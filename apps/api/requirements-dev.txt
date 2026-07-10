@@ -1,0 +1,5 @@
+-r requirements.txt
+-e ../../plugins/sdk
+-e ../../plugins/proxmox
+httpx==0.28.1
+pytest==8.4.1

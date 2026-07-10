@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-proxmox"
+version = "0.1.0"
+description = "Proxmox discovery plugin for Atlas"
+requires-python = ">=3.12"
+dependencies = [
+  "atlas-plugin-sdk>=0.1.0,<0.2.0",
+  "httpx>=0.28.1,<0.29",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.4,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
