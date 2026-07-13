@@ -13,6 +13,22 @@ from app.schemas import AssetRelationshipCreate, AssetRelationshipResponse
 router = APIRouter(prefix="/asset-relationships", tags=["asset relationships"])
 
 
+def relationship_response(db: Session, relationship: AssetRelationship) -> dict:
+    source = db.get(Asset, relationship.source_asset_id)
+    target = db.get(Asset, relationship.target_asset_id)
+    return {
+        "id": relationship.id,
+        "source_asset_id": relationship.source_asset_id,
+        "target_asset_id": relationship.target_asset_id,
+        "relationship_type": relationship.relationship_type,
+        "notes": relationship.notes,
+        "source_asset_name": source.name if source else None,
+        "target_asset_name": target.name if target else None,
+        "created_at": relationship.created_at,
+        "updated_at": relationship.updated_at,
+    }
+
+
 @router.get("", response_model=list[AssetRelationshipResponse])
 def list_asset_relationships(
     _: CurrentUser,
@@ -29,7 +45,7 @@ def list_asset_relationships(
                 AssetRelationship.target_asset_id == asset_id,
             )
         )
-    return list(db.scalars(query))
+    return [relationship_response(db, item) for item in db.scalars(query)]
 
 
 @router.post("", response_model=AssetRelationshipResponse, status_code=status.HTTP_201_CREATED)
@@ -49,7 +65,7 @@ def create_asset_relationship(
     db.add(relationship)
     commit(db, "Asset relationship")
     db.refresh(relationship)
-    return relationship
+    return relationship_response(db, relationship)
 
 
 @router.delete("/{relationship_id}", status_code=status.HTTP_204_NO_CONTENT)

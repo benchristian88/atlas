@@ -138,5 +138,14 @@ class AssetRelationshipResponse(ORMResponse):
     target_asset_id: uuid.UUID
     relationship_type: str
     notes: str | None
+    source_asset_name: str | None = None
+    target_asset_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TopologyResponse(BaseModel):
+    customers: list[CustomerResponse]
+    sites: list[SiteResponse]
+    assets: list[ManualAssetResponse]
+    relationships: list[AssetRelationshipResponse]

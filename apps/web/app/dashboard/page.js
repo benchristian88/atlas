@@ -60,6 +60,10 @@ export default function DashboardPage() {
           </Link>
         ))}
       </section>
+      <section className="dashboard-prompt">
+        <div><p className="eyebrow">Homelab modelling</p><h2>Map infrastructure from hardware to workloads</h2><p>Start with Customer → Site → Proxmox Host → VM/LXC/Docker Host → Workload, then connect dependencies.</p></div>
+        <Link className="button button-primary" href="/topology">Open Topology</Link>
+      </section>
     </>
   );
 }

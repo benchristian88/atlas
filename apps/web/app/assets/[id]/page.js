@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { PageHeader } from "../../../components/page-header";
 import { StatusBadge } from "../../../components/status-badge";
 import { apiRequest } from "../../../lib/api";
+import { RELATIONSHIP_TYPES, taxonomyLabel } from "../../../lib/taxonomy";
 
 const detailFields = [
   ["asset_type", "Type"], ["vendor", "Vendor"], ["model", "Model"],
@@ -19,7 +20,7 @@ export default function AssetDetailPage() {
   const [customers, setCustomers] = useState([]);
   const [sites, setSites] = useState([]);
   const [relationships, setRelationships] = useState([]);
-  const [form, setForm] = useState({ target_asset_id: "", relationship_type: "depends_on", notes: "" });
+  const [form, setForm] = useState({ source_asset_id: "", target_asset_id: "", relationship_type: "depends_on", notes: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -37,6 +38,7 @@ export default function AssetDetailPage() {
       setCustomers(allCustomers);
       setSites(allSites);
       setRelationships(edges);
+      setForm((currentForm) => ({ ...currentForm, source_asset_id: currentForm.source_asset_id || id }));
     } catch (requestError) {
       setError(requestError.message || "Atlas could not load this asset.");
     } finally {
@@ -62,13 +64,13 @@ export default function AssetDetailPage() {
       await apiRequest("/asset-relationships", {
         method: "POST",
         body: JSON.stringify({
-          source_asset_id: id,
+          source_asset_id: form.source_asset_id,
           target_asset_id: form.target_asset_id,
           relationship_type: form.relationship_type,
           notes: form.notes || null,
         }),
       });
-      setForm({ target_asset_id: "", relationship_type: "depends_on", notes: "" });
+      setForm({ source_asset_id: id, target_asset_id: "", relationship_type: "depends_on", notes: "" });
       await load();
     } catch (requestError) {
       setError(requestError.message);
@@ -107,8 +109,9 @@ export default function AssetDetailPage() {
         <div className="form-card-header"><h2>Add relationship</h2></div>
         <form className="resource-form" onSubmit={createRelationship}>
           <div className="form-grid">
-            <label className="field"><span>Target asset *</span><select required value={form.target_asset_id} onChange={(event) => setForm({ ...form, target_asset_id: event.target.value })}><option value="">Select an asset</option>{assets.filter((item) => item.id !== id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label className="field"><span>Relationship type *</span><input required value={form.relationship_type} onChange={(event) => setForm({ ...form, relationship_type: event.target.value })} /></label>
+            <label className="field"><span>Source asset *</span><select required value={form.source_asset_id} onChange={(event) => setForm({ ...form, source_asset_id: event.target.value, target_asset_id: event.target.value === form.target_asset_id ? "" : form.target_asset_id })}><option value="">Select an asset</option>{assets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label className="field"><span>Relationship type *</span><select required value={form.relationship_type} onChange={(event) => setForm({ ...form, relationship_type: event.target.value })}>{RELATIONSHIP_TYPES.map((value) => <option key={value} value={value}>{taxonomyLabel(value)}</option>)}</select></label>
+            <label className="field"><span>Target asset *</span><select required value={form.target_asset_id} onChange={(event) => setForm({ ...form, target_asset_id: event.target.value })}><option value="">Select an asset</option>{assets.filter((item) => item.id !== form.source_asset_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label className="field field-wide"><span>Notes</span><textarea rows="2" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
           </div>
           <div className="form-actions"><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Add relationship"}</button></div>
@@ -119,9 +122,7 @@ export default function AssetDetailPage() {
         <div className="table-meta"><span>{relationships.length} relationships</span></div>
         {relationships.length === 0 ? <p className="empty-state">No relationships yet.</p> : (
           <div className="relationship-list">{relationships.map((edge) => {
-            const outgoing = edge.source_asset_id === id;
-            const other = assetsById[outgoing ? edge.target_asset_id : edge.source_asset_id];
-            return <div className="relationship-row" key={edge.id}><span><strong>{outgoing ? "Outgoing" : "Incoming"}</strong> · {edge.relationship_type} · {other?.name || "Unknown asset"}{edge.notes ? ` — ${edge.notes}` : ""}</span><button className="text-button text-danger" onClick={() => removeRelationship(edge.id)} type="button">Delete</button></div>;
+            return <div className="relationship-row" key={edge.id}><span><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name || "Unknown asset"}</strong> → {taxonomyLabel(edge.relationship_type)} → <strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name || "Unknown asset"}</strong>{edge.notes ? ` — ${edge.notes}` : ""}</span><button className="text-button text-danger" onClick={() => removeRelationship(edge.id)} type="button">Delete</button></div>;
           })}</div>
         )}
       </section>

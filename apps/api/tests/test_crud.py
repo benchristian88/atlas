@@ -19,6 +19,7 @@ from app.routes.manual_assets import (
     update_manual_asset,
 )
 from app.routes.sites import create_site, delete_site, update_site
+from app.routes.topology import get_topology
 from app.schemas import (
     CustomerCreate,
     CustomerUpdate,
@@ -242,9 +243,11 @@ def test_asset_and_relationship_create_list_get_update_flows(
         user,
         db,
     )
-    assert edge.notes == "uplink"
+    assert edge["notes"] == "uplink"
+    assert edge["source_asset_name"] == "router-01"
+    assert edge["target_asset_name"] == "switch-01"
     assert len(list_asset_relationships(user, None, 500, 0, db)) == 1
-    assert delete_asset_relationship(edge.id, user, db).status_code == 204
+    assert delete_asset_relationship(edge["id"], user, db).status_code == 204
 
 
 def test_relationship_rejects_missing_assets(user: User) -> None:
@@ -260,3 +263,30 @@ def test_relationship_rejects_missing_assets(user: User) -> None:
             db,
         )
     assert exc_info.value.status_code == 404
+
+
+def test_topology_returns_frontend_friendly_named_graph(
+    workspace: Workspace, user: User
+) -> None:
+    customer = Customer(id=uuid.uuid4(), workspace_id=workspace.id, name="Home Lab")
+    site = Site(id=uuid.uuid4(), customer_id=customer.id, name="Home")
+    host = Asset(
+        id=uuid.uuid4(), workspace_id=workspace.id, customer_id=customer.id,
+        site_id=site.id, name="pve1", asset_type="proxmox_host", status="active",
+        source="manual", metadata_={},
+    )
+    vm = Asset(
+        id=uuid.uuid4(), workspace_id=workspace.id, customer_id=customer.id,
+        site_id=site.id, name="docker01", asset_type="virtual_machine", status="active",
+        source="manual", metadata_={},
+    )
+    edge = AssetRelationship(
+        id=uuid.uuid4(), source_asset_id=vm.id, target_asset_id=host.id,
+        relationship_type="runs_on", notes=None, metadata_={},
+    )
+    db = FakeSession([workspace, customer, site, host, vm, edge])
+    topology = get_topology(user, db)
+    assert [item.name for item in topology["customers"]] == ["Home Lab"]
+    assert len(topology["assets"]) == 2
+    assert topology["relationships"][0]["source_asset_name"] == "docker01"
+    assert topology["relationships"][0]["target_asset_name"] == "pve1"

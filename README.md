@@ -156,6 +156,18 @@ The API container runs `alembic upgrade head` at startup. Existing deployments
 must restart the API container after pulling these changes so the manual
 infrastructure field migration is applied.
 
+### Manual homelab modelling example
+
+1. Create customer **Home Lab** and site **Home**.
+2. Create asset **pve1** with type `proxmox_host`.
+3. Create asset **docker01** with type `virtual_machine` or `docker_host`.
+4. Create asset **nginx-proxy-manager** with type `docker_container` or `application`.
+5. Open an asset detail page and create `docker01` → `runs_on` → `pve1`.
+6. Create `nginx-proxy-manager` → `runs_on` → `docker01`.
+7. Open **Topology**, switch between **Hierarchy** and **Relationships**, and verify node details and edge labels.
+8. Filter the topology by Home Lab, Home, and an asset type; clear each filter and confirm the graph remains stable.
+9. Refresh the browser and confirm all assets and relationships remain present without repeated idle API requests.
+
 Stop the stack with `Ctrl+C`, or remove its containers and volumes with:
 
 ```bash

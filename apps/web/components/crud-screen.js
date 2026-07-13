@@ -74,7 +74,11 @@ export function CrudScreen({
 
   function openEdit(record) {
     setEditingId(record.id);
-    setForm(Object.fromEntries(Object.keys(emptyValues).map((key) => [key, valueForInput(record[key])])));
+    setForm(Object.fromEntries(Object.keys(emptyValues).map((key) => {
+      const field = fields.find((item) => item.name === key);
+      const value = field?.valueFromRecord ? field.valueFromRecord(record) : record[key];
+      return [key, valueForInput(value)];
+    })));
     setFormOpen(true);
     setError("");
   }
@@ -133,7 +137,10 @@ export function CrudScreen({
           <form className="resource-form" onSubmit={submit}>
             <div className="form-grid">
               {fields.map((field) => {
-                const options = field.optionsKey ? related[field.optionsKey] || [] : field.options || [];
+                const unfilteredOptions = field.optionsKey ? related[field.optionsKey] || [] : field.options || [];
+                const options = field.optionsFilter
+                  ? unfilteredOptions.filter((option) => field.optionsFilter(option, form))
+                  : unfilteredOptions;
                 return (
                   <label className={field.wide ? "field field-wide" : "field"} key={field.name}>
                     <span>{field.label}{field.required ? " *" : ""}</span>
@@ -150,12 +157,19 @@ export function CrudScreen({
                       <select
                         name={field.name}
                         disabled={field.createOnly && Boolean(editingId)}
-                        onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
+                        onChange={(event) => setForm({
+                          ...form,
+                          [field.name]: event.target.value,
+                          ...Object.fromEntries((field.clearFields || []).map((name) => [name, ""])),
+                        })}
                         required={field.required}
                         value={form[field.name]}
                       >
                         {!field.required && <option value="">None</option>}
                         {field.placeholder && <option value="">{field.placeholder}</option>}
+                        {form[field.name] && !options.some((option) => (option.id ?? option.value) === form[field.name]) && (
+                          <option value={form[field.name]}>{form[field.name]} (existing custom value)</option>
+                        )}
                         {options.map((option) => (
                           <option key={option.id ?? option.value} value={option.id ?? option.value}>
                             {field.optionLabel ? field.optionLabel(option, relatedById) : option.name ?? option.label}

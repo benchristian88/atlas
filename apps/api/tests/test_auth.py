@@ -108,6 +108,7 @@ def test_protected_routes_require_a_valid_session(user: User) -> None:
     with client_with_database_result(user) as client:
         assert client.get("/auth/me").status_code == 401
         assert client.get("/protected").status_code == 401
+        assert client.get("/topology").status_code == 401
     app.dependency_overrides.clear()
 
 
