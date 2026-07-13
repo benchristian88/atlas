@@ -8,6 +8,7 @@ const items = [
   { href: "/customers", label: "Customers" },
   { href: "/sites", label: "Sites" },
   { href: "/assets", label: "Assets" },
+  { href: "/networks", label: "Networks" },
   { href: "/topology", label: "Topology" },
   { href: "/integrations", label: "Integrations" },
   { href: "/discovery-runs", label: "Discovery runs" },

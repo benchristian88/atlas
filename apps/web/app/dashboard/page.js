@@ -9,6 +9,7 @@ const cards = [
   { key: "customers", label: "Customers", href: "/customers", description: "Managed organisations" },
   { key: "sites", label: "Sites", href: "/sites", description: "Customer locations" },
   { key: "assets", label: "Assets", href: "/assets", description: "Managed infrastructure" },
+  { key: "networks", label: "Networks", href: "/networks", description: "VLANs and network segments" },
   { key: "relationships", label: "Relationships", href: "/topology", description: "Connections between assets" },
 ];
 
@@ -22,16 +23,18 @@ export default function DashboardPage() {
     started.current = true;
     async function loadCounts() {
       try {
-        const [customers, sites, assets, relationships] = await Promise.all([
+        const [customers, sites, assets, networks, relationships] = await Promise.all([
           apiRequest("/customers"),
           apiRequest("/sites"),
           apiRequest("/assets"),
+          apiRequest("/networks"),
           apiRequest("/asset-relationships"),
         ]);
         setCounts({
           customers: customers.length,
           sites: sites.length,
           assets: assets.length,
+          networks: networks.length,
           relationships: relationships.length,
         });
       } catch (requestError) {

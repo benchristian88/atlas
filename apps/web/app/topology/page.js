@@ -55,6 +55,7 @@ export default function TopologyPage() {
           <div className="mode-selector" aria-label="Topology mode">
             <button className={`button ${mode === "hierarchy" ? "button-primary" : "button-secondary"}`} onClick={() => setMode("hierarchy")} type="button">Hierarchy</button>
             <button className={`button ${mode === "relationships" ? "button-primary" : "button-secondary"}`} onClick={() => setMode("relationships")} type="button">Relationships</button>
+            <button className={`button ${mode === "networks" ? "button-primary" : "button-secondary"}`} onClick={() => setMode("networks")} type="button">Network / VLAN</button>
           </div>
           <div className="topology-filters">
             <label className="field"><span>Customer</span><select value={filters.customer} onChange={(event) => updateFilter("customer", event.target.value)}><option value="">All customers</option>{data.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
@@ -66,6 +67,7 @@ export default function TopologyPage() {
         {!empty && visibleAssets.length === 0 && <div className="empty-state detail-card">No assets match these filters.</div>}
         {visibleAssets.length > 0 && mode === "hierarchy" && <Hierarchy data={data} assets={visibleAssets} relationships={visibleRelationships} assetsById={assetsById} filters={filters} />}
         {visibleAssets.length > 0 && mode === "relationships" && <RelationshipGraph assets={visibleAssets} relationships={visibleRelationships} assetsById={assetsById} />}
+        {visibleAssets.length > 0 && mode === "networks" && <NetworkGraph data={data} assets={visibleAssets} visibleIds={visibleIds} filters={filters} />}
       </>}
     </>
   );
@@ -103,6 +105,38 @@ function HierarchyNode({ asset, children, seen }) {
 
 function RelationshipGraph({ assets, relationships, assetsById }) {
   return <div className="relationship-graph"><div className="graph-nodes">{assets.map((asset) => <AssetNode asset={asset} key={asset.id} />)}</div><div className="graph-edges"><h2>Relationship edges</h2>{relationships.length === 0 ? <p className="secondary-text">No relationships between the visible assets.</p> : relationships.map((edge) => <div className="graph-edge" key={edge.id}><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name}</strong><span>→ {taxonomyLabel(edge.relationship_type)} →</span><strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name}</strong></div>)}</div></div>;
+}
+
+function NetworkGraph({ data, assets, visibleIds, filters }) {
+  const interfaces = data.asset_interfaces.filter((item) => visibleIds.has(item.asset_id));
+  const interfacesByNetwork = interfaces.reduce((groups, item) => {
+    if (item.network_id) (groups[item.network_id] ||= []).push(item);
+    return groups;
+  }, {});
+  const assignedAssetIds = new Set(interfaces.map((item) => item.asset_id));
+  const networks = data.networks.filter((network) =>
+    (!filters.customer || network.customer_id === filters.customer)
+    && (!filters.site || network.site_id === filters.site || !network.site_id)
+  );
+  const assetsById = Object.fromEntries(assets.map((asset) => [asset.id, asset]));
+  const unassigned = assets.filter((asset) => !assignedAssetIds.has(asset.id));
+  const unassignedInterfaces = interfaces.filter((item) => !item.network_id);
+
+  return <div className="network-groups">
+    {networks.map((network) => {
+      const members = interfacesByNetwork[network.id] || [];
+      return <section className="network-group" key={network.id}>
+        <div className="network-group-header"><div><p className="eyebrow">{network.network_type}</p><h2>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}{network.cidr ? ` — ${network.cidr}` : ""}</h2></div><span>{network.gateway ? `Gateway ${network.gateway}` : "No gateway"}</span></div>
+        {members.length === 0 ? <p className="secondary-text">No interfaces assigned.</p> : <div className="network-members">{members.map((item) => <NetworkMember asset={assetsById[item.asset_id]} interfaceRecord={item} key={item.id} />)}</div>}
+      </section>;
+    })}
+    {(unassigned.length > 0 || unassignedInterfaces.length > 0) && <section className="network-group network-unassigned"><div className="network-group-header"><div><p className="eyebrow">Unassigned</p><h2>Unassigned network</h2></div><span>Explicit network membership required</span></div><div className="network-members">{unassignedInterfaces.map((item) => <NetworkMember asset={assetsById[item.asset_id]} interfaceRecord={item} key={item.id} />)}{unassigned.map((asset) => <NetworkMember asset={asset} interfaceRecord={{ name: "No interface", ip_address: asset.ip_address }} key={asset.id} />)}</div></section>}
+  </div>;
+}
+
+function NetworkMember({ asset, interfaceRecord }) {
+  if (!asset) return null;
+  return <Link className="network-member" href={`/assets/${asset.id}`}><strong>{asset.name}</strong><span>{taxonomyLabel(asset.asset_type)}</span><span>{asset.hostname || "No hostname"}</span><span>{interfaceRecord.name} · {interfaceRecord.ip_address || asset.ip_address || "No IP"}</span></Link>;
 }
 
 function AssetNode({ asset }) {

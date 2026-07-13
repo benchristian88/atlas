@@ -4,13 +4,15 @@ import pytest
 from fastapi import HTTPException
 
 from app.main import app
-from app.models import Asset, AssetRelationship, Customer, Site, User, Workspace
+from app.models import Asset, AssetInterface, AssetRelationship, Customer, Network, Site, User, Workspace
+from app.routes.asset_interfaces import create_asset_interface, update_asset_interface
 from app.routes.asset_relationships import (
     create_asset_relationship,
     delete_asset_relationship,
     list_asset_relationships,
 )
 from app.routes.assets import create_asset, get_asset, list_assets, update_asset
+from app.routes.networks import create_network, update_network
 from app.routes.customers import create_customer, delete_customer, update_customer
 from app.routes.manual_assets import (
     create_manual_asset,
@@ -26,6 +28,10 @@ from app.schemas import (
     ManualAssetCreate,
     ManualAssetUpdate,
     AssetRelationshipCreate,
+    AssetInterfaceCreate,
+    AssetInterfaceUpdate,
+    NetworkCreate,
+    NetworkUpdate,
     SiteCreate,
     SiteUpdate,
 )
@@ -96,6 +102,10 @@ def test_openapi_exposes_protected_crud_operations() -> None:
         assert {"get", "patch", "delete"} <= set(paths[detail_path])
     assert {"get", "post"} <= set(paths["/asset-relationships"])
     assert "delete" in paths["/asset-relationships/{relationship_id}"]
+    assert {"get", "post"} <= set(paths["/networks"])
+    assert {"get", "patch", "delete"} <= set(paths["/networks/{network_id}"])
+    assert {"get", "post"} <= set(paths["/asset-interfaces"])
+    assert {"patch", "delete"} <= set(paths["/asset-interfaces/{interface_id}"])
 
 
 def test_customer_crud(workspace: Workspace, user: User) -> None:
@@ -284,9 +294,57 @@ def test_topology_returns_frontend_friendly_named_graph(
         id=uuid.uuid4(), source_asset_id=vm.id, target_asset_id=host.id,
         relationship_type="runs_on", notes=None, metadata_={},
     )
-    db = FakeSession([workspace, customer, site, host, vm, edge])
+    network = Network(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id, name="Apps VLAN",
+        network_type="vlan", vlan_id=5, cidr="192.168.5.0/24",
+    )
+    interface = AssetInterface(
+        id=uuid.uuid4(), asset_id=vm.id, network_id=network.id, name="eth0",
+        ip_address="192.168.5.8", is_primary=True,
+    )
+    db = FakeSession([workspace, customer, site, host, vm, edge, network, interface])
     topology = get_topology(user, db)
     assert [item.name for item in topology["customers"]] == ["Home Lab"]
     assert len(topology["assets"]) == 2
     assert topology["relationships"][0]["source_asset_name"] == "docker01"
     assert topology["relationships"][0]["target_asset_name"] == "pve1"
+    assert topology["networks"][0].name == "Apps VLAN"
+    assert topology["asset_interfaces"][0].ip_address == "192.168.5.8"
+
+
+def test_network_and_asset_interface_creation(
+    workspace: Workspace, user: User
+) -> None:
+    customer = Customer(id=uuid.uuid4(), workspace_id=workspace.id, name="Home Lab")
+    site = Site(id=uuid.uuid4(), customer_id=customer.id, name="Home")
+    asset = Asset(
+        id=uuid.uuid4(), workspace_id=workspace.id, customer_id=customer.id,
+        site_id=site.id, name="docker01", asset_type="docker_host", status="active",
+        source="manual", metadata_={},
+    )
+    db = FakeSession([workspace, customer, site, asset])
+    network = create_network(
+        NetworkCreate(
+            customer_id=customer.id, site_id=site.id, name="Apps VLAN",
+            network_type="vlan", vlan_id=5, cidr="192.168.5.1/24",
+            gateway="192.168.5.1",
+        ),
+        user,
+        db,
+    )
+    assert network.cidr == "192.168.5.0/24"
+    interface = create_asset_interface(
+        AssetInterfaceCreate(
+            asset_id=asset.id, network_id=network.id, name="eth0",
+            ip_address="192.168.5.8", mac_address="02:00:00:00:05:08", is_primary=True,
+        ),
+        user,
+        db,
+    )
+    assert interface.network_id == network.id
+    update_network(network.id, NetworkUpdate(purpose="Applications"), user, db)
+    update_asset_interface(
+        interface.id, AssetInterfaceUpdate(notes="Primary LAN"), user, db
+    )
+    assert network.purpose == "Applications"
+    assert interface.notes == "Primary LAN"

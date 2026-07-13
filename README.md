@@ -101,6 +101,8 @@ Authenticated CRUD endpoints are available for:
 - `/sites`
 - `/assets`
 - `/asset-relationships`
+- `/networks`
+- `/asset-interfaces`
 
 Collection routes support `GET` and `POST`; resource routes support `GET`,
 `PATCH`, and `DELETE` where applicable. The corresponding web screens are
@@ -167,6 +169,18 @@ infrastructure field migration is applied.
 7. Open **Topology**, switch between **Hierarchy** and **Relationships**, and verify node details and edge labels.
 8. Filter the topology by Home Lab, Home, and an asset type; clear each filter and confirm the graph remains stable.
 9. Refresh the browser and confirm all assets and relationships remain present without repeated idle API requests.
+
+### Model a homelab network
+
+1. Create customer **Home Lab** and site **Home**.
+2. Open **Networks** and create **Apps VLAN** as a `vlan`, VLAN ID `5`, CIDR `192.168.5.0/24`, and gateway `192.168.5.1`.
+3. Create **IoT VLAN** as a `vlan`, VLAN ID `3`, and CIDR `192.168.3.0/24`.
+4. Create asset **docker01**, then open its asset detail page.
+5. Add interface **eth0** with IP `192.168.5.8`, select **Apps VLAN**, and mark it primary.
+6. Refresh the asset detail page and confirm the interface and network remain present.
+7. Open **Topology**, select **Network / VLAN**, and confirm docker01 appears under `VLAN 5 — Apps VLAN — 192.168.5.0/24`.
+8. Confirm an asset without an interface appears under **Unassigned network** rather than being assigned from its primary IP silently.
+9. Edit Apps VLAN, refresh the page, then delete a disposable network and confirm the list updates only after those user actions.
 
 Stop the stack with `Ctrl+C`, or remove its containers and volumes with:
 

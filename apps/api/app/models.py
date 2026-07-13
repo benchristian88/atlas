@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     MetaData,
     String,
     Text,
@@ -203,6 +204,49 @@ class AssetRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )
+
+
+class Network(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "networks"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "site_id", "name", name="uq_networks_customer_site_name"),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("sites.id", ondelete="SET NULL"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    network_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    vlan_id: Mapped[int | None] = mapped_column(Integer)
+    cidr: Mapped[str | None] = mapped_column(String(49), index=True)
+    gateway: Mapped[str | None] = mapped_column(String(45))
+    purpose: Mapped[str | None] = mapped_column(String(255))
+    zone: Mapped[str | None] = mapped_column(String(100), index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class AssetInterface(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "asset_interfaces"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "name", name="uq_asset_interfaces_asset_name"),
+    )
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    network_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("networks.id", ondelete="SET NULL"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    ip_address: Mapped[str | None] = mapped_column(String(45), index=True)
+    mac_address: Mapped[str | None] = mapped_column(String(17), index=True)
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", index=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
 
 
 class AssetFact(UUIDPrimaryKeyMixin, TimestampMixin, Base):

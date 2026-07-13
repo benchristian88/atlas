@@ -20,24 +20,31 @@ export default function AssetDetailPage() {
   const [customers, setCustomers] = useState([]);
   const [sites, setSites] = useState([]);
   const [relationships, setRelationships] = useState([]);
+  const [networks, setNetworks] = useState([]);
+  const [interfaces, setInterfaces] = useState([]);
   const [form, setForm] = useState({ source_asset_id: "", target_asset_id: "", relationship_type: "depends_on", notes: "" });
+  const [interfaceForm, setInterfaceForm] = useState({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: true, notes: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingInterface, setSavingInterface] = useState(false);
   const [error, setError] = useState("");
   const started = useRef(false);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const [current, allAssets, allCustomers, allSites, edges] = await Promise.all([
+      const [current, allAssets, allCustomers, allSites, edges, allNetworks, assetInterfaces] = await Promise.all([
         apiRequest(`/assets/${id}`), apiRequest("/assets"), apiRequest("/customers"),
         apiRequest("/sites"), apiRequest(`/asset-relationships?asset_id=${id}`),
+        apiRequest("/networks"), apiRequest(`/asset-interfaces?asset_id=${id}`),
       ]);
       setAsset(current);
       setAssets(allAssets);
       setCustomers(allCustomers);
       setSites(allSites);
       setRelationships(edges);
+      setNetworks(allNetworks);
+      setInterfaces(assetInterfaces);
       setForm((currentForm) => ({ ...currentForm, source_asset_id: currentForm.source_asset_id || id }));
     } catch (requestError) {
       setError(requestError.message || "Atlas could not load this asset.");
@@ -55,6 +62,47 @@ export default function AssetDetailPage() {
   const assetsById = useMemo(() => Object.fromEntries(assets.map((item) => [item.id, item])), [assets]);
   const customer = customers.find((item) => item.id === asset?.customer_id);
   const site = sites.find((item) => item.id === asset?.site_id);
+  const networksById = useMemo(() => Object.fromEntries(networks.map((item) => [item.id, item])), [networks]);
+  const availableNetworks = networks.filter((network) =>
+    network.customer_id === asset?.customer_id
+    && (!network.site_id || network.site_id === asset?.site_id)
+  );
+
+  async function createInterface(event) {
+    event.preventDefault();
+    setSavingInterface(true);
+    setError("");
+    try {
+      await apiRequest("/asset-interfaces", {
+        method: "POST",
+        body: JSON.stringify({
+          asset_id: id,
+          network_id: interfaceForm.network_id || null,
+          name: interfaceForm.name,
+          ip_address: interfaceForm.ip_address || null,
+          mac_address: interfaceForm.mac_address || null,
+          is_primary: interfaceForm.is_primary,
+          notes: interfaceForm.notes || null,
+        }),
+      });
+      setInterfaceForm({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: false, notes: "" });
+      await load();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSavingInterface(false);
+    }
+  }
+
+  async function removeInterface(interfaceId) {
+    setError("");
+    try {
+      await apiRequest(`/asset-interfaces/${interfaceId}`, { method: "DELETE" });
+      await load();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
 
   async function createRelationship(event) {
     event.preventDefault();
@@ -103,6 +151,22 @@ export default function AssetDetailPage() {
           <div><span>Site</span><strong>{site?.name || "—"}</strong></div>
           {detailFields.map(([key, label]) => <div key={key}><span>{label}</span><strong>{asset[key] || "—"}</strong></div>)}
         </div>
+      </section>
+
+      <section className="form-card">
+        <div className="form-card-header"><h2>Interfaces and networks</h2></div>
+        <form className="resource-form" onSubmit={createInterface}>
+          <div className="form-grid">
+            <label className="field"><span>Interface name *</span><input required value={interfaceForm.name} onChange={(event) => setInterfaceForm({ ...interfaceForm, name: event.target.value })} placeholder="eth0" /></label>
+            <label className="field"><span>Network / VLAN</span><select value={interfaceForm.network_id} onChange={(event) => setInterfaceForm({ ...interfaceForm, network_id: event.target.value })}><option value="">Unassigned network</option>{availableNetworks.map((network) => <option key={network.id} value={network.id}>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}{network.cidr ? ` — ${network.cidr}` : ""}</option>)}</select></label>
+            <label className="field"><span>IP address</span><input value={interfaceForm.ip_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, ip_address: event.target.value })} placeholder="192.168.5.8" /></label>
+            <label className="field"><span>MAC address</span><input value={interfaceForm.mac_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, mac_address: event.target.value })} placeholder="02:00:00:00:05:08" /></label>
+            <label className="field checkbox-field"><input checked={interfaceForm.is_primary} onChange={(event) => setInterfaceForm({ ...interfaceForm, is_primary: event.target.checked })} type="checkbox" /><span>Primary interface</span></label>
+            <label className="field field-wide"><span>Notes</span><textarea rows="2" value={interfaceForm.notes} onChange={(event) => setInterfaceForm({ ...interfaceForm, notes: event.target.value })} /></label>
+          </div>
+          <div className="form-actions"><button className="button button-primary" disabled={savingInterface} type="submit">{savingInterface ? "Saving…" : "Add interface"}</button></div>
+        </form>
+        <div className="interface-list">{interfaces.length === 0 ? <p className="secondary-text">No interfaces yet.</p> : interfaces.map((item) => { const network = networksById[item.network_id]; return <div className="interface-row" key={item.id}><div><strong>{item.name}{item.is_primary ? " · Primary" : ""}</strong><span>{item.ip_address || "No IP"}{item.mac_address ? ` · ${item.mac_address}` : ""}</span><span>{network ? `${network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}${network.name}${network.cidr ? ` — ${network.cidr}` : ""}` : "Unassigned network"}</span></div><button className="text-button text-danger" onClick={() => removeInterface(item.id)} type="button">Delete</button></div>; })}</div>
       </section>
 
       <section className="form-card">

@@ -11,6 +11,11 @@ export const RELATIONSHIP_TYPES = [
   "proxies", "authenticates", "exposes", "belongs_to_network",
 ];
 
+export const NETWORK_TYPES = [
+  "lan", "vlan", "wan", "vpn", "docker_bridge", "overlay", "storage",
+  "management", "guest", "iot", "dmz",
+];
+
 export function taxonomyLabel(value) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

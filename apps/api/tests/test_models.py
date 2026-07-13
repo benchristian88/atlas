@@ -24,6 +24,14 @@ EXPECTED_COLUMNS = {
         "id", "source_asset_id", "target_asset_id", "relationship_type", "notes", "metadata",
         "created_at", "updated_at",
     },
+    "networks": {
+        "id", "customer_id", "site_id", "name", "network_type", "vlan_id",
+        "cidr", "gateway", "purpose", "zone", "notes", "created_at", "updated_at",
+    },
+    "asset_interfaces": {
+        "id", "asset_id", "network_id", "name", "ip_address", "mac_address",
+        "is_primary", "notes", "created_at", "updated_at",
+    },
     "asset_facts": {"id", "asset_id", "key", "value", "source", "created_at", "updated_at"},
     "documents": {
         "id", "asset_id", "title", "content_markdown",

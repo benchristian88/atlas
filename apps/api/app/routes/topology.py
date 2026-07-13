@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser
 from app.database import get_db
-from app.models import Asset, AssetRelationship, Customer, Site
+from app.models import Asset, AssetInterface, AssetRelationship, Customer, Network, Site
 from app.routes.asset_relationships import relationship_response
 from app.schemas import TopologyResponse
 
@@ -20,9 +20,15 @@ def get_topology(_: CurrentUser, db: Session = Depends(get_db)):
         relationship_response(db, item)
         for item in db.scalars(select(AssetRelationship).order_by(AssetRelationship.created_at))
     ]
+    networks = list(db.scalars(select(Network).order_by(Network.name)))
+    asset_interfaces = list(
+        db.scalars(select(AssetInterface).order_by(AssetInterface.name))
+    )
     return {
         "customers": customers,
         "sites": sites,
         "assets": assets,
         "relationships": relationships,
+        "networks": networks,
+        "asset_interfaces": asset_interfaces,
     }

@@ -17,3 +17,8 @@ RELATIONSHIP_TYPES = (
     "protects", "depends_on", "uses_storage", "backs_up_to", "monitors",
     "proxies", "authenticates", "exposes", "belongs_to_network",
 )
+
+NETWORK_TYPES = (
+    "lan", "vlan", "wan", "vpn", "docker_bridge", "overlay", "storage",
+    "management", "guest", "iot", "dmz",
+)
