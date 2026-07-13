@@ -45,13 +45,15 @@ def test_passwords_are_argon2_hashed() -> None:
     assert not verify_password("wrong password", password_hash)
 
 
-def test_login_sets_httponly_cookie_and_allows_protected_routes(user: User) -> None:
+def test_login_returns_bearer_token_and_allows_protected_routes(user: User) -> None:
     with client_with_database_result(user) as client:
         response = client.post(
             "/auth/login",
             json={"email": "ADMIN@example.com", "password": "correct horse battery staple"},
         )
         assert response.status_code == 200
+        assert response.json()["token_type"] == "bearer"
+        access_token = response.json()["access_token"]
         assert response.json()["user"] == {
             "id": str(user.id),
             "email": user.email,
@@ -59,14 +61,27 @@ def test_login_sets_httponly_cookie_and_allows_protected_routes(user: User) -> N
         }
         assert "HttpOnly" in response.headers["set-cookie"]
         assert "SameSite=lax" in response.headers["set-cookie"]
+        assert decode_session_token(access_token) == user.id
         assert decode_session_token(client.cookies[COOKIE_NAME]) == user.id
 
-        me_response = client.get("/auth/me")
+        authorization = {"Authorization": f"Bearer {access_token}"}
+        me_response = client.get("/auth/me", headers=authorization)
         assert me_response.status_code == 200
-        protected_response = client.get("/protected")
+        protected_response = client.get("/protected", headers=authorization)
         assert protected_response.json() == {
             "message": "Authenticated as admin@example.com"
         }
+    app.dependency_overrides.clear()
+
+
+def test_existing_cookie_authentication_remains_supported(user: User) -> None:
+    with client_with_database_result(user) as client:
+        response = client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        )
+        assert response.status_code == 200
+        assert client.get("/auth/me").status_code == 200
     app.dependency_overrides.clear()
 
 
@@ -117,10 +132,11 @@ def test_web_origin_can_make_credentialed_requests(user: User) -> None:
             headers={
                 "Origin": "http://localhost:3000",
                 "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "content-type",
+                "Access-Control-Request-Headers": "authorization,content-type",
             },
         )
         assert response.status_code == 200
         assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
         assert response.headers["access-control-allow-credentials"] == "true"
+        assert "Authorization" in response.headers["access-control-allow-headers"]
     app.dependency_overrides.clear()

@@ -5,6 +5,7 @@ from typing import Annotated
 
 import jwt
 from fastapi import Cookie, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 from pwdlib.exceptions import PwdlibError
@@ -20,6 +21,7 @@ TOKEN_ISSUER = "atlas-api"
 TOKEN_AUDIENCE = "atlas-web"
 
 password_hasher = PasswordHash.recommended()
+bearer_scheme = HTTPBearer(auto_error=False)
 # Verifying this hash when an email is unknown keeps failure timing less revealing.
 DUMMY_PASSWORD_HASH = password_hasher.hash("atlas-dummy-password")
 
@@ -90,6 +92,7 @@ def unauthorized() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
@@ -103,12 +106,16 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
 
 
 def get_current_user(
+    bearer: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
+    ] = None,
     session_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
     db: Session = Depends(get_db),
 ) -> User:
-    if session_token is None:
+    token = bearer.credentials if bearer is not None else session_token
+    if token is None:
         raise unauthorized()
-    user_id = decode_session_token(session_token)
+    user_id = decode_session_token(token)
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise unauthorized()

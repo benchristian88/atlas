@@ -11,6 +11,9 @@ services:
       AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-480}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ATLAS_ADMIN_EMAIL: ${ATLAS_ADMIN_EMAIL:?ATLAS_ADMIN_EMAIL must be set}
+      ATLAS_ADMIN_PASSWORD: ${ATLAS_ADMIN_PASSWORD:?ATLAS_ADMIN_PASSWORD must be set}
+      ATLAS_ADMIN_DISPLAY_NAME: ${ATLAS_ADMIN_DISPLAY_NAME:?ATLAS_ADMIN_DISPLAY_NAME must be set}
     ports:
       - "8000:8000"
     depends_on:
@@ -35,7 +38,7 @@ services:
     env_file:
       - ../../.env
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set}
     ports:
       - "3000:3000"
     depends_on:

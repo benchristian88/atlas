@@ -35,43 +35,65 @@ outside Docker.
    cp .env.example .env
    ```
 
+   Edit `.env` before starting. At minimum, replace `AUTH_SECRET_KEY` and
+   `ATLAS_ADMIN_PASSWORD`. For a remote Docker host, set:
+
+   ```dotenv
+   NEXT_PUBLIC_API_URL=http://<docker-host-ip>:8000
+   CORS_ORIGINS=http://<docker-host-ip>:3000
+   ```
+
+   These values are browser-facing; `localhost` only works when the browser is
+   running on the Docker host itself.
+
 2. Build and start all services:
 
    ```bash
    docker compose --env-file .env -f infra/docker/docker-compose.yml up --build
    ```
 
-   Before using the stack outside local development, replace
-   `AUTH_SECRET_KEY` with a random value of at least 32 characters and set
-   `AUTH_COOKIE_SECURE=true` when serving over HTTPS.
+   API startup applies migrations and idempotently seeds the administrator from
+   `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
+   `ATLAS_ADMIN_DISPLAY_NAME`.
 
 3. Open the services:
 
    - Web: <http://localhost:3000>
+   - Login: <http://localhost:3000/login>
    - API health check: <http://localhost:8000/health>
 
 The API health endpoint returns `{"status":"ok"}`. The worker logs
 `Atlas worker is ready` once it starts.
 
-## Create the first user
+## Seed the administrator
 
-Atlas does not expose public registration. Once the API container is running,
-create the initial user interactively:
+Atlas does not expose public registration. The API container runs the admin seed
+command automatically after migrations. The command creates the configured user
+only when that email is missing, so container restarts do not create duplicates.
+
+To run the same idempotent seed manually:
 
 ```bash
 docker compose --env-file .env -f infra/docker/docker-compose.yml exec api \
-  python -m scripts.create_user --email admin@example.com --display-name "Atlas Admin"
+  python -m scripts.seed_admin
 ```
 
-Passwords must contain at least 12 characters and are stored as Argon2 hashes.
+All three `ATLAS_ADMIN_*` variables are required. Passwords must contain at
+least 12 characters, are stored as Argon2 hashes, and are never logged.
 
 ## Authentication API
 
-- `POST /auth/login` accepts JSON containing `email` and `password` and sets an
-  HttpOnly session cookie.
-- `POST /auth/logout` clears the session cookie.
-- `GET /auth/me` returns the authenticated user.
+- `POST /auth/login` accepts JSON containing `email` and `password` and returns
+  an `access_token`, `token_type`, and safe user object.
+- `GET /auth/me` accepts `Authorization: Bearer <token>` and returns the
+  authenticated user.
+- `POST /auth/logout` retains compatibility with the earlier cookie flow. The
+  MVP web logout clears its bearer token locally.
 - `GET /protected` demonstrates how future routes require authentication.
+
+The web UI stores the bearer token in `localStorage` for the MVP. `/dashboard`
+validates it through `/auth/me`; missing or rejected tokens redirect to
+`/login`.
 
 Authenticated CRUD endpoints are available for:
 
@@ -90,6 +112,30 @@ must be added with the tenancy model.
 
 For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
 Production deployments must use HTTPS and set it to `true`.
+
+## Manual authentication test
+
+1. Start from a fresh database and bring the stack up with `--build`.
+2. Confirm the API logs report that the configured admin was created (or
+   already exists after a restart).
+3. Open `/login` and sign in with `ATLAS_ADMIN_EMAIL` and
+   `ATLAS_ADMIN_PASSWORD`.
+4. Confirm login redirects to `/dashboard` and displays the configured email
+   and display name.
+5. Refresh `/dashboard`; the authenticated session should remain active.
+6. Select **Log out** and confirm the browser returns to `/login`.
+7. Open `/dashboard` directly while logged out and confirm it redirects to
+   `/login`.
+8. Verify bearer authentication from a terminal:
+
+   ```bash
+   curl -X POST "$NEXT_PUBLIC_API_URL/auth/login" \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"admin@example.com","password":"your-admin-password"}'
+
+   curl "$NEXT_PUBLIC_API_URL/auth/me" \
+     -H 'Authorization: Bearer <access_token-from-login>'
+   ```
 
 Stop the stack with `Ctrl+C`, or remove its containers and volumes with:
 

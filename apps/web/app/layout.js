@@ -1,5 +1,5 @@
 import "./globals.css";
-import { AppShell } from "../components/app-shell";
+import { RootShell } from "../components/root-shell";
 
 export const metadata = {
   title: "Atlas",
@@ -10,7 +10,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AppShell>{children}</AppShell>
+        <RootShell>{children}</RootShell>
       </body>
     </html>
   );

@@ -25,16 +25,21 @@ def login(credentials: LoginRequest, response: Response, db: Session = Depends(g
         )
 
     duration = session_duration()
+    access_token = create_session_token(user.id)
     response.set_cookie(
         key=COOKIE_NAME,
-        value=create_session_token(user.id),
+        value=access_token,
         max_age=int(duration.total_seconds()),
         httponly=True,
         secure=cookie_secure(),
         samesite="lax",
         path="/",
     )
-    return LoginResponse(user=UserResponse.model_validate(user))
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

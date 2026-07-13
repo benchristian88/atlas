@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: atlas-proxmox
+Version: 0.1.0
+Summary: Proxmox discovery plugin for Atlas
+Requires-Python: >=3.12
+Requires-Dist: atlas-plugin-sdk<0.2.0,>=0.1.0
+Requires-Dist: httpx<0.29,>=0.28.1
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8.4; extra == "dev"
