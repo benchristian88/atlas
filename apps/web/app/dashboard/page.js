@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "../../components/page-header";
 import {
@@ -9,45 +9,64 @@ import {
   getAccessToken,
 } from "../../lib/api";
 
+function validUser(value) {
+  return Boolean(
+    value
+    && typeof value.email === "string"
+    && typeof value.display_name === "string",
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!getAccessToken()) {
-      router.replace("/login");
-      return;
-    }
-
-    let active = true;
-    apiRequest("/auth/me")
-      .then((currentUser) => {
-        if (active) setUser(currentUser);
-      })
-      .catch((requestError) => {
-        if (!active) return;
-        clearAccessToken();
-        if (requestError.message === "Sign in to Atlas before managing records.") {
-          router.replace("/login");
-        } else {
-          setError(requestError.message);
+  const loadCurrentUser = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      if (!getAccessToken()) {
+        router.replace("/login");
+        return;
+      }
+      const currentUser = await apiRequest("/auth/me");
+      if (!validUser(currentUser)) {
+        throw new Error("Atlas API returned an unexpected user response.");
+      }
+      setUser(currentUser);
+    } catch (requestError) {
+      if (requestError.status === 401) {
+        try {
+          clearAccessToken();
+        } catch (storageError) {
+          setError(storageError.message);
+          return;
         }
-      });
-    return () => { active = false; };
+        router.replace("/login");
+        return;
+      }
+      setError(requestError.message || "Atlas could not load the dashboard.");
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
-  async function logout() {
+  useEffect(() => { loadCurrentUser(); }, [loadCurrentUser]);
+
+  function logout() {
     try {
-      await apiRequest("/auth/logout", { method: "POST" });
-    } finally {
       clearAccessToken();
       router.replace("/login");
+      router.refresh();
+    } catch (storageError) {
+      setError(storageError.message);
     }
   }
 
-  if (!user && !error) {
-    return <p className="secondary-text">Loading dashboard…</p>;
+  if (loading) {
+    return <div className="status-banner" role="status">Checking your Atlas session…</div>;
   }
 
   return (
@@ -58,17 +77,20 @@ export default function DashboardPage() {
           title="Welcome to Atlas"
           description="Your authenticated Atlas session is active."
         />
-        <button className="button button-secondary" onClick={logout} type="button">Log out</button>
+        {user && <button className="button button-secondary" onClick={logout} type="button">Log out</button>}
       </div>
       {error ? (
-        <div className="error-banner" role="alert">{error}</div>
-      ) : (
+        <div className="error-panel" role="alert">
+          <p>{error}</p>
+          <button className="button button-secondary" onClick={loadCurrentUser} type="button">Try again</button>
+        </div>
+      ) : user ? (
         <section className="profile-card">
           <p className="eyebrow">Signed in as</p>
           <h2>{user.display_name}</h2>
           <p>{user.email}</p>
         </section>
-      )}
+      ) : null}
     </>
   );
 }
