@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { PageHeader } from "./page-header";
+
+const EMPTY_DEPENDENCIES = [];
 
 function valueForInput(value) {
   if (value === null || value === undefined) return "";
@@ -18,7 +20,7 @@ export function CrudScreen({
   fields,
   columns,
   emptyValues,
-  dependencies = [],
+  dependencies = EMPTY_DEPENDENCIES,
   preparePayload = (form) => form,
 }) {
   const [records, setRecords] = useState([]);
@@ -29,6 +31,7 @@ export function CrudScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const initialLoadStarted = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,7 +52,11 @@ export function CrudScreen({
     }
   }, [endpoint, dependencies]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (initialLoadStarted.current) return;
+    initialLoadStarted.current = true;
+    load();
+  }, [load]);
 
   const relatedById = useMemo(() => Object.fromEntries(
     Object.entries(related).map(([key, values]) => [
@@ -191,7 +198,7 @@ export function CrudScreen({
             <thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Actions</th></tr></thead>
             <tbody>
               {!loading && records.length === 0 && (
-                <tr><td className="empty-state" colSpan={columns.length + 1}>No records yet. Add the first one to get started.</td></tr>
+                <tr><td className="empty-state" colSpan={columns.length + 1}>No {title.toLowerCase()} yet.</td></tr>
               )}
               {records.map((record) => (
                 <tr key={record.id}>

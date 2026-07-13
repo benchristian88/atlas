@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/", label: "Overview" },
   { href: "/customers", label: "Customers" },
   { href: "/sites", label: "Sites" },
   { href: "/assets", label: "Assets" },
@@ -19,7 +18,7 @@ export function Navigation() {
   return (
     <nav className="nav-list" aria-label="Primary navigation">
       {items.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+        const active = pathname.startsWith(item.href);
         return (
           <Link
             aria-current={active ? "page" : undefined}
