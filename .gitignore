@@ -7,3 +7,5 @@ node_modules/
 .next/
 npm-debug.log*
 .DS_Store
+.env.local
+.env.*.local
