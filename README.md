@@ -172,6 +172,11 @@ infrastructure field migration is applied.
 
 ### Model a homelab network
 
+Networks and VLANs represent subnets and broadcast/routing domains. Assets can
+have one or more interfaces, and interface records are the source of truth for
+IP and network membership. The legacy asset-level IP field remains API-compatible
+but is not used by the web workflow.
+
 1. Create customer **Home Lab** and site **Home**.
 2. Open **Networks** and create **Apps VLAN** as a `vlan`, VLAN ID `5`, CIDR `192.168.5.0/24`, and gateway `192.168.5.1`.
 3. Create **IoT VLAN** as a `vlan`, VLAN ID `3`, and CIDR `192.168.3.0/24`.

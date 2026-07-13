@@ -194,6 +194,8 @@ a { color: inherit; text-decoration: none; }
   padding: 12px 14px;
 }
 
+.success-banner { background: var(--accent-soft); border: 1px solid #bde4db; border-radius: 9px; color: #19675d; font-size: 13px; margin-bottom: 18px; padding: 12px 14px; }
+
 .status-banner {
   background: var(--info-soft);
   border: 1px solid #cbdcf2;

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import { PageHeader } from "../../../components/page-header";
 import { StatusBadge } from "../../../components/status-badge";
 import { apiRequest } from "../../../lib/api";
@@ -9,12 +10,13 @@ import { RELATIONSHIP_TYPES, taxonomyLabel } from "../../../lib/taxonomy";
 
 const detailFields = [
   ["asset_type", "Type"], ["vendor", "Vendor"], ["model", "Model"],
-  ["hostname", "Hostname"], ["ip_address", "IP address"], ["source", "Source"],
+  ["hostname", "Hostname"], ["source", "Source"],
   ["description", "Description"],
 ];
 
 export default function AssetDetailPage() {
   const { id } = useParams();
+  const searchParams = useSearchParams();
   const [asset, setAsset] = useState(null);
   const [assets, setAssets] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -27,6 +29,8 @@ export default function AssetDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingInterface, setSavingInterface] = useState(false);
+  const [showInterfaceForm, setShowInterfaceForm] = useState(false);
+  const [showRelationshipForm, setShowRelationshipForm] = useState(false);
   const [error, setError] = useState("");
   const started = useRef(false);
 
@@ -87,6 +91,7 @@ export default function AssetDetailPage() {
       });
       setInterfaceForm({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: false, notes: "" });
       await load();
+      setShowInterfaceForm(false);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -120,6 +125,7 @@ export default function AssetDetailPage() {
       });
       setForm({ source_asset_id: id, target_asset_id: "", relationship_type: "depends_on", notes: "" });
       await load();
+      setShowRelationshipForm(false);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -142,7 +148,8 @@ export default function AssetDetailPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Asset detail" title={asset.name} description={`${customer?.name || "Unknown customer"} · ${site?.name || "No site"}`} />
+      <div className="page-heading-row"><PageHeader eyebrow="Asset detail" title={asset.name} description={`${customer?.name || "Unknown customer"} · ${site?.name || "No site"}`} /><Link className="button button-secondary" href={`/assets/${id}/edit`}>Edit Asset</Link></div>
+      {searchParams.get("updated") === "1" && <div className="success-banner" role="status">Asset updated successfully.</div>}
       {error && <div className="error-banner" role="alert">{error}</div>}
       <section className="detail-card">
         <div className="detail-grid">
@@ -154,8 +161,8 @@ export default function AssetDetailPage() {
       </section>
 
       <section className="form-card">
-        <div className="form-card-header"><h2>Interfaces and networks</h2></div>
-        <form className="resource-form" onSubmit={createInterface}>
+        <div className="form-card-header"><h2>Interfaces and networks</h2>{!showInterfaceForm && <button className="button button-primary" onClick={() => setShowInterfaceForm(true)} type="button">Add interface</button>}</div>
+        {showInterfaceForm && <form className="resource-form" onSubmit={createInterface}>
           <div className="form-grid">
             <label className="field"><span>Interface name *</span><input required value={interfaceForm.name} onChange={(event) => setInterfaceForm({ ...interfaceForm, name: event.target.value })} placeholder="eth0" /></label>
             <label className="field"><span>Network / VLAN</span><select value={interfaceForm.network_id} onChange={(event) => setInterfaceForm({ ...interfaceForm, network_id: event.target.value })}><option value="">Unassigned network</option>{availableNetworks.map((network) => <option key={network.id} value={network.id}>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}{network.cidr ? ` — ${network.cidr}` : ""}</option>)}</select></label>
@@ -164,22 +171,22 @@ export default function AssetDetailPage() {
             <label className="field checkbox-field"><input checked={interfaceForm.is_primary} onChange={(event) => setInterfaceForm({ ...interfaceForm, is_primary: event.target.checked })} type="checkbox" /><span>Primary interface</span></label>
             <label className="field field-wide"><span>Notes</span><textarea rows="2" value={interfaceForm.notes} onChange={(event) => setInterfaceForm({ ...interfaceForm, notes: event.target.value })} /></label>
           </div>
-          <div className="form-actions"><button className="button button-primary" disabled={savingInterface} type="submit">{savingInterface ? "Saving…" : "Add interface"}</button></div>
-        </form>
+          <div className="form-actions"><button className="button button-secondary" onClick={() => setShowInterfaceForm(false)} type="button">Cancel</button><button className="button button-primary" disabled={savingInterface} type="submit">{savingInterface ? "Saving…" : "Add interface"}</button></div>
+        </form>}
         <div className="interface-list">{interfaces.length === 0 ? <p className="secondary-text">No interfaces yet.</p> : interfaces.map((item) => { const network = networksById[item.network_id]; return <div className="interface-row" key={item.id}><div><strong>{item.name}{item.is_primary ? " · Primary" : ""}</strong><span>{item.ip_address || "No IP"}{item.mac_address ? ` · ${item.mac_address}` : ""}</span><span>{network ? `${network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}${network.name}${network.cidr ? ` — ${network.cidr}` : ""}` : "Unassigned network"}</span></div><button className="text-button text-danger" onClick={() => removeInterface(item.id)} type="button">Delete</button></div>; })}</div>
       </section>
 
       <section className="form-card">
-        <div className="form-card-header"><h2>Add relationship</h2></div>
-        <form className="resource-form" onSubmit={createRelationship}>
+        <div className="form-card-header"><h2>Relationships</h2>{!showRelationshipForm && <button className="button button-primary" onClick={() => setShowRelationshipForm(true)} type="button">Add relationship</button>}</div>
+        {showRelationshipForm && <form className="resource-form" onSubmit={createRelationship}>
           <div className="form-grid">
             <label className="field"><span>Source asset *</span><select required value={form.source_asset_id} onChange={(event) => setForm({ ...form, source_asset_id: event.target.value, target_asset_id: event.target.value === form.target_asset_id ? "" : form.target_asset_id })}><option value="">Select an asset</option>{assets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label className="field"><span>Relationship type *</span><select required value={form.relationship_type} onChange={(event) => setForm({ ...form, relationship_type: event.target.value })}>{RELATIONSHIP_TYPES.map((value) => <option key={value} value={value}>{taxonomyLabel(value)}</option>)}</select></label>
             <label className="field"><span>Target asset *</span><select required value={form.target_asset_id} onChange={(event) => setForm({ ...form, target_asset_id: event.target.value })}><option value="">Select an asset</option>{assets.filter((item) => item.id !== form.source_asset_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label className="field field-wide"><span>Notes</span><textarea rows="2" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
           </div>
-          <div className="form-actions"><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Add relationship"}</button></div>
-        </form>
+          <div className="form-actions"><button className="button button-secondary" onClick={() => setShowRelationshipForm(false)} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Add relationship"}</button></div>
+        </form>}
       </section>
 
       <section className="table-card" aria-label="Asset relationships">

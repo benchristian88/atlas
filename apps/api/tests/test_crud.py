@@ -238,6 +238,7 @@ def test_asset_and_relationship_create_list_get_update_flows(
         user,
         db,
     )
+    assert second.ip_address is None
     assert get_asset(first.id, user, db) is first
     assert len(list_assets(user, None, None, 100, 0, db)) == 2
     update_asset(first.id, ManualAssetUpdate(model="Atlas Edge"), user, db)

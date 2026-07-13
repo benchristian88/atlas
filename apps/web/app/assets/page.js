@@ -8,6 +8,7 @@ import { ASSET_TYPES, taxonomyLabel } from "../../lib/taxonomy";
 const dependencies = [
   { key: "customers", endpoint: "/customers" },
   { key: "sites", endpoint: "/sites" },
+  { key: "interfaces", endpoint: "/asset-interfaces" },
 ];
 const fields = [
   { name: "customer_id", label: "Customer", type: "select", optionsKey: "customers", required: true, placeholder: "Select a customer", clearFields: ["site_id"] },
@@ -17,7 +18,6 @@ const fields = [
   { name: "vendor", label: "Vendor" },
   { name: "model", label: "Model" },
   { name: "hostname", label: "Hostname" },
-  { name: "ip_address", label: "IP address" },
   { name: "management_url", label: "Management URL", type: "url", valueFromRecord: (record) => record.metadata?.management_url || "" },
   { name: "tags", label: "Tags", placeholder: "homelab, production, critical", valueFromRecord: (record) => (record.metadata?.tags || []).join(", ") },
   { name: "status", label: "Status", type: "select", required: true, options: [
@@ -32,7 +32,11 @@ const columns = [
   { key: "customer_id", label: "Customer", render: (row, related) => related.customers?.[row.customer_id]?.name || "Unknown" },
   { key: "site_id", label: "Site", render: (row, related) => row.site_id ? related.sites?.[row.site_id]?.name || "Unknown" : "—" },
   { key: "hostname", label: "Hostname", render: (row) => <span className="mono secondary-text">{row.hostname || "—"}</span> },
-  { key: "ip_address", label: "IP address", render: (row) => <span className="mono secondary-text">{row.ip_address || "—"}</span> },
+  { key: "primary_ip", label: "Primary IP", render: (row, related) => {
+    const interfaces = Object.values(related.interfaces || {}).filter((item) => item.asset_id === row.id && item.ip_address);
+    const primary = interfaces.find((item) => item.is_primary) || interfaces[0];
+    return <span className="mono secondary-text">{primary?.ip_address || "—"}</span>;
+  } },
   { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
 ];
 
@@ -53,7 +57,6 @@ function preparePayload(form) {
     vendor: form.vendor || null,
     model: form.model || null,
     hostname: form.hostname || null,
-    ip_address: form.ip_address || null,
     description: form.description || null,
     metadata: {
       ...metadata,
@@ -69,7 +72,7 @@ export default function AssetsPage() {
       columns={columns}
       dependencies={dependencies}
       description="Create and maintain infrastructure assets, addressing details, metadata, and topology roles."
-      emptyValues={{ customer_id: "", site_id: "", name: "", asset_type: "", vendor: "", model: "", hostname: "", ip_address: "", management_url: "", tags: "", status: "active", description: "", metadata: "{}" }}
+      emptyValues={{ customer_id: "", site_id: "", name: "", asset_type: "", vendor: "", model: "", hostname: "", management_url: "", tags: "", status: "active", description: "", metadata: "{}" }}
       endpoint="/assets"
       eyebrow="Inventory"
       fields={fields}
