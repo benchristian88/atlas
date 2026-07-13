@@ -3,71 +3,55 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  apiRequest,
-  clearAccessToken,
-  getAccessToken,
-  setAccessToken,
-} from "../../lib/api";
-
-function validLoginResponse(result) {
-  return Boolean(
-    result
-    && typeof result.access_token === "string"
-    && result.access_token.trim()
-    && result.token_type?.toLowerCase() === "bearer"
-    && typeof result.user?.email === "string",
-  );
-}
+  clearToken,
+  getCurrentUser,
+  getToken,
+  login,
+} from "../../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("checking");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let active = true;
-    async function checkExistingSession() {
+    async function validateExistingToken() {
+      let existingToken;
       try {
-        if (!getAccessToken()) {
-          if (active) setStatus("idle");
-          return;
-        }
-        await apiRequest("/auth/me");
+        existingToken = getToken();
+        if (!existingToken) return;
+        await getCurrentUser();
         if (active) router.replace("/dashboard");
       } catch (requestError) {
         if (!active) return;
-        if (requestError.status === 401) {
-          try {
-            clearAccessToken();
-          } catch (storageError) {
-            setError(storageError.message);
-          }
-        } else {
-          setError(`Could not verify the saved session. ${requestError.message}`);
+        try {
+          // Do not let an older session check erase a token from a new login.
+          if (getToken() !== existingToken) return;
+          clearToken();
+        } catch (storageError) {
+          setError(storageError.message);
+          return;
         }
-        setStatus("idle");
+        setError(
+          requestError.status === 401
+            ? "Your previous session expired. Sign in again."
+            : `The saved session could not be verified. ${requestError.message}`,
+        );
       }
     }
-    checkExistingSession();
+    validateExistingToken();
     return () => { active = false; };
   }, [router]);
 
   async function submit(event) {
     event.preventDefault();
-    setStatus("submitting");
+    setSubmitting(true);
     setError("");
     try {
-      const result = await apiRequest("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      if (!validLoginResponse(result)) {
-        throw new Error("Atlas API returned an unexpected login response without a valid bearer token.");
-      }
-      setAccessToken(result.access_token);
-      setStatus("redirecting");
+      await login(email, password);
       router.replace("/dashboard");
       router.refresh();
     } catch (requestError) {
@@ -76,11 +60,10 @@ export default function LoginPage() {
           ? "The email or password is incorrect."
           : requestError.message || "Atlas could not complete the login request.",
       );
-      setStatus("idle");
+      setSubmitting(false);
     }
   }
 
-  const busy = status !== "idle";
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby="login-title">
@@ -92,15 +75,13 @@ export default function LoginPage() {
         <h1 id="login-title">Sign in to Atlas</h1>
         <p className="page-description">Use the administrator credentials configured for this deployment.</p>
         {error && <div className="error-banner" role="alert">{error}</div>}
-        {status === "checking" && <div className="status-banner" role="status">Checking for an existing session…</div>}
-        {status === "redirecting" && <div className="status-banner" role="status">Login successful. Opening dashboard…</div>}
         <form className="login-form" onSubmit={submit}>
           <label className="field">
             <span>Email</span>
             <input
               autoComplete="email"
               autoFocus
-              disabled={busy}
+              disabled={submitting}
               onChange={(event) => setEmail(event.target.value)}
               required
               type="email"
@@ -111,15 +92,15 @@ export default function LoginPage() {
             <span>Password</span>
             <input
               autoComplete="current-password"
-              disabled={busy}
+              disabled={submitting}
               onChange={(event) => setPassword(event.target.value)}
               required
               type="password"
               value={password}
             />
           </label>
-          <button className="button button-primary login-submit" disabled={busy} type="submit">
-            {status === "submitting" ? "Signing in…" : status === "redirecting" ? "Opening dashboard…" : "Sign in"}
+          <button className="button button-primary login-submit" disabled={submitting} type="submit">
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </section>
