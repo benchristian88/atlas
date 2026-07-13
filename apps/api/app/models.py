@@ -73,6 +73,9 @@ class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="active", index=True
+    )
 
 
 class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -87,6 +90,9 @@ class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="active", index=True
+    )
 
 
 class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -154,10 +160,16 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     vendor: Mapped[str | None] = mapped_column(String(100), index=True)
+    model: Mapped[str | None] = mapped_column(String(255))
+    hostname: Mapped[str | None] = mapped_column(String(255), index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="active", index=True
     )
     description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="manual", index=True
+    )
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )
@@ -187,6 +199,7 @@ class AssetRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     relationship_type: Mapped[str] = mapped_column(
         String(100), nullable=False, index=True
     )
+    notes: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )

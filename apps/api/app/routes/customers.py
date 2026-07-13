@@ -29,9 +29,18 @@ def list_customers(
 
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate, _: CurrentUser, db: Session = Depends(get_db)):
-    if db.get(Workspace, payload.workspace_id) is None:
+    workspace = db.get(Workspace, payload.workspace_id) if payload.workspace_id else None
+    if payload.workspace_id and workspace is None:
         raise not_found("Workspace")
-    customer = Customer(**payload.model_dump())
+    if workspace is None:
+        workspace = db.scalar(select(Workspace).order_by(Workspace.created_at))
+    if workspace is None:
+        workspace = Workspace(name="Atlas Workspace", slug="atlas")
+        db.add(workspace)
+        commit(db, "Workspace")
+        db.refresh(workspace)
+    values = payload.model_dump(exclude={"workspace_id"})
+    customer = Customer(**values, workspace_id=workspace.id)
     db.add(customer)
     commit(db, "Customer")
     db.refresh(customer)

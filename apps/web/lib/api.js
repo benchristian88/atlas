@@ -1,5 +1,5 @@
 import { ApiError } from "./api-error";
-import { getToken } from "./auth-token";
+import { clearToken, getToken } from "./auth-token";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -45,6 +45,13 @@ export async function apiRequest(path, options = {}) {
 
   const body = await responseBody(response);
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      try {
+        clearToken();
+      } finally {
+        window.location.replace("/login");
+      }
+    }
     let detail = `Atlas API request failed with status ${response.status}.`;
     if (typeof body?.detail === "string") detail = body.detail;
     if (Array.isArray(body?.detail)) {

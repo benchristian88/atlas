@@ -99,16 +99,19 @@ Authenticated CRUD endpoints are available for:
 
 - `/customers`
 - `/sites`
-- `/manual-assets`
+- `/assets`
+- `/asset-relationships`
 
 Collection routes support `GET` and `POST`; resource routes support `GET`,
-`PATCH`, and `DELETE`. The corresponding web screens are available at
-`/customers`, `/sites`, and `/assets`.
+`PATCH`, and `DELETE` where applicable. The corresponding web screens are
+available at `/customers`, `/sites`, `/assets`, `/assets/<id>`, and `/topology`.
+`/manual-assets` remains as a compatibility route for earlier clients.
 
 The current v0 data model does not yet relate users to workspaces. Customer
-creation therefore requires an existing `workspace_id`, and all authenticated
-users currently have access to the same records. Workspace-scoped authorization
-must be added with the tenancy model.
+creation uses the first existing workspace, or creates the default Atlas
+workspace when needed. All authenticated users currently have access to the
+same records. Workspace-scoped authorization must be added with the tenancy
+model.
 
 For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
 Production deployments must use HTTPS and set it to `true`.
@@ -136,6 +139,22 @@ Production deployments must use HTTPS and set it to `true`.
    curl "$NEXT_PUBLIC_API_URL/auth/me" \
      -H 'Authorization: Bearer <access_token-from-login>'
    ```
+
+## Manual infrastructure test
+
+After signing in, verify the persistent manual-data workflow:
+
+1. Open **Customers**, create a customer, then refresh and confirm it remains.
+2. Open **Sites**, select that customer, create a site, and confirm the customer name is shown.
+3. Open **Assets**, select the customer and site, enter an asset name, type, hostname, and IP address, then create it.
+4. Create a second asset, open the first asset by selecting its name, and add a relationship to the second asset.
+5. Refresh the asset detail page and confirm the asset fields and relationship remain.
+6. Open **Topology** and confirm the customer → site → assets tree and relationship label appear.
+7. Return to **Dashboard** and confirm the live customer, site, asset, and relationship counts.
+
+The API container runs `alembic upgrade head` at startup. Existing deployments
+must restart the API container after pulling these changes so the manual
+infrastructure field migration is applied.
 
 Stop the stack with `Ctrl+C`, or remove its containers and volumes with:
 

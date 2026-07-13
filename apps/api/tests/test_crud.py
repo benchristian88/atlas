@@ -4,7 +4,13 @@ import pytest
 from fastapi import HTTPException
 
 from app.main import app
-from app.models import Asset, Customer, Site, User, Workspace
+from app.models import Asset, AssetRelationship, Customer, Site, User, Workspace
+from app.routes.asset_relationships import (
+    create_asset_relationship,
+    delete_asset_relationship,
+    list_asset_relationships,
+)
+from app.routes.assets import create_asset, get_asset, list_assets, update_asset
 from app.routes.customers import create_customer, delete_customer, update_customer
 from app.routes.manual_assets import (
     create_manual_asset,
@@ -18,6 +24,7 @@ from app.schemas import (
     CustomerUpdate,
     ManualAssetCreate,
     ManualAssetUpdate,
+    AssetRelationshipCreate,
     SiteCreate,
     SiteUpdate,
 )
@@ -32,6 +39,14 @@ class FakeSession:
 
     def get(self, model, record_id):
         return self.records.get((model, record_id))
+
+    def scalar(self, statement):
+        model = statement.column_descriptions[0].get("entity")
+        return next((record for (record_type, _), record in self.records.items() if record_type is model), None)
+
+    def scalars(self, statement):
+        model = statement.column_descriptions[0].get("entity")
+        return [record for (record_type, _), record in self.records.items() if record_type is model]
 
     def add(self, record):
         now = datetime.now(timezone.utc)
@@ -73,10 +88,13 @@ def test_openapi_exposes_protected_crud_operations() -> None:
         "/customers": "/customers/{customer_id}",
         "/sites": "/sites/{site_id}",
         "/manual-assets": "/manual-assets/{asset_id}",
+        "/assets": "/assets/{asset_id}",
     }
     for collection, detail_path in detail_paths.items():
         assert {"get", "post"} <= set(paths[collection])
         assert {"get", "patch", "delete"} <= set(paths[detail_path])
+    assert {"get", "post"} <= set(paths["/asset-relationships"])
+    assert "delete" in paths["/asset-relationships/{relationship_id}"]
 
 
 def test_customer_crud(workspace: Workspace, user: User) -> None:
@@ -182,4 +200,63 @@ def test_discovered_asset_cannot_be_changed_through_manual_asset_routes(
     db = FakeSession([discovered])
     with pytest.raises(HTTPException) as exc_info:
         get_manual_asset(db, discovered.id)
+    assert exc_info.value.status_code == 404
+
+
+def test_asset_and_relationship_create_list_get_update_flows(
+    workspace: Workspace, user: User
+) -> None:
+    customer = Customer(id=uuid.uuid4(), workspace_id=workspace.id, name="Customer")
+    site = Site(id=uuid.uuid4(), customer_id=customer.id, name="Main")
+    db = FakeSession([workspace, customer, site])
+
+    first = create_asset(
+        ManualAssetCreate(
+            customer_id=customer.id,
+            site_id=site.id,
+            name="router-01",
+            asset_type="router",
+            hostname="router-01.example.test",
+            ip_address="192.0.2.10",
+        ),
+        user,
+        db,
+    )
+    second = create_asset(
+        ManualAssetCreate(customer_id=customer.id, name="switch-01", asset_type="switch"),
+        user,
+        db,
+    )
+    assert get_asset(first.id, user, db) is first
+    assert len(list_assets(user, None, None, 100, 0, db)) == 2
+    update_asset(first.id, ManualAssetUpdate(model="Atlas Edge"), user, db)
+    assert first.model == "Atlas Edge"
+
+    edge = create_asset_relationship(
+        AssetRelationshipCreate(
+            source_asset_id=first.id,
+            target_asset_id=second.id,
+            relationship_type="connects_to",
+            notes="uplink",
+        ),
+        user,
+        db,
+    )
+    assert edge.notes == "uplink"
+    assert len(list_asset_relationships(user, None, 500, 0, db)) == 1
+    assert delete_asset_relationship(edge.id, user, db).status_code == 204
+
+
+def test_relationship_rejects_missing_assets(user: User) -> None:
+    db = FakeSession()
+    with pytest.raises(HTTPException) as exc_info:
+        create_asset_relationship(
+            AssetRelationshipCreate(
+                source_asset_id=uuid.uuid4(),
+                target_asset_id=uuid.uuid4(),
+                relationship_type="depends_on",
+            ),
+            user,
+            db,
+        )
     assert exc_info.value.status_code == 404

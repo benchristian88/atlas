@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, customers, manual_assets, protected, sites
+from app.routes import asset_relationships, assets, auth, customers, manual_assets, protected, sites
 
 app = FastAPI(title="Atlas API")
 app.add_middleware(
@@ -20,6 +20,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(customers.router)
 app.include_router(sites.router)
+app.include_router(assets.router)
+app.include_router(asset_relationships.router)
 app.include_router(manual_assets.router)
 app.include_router(protected.router)
 

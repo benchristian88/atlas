@@ -3,15 +3,17 @@
 import { CrudScreen } from "../../components/crud-screen";
 
 const fields = [
-  { name: "workspace_id", label: "Workspace ID", required: true, createOnly: true, placeholder: "UUID", help: "Workspace cannot be changed after customer creation." },
   { name: "name", label: "Name", required: true },
   { name: "description", label: "Description", type: "textarea", wide: true },
+  { name: "status", label: "Status", type: "select", required: true, options: [
+    { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" },
+  ] },
 ];
 
 const columns = [
   { key: "name", label: "Customer", render: (row) => <span className="primary-cell">{row.name}</span> },
   { key: "description", label: "Description", render: (row) => <span className="secondary-text">{row.description || "—"}</span> },
-  { key: "workspace_id", label: "Workspace", render: (row) => <span className="mono secondary-text">{row.workspace_id}</span> },
+  { key: "status", label: "Status" },
 ];
 
 export default function CustomersPage() {
@@ -19,15 +21,11 @@ export default function CustomersPage() {
     <CrudScreen
       columns={columns}
       description="Create and maintain organisations whose infrastructure is managed in this workspace."
-      emptyValues={{ workspace_id: "", name: "", description: "" }}
+      emptyValues={{ name: "", description: "", status: "active" }}
       endpoint="/customers"
       eyebrow="Organisation"
       fields={fields}
-      preparePayload={(form, editingId) => {
-        const payload = { ...form, description: form.description || null };
-        if (editingId) delete payload.workspace_id;
-        return payload;
-      }}
+      preparePayload={(form) => ({ ...form, description: form.description || null })}
       title="Customers"
     />
   );

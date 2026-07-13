@@ -8,12 +8,16 @@ const fields = [
   { name: "name", label: "Name", required: true },
   { name: "address", label: "Address", type: "textarea", wide: true },
   { name: "notes", label: "Notes", type: "textarea", wide: true },
+  { name: "status", label: "Status", type: "select", required: true, options: [
+    { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" },
+  ] },
 ];
 const columns = [
   { key: "name", label: "Site", render: (row) => <span className="primary-cell">{row.name}</span> },
   { key: "customer_id", label: "Customer", render: (row, related) => related.customers?.[row.customer_id]?.name || "Unknown" },
   { key: "address", label: "Address", render: (row) => <span className="secondary-text">{row.address || "—"}</span> },
   { key: "notes", label: "Notes", render: (row) => <span className="secondary-text">{row.notes || "—"}</span> },
+  { key: "status", label: "Status" },
 ];
 
 export default function SitesPage() {
@@ -22,7 +26,7 @@ export default function SitesPage() {
       columns={columns}
       dependencies={dependencies}
       description="Create and maintain physical or logical locations for each customer."
-      emptyValues={{ customer_id: "", name: "", address: "", notes: "" }}
+      emptyValues={{ customer_id: "", name: "", address: "", notes: "", status: "active" }}
       endpoint="/sites"
       eyebrow="Locations"
       fields={fields}

@@ -4,8 +4,8 @@ from app.models import Base
 EXPECTED_COLUMNS = {
     "users": {"id", "email", "password_hash", "display_name", "created_at", "updated_at"},
     "workspaces": {"id", "name", "slug", "created_at", "updated_at"},
-    "customers": {"id", "workspace_id", "name", "description", "created_at", "updated_at"},
-    "sites": {"id", "customer_id", "name", "address", "notes", "created_at", "updated_at"},
+    "customers": {"id", "workspace_id", "name", "description", "status", "created_at", "updated_at"},
+    "sites": {"id", "customer_id", "name", "address", "notes", "status", "created_at", "updated_at"},
     "integrations": {
         "id", "customer_id", "site_id", "plugin_id", "name", "base_url",
         "username_or_token_id", "secret_reference", "verify_tls", "status",
@@ -17,11 +17,11 @@ EXPECTED_COLUMNS = {
     },
     "assets": {
         "id", "workspace_id", "customer_id", "site_id", "source_integration_id",
-        "external_id", "name", "asset_type", "vendor", "status", "description",
+        "external_id", "name", "asset_type", "vendor", "model", "hostname", "ip_address", "status", "description", "source",
         "metadata", "first_seen_at", "last_seen_at", "created_at", "updated_at",
     },
     "asset_relationships": {
-        "id", "source_asset_id", "target_asset_id", "relationship_type", "metadata",
+        "id", "source_asset_id", "target_asset_id", "relationship_type", "notes", "metadata",
         "created_at", "updated_at",
     },
     "asset_facts": {"id", "asset_id", "key", "value", "source", "created_at", "updated_at"},

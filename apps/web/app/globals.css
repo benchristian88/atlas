@@ -331,6 +331,23 @@ tbody tr:hover { background: #fbfdfd; }
   padding: 4px 8px;
   text-transform: capitalize;
 }
+
+.detail-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; padding: 22px; }
+.detail-grid { display: grid; gap: 20px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-grid > div { display: grid; gap: 6px; }
+.detail-grid span { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.detail-grid strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.relationship-list { display: grid; }
+.relationship-row { align-items: center; border-top: 1px solid var(--border); display: flex; font-size: 13px; gap: 20px; justify-content: space-between; padding: 15px 18px; }
+.topology-tree { display: grid; gap: 18px; }
+.topology-customer { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.topology-customer h2 { font-size: 19px; margin: 0 0 16px; }
+.topology-site { border-left: 3px solid var(--accent-soft); margin: 14px 0 0 8px; padding-left: 18px; }
+.topology-site h3 { font-size: 15px; margin: 0 0 10px; }
+.topology-assets { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.topology-assets li { background: var(--surface-muted); border-radius: 8px; display: grid; font-size: 13px; gap: 3px; padding: 10px 12px; }
+.topology-assets a { color: var(--accent); font-weight: 650; }
+.topology-assets span { color: var(--muted); font-size: 11px; }
 .status-active, .status-success, .status-completed, .status-connected, .status-running { background: var(--accent-soft); color: #19675d; }
 .status-pending, .status-warning { background: var(--warning-soft); color: var(--warning); }
 .status-failed, .status-error, .status-stale { background: var(--danger-soft); color: var(--danger); }
