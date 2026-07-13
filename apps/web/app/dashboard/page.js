@@ -11,6 +11,7 @@ const cards = [
   { key: "assets", label: "Assets", href: "/assets", description: "Managed infrastructure" },
   { key: "networks", label: "Networks", href: "/networks", description: "VLANs and network segments" },
   { key: "relationships", label: "Relationships", href: "/topology", description: "Connections between assets" },
+  { key: "topology", label: "Topology", href: "/topology", description: "Physical, platform, network, dependency, and all-relationship lenses", value: "5" },
 ];
 
 export default function DashboardPage() {
@@ -57,7 +58,7 @@ export default function DashboardPage() {
         {cards.map((card) => (
           <Link className="summary-card" href={card.href} key={card.key}>
             <span>{card.label}</span>
-            <strong>{counts ? counts[card.key] : "—"}</strong>
+            <strong>{card.value || (counts ? counts[card.key] : "—")}</strong>
             <span className="summary-description">{card.description}</span>
             <span className="card-link">View <span aria-hidden="true">→</span></span>
           </Link>

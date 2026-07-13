@@ -360,6 +360,17 @@ tbody tr:hover { background: #fbfdfd; }
 .topology-assets a { color: var(--accent); font-weight: 650; }
 .topology-assets span { color: var(--muted); font-size: 11px; }
 .topology-toolbar { align-items: end; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; gap: 24px; justify-content: space-between; margin-bottom: 20px; padding: 16px; }
+.topology-workbench { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; padding: 16px; }
+.lens-selector { display: flex; flex-wrap: wrap; gap: 8px; }
+.lens-description { color: var(--muted); font-size: 13px; margin: 12px 0 16px; }
+.topology-filters-wide { grid-template-columns: repeat(5, minmax(130px, 1fr)); max-width: none; }
+.focus-control { align-items: center; display: flex; gap: 7px; }
+.focus-control select { min-width: 0; }
+.warning-banner { background: var(--warning-soft); border: 1px solid #ead8a1; border-radius: 9px; color: var(--warning); font-size: 13px; margin-bottom: 16px; padding: 12px 14px; }
+.platform-lanes { display: grid; gap: 14px; }
+.platform-node { min-width: 0; }
+.platform-child { border-left: 2px solid #bde4db; margin: 9px 0 0 24px; padding-left: 20px; }
+.workload-badge { align-self: start; background: var(--accent-soft); border-radius: 999px; color: #19675d !important; font-size: 10px !important; font-weight: 700; margin-top: 3px; padding: 4px 8px; }
 .mode-selector { display: flex; gap: 8px; }
 .topology-filters { display: grid; flex: 1; gap: 12px; grid-template-columns: repeat(3, minmax(130px, 1fr)); max-width: 720px; }
 .topology-empty { background: var(--surface); border: 1px dashed #abc8c5; border-radius: 12px; padding: 38px; text-align: center; }
@@ -405,6 +416,7 @@ tbody tr:hover { background: #fbfdfd; }
   .page-content { padding: 26px 20px; }
   .topology-toolbar, .dashboard-prompt { align-items: stretch; flex-direction: column; }
   .topology-filters, .relationship-graph { grid-template-columns: 1fr; }
+  .lens-selector { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .network-members { grid-template-columns: 1fr; }
   .account-identity span { display: none; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

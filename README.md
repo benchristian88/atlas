@@ -148,7 +148,7 @@ After signing in, verify the persistent manual-data workflow:
 
 1. Open **Customers**, create a customer, then refresh and confirm it remains.
 2. Open **Sites**, select that customer, create a site, and confirm the customer name is shown.
-3. Open **Assets**, select the customer and site, enter an asset name, type, hostname, and IP address, then create it.
+3. Open **Assets**, select the customer and site, enter an asset name, type, and hostname, then create it. Add IP addresses from the asset detail interface section.
 4. Create a second asset, open the first asset by selecting its name, and add a relationship to the second asset.
 5. Refresh the asset detail page and confirm the asset fields and relationship remain.
 6. Open **Topology** and confirm the customer → site → assets tree and relationship label appear.
@@ -166,7 +166,7 @@ infrastructure field migration is applied.
 4. Create asset **nginx-proxy-manager** with type `docker_container` or `application`.
 5. Open an asset detail page and create `docker01` → `runs_on` → `pve1`.
 6. Create `nginx-proxy-manager` → `runs_on` → `docker01`.
-7. Open **Topology**, switch between **Hierarchy** and **Relationships**, and verify node details and edge labels.
+7. Open **Topology**, switch between **Platform** and **All relationships**, and verify node details and edge labels.
 8. Filter the topology by Home Lab, Home, and an asset type; clear each filter and confirm the graph remains stable.
 9. Refresh the browser and confirm all assets and relationships remain present without repeated idle API requests.
 
@@ -186,6 +186,29 @@ but is not used by the web workflow.
 7. Open **Topology**, select **Network / VLAN**, and confirm docker01 appears under `VLAN 5 — Apps VLAN — 192.168.5.0/24`.
 8. Confirm an asset without an interface appears under **Unassigned network** rather than being assigned from its primary IP silently.
 9. Edit Apps VLAN, refresh the page, then delete a disposable network and confirm the list updates only after those user actions.
+
+### Topology lenses
+
+Atlas separates overlapping infrastructure questions into focused topology lenses:
+
+- **Physical** shows firewalls, routers, switches, access points, storage, and physical hosts connected by `connects_to`, `uplinks_to`, or `connected_via`. Hosted workloads are summarized as counts instead of being drawn.
+- **Platform** shows clusters, hypervisor hosts, VMs, LXCs, Docker hosts, containers, and applications using hosting and containment relationships.
+- **Network / VLAN** groups every asset interface under its explicit Network/VLAN. Assets without interface membership remain unassigned.
+- **Dependency** shows operational links such as `depends_on`, `proxies`, `authenticates`, `exposes`, `backs_up_to`, and `uses_storage`.
+- **All relationships** is the advanced/debug lens. Use customer, site, asset type, relationship type, or focus-asset filters when it becomes busy.
+
+To exercise the lenses with a representative homelab:
+
+1. Create **UDM Pro**, **USW-16-POE**, **NAS**, **PBS**, **pve1**, and **pve2** assets.
+2. Record `UDM Pro` → `uplinks_to` → `USW-16-POE`, then connect NAS, PBS, pve1, and pve2 to the switch with `connects_to`.
+3. Create a **Proxmox Cluster** and record pve1 and pve2 as `member_of` the cluster.
+4. Add VMs and LXCs with `runs_on` relationships to their Proxmox hosts.
+5. Add a Docker host and containers/applications, then record their `runs_on` relationships.
+6. Add an application → `depends_on` → database relationship.
+7. Confirm **Physical** hides the VMs and containers but shows workload counts on the hosts.
+8. Confirm **Platform** shows cluster → hosts → VMs/LXCs → containers/applications.
+9. Confirm **Network / VLAN** uses interface membership and **Dependency** shows the application/database edge.
+10. Select pve1 as the focus asset and confirm only pve1 and its directly connected neighbors remain. Clear focus and verify the full filtered lens returns without another API fetch.
 
 Stop the stack with `Ctrl+C`, or remove its containers and volumes with:
 

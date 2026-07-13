@@ -7,133 +7,174 @@ import { StatusBadge } from "../../components/status-badge";
 import { apiRequest } from "../../lib/api";
 import { taxonomyLabel } from "../../lib/taxonomy";
 
-const parentTypes = new Set(["proxmox_cluster", "proxmox_host", "docker_host", "network", "vlan", "storage_pool", "nas"]);
+const lenses = {
+  physical: { label: "Physical", description: "Physical hosts and network hardware connectivity." },
+  platform: { label: "Platform", description: "Virtualisation, hosting, and workload containment." },
+  networks: { label: "Network / VLAN", description: "Explicit interface membership across networks and VLANs." },
+  dependency: { label: "Dependency", description: "Operational dependencies between applications, services, and infrastructure." },
+  all: { label: "All relationships", description: "Every recorded relationship for advanced inspection and debugging." },
+};
+const physicalAssetTypes = new Set(["firewall", "router", "switch", "access_point", "nas", "backup_target", "proxmox_host", "physical_server", "docker_host"]);
+const physicalRelationships = new Set(["connects_to", "uplinks_to", "connected_via"]);
+const platformAssetTypes = new Set(["proxmox_cluster", "proxmox_host", "virtual_machine", "lxc_container", "docker_host", "docker_container", "application", "database", "service"]);
+const platformRelationships = new Set(["member_of", "hosts", "runs_on", "runs", "contains"]);
+const dependencyAssetTypes = new Set(["application", "service", "database", "docker_container", "virtual_machine", "lxc_container", "nas", "backup_target", "firewall", "proxy"]);
+const dependencyRelationships = new Set(["depends_on", "proxies", "authenticates", "exposes", "backs_up_to", "monitors", "uses_storage", "protects", "protected_by", "served_by"]);
 
 export default function TopologyPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [mode, setMode] = useState("hierarchy");
-  const [filters, setFilters] = useState({ customer: "", site: "", assetType: "" });
+  const [mode, setMode] = useState("physical");
+  const [filters, setFilters] = useState({ customer: "", site: "", assetType: "", relationshipType: "", focusAsset: "" });
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    apiRequest("/topology").then(setData).catch((requestError) => {
-      setError(requestError.message || "Atlas could not load the topology.");
-    });
+    apiRequest("/topology").then(setData).catch((requestError) => setError(requestError.message || "Atlas could not load the topology."));
   }, []);
 
-  const visibleAssets = useMemo(() => (data?.assets || []).filter((asset) =>
-    (!filters.customer || asset.customer_id === filters.customer)
-    && (!filters.site || asset.site_id === filters.site)
-    && (!filters.assetType || asset.asset_type === filters.assetType)
-  ), [data, filters]);
-  const visibleIds = useMemo(() => new Set(visibleAssets.map((asset) => asset.id)), [visibleAssets]);
-  const visibleRelationships = useMemo(() => (data?.relationships || []).filter((edge) =>
-    visibleIds.has(edge.source_asset_id) && visibleIds.has(edge.target_asset_id)
-  ), [data, visibleIds]);
   const assetsById = useMemo(() => Object.fromEntries((data?.assets || []).map((asset) => [asset.id, asset])), [data]);
   const assetTypes = useMemo(() => [...new Set((data?.assets || []).map((asset) => asset.asset_type))].sort(), [data]);
+  const relationshipTypes = useMemo(() => [...new Set((data?.relationships || []).map((edge) => edge.relationship_type))].sort(), [data]);
+  const filtered = useMemo(() => {
+    if (!data) return { assets: [], relationships: [] };
+    let assets = data.assets.filter((asset) =>
+      (!filters.customer || asset.customer_id === filters.customer)
+      && (!filters.site || asset.site_id === filters.site)
+      && (!filters.assetType || asset.asset_type === filters.assetType)
+    );
+    let ids = new Set(assets.map((asset) => asset.id));
+    let relationships = data.relationships.filter((edge) => ids.has(edge.source_asset_id) && ids.has(edge.target_asset_id));
+    if (filters.focusAsset && ids.has(filters.focusAsset)) {
+      const focusIds = new Set([filters.focusAsset]);
+      for (const edge of relationships) {
+        if (edge.source_asset_id === filters.focusAsset) focusIds.add(edge.target_asset_id);
+        if (edge.target_asset_id === filters.focusAsset) focusIds.add(edge.source_asset_id);
+      }
+      assets = assets.filter((asset) => focusIds.has(asset.id));
+      ids = focusIds;
+      relationships = relationships.filter((edge) => ids.has(edge.source_asset_id) && ids.has(edge.target_asset_id));
+    }
+    if (filters.relationshipType) relationships = relationships.filter((edge) => edge.relationship_type === filters.relationshipType);
+    return { assets, relationships };
+  }, [data, filters]);
 
   function updateFilter(name, value) {
     setFilters((current) => ({
       ...current,
       [name]: value,
+      ...(["customer", "site", "assetType"].includes(name) ? { focusAsset: "" } : {}),
       ...(name === "customer" ? { site: "" } : {}),
     }));
   }
 
-  const empty = data && data.assets.length === 0;
-  return (
-    <>
-      <PageHeader eyebrow="Infrastructure map" title="Topology" description="Explore hosting hierarchy and explicit relationships across your infrastructure." />
-      {error && <div className="error-banner" role="alert">{error}</div>}
-      {!data && !error && <div className="status-banner" role="status">Loading topology…</div>}
-      {data && <>
-        <div className="topology-toolbar">
-          <div className="mode-selector" aria-label="Topology mode">
-            <button className={`button ${mode === "hierarchy" ? "button-primary" : "button-secondary"}`} onClick={() => setMode("hierarchy")} type="button">Hierarchy</button>
-            <button className={`button ${mode === "relationships" ? "button-primary" : "button-secondary"}`} onClick={() => setMode("relationships")} type="button">Relationships</button>
-            <button className={`button ${mode === "networks" ? "button-primary" : "button-secondary"}`} onClick={() => setMode("networks")} type="button">Network / VLAN</button>
-          </div>
-          <div className="topology-filters">
-            <label className="field"><span>Customer</span><select value={filters.customer} onChange={(event) => updateFilter("customer", event.target.value)}><option value="">All customers</option>{data.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
-            <label className="field"><span>Site</span><select value={filters.site} onChange={(event) => updateFilter("site", event.target.value)}><option value="">All sites</option>{data.sites.filter((site) => !filters.customer || site.customer_id === filters.customer).map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></label>
-            <label className="field"><span>Asset type</span><select value={filters.assetType} onChange={(event) => updateFilter("assetType", event.target.value)}><option value="">All types</option>{assetTypes.map((type) => <option key={type} value={type}>{taxonomyLabel(type)}</option>)}</select></label>
-          </div>
+  return <>
+    <PageHeader eyebrow="Topology workbench" title="Topology lenses" description="Use focused views of the same Atlas inventory instead of one unreadable infrastructure graph." />
+    {error && <div className="error-banner" role="alert">{error}</div>}
+    {!data && !error && <div className="status-banner" role="status">Loading topology…</div>}
+    {data && <>
+      <div className="topology-workbench">
+        <div className="lens-selector" aria-label="Topology lens">{Object.entries(lenses).map(([key, lens]) => <button className={`button ${mode === key ? "button-primary" : "button-secondary"}`} key={key} onClick={() => setMode(key)} type="button">{lens.label}</button>)}</div>
+        <p className="lens-description">{lenses[mode].description}</p>
+        <div className="topology-filters topology-filters-wide">
+          <Filter label="Customer" value={filters.customer} onChange={(value) => updateFilter("customer", value)} options={data.customers.map((item) => [item.id, item.name])} emptyLabel="All customers" />
+          <Filter label="Site" value={filters.site} onChange={(value) => updateFilter("site", value)} options={data.sites.filter((item) => !filters.customer || item.customer_id === filters.customer).map((item) => [item.id, item.name])} emptyLabel="All sites" />
+          <Filter label="Asset type" value={filters.assetType} onChange={(value) => updateFilter("assetType", value)} options={assetTypes.map((value) => [value, taxonomyLabel(value)])} emptyLabel="All asset types" />
+          <Filter label="Relationship" value={filters.relationshipType} onChange={(value) => updateFilter("relationshipType", value)} options={relationshipTypes.map((value) => [value, taxonomyLabel(value)])} emptyLabel="All relationship types" />
+          <label className="field"><span>Focus asset</span><div className="focus-control"><select value={filters.focusAsset} onChange={(event) => updateFilter("focusAsset", event.target.value)}><option value="">No focus</option>{data.assets.filter((asset) => (!filters.customer || asset.customer_id === filters.customer) && (!filters.site || asset.site_id === filters.site) && (!filters.assetType || asset.asset_type === filters.assetType)).map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select>{filters.focusAsset && <button className="text-button" onClick={() => updateFilter("focusAsset", "")} type="button">Clear</button>}</div></label>
         </div>
-        {empty && <div className="topology-empty"><h2>Start modelling your infrastructure</h2><p>Create a customer, site, assets, and relationships to build a topology.</p><div><Link className="button button-primary" href="/customers">Create customer</Link> <Link className="button button-secondary" href="/assets">Create asset</Link></div></div>}
-        {!empty && visibleAssets.length === 0 && <div className="empty-state detail-card">No assets match these filters.</div>}
-        {visibleAssets.length > 0 && mode === "hierarchy" && <Hierarchy data={data} assets={visibleAssets} relationships={visibleRelationships} assetsById={assetsById} filters={filters} />}
-        {visibleAssets.length > 0 && mode === "relationships" && <RelationshipGraph data={data} assets={visibleAssets} relationships={visibleRelationships} assetsById={assetsById} />}
-        {visibleAssets.length > 0 && mode === "networks" && <NetworkGraph data={data} assets={visibleAssets} visibleIds={visibleIds} filters={filters} />}
-      </>}
-    </>
-  );
+      </div>
+      {data.assets.length === 0 && <div className="topology-empty"><h2>Start modelling your infrastructure</h2><p>Create customers, sites, assets, interfaces, and relationships to use topology lenses.</p><Link className="button button-primary" href="/assets">Create asset</Link></div>}
+      {data.assets.length > 0 && <Lens mode={mode} data={data} assets={filtered.assets} relationships={filtered.relationships} assetsById={assetsById} filters={filters} />}
+    </>}
+  </>;
 }
 
-function Hierarchy({ data, assets, relationships, assetsById, filters }) {
+function Filter({ label, value, onChange, options, emptyLabel }) {
+  return <label className="field"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="">{emptyLabel}</option>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label>;
+}
+
+function Lens({ mode, data, assets, relationships, assetsById, filters }) {
+  if (mode === "networks") return assets.length ? <NetworkGraph data={data} assets={assets} filters={filters} /> : <LensEmpty mode={mode} />;
+  let allowedAssets;
+  let allowedRelationships;
+  if (mode === "physical") [allowedAssets, allowedRelationships] = [physicalAssetTypes, physicalRelationships];
+  if (mode === "platform") [allowedAssets, allowedRelationships] = [platformAssetTypes, platformRelationships];
+  if (mode === "dependency") [allowedAssets, allowedRelationships] = [dependencyAssetTypes, dependencyRelationships];
+  const lensAssets = allowedAssets ? assets.filter((asset) => {
+    if (!allowedAssets.has(asset.asset_type)) return false;
+    if (mode === "physical" && asset.asset_type === "docker_host") {
+      return !data.relationships.some((edge) => edge.source_asset_id === asset.id && edge.relationship_type === "runs_on");
+    }
+    return true;
+  }) : assets;
+  const ids = new Set(lensAssets.map((asset) => asset.id));
+  const lensRelationships = relationships.filter((edge) =>
+    ids.has(edge.source_asset_id) && ids.has(edge.target_asset_id)
+    && (!allowedRelationships || allowedRelationships.has(edge.relationship_type))
+  );
+  if (!lensAssets.length) return <LensEmpty mode={mode} />;
+  if (mode === "platform") return <PlatformView data={data} assets={lensAssets} relationships={lensRelationships} assetsById={assetsById} filters={filters} />;
+  const workloadCounts = mode === "physical" ? physicalWorkloadCounts(data.relationships) : {};
+  return <>{mode === "all" && <div className="warning-banner">This view can become busy. Use filters or focus mode to narrow the graph.</div>}<RelationshipGraph data={data} assets={lensAssets} relationships={lensRelationships} assetsById={assetsById} workloadCounts={workloadCounts} /></>;
+}
+
+function LensEmpty({ mode }) {
+  return <div className="empty-state detail-card">No {lenses[mode].label.toLowerCase()} topology matches the current filters.</div>;
+}
+
+function physicalWorkloadCounts(relationships) {
+  const counts = {};
+  for (const edge of relationships) {
+    let parent;
+    if (edge.relationship_type === "runs_on" || edge.relationship_type === "member_of") parent = edge.target_asset_id;
+    if (["hosts", "contains", "runs"].includes(edge.relationship_type)) parent = edge.source_asset_id;
+    if (parent) counts[parent] = (counts[parent] || 0) + 1;
+  }
+  return counts;
+}
+
+function PlatformView({ data, assets, relationships, assetsById, filters }) {
   const interfaceIp = primaryInterfaceIps(data.asset_interfaces);
   const childIds = new Set();
   const children = {};
   for (const edge of relationships) {
     let parentId;
     let childId;
-    if (edge.relationship_type === "runs_on") [childId, parentId] = [edge.source_asset_id, edge.target_asset_id];
+    if (["runs_on", "member_of"].includes(edge.relationship_type)) [childId, parentId] = [edge.source_asset_id, edge.target_asset_id];
     if (["hosts", "contains", "runs"].includes(edge.relationship_type)) [parentId, childId] = [edge.source_asset_id, edge.target_asset_id];
-    if (parentId && childId) {
-      (children[parentId] ||= []).push({ asset: assetsById[childId], label: edge.relationship_type });
-      childIds.add(childId);
-    }
+    if (parentId && childId) { (children[parentId] ||= []).push({ asset: assetsById[childId], label: edge.relationship_type }); childIds.add(childId); }
   }
-  const customers = data.customers.filter((customer) => !filters.customer || customer.id === filters.customer);
-  return <div className="topology-tree">{customers.map((customer) => {
-    const sites = data.sites.filter((site) => site.customer_id === customer.id && (!filters.site || site.id === filters.site));
-    return <section className="topology-customer" key={customer.id}><h2>{customer.name}</h2>{sites.map((site) => {
-      const siteAssets = assets.filter((asset) => asset.site_id === site.id);
-      const roots = siteAssets.filter((asset) => !childIds.has(asset.id));
-      return <div className="topology-site" key={site.id}><h3>{site.name}</h3>{roots.length ? <div className="hierarchy-nodes">{roots.sort((a, b) => Number(parentTypes.has(b.asset_type)) - Number(parentTypes.has(a.asset_type))).map((asset) => <HierarchyNode asset={asset} children={children} interfaceIp={interfaceIp} key={asset.id} seen={new Set()} />)}</div> : <p className="secondary-text">No root assets</p>}</div>;
-    })}</section>;
-  })}</div>;
+  const roots = assets.filter((asset) => !childIds.has(asset.id));
+  return <div className="platform-lanes">{roots.map((asset) => <PlatformNode asset={asset} children={children} interfaceIp={interfaceIp} key={asset.id} seen={new Set()} />)}{roots.length === 0 && <LensEmpty mode="platform" />}</div>;
 }
 
-function HierarchyNode({ asset, children, interfaceIp, seen }) {
+function PlatformNode({ asset, children, interfaceIp, seen }) {
   if (!asset || seen.has(asset.id)) return null;
   const nextSeen = new Set(seen).add(asset.id);
-  return <div className="hierarchy-node"><AssetNode asset={asset} interfaceIp={interfaceIp[asset.id]} />{(children[asset.id] || []).map((child) => <div className="hierarchy-child" key={`${asset.id}-${child.asset?.id}`}><span className="edge-label">{taxonomyLabel(child.label)}</span><HierarchyNode asset={child.asset} children={children} interfaceIp={interfaceIp} seen={nextSeen} /></div>)}</div>;
+  return <div className="platform-node"><AssetNode asset={asset} interfaceIp={interfaceIp[asset.id]} />{(children[asset.id] || []).map((child) => <div className="platform-child" key={`${asset.id}-${child.asset?.id}`}><span className="edge-label">{taxonomyLabel(child.label)}</span><PlatformNode asset={child.asset} children={children} interfaceIp={interfaceIp} seen={nextSeen} /></div>)}</div>;
 }
 
-function RelationshipGraph({ data, assets, relationships, assetsById }) {
+function RelationshipGraph({ data, assets, relationships, assetsById, workloadCounts = {} }) {
   const interfaceIp = primaryInterfaceIps(data.asset_interfaces);
-  return <div className="relationship-graph"><div className="graph-nodes">{assets.map((asset) => <AssetNode asset={asset} interfaceIp={interfaceIp[asset.id]} key={asset.id} />)}</div><div className="graph-edges"><h2>Relationship edges</h2>{relationships.length === 0 ? <p className="secondary-text">No relationships between the visible assets.</p> : relationships.map((edge) => <div className="graph-edge" key={edge.id}><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name}</strong><span>→ {taxonomyLabel(edge.relationship_type)} →</span><strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name}</strong></div>)}</div></div>;
+  return <div className="relationship-graph"><div className="graph-nodes">{assets.map((asset) => <AssetNode asset={asset} interfaceIp={interfaceIp[asset.id]} key={asset.id} workloadCount={workloadCounts[asset.id]} />)}</div><div className="graph-edges"><h2>Relationship edges</h2>{relationships.length === 0 ? <p className="secondary-text">No matching relationships between these assets.</p> : relationships.map((edge) => <div className="graph-edge" key={edge.id}><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name}</strong><span>→ {taxonomyLabel(edge.relationship_type)} →</span><strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name}</strong></div>)}</div></div>;
 }
 
-function NetworkGraph({ data, assets, visibleIds, filters }) {
+function NetworkGraph({ data, assets, filters }) {
+  const visibleIds = new Set(assets.map((asset) => asset.id));
   const interfaces = data.asset_interfaces.filter((item) => visibleIds.has(item.asset_id));
-  const interfacesByNetwork = interfaces.reduce((groups, item) => {
-    if (item.network_id) (groups[item.network_id] ||= []).push(item);
-    return groups;
-  }, {});
-  const assignedAssetIds = new Set(interfaces.map((item) => item.asset_id));
-  const networks = data.networks.filter((network) =>
-    (!filters.customer || network.customer_id === filters.customer)
-    && (!filters.site || network.site_id === filters.site || !network.site_id)
-  );
+  const grouped = interfaces.reduce((result, item) => { if (item.network_id) (result[item.network_id] ||= []).push(item); return result; }, {});
+  const assignedIds = new Set(interfaces.map((item) => item.asset_id));
   const assetsById = Object.fromEntries(assets.map((asset) => [asset.id, asset]));
-  const unassigned = assets.filter((asset) => !assignedAssetIds.has(asset.id));
+  const networks = data.networks.filter((network) => (!filters.customer || network.customer_id === filters.customer) && (!filters.site || !network.site_id || network.site_id === filters.site));
+  const unassignedAssets = assets.filter((asset) => !assignedIds.has(asset.id));
   const unassignedInterfaces = interfaces.filter((item) => !item.network_id);
+  return <div className="network-groups">{networks.map((network) => <section className="network-group" key={network.id}><NetworkHeader network={network} />{(grouped[network.id] || []).length ? <div className="network-members">{grouped[network.id].map((item) => <NetworkMember asset={assetsById[item.asset_id]} interfaceRecord={item} key={item.id} />)}</div> : <p className="secondary-text">No interfaces assigned.</p>}</section>)}{(unassignedAssets.length > 0 || unassignedInterfaces.length > 0) && <section className="network-group network-unassigned"><div className="network-group-header"><div><p className="eyebrow">Unassigned</p><h2>Unassigned network</h2></div><span>Explicit interface membership required</span></div><div className="network-members">{unassignedInterfaces.map((item) => <NetworkMember asset={assetsById[item.asset_id]} interfaceRecord={item} key={item.id} />)}{unassignedAssets.map((asset) => <NetworkMember asset={asset} interfaceRecord={{ name: "No interface", ip_address: null }} key={asset.id} />)}</div></section>}</div>;
+}
 
-  return <div className="network-groups">
-    {networks.map((network) => {
-      const members = interfacesByNetwork[network.id] || [];
-      return <section className="network-group" key={network.id}>
-        <div className="network-group-header"><div><p className="eyebrow">{network.network_type}</p><h2>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}{network.cidr ? ` — ${network.cidr}` : ""}</h2></div><span>{network.gateway ? `Gateway ${network.gateway}` : "No gateway"}</span></div>
-        {members.length === 0 ? <p className="secondary-text">No interfaces assigned.</p> : <div className="network-members">{members.map((item) => <NetworkMember asset={assetsById[item.asset_id]} interfaceRecord={item} key={item.id} />)}</div>}
-      </section>;
-    })}
-    {(unassigned.length > 0 || unassignedInterfaces.length > 0) && <section className="network-group network-unassigned"><div className="network-group-header"><div><p className="eyebrow">Unassigned</p><h2>Unassigned network</h2></div><span>Explicit network membership required</span></div><div className="network-members">{unassignedInterfaces.map((item) => <NetworkMember asset={assetsById[item.asset_id]} interfaceRecord={item} key={item.id} />)}{unassigned.map((asset) => <NetworkMember asset={asset} interfaceRecord={{ name: "No interface", ip_address: null }} key={asset.id} />)}</div></section>}
-  </div>;
+function NetworkHeader({ network }) {
+  return <div className="network-group-header"><div><p className="eyebrow">{network.network_type}</p><h2>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}{network.cidr ? ` — ${network.cidr}` : ""}</h2></div><span>{network.gateway ? `Gateway ${network.gateway}` : "No gateway"}</span></div>;
 }
 
 function NetworkMember({ asset, interfaceRecord }) {
@@ -142,16 +183,10 @@ function NetworkMember({ asset, interfaceRecord }) {
 }
 
 function primaryInterfaceIps(interfaces) {
-  const grouped = interfaces.reduce((result, item) => {
-    if (item.ip_address) (result[item.asset_id] ||= []).push(item);
-    return result;
-  }, {});
-  return Object.fromEntries(Object.entries(grouped).map(([assetId, items]) => [
-    assetId,
-    (items.find((item) => item.is_primary) || items[0]).ip_address,
-  ]));
+  const grouped = interfaces.reduce((result, item) => { if (item.ip_address) (result[item.asset_id] ||= []).push(item); return result; }, {});
+  return Object.fromEntries(Object.entries(grouped).map(([assetId, items]) => [assetId, (items.find((item) => item.is_primary) || items[0]).ip_address]));
 }
 
-function AssetNode({ asset, interfaceIp }) {
-  return <Link className="asset-node" href={`/assets/${asset.id}`}><span className="asset-node-heading"><strong>{asset.name}</strong><StatusBadge status={asset.status} /></span><span>{taxonomyLabel(asset.asset_type)}</span><small>{interfaceIp || asset.hostname || "No interface IP"}</small></Link>;
+function AssetNode({ asset, interfaceIp, workloadCount }) {
+  return <Link className="asset-node" href={`/assets/${asset.id}`}><span className="asset-node-heading"><strong>{asset.name}</strong><StatusBadge status={asset.status} /></span><span>{taxonomyLabel(asset.asset_type)}</span><small>{interfaceIp || asset.hostname || "No interface IP"}</small>{workloadCount ? <span className="workload-badge">{workloadCount} workload{workloadCount === 1 ? "" : "s"}</span> : null}</Link>;
 }
