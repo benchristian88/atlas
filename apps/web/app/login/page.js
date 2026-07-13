@@ -9,6 +9,10 @@ import {
   login,
 } from "../../lib/auth";
 
+function developmentInfo(message) {
+  if (process.env.NODE_ENV === "development") console.info(message);
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -48,10 +52,13 @@ export default function LoginPage() {
 
   async function submit(event) {
     event.preventDefault();
+    developmentInfo("login submit clicked");
     setSubmitting(true);
     setError("");
     try {
       await login(email, password);
+      developmentInfo("redirecting to dashboard");
+      setSubmitting(false);
       router.replace("/dashboard");
       router.refresh();
     } catch (requestError) {
@@ -60,6 +67,7 @@ export default function LoginPage() {
           ? "The email or password is incorrect."
           : requestError.message || "Atlas could not complete the login request.",
       );
+    } finally {
       setSubmitting(false);
     }
   }
