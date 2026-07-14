@@ -41,7 +41,7 @@ services:
       # Pass only public browser configuration to Next.js. Never inject the
       # complete .env file (database, auth and bootstrap secrets) into web.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set}
-      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-localhost,192.168.3.147}
+      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-localhost,192.168.5.9}
     ports:
       - "3000:3000"
     depends_on:
