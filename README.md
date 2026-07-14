@@ -1,9 +1,9 @@
 # Atlas
 
-Atlas is an infrastructure knowledge and documentation platform for MSPs and
-internal IT teams. This repository currently contains the local runtime
-scaffold for the web application, API, background worker, and discovery
-plugins.
+Atlas is an infrastructure knowledge, documentation, and topology platform for
+homelabs, internal IT teams, and MSPs. It combines a customer/site-scoped asset
+inventory with managed relationships, reference data, enrichment fields, and
+an auditable administration foundation.
 
 ## Repository layout
 
@@ -24,8 +24,8 @@ docs/                   Product and architecture documentation
 
 - Docker with Docker Compose v2
 
-Node.js and Python are only required if you want to run an individual service
-outside Docker.
+Node.js 22+ and Python 3.12+ are only required if you want to run an individual
+service outside Docker.
 
 ## Start the local stack
 
@@ -35,8 +35,24 @@ outside Docker.
    cp .env.example .env
    ```
 
-   Edit `.env` before starting. At minimum, replace `AUTH_SECRET_KEY` and
-   `ATLAS_ADMIN_PASSWORD`. For a remote Docker host, set:
+   Edit `.env` before starting. Always replace `AUTH_SECRET_KEY` with at least
+   32 random characters. For example:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+   On the first start of an empty database, set all three one-time bootstrap
+   values:
+
+   ```dotenv
+   ATLAS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+   ATLAS_BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-long-random-password
+   ATLAS_BOOTSTRAP_ADMIN_NAME=Atlas Administrator
+   ```
+
+   They are optional after an account exists and are never the application's
+   permanent login configuration. For a remote Docker host, also set:
 
    ```dotenv
    NEXT_PUBLIC_API_URL=http://<docker-host-ip>:8000
@@ -52,9 +68,8 @@ outside Docker.
    docker compose --env-file .env -f infra/docker/docker-compose.yml up --build
    ```
 
-   API startup applies migrations and idempotently seeds the administrator from
-   `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
-   `ATLAS_ADMIN_DISPLAY_NAME`.
+   API startup applies pending Alembic migrations, seeds protected system
+   definitions idempotently, and then runs the optional bootstrap check.
 
 3. Open the services:
 
@@ -65,82 +80,202 @@ outside Docker.
 The API health endpoint returns `{"status":"ok"}`. The worker logs
 `Atlas worker is ready` once it starts.
 
-## Seed the administrator
+4. Sign in with the temporary bootstrap credentials, change the password when
+   prompted, remove the three `ATLAS_BOOTSTRAP_ADMIN_*` entries from `.env`,
+   and restart the API. Leaving a bootstrap password in deployment
+   configuration needlessly exposes it to anyone who can inspect the
+   environment, even though Atlas will not reuse it.
 
-Atlas does not expose public registration. The API container runs the admin seed
-command automatically after migrations. The command creates the configured user
-only when that email is missing, so container restarts do not create duplicates.
+## Bootstrap the first administrator
 
-To run the same idempotent seed manually:
+Atlas does not expose public registration. The startup command creates one
+Master Administrator only when the entire `users` table is empty and all three
+valid bootstrap values are present. The password is hashed, the account is
+assigned the global Master Administrator role, and the account must change its
+password at first login.
+
+On a truly context-free fresh installation, the same bootstrap creates the
+starter `Home / Homelab` customer and site. It never adds that sample context
+when a customer already exists.
+
+If any user already exists, bootstrap is a no-op: it never creates a second
+user, overwrites an account, or resets a password. Supplying only some bootstrap
+values, an invalid email, or a password that fails the server policy while the
+users table is empty is a configuration error. With no bootstrap values, the API
+may start without creating a user; this is useful for an already-initialised
+deployment.
+
+To run the same safe check manually:
 
 ```bash
 docker compose --env-file .env -f infra/docker/docker-compose.yml exec api \
   python -m scripts.seed_admin
 ```
 
-All three `ATLAS_ADMIN_*` variables are required. Passwords must contain at
-least 12 characters, are stored as Argon2 hashes, and are never logged.
+Bootstrap messages never contain the password. Bootstrap is not an account
+recovery or password-reset mechanism.
 
-## Authentication API
+For a transition from an older empty installation, the seed command recognizes
+deprecated `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
+`ATLAS_ADMIN_DISPLAY_NAME` only when no user exists and the preferred bootstrap
+group is absent. It emits a deprecation warning and treats them as the same
+one-time bootstrap input, never as live credentials. Replace/remove them
+immediately. If a database user exists, even those legacy values are ignored.
+The reference Compose file forwards only the new names, so rename legacy keys
+in `.env` before a Compose upgrade rather than relying on the fallback.
 
-- `POST /auth/login` accepts JSON containing `email` and `password` and returns
-  an `access_token`, `token_type`, and safe user object.
-- `GET /auth/me` accepts `Authorization: Bearer <token>` and returns the
-  authenticated user.
-- `POST /auth/logout` retains compatibility with the earlier cookie flow. The
-  MVP web logout clears its bearer token locally.
-- `GET /protected` demonstrates how future routes require authentication.
+## Authentication and profile
 
-The web UI stores the bearer token in `localStorage` for the MVP. `/dashboard`
-validates it through `/auth/me`; missing or rejected tokens redirect to
-`/login`.
+User accounts and password hashes live in PostgreSQL. Successful login creates
+an expiring `HttpOnly`, `SameSite=Lax` session cookie; the web application does
+not put an access token in `localStorage` or expose it to JavaScript. Requests
+include the cookie and the API remains authoritative for every permission and
+scope decision.
 
-Authenticated CRUD endpoints are available for:
+The profile menu shows the login email, editable display name, assigned roles,
+and available customer/site scope. Password changes require the current
+password and a policy-compliant confirmed replacement. Logout and password
+changes advance the user's session version, invalidating previously issued
+sessions; disabling a user also prevents authentication. Passwords, hashes,
+cookies, and session tokens are excluded from API responses and audit details.
 
+For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
+Production deployments must terminate HTTPS and set it to `true`. Keep
+`CORS_ORIGINS` restricted to the actual web origins, and treat
+`AUTH_SECRET_KEY` as a production secret; rotating it invalidates all sessions.
+
+## Roles, permissions, and access scope
+
+Roles grant explicit permission keys; separate role assignments say where
+those permissions apply. An assignment can be global, customer-scoped, or
+site-scoped, and a user can hold different roles at different scopes.
+
+| Built-in role | Intended access |
+| --- | --- |
+| Master Administrator | Every permission across the instance. The bootstrap account receives this role at global scope. |
+| Administrator | Broad administration and operations according to its assignment scope, without the Master-only platform settings implicitly granted. |
+| Customer Administrator | Manage assets, relationships, networks, sites, integrations, and applicable metadata inside assigned customers/sites; no access to another customer. |
+| Viewer | Read-only inventory, topology, and reference-data access inside assigned scope. |
+
+The built-in roles are protected definitions. Authorization is based on
+permission keys such as `assets.edit`, `users.assign_roles`, and `audit.view`,
+not on role-name checks alone. Navigation and action buttons use the same
+effective permissions for usability, but hiding a control is never the
+security boundary. Direct ID, URL, query, and request-body substitutions are
+checked by the API and rejected with `403` (or a non-disclosing not-found
+response where appropriate).
+
+## Customer and site context
+
+Atlas always models inventory as `Customer -> Site -> assets/relationships`,
+including a single homelab (for example, `Home -> Homelab`). An
+MSP user can be assigned multiple customers or selected sites. The header
+selector contains only authorized customers/sites, filters sites after a
+customer selection, and drives inventory, topology, dashboards, and creation
+forms. A sole accessible customer/site is selected automatically.
+
+Global users can inspect all authorized records, but creating an asset still
+requires a concrete customer and site. New assets inherit the active context.
+New relationships require both endpoints in that same customer and site. The
+API validates context independently of browser state and rejects stale or
+unauthorized selections.
+
+## Administration and managed data
+
+The permission-aware **Administration** area provides the functions available
+to the current user:
+
+- Users, roles, permissions, and global/customer/site assignments.
+- Customers and sites, including activation/deactivation and guarded deletion.
+- Asset and relationship types.
+- Custom asset fields and dropdown options.
+- A read-only, filterable audit log.
+- Protected system settings for global Master Administrators.
+
+User administration accepts write-only temporary passwords and can require a
+change at next login; it never reveals an existing password. Atlas rejects a
+change that would remove or disable the final usable global Master
+Administrator.
+
+Asset and relationship types are managed records with stable keys. Only active
+types are offered for new records. An inactive type remains readable on old
+records; a referenced type cannot be deleted; and a system-defined type cannot
+be deleted even when unused. Deactivation is the safe retirement path.
+
+Custom fields support single-line text, multiline text, number, date, boolean,
+absolute HTTP/HTTPS URL, and dropdown values. Definitions can be global or
+applicable to selected asset types. The total active fields applicable to any
+one asset type is limited to 10, including global fields. Keys remain stable
+after use, typed values are validated by the API, and deactivation preserves
+existing values.
+
+Asset types can define an HTTPS icon URL and an asset can override it. Atlas
+resolves `asset override -> type default -> generic fallback`. Remote SVG URLs
+and non-HTTPS URLs are rejected. The API validates and stores the URL but does
+not fetch it; the user's browser fetches the image and falls back safely if it
+fails.
+
+For example, an operator can configure externally hosted Proxmox, Home
+Assistant, or UniFi artwork for a type or specific asset. Atlas does not bundle
+third-party copyrighted logos; verify the URL's licensing and availability.
+
+Audit events capture authentication, password, user/assignment, customer/site,
+and managed-reference-data changes without storing credentials or tokens. The
+application exposes audit records read-only to users with `audit.view`.
+
+The detailed design is documented in
+[authentication and access control](docs/architecture/authentication-and-access-control.md)
+and the [Mermaid data model](docs/architecture/data-model-v0.md).
+
+The authenticated API surface includes:
+
+- `/auth`, `/context`, and `/dashboard/summary`
+- `/users`, `/roles`, and `/permissions`
 - `/customers`
 - `/sites`
 - `/assets`
 - `/asset-relationships`
+- `/topology`
 - `/networks`
 - `/asset-interfaces`
+- `/asset-types` and `/relationship-types`
+- `/custom-fields` and asset custom-field values
+- read-only `/audit-events`
+- protected `/system-settings`
 
 Collection routes support `GET` and `POST`; resource routes support `GET`,
-`PATCH`, and `DELETE` where applicable. The corresponding web screens are
-available at `/customers`, `/sites`, `/assets`, `/assets/<id>`, and `/topology`.
-`/manual-assets` remains as a compatibility route for earlier clients.
-
-The current v0 data model does not yet relate users to workspaces. Customer
-creation uses the first existing workspace, or creates the default Atlas
-workspace when needed. All authenticated users currently have access to the
-same records. Workspace-scoped authorization must be added with the tenancy
-model.
-
-For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
-Production deployments must use HTTPS and set it to `true`.
+`PATCH`, and `DELETE` where applicable; audit events intentionally have no
+mutation route. The corresponding web screens include
+`/customers`, `/sites`, `/assets`, `/assets/<id>`, and `/topology`, together
+with profile and permitted administration pages. `/manual-assets` remains a
+compatibility route for earlier clients and is subject to the same authorization
+policy.
 
 ## Manual authentication test
 
 1. Start from a fresh database and bring the stack up with `--build`.
-2. Confirm the API logs report that the configured admin was created (or
-   already exists after a restart).
-3. Open `/login` and sign in with `ATLAS_ADMIN_EMAIL` and
-   `ATLAS_ADMIN_PASSWORD`.
-4. Confirm login redirects to `/dashboard` and displays the configured email
-   and display name.
+2. Confirm the API logs report that the bootstrap admin was created. Restart
+   once and confirm another account is not created.
+3. Open `/login` and sign in with `ATLAS_BOOTSTRAP_ADMIN_EMAIL` and
+   `ATLAS_BOOTSTRAP_ADMIN_PASSWORD`.
+4. Confirm login routes to the required password-change profile. Change the
+   password, then confirm `/dashboard` is accessible and the header displays the
+   configured email and display name.
 5. Refresh `/dashboard`; the authenticated session should remain active.
 6. Select **Log out** and confirm the browser returns to `/login`.
 7. Open `/dashboard` directly while logged out and confirm it redirects to
    `/login`.
-8. Verify bearer authentication from a terminal:
+8. Verify cookie authentication from a terminal:
 
    ```bash
-   curl -X POST "$NEXT_PUBLIC_API_URL/auth/login" \
+   curl -c /tmp/atlas-cookies -X POST "$NEXT_PUBLIC_API_URL/auth/login" \
      -H 'Content-Type: application/json' \
      -d '{"email":"admin@example.com","password":"your-admin-password"}'
 
-   curl "$NEXT_PUBLIC_API_URL/auth/me" \
-     -H 'Authorization: Bearer <access_token-from-login>'
+   curl -b /tmp/atlas-cookies "$NEXT_PUBLIC_API_URL/auth/me"
    ```
+
+   Delete the temporary cookie jar after testing.
 
 ## Manual infrastructure test
 
@@ -155,8 +290,8 @@ After signing in, verify the persistent manual-data workflow:
 7. Return to **Dashboard** and confirm the live customer, site, asset, and relationship counts.
 
 The API container runs `alembic upgrade head` at startup. Existing deployments
-must restart the API container after pulling these changes so the manual
-infrastructure field migration is applied.
+must back up PostgreSQL before rebuilding and review the migration behavior
+below; do not drop/recreate the database.
 
 ### Manual homelab modelling example
 
@@ -210,11 +345,64 @@ To exercise the lenses with a representative homelab:
 9. Confirm **Network / VLAN** uses interface membership and **Dependency** shows the application/database edge.
 10. Select pve1 as the focus asset and confirm only pve1 and its directly connected neighbors remain. Clear focus and verify the full filtered lens returns without another API fetch.
 
-Stop the stack with `Ctrl+C`, or remove its containers and volumes with:
+Stop the stack with `Ctrl+C`. To remove containers while retaining Atlas data,
+run:
 
 ```bash
-docker compose --env-file .env -f infra/docker/docker-compose.yml down -v
+docker compose --env-file .env -f infra/docker/docker-compose.yml down
 ```
+
+> **Warning:** adding `-v` deletes the named PostgreSQL and Redis volumes. It
+> destroys Atlas data and should be used only for an intentional disposable
+> reset after a verified backup.
+
+## Upgrade an existing installation
+
+Before upgrading, record the deployed revision and make a verified PostgreSQL
+backup. Replace obsolete `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
+`ATLAS_ADMIN_DISPLAY_NAME` settings with the new names only if the users table is
+genuinely empty. Existing database users and password hashes remain. The seed
+recognizes the legacy group solely as a deprecated first-user fallback on an
+empty table; it is never permanent authentication and cannot reset an existing
+password. Remove either bootstrap group after first use.
+
+The foundation migration:
+
+- Creates a `Default Site` for each customer that needs one, assigns legacy
+  site-less or mismatched-site assets and integrations, and derives relationship
+  context without deleting inventory. Every integration has a valid site after
+  the upgrade. A network whose legacy site belongs to another customer is
+  preserved as a customer-wide network.
+- Migrates string asset/relationship types to managed stable keys. Blank legacy
+  asset and relationship type values normalize to `unknown` and `related_to`,
+  respectively.
+- Assigns each legacy user a global Master Administrator role to avoid an
+  upgrade lockout. Review and narrow those assignments after validation.
+- Normalizes login emails case-insensitively and aborts on a legacy collision;
+  run the preflight query in the deployment guide before upgrading.
+- Retains legacy cross-context relationships; new ones are rejected and a
+  retained edge is visible only when both endpoints are authorized.
+- Seeds roles, permissions, and system definitions idempotently.
+
+Normal API startup runs the migration. To run only the migration step in the
+Compose environment:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml run --rm api \
+  alembic upgrade head
+```
+
+Rebuild/start the matched services, allow the API to run `alembic upgrade head`,
+then verify health, login/password-change state, customer/site selectors,
+scope-limited users, inventory counts, and topology. Remove bootstrap values
+after first use.
+
+Rollback should restore the pre-upgrade database backup and matching prior
+application revision. Do not run old code against the upgraded schema or assume
+an Alembic downgrade preserves ownership/type backfills. See
+[deployment and upgrade guidance](docs/architecture/deployment-and-upgrades.md)
+for backup commands, migration detail, rollback steps, and production security
+limitations.
 
 ## Run services directly
 
@@ -225,25 +413,25 @@ cd apps/api
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
+python -m scripts.seed_admin
 uvicorn app.main:app --reload
 ```
 
-Apply database migrations before starting the API directly:
+Export the API variables from the root `.env` before running those commands. If
+PostgreSQL is in Compose but the API is on the host, use `localhost` rather than
+the Compose-only `postgres` hostname in `DATABASE_URL`. The seed command is a
+safe no-op when bootstrap values are absent or a user already exists. The API
+container performs migration and bootstrap automatically.
 
-```bash
-cd apps/api
-alembic upgrade head
-```
-
-The API container applies pending migrations automatically when it starts. To
-create a migration after changing the SQLAlchemy models, run:
+To create a migration after changing the SQLAlchemy models, run:
 
 ```bash
 cd apps/api
 alembic revision --autogenerate -m "describe the schema change"
 ```
 
-Run the API model tests with:
+Run the API test suite with:
 
 ```bash
 cd apps/api
@@ -258,6 +446,8 @@ cd apps/web
 npm install
 npm run dev
 ```
+
+Validate the production bundle with `npm run build`.
 
 ### Worker
 

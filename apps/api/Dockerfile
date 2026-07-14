@@ -15,4 +15,6 @@ COPY migrations ./migrations
 
 EXPOSE 8000
 
+# The bootstrap check is intentionally part of every startup. It is a safe
+# no-op when users already exist or no one-time bootstrap values are supplied.
 CMD ["sh", "-c", "alembic upgrade head && python -m scripts.seed_admin && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

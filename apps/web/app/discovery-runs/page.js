@@ -1,3 +1,7 @@
+"use client";
+
+import { AccessDenied } from "../../components/access-denied";
+import { useAuth } from "../../components/auth-context";
 import { MockPage } from "../../components/mock-page";
 import { StatusBadge } from "../../components/status-badge";
 import { discoveryRuns } from "../../lib/mock-data";
@@ -13,5 +17,7 @@ const columns = [
 ];
 
 export default function DiscoveryRunsPage() {
+  const { hasPermission } = useAuth();
+  if (!hasPermission("integrations.view")) return <AccessDenied />;
   return <MockPage eyebrow="History" title="Discovery runs" description="Recent discovery activity and outcomes from configured integrations." columns={columns} rows={discoveryRuns} />;
 }

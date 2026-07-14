@@ -1,6 +1,9 @@
 "use client";
 
+import { AccessDenied } from "../../components/access-denied";
+import { useAuth } from "../../components/auth-context";
 import { CrudScreen } from "../../components/crud-screen";
+import { useWorkspaceContext } from "../../components/workspace-context";
 
 const dependencies = [{ key: "customers", endpoint: "/customers" }];
 const fields = [
@@ -21,17 +24,33 @@ const columns = [
 ];
 
 export default function SitesPage() {
+  const {
+    hasPermission,
+    hasPermissionForObject,
+    hasPermissionInContext,
+  } = useAuth();
+  const { activeCustomer, customerId, reload, reloadKey } = useWorkspaceContext();
+  if (!hasPermission("sites.view")) return <AccessDenied />;
   return (
     <CrudScreen
+      canCreate={customerId
+        ? hasPermissionForObject("sites.manage", customerId)
+        : hasPermissionInContext("sites.manage")}
+      canDelete={(row) => hasPermissionForObject("sites.manage", row.customer_id, row.id)}
+      canEdit={(row) => hasPermissionForObject("sites.manage", row.customer_id, row.id)}
       columns={columns}
-      dependencies={dependencies}
+      contextReloadKey={reloadKey}
+      dependencies={hasPermission("customers.view") ? dependencies : []}
       description="Create and maintain physical or logical locations for each customer."
-      emptyValues={{ customer_id: "", name: "", address: "", notes: "", status: "active" }}
+      deleteReason="Sites with assets, networks, integrations, or access assignments must be deactivated instead."
+      emptyValues={{ customer_id: customerId || "", name: "", address: "", notes: "", status: "active" }}
       endpoint="/sites"
       eyebrow="Locations"
       fields={fields}
+      listEndpoint={customerId ? `/sites?customer_id=${encodeURIComponent(customerId)}` : "/sites"}
+      onMutation={reload}
       preparePayload={(form) => ({ ...form, address: form.address || null, notes: form.notes || null })}
-      title="Sites"
+      title={activeCustomer ? `${activeCustomer.name} sites` : "Sites"}
     />
   );
 }

@@ -2,16 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  clearToken,
-  getCurrentUser,
-  getToken,
-  login,
-} from "../../lib/auth";
-
-function developmentInfo(message) {
-  if (process.env.NODE_ENV === "development") console.info(message);
-}
+import { authenticatedHome } from "../../components/auth-context";
+import { getCurrentUser, login } from "../../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,47 +11,36 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     let active = true;
-    async function validateExistingToken() {
-      let existingToken;
+    async function validateExistingSession() {
       try {
-        existingToken = getToken();
-        if (!existingToken) return;
-        await getCurrentUser();
-        if (active) router.replace("/dashboard");
+        const user = await getCurrentUser();
+        if (active) {
+          router.replace(authenticatedHome(user));
+        }
       } catch (requestError) {
         if (!active) return;
-        try {
-          // Do not let an older session check erase a token from a new login.
-          if (getToken() !== existingToken) return;
-          clearToken();
-        } catch (storageError) {
-          setError(storageError.message);
-          return;
+        if (requestError.status !== 401) {
+          setError(`Atlas could not check your existing session. ${requestError.message}`);
         }
-        setError(
-          requestError.status === 401
-            ? "Your previous session expired. Sign in again."
-            : `The saved session could not be verified. ${requestError.message}`,
-        );
+      } finally {
+        if (active) setCheckingSession(false);
       }
     }
-    validateExistingToken();
+    validateExistingSession();
     return () => { active = false; };
   }, [router]);
 
   async function submit(event) {
     event.preventDefault();
-    developmentInfo("login submit clicked");
     setSubmitting(true);
     setError("");
     try {
-      await login(email, password);
-      developmentInfo("redirecting to dashboard");
-      setSubmitting(false);
-      router.replace("/dashboard");
+      const user = await login(email, password);
+      router.replace(authenticatedHome(user));
       router.refresh();
     } catch (requestError) {
       setError(
@@ -81,7 +62,7 @@ export default function LoginPage() {
         </div>
         <p className="eyebrow">Welcome back</p>
         <h1 id="login-title">Sign in to Atlas</h1>
-        <p className="page-description">Use the administrator credentials configured for this deployment.</p>
+        <p className="page-description">Use your database-backed Atlas account.</p>
         {error && <div className="error-banner" role="alert">{error}</div>}
         <form className="login-form" onSubmit={submit}>
           <label className="field">
@@ -89,7 +70,7 @@ export default function LoginPage() {
             <input
               autoComplete="email"
               autoFocus
-              disabled={submitting}
+              disabled={submitting || checkingSession}
               onChange={(event) => setEmail(event.target.value)}
               required
               type="email"
@@ -100,15 +81,19 @@ export default function LoginPage() {
             <span>Password</span>
             <input
               autoComplete="current-password"
-              disabled={submitting}
+              disabled={submitting || checkingSession}
               onChange={(event) => setPassword(event.target.value)}
               required
               type="password"
               value={password}
             />
           </label>
-          <button className="button button-primary login-submit" disabled={submitting} type="submit">
-            {submitting ? "Signing in…" : "Sign in"}
+          <button
+            className="button button-primary login-submit"
+            disabled={submitting || checkingSession}
+            type="submit"
+          >
+            {checkingSession ? "Checking session…" : submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </section>

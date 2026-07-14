@@ -1,15 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { clearToken, getCurrentUser, getToken } from "../lib/auth";
+import { getCurrentUser } from "../lib/auth";
 import { AppShell } from "./app-shell";
-import { AuthContext } from "./auth-context";
+import {
+  authenticatedHome,
+  AuthContext,
+  userHasAnyPermission,
+  userHasGlobalPermission,
+  userHasPermission,
+  userHasPermissionForObject,
+  userHasPermissionInContext,
+} from "./auth-context";
+import { WorkspaceContextProvider } from "./workspace-context";
 
 function isPublicRoute(pathname) {
-  return pathname === "/login"
-    || pathname === "/debug/auth"
-    || pathname.startsWith("/debug/auth/");
+  return pathname === "/login";
 }
 
 export function RootShell({ children }) {
@@ -19,49 +26,66 @@ export function RootShell({ children }) {
   const [authState, setAuthState] = useState({
     status: "checking",
     user: null,
-    pathname: null,
   });
 
   useEffect(() => {
     if (publicRoute) {
-      setAuthState({ status: "public", user: null, pathname });
+      setAuthState({ status: "public", user: null });
       return;
     }
 
     let active = true;
-    setAuthState({ status: "checking", user: null, pathname });
+    setAuthState({ status: "checking", user: null });
     async function protectRoute() {
       try {
-        if (!getToken()) {
-          router.replace("/login");
-          return;
-        }
         const user = await getCurrentUser();
         if (!active) return;
-        if (pathname === "/") {
-          router.replace("/dashboard");
-          return;
-        }
-        setAuthState({ status: "authenticated", user, pathname });
+        setAuthState({ status: "authenticated", user });
       } catch {
         if (!active) return;
-        try {
-          clearToken();
-        } catch {
-          // The login screen will display storage errors on its next interaction.
-        }
         router.replace("/login");
       }
     }
     protectRoute();
     return () => { active = false; };
-  }, [pathname, publicRoute, router]);
+  }, [publicRoute, router]);
+
+  const updateUser = useCallback((nextUser) => {
+    setAuthState((current) => ({
+      ...current,
+      user: typeof nextUser === "function" ? nextUser(current.user) : nextUser,
+    }));
+  }, []);
+
+  const authValue = useMemo(() => ({
+    user: authState.user,
+    updateUser,
+    permissions: authState.user?.permissions || [],
+    hasPermission: (permission) => userHasPermission(authState.user, permission),
+    hasAnyPermission: (permissions) => userHasAnyPermission(authState.user, permissions),
+    hasGlobalPermission: (permission) => userHasGlobalPermission(authState.user, permission),
+    hasPermissionInContext: (permission, customerId, siteId) => (
+      userHasPermissionInContext(authState.user, permission, customerId, siteId)
+    ),
+    hasPermissionForObject: (permission, customerId, siteId) => (
+      userHasPermissionForObject(authState.user, permission, customerId, siteId)
+    ),
+  }), [authState.user, updateUser]);
+
+  const passwordChangeRequired = Boolean(
+    authState.status === "authenticated"
+    && authState.user?.force_password_change
+    && pathname !== "/profile",
+  );
+  const redirectHome = authState.status === "authenticated" && pathname === "/";
+
+  useEffect(() => {
+    if (passwordChangeRequired) router.replace("/profile?password=required");
+    else if (redirectHome) router.replace(authenticatedHome(authState.user));
+  }, [authState.user, passwordChangeRequired, redirectHome, router]);
 
   if (publicRoute) return children;
-  if (
-    authState.status !== "authenticated"
-    || authState.pathname !== pathname
-  ) {
+  if (authState.status !== "authenticated" || passwordChangeRequired || redirectHome) {
     return (
       <main className="route-loading" aria-live="polite">
         <div className="status-banner" role="status">Checking your Atlas session…</div>
@@ -69,8 +93,10 @@ export function RootShell({ children }) {
     );
   }
   return (
-    <AuthContext.Provider value={{ user: authState.user }}>
-      <AppShell>{children}</AppShell>
+    <AuthContext.Provider value={authValue}>
+      <WorkspaceContextProvider user={authState.user}>
+        <AppShell>{children}</AppShell>
+      </WorkspaceContextProvider>
     </AuthContext.Provider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { PageHeader } from "./page-header";
 
@@ -12,17 +12,40 @@ function valueForInput(value) {
   return String(value);
 }
 
+function capabilityAllows(capability, record) {
+  return typeof capability === "function" ? Boolean(capability(record)) : Boolean(capability);
+}
+
+function hookValue(hook, record, fallback) {
+  if (typeof hook === "function") return hook(record);
+  return hook ?? fallback;
+}
+
 export function CrudScreen({
   eyebrow,
   title,
   description,
   endpoint,
+  listEndpoint = endpoint,
   fields,
   columns,
   emptyValues,
   dependencies = EMPTY_DEPENDENCIES,
   preparePayload = (form) => form,
+  canCreate = true,
+  canEdit = true,
+  canDelete = true,
+  deleteLabel,
+  deleteReason,
+  contextReloadKey,
+  onMutation,
 }) {
+  const dependencySignature = JSON.stringify(
+    dependencies.map((dependency) => [dependency.key, dependency.endpoint]),
+  );
+  // Some callers build dependency arrays inline. Keep the loader stable until
+  // the actual dependency endpoints change so a state update cannot cause a loop.
+  const stableDependencies = useMemo(() => dependencies, [dependencySignature]);
   const [records, setRecords] = useState([]);
   const [related, setRelated] = useState({});
   const [form, setForm] = useState(emptyValues);
@@ -31,32 +54,31 @@ export function CrudScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const initialLoadStarted = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const [items, ...relatedResults] = await Promise.all([
-        apiRequest(endpoint),
-        ...dependencies.map((dependency) => apiRequest(dependency.endpoint)),
+        apiRequest(listEndpoint),
+        ...stableDependencies.map((dependency) => apiRequest(dependency.endpoint)),
       ]);
       setRecords(items);
       setRelated(
-        Object.fromEntries(dependencies.map((dependency, index) => [dependency.key, relatedResults[index]])),
+        Object.fromEntries(stableDependencies.map(
+          (dependency, index) => [dependency.key, relatedResults[index]],
+        )),
       );
     } catch (requestError) {
       setError(requestError.message);
     } finally {
       setLoading(false);
     }
-  }, [endpoint, dependencies]);
+  }, [listEndpoint, stableDependencies]);
 
   useEffect(() => {
-    if (initialLoadStarted.current) return;
-    initialLoadStarted.current = true;
     load();
-  }, [load]);
+  }, [contextReloadKey, load]);
 
   const relatedById = useMemo(() => Object.fromEntries(
     Object.entries(related).map(([key, values]) => [
@@ -77,6 +99,8 @@ export function CrudScreen({
     setForm(Object.fromEntries(Object.keys(emptyValues).map((key) => {
       const field = fields.find((item) => item.name === key);
       const value = field?.valueFromRecord ? field.valueFromRecord(record) : record[key];
+      if (field?.type === "checkbox") return [key, Boolean(value)];
+      if (field?.type === "multiselect") return [key, Array.isArray(value) ? value : []];
       return [key, valueForInput(value)];
     })));
     setFormOpen(true);
@@ -101,6 +125,7 @@ export function CrudScreen({
       });
       closeForm();
       await load();
+      if (onMutation) await onMutation();
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -109,21 +134,36 @@ export function CrudScreen({
   }
 
   async function remove(record) {
-    if (!window.confirm(`Delete “${record.name}”? This cannot be undone.`)) return;
+    const label = hookValue(
+      deleteLabel,
+      record,
+      record.name || record.display_name || record.label || "this record",
+    );
+    const reason = hookValue(deleteReason, record, "This cannot be undone.");
+    const reasonText = reason ? ` ${reason}` : "";
+    if (!window.confirm(`Delete “${label}”?${reasonText}`)) return;
     setError("");
     try {
       await apiRequest(`${endpoint}/${record.id}`, { method: "DELETE" });
       await load();
+      if (onMutation) await onMutation();
     } catch (requestError) {
       setError(requestError.message);
     }
   }
 
+  const showCreate = capabilityAllows(canCreate);
+  const showActions = canEdit !== false || canDelete !== false;
+
   return (
     <>
       <div className="page-heading-row">
         <PageHeader eyebrow={eyebrow} title={title} description={description} />
-        <button className="button button-primary" onClick={openCreate} type="button">Add {title.replace(/s$/, "")}</button>
+        {showCreate && (
+          <button className="button button-primary" onClick={openCreate} type="button">
+            Add {title.replace(/s$/, "")}
+          </button>
+        )}
       </div>
 
       {error && <div className="error-banner" role="alert">{error}</div>}
@@ -141,37 +181,64 @@ export function CrudScreen({
                 const options = field.optionsFilter
                   ? unfilteredOptions.filter((option) => field.optionsFilter(option, form))
                   : unfilteredOptions;
+                const optionValue = (option) => field.optionValue
+                  ? field.optionValue(option)
+                  : option.id ?? option.value;
+                const fieldDisabled = Boolean(
+                  (field.createOnly && editingId)
+                  || (typeof field.disabled === "function"
+                    ? field.disabled(form, editingId)
+                    : field.disabled),
+                );
                 return (
-                  <label className={field.wide ? "field field-wide" : "field"} key={field.name}>
+                  <label
+                    className={`${field.wide ? "field field-wide" : "field"}${field.type === "checkbox" ? " checkbox-field" : ""}`}
+                    key={field.name}
+                  >
                     <span>{field.label}{field.required ? " *" : ""}</span>
-                    {field.type === "textarea" ? (
+                    {field.type === "checkbox" ? (
+                      <input
+                        checked={Boolean(form[field.name])}
+                        disabled={fieldDisabled}
+                        name={field.name}
+                        onChange={(event) => setForm({ ...form, [field.name]: event.target.checked })}
+                        type="checkbox"
+                      />
+                    ) : field.type === "textarea" ? (
                       <textarea
                         name={field.name}
-                        disabled={field.createOnly && Boolean(editingId)}
+                        disabled={fieldDisabled}
                         onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
                         required={field.required}
                         rows={field.rows || 3}
                         value={form[field.name]}
                       />
-                    ) : field.type === "select" ? (
+                    ) : field.type === "select" || field.type === "multiselect" ? (
                       <select
                         name={field.name}
-                        disabled={field.createOnly && Boolean(editingId)}
-                        onChange={(event) => setForm({
-                          ...form,
-                          [field.name]: event.target.value,
-                          ...Object.fromEntries((field.clearFields || []).map((name) => [name, ""])),
-                        })}
+                        disabled={fieldDisabled}
+                        multiple={field.type === "multiselect"}
+                        onChange={(event) => {
+                          const value = field.type === "multiselect"
+                            ? [...event.target.selectedOptions].map((option) => option.value)
+                            : event.target.value;
+                          setForm({
+                            ...form,
+                            [field.name]: value,
+                            ...Object.fromEntries((field.clearFields || []).map((name) => [name, ""])),
+                          });
+                        }}
                         required={field.required}
-                        value={form[field.name]}
+                        size={field.type === "multiselect" ? field.size || 6 : undefined}
+                        value={form[field.name] ?? (field.type === "multiselect" ? [] : "")}
                       >
-                        {!field.required && <option value="">None</option>}
-                        {field.placeholder && <option value="">{field.placeholder}</option>}
-                        {form[field.name] && !options.some((option) => (option.id ?? option.value) === form[field.name]) && (
+                        {field.type !== "multiselect" && !field.required && <option value="">None</option>}
+                        {field.type !== "multiselect" && field.placeholder && <option value="">{field.placeholder}</option>}
+                        {field.type !== "multiselect" && form[field.name] && !options.some((option) => optionValue(option) === form[field.name]) && (
                           <option value={form[field.name]}>{form[field.name]} (existing custom value)</option>
                         )}
                         {options.map((option) => (
-                          <option key={option.id ?? option.value} value={option.id ?? option.value}>
+                          <option key={optionValue(option)} value={optionValue(option)}>
                             {field.optionLabel ? field.optionLabel(option, relatedById) : option.name ?? option.label}
                           </option>
                         ))}
@@ -179,7 +246,7 @@ export function CrudScreen({
                     ) : (
                       <input
                         name={field.name}
-                        disabled={field.createOnly && Boolean(editingId)}
+                        disabled={fieldDisabled}
                         onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
                         placeholder={field.placeholder}
                         required={field.required}
@@ -209,22 +276,50 @@ export function CrudScreen({
         </div>
         <div className="table-scroll">
           <table>
-            <thead><tr>{columns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                {columns.map((column) => <th key={column.key}>{column.label}</th>)}
+                {showActions && <th>Actions</th>}
+              </tr>
+            </thead>
             <tbody>
               {!loading && records.length === 0 && (
-                <tr><td className="empty-state" colSpan={columns.length + 1}>No {title.toLowerCase()} yet.</td></tr>
+                <tr>
+                  <td className="empty-state" colSpan={columns.length + (showActions ? 1 : 0)}>
+                    No {title.toLowerCase()} yet.
+                  </td>
+                </tr>
               )}
               {records.map((record) => (
                 <tr key={record.id}>
                   {columns.map((column) => (
                     <td key={column.key}>{column.render ? column.render(record, relatedById) : record[column.key] || "—"}</td>
                   ))}
-                  <td>
-                    <div className="row-actions">
-                      <button className="text-button" onClick={() => openEdit(record)} type="button">Edit</button>
-                      <button className="text-button text-danger" onClick={() => remove(record)} type="button">Delete</button>
-                    </div>
-                  </td>
+                  {showActions && (
+                    <td>
+                      <div className="row-actions">
+                        {capabilityAllows(canEdit, record) && (
+                          <button className="text-button" onClick={() => openEdit(record)} type="button">
+                            Edit
+                          </button>
+                        )}
+                        {capabilityAllows(canDelete, record) ? (
+                          <button className="text-button text-danger" onClick={() => remove(record)} type="button">
+                            Delete
+                          </button>
+                        ) : typeof canDelete === "function" && deleteReason ? (
+                          <button
+                            className="text-button text-danger"
+                            disabled
+                            title={hookValue(deleteReason, record, "This record cannot be deleted.")}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

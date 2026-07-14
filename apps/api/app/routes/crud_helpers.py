@@ -21,6 +21,17 @@ def commit(db: Session, resource: str) -> None:
         ) from exc
 
 
+def flush(db: Session, resource: str) -> None:
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{resource} conflicts with an existing record or dependency",
+        ) from exc
+
+
 def apply_changes(instance: object, changes: dict) -> None:
     for field, value in changes.items():
         setattr(instance, field, value)

@@ -1,3 +1,7 @@
+"use client";
+
+import { AccessDenied } from "../../components/access-denied";
+import { useAuth } from "../../components/auth-context";
 import { MockPage } from "../../components/mock-page";
 import { StatusBadge } from "../../components/status-badge";
 import { integrations } from "../../lib/mock-data";
@@ -12,5 +16,7 @@ const columns = [
 ];
 
 export default function IntegrationsPage() {
+  const { hasPermission } = useAuth();
+  if (!hasPermission("integrations.view")) return <AccessDenied />;
   return <MockPage eyebrow="Connections" title="Integrations" description="Read-only discovery sources configured for customer environments." columns={columns} rows={integrations} />;
 }
