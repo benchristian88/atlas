@@ -158,8 +158,8 @@ accessible contrast.
 
 Password changes require the current password and a policy-compliant confirmed
 replacement. Logout and password changes advance the user's session version,
-invalidating previously issued
-sessions; disabling a user also prevents authentication. Passwords, hashes,
+invalidating previously issued sessions; disabling a user also prevents
+authentication. Passwords, hashes,
 cookies, and session tokens are excluded from API responses and audit details.
 
 For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
@@ -167,6 +167,24 @@ Production deployments must terminate HTTPS and set it to `true`. Leave
 `CORS_ORIGINS` blank for normal same-origin operation; for intentional
 split-origin development, restrict it to the exact web origins. Treat
 `AUTH_SECRET_KEY` as a production secret; rotating it invalidates all sessions.
+
+## Branding assets
+
+The application-owned horizontal logo is committed at
+`apps/web/public/branding/atlas-logo.svg`. It uses a transparent background and
+an approximately 4.5:1 horizontal aspect ratio so the icon and Atlas wordmark
+remain clear in the dark sidebar. SVG is preferred for sharp rendering. An
+optional transparent PNG fallback may be stored at
+`apps/web/public/branding/atlas-logo.png`, and an optional icon-only mark may be
+stored at `apps/web/public/branding/atlas-mark.svg`. The current component falls
+back to accessible Atlas text if the SVG cannot be loaded; a private fork can
+add a suitable transparent PNG to its component asset list if needed.
+
+Branding assets are included at web-image build time. To customise a private
+fork, replace `atlas-logo.svg` with a transparent horizontal asset using the
+same filename, then rebuild the web service. Replacing the asset at runtime,
+customer-specific white labelling, uploads, and externally hosted logo URLs are
+not supported by the MVP.
 
 ## Roles, permissions, and access scope
 
