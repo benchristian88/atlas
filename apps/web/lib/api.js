@@ -1,17 +1,8 @@
 import { ApiError } from "./api-error";
+import { apiUrl, normalizeApiBase } from "./api-url.mjs";
 import { getRequestContext } from "./context-store";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-
-function configuredApiUrl() {
-  if (!API_URL) {
-    throw new ApiError(
-      "Atlas is missing NEXT_PUBLIC_API_URL. Configure it and rebuild or restart the web service.",
-      { kind: "configuration" },
-    );
-  }
-  return API_URL;
-}
+const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
 
 async function responseBody(response) {
   const contentType = response.headers.get("content-type") || "";
@@ -24,7 +15,7 @@ async function responseBody(response) {
 }
 
 export async function apiRequest(path, options = {}) {
-  const baseUrl = configuredApiUrl();
+  const requestUrl = apiUrl(path, API_BASE);
   const {
     omitContext = false,
     redirectOnUnauthorized = true,
@@ -43,14 +34,14 @@ export async function apiRequest(path, options = {}) {
 
   let response;
   try {
-    response = await fetch(`${baseUrl}${path}`, {
+    response = await fetch(requestUrl, {
       ...fetchOptions,
       credentials: "include",
       headers,
     });
   } catch {
     throw new ApiError(
-      `Could not reach the Atlas API at ${baseUrl}. Check NEXT_PUBLIC_API_URL, CORS_ORIGINS, and API availability.`,
+      `Could not reach the Atlas API at ${API_BASE}. Check API routing and availability.`,
       { kind: "network" },
     );
   }

@@ -27,6 +27,19 @@ docs/                   Product and architecture documentation
 Node.js 22+ and Python 3.12+ are only required if you want to run an individual
 service outside Docker.
 
+## Browser and API routing
+
+Atlas defaults to a single browser origin. The web UI uses the relative API
+base `/api`; an operator-selected reverse proxy forwards `/api/*` unchanged to
+FastAPI and all other paths to Next.js. No public hostname is compiled into
+Atlas, and normal production browser traffic does not depend on CORS.
+The reference web image runs the Next.js standalone production server, not the
+development/HMR server.
+
+See [single-origin deployment](docs/deployment/single-origin.md),
+[reverse-proxy examples](docs/deployment/reverse-proxy-examples.md), and the
+[split-origin migration guide](docs/deployment/split-origin-migration.md).
+
 ## Start the local stack
 
 1. Create your local environment file:
@@ -52,15 +65,17 @@ service outside Docker.
    ```
 
    They are optional after an account exists and are never the application's
-   permanent login configuration. For a remote Docker host, also set:
+   permanent login configuration. To use the exposed development ports without
+   a reverse proxy, explicitly select split-origin development:
 
    ```dotenv
-   NEXT_PUBLIC_API_URL=http://<docker-host-ip>:8000
-   CORS_ORIGINS=http://<docker-host-ip>:3000
+   NEXT_PUBLIC_API_URL=http://localhost:8000/api
+   CORS_ORIGINS=http://localhost:3000
    ```
 
-   These values are browser-facing; `localhost` only works when the browser is
-   running on the Docker host itself.
+   Keep the default `NEXT_PUBLIC_API_URL=/api` for a same-origin reverse-proxy
+   deployment. An absolute override is only needed when browser origins are
+   intentionally split.
 
 2. Build and start all services:
 
@@ -75,7 +90,7 @@ service outside Docker.
 
    - Web: <http://localhost:3000>
    - Login: <http://localhost:3000/login>
-   - API health check: <http://localhost:8000/health>
+   - Direct API health check: <http://localhost:8000/api/health>
 
 The API health endpoint returns `{"status":"ok"}`. The worker logs
 `Atlas worker is ready` once it starts.
@@ -133,16 +148,43 @@ include the cookie and the API remains authoritative for every permission and
 scope decision.
 
 The profile menu shows the login email, editable display name, assigned roles,
-and available customer/site scope. Password changes require the current
-password and a policy-compliant confirmed replacement. Logout and password
-changes advance the user's session version, invalidating previously issued
-sessions; disabling a user also prevents authentication. Passwords, hashes,
+available customer/site scope, and an Appearance control. Each user can choose
+an accent with the colour picker, enter a six-digit hex value, select a preset,
+or reset to the Atlas default. The preference is stored on the user account, so
+it follows that user across browsers and devices. It changes the primary accent
+family and derived sidebar treatment while success, warning, error, and neutral
+status colours remain semantic. Derived text and focus colours are selected for
+accessible contrast.
+
+Password changes require the current password and a policy-compliant confirmed
+replacement. Logout and password changes advance the user's session version,
+invalidating previously issued sessions; disabling a user also prevents
+authentication. Passwords, hashes,
 cookies, and session tokens are excluded from API responses and audit details.
 
 For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
-Production deployments must terminate HTTPS and set it to `true`. Keep
-`CORS_ORIGINS` restricted to the actual web origins, and treat
+Production deployments must terminate HTTPS and set it to `true`. Leave
+`CORS_ORIGINS` blank for normal same-origin operation; for intentional
+split-origin development, restrict it to the exact web origins. Treat
 `AUTH_SECRET_KEY` as a production secret; rotating it invalidates all sessions.
+
+## Branding assets
+
+The application-owned horizontal logo is committed at
+`apps/web/public/branding/atlas-logo.svg`. It uses a transparent background and
+an approximately 4.5:1 horizontal aspect ratio so the icon and Atlas wordmark
+remain clear in the dark sidebar. SVG is preferred for sharp rendering. An
+optional transparent PNG fallback may be stored at
+`apps/web/public/branding/atlas-logo.png`, and an optional icon-only mark may be
+stored at `apps/web/public/branding/atlas-mark.svg`. The current component falls
+back to accessible Atlas text if the SVG cannot be loaded; a private fork can
+add a suitable transparent PNG to its component asset list if needed.
+
+Branding assets are included at web-image build time. To customise a private
+fork, replace `atlas-logo.svg` with a transparent horizontal asset using the
+same filename, then rebuild the web service. Replacing the asset at runtime,
+customer-specific white labelling, uploads, and externally hosted logo URLs are
+not supported by the MVP.
 
 ## Roles, permissions, and access scope
 
@@ -227,27 +269,27 @@ The detailed design is documented in
 [authentication and access control](docs/architecture/authentication-and-access-control.md)
 and the [Mermaid data model](docs/architecture/data-model-v0.md).
 
-The authenticated API surface includes:
+The authenticated API surface is canonical beneath `/api` and includes:
 
-- `/auth`, `/context`, and `/dashboard/summary`
-- `/users`, `/roles`, and `/permissions`
-- `/customers`
-- `/sites`
-- `/assets`
-- `/asset-relationships`
-- `/topology`
-- `/networks`
-- `/asset-interfaces`
-- `/asset-types` and `/relationship-types`
-- `/custom-fields` and asset custom-field values
-- read-only `/audit-events`
-- protected `/system-settings`
+- `/api/auth`, `/api/context`, and `/api/dashboard/summary`
+- `/api/users`, `/api/roles`, and `/api/permissions`
+- `/api/customers`
+- `/api/sites`
+- `/api/assets`
+- `/api/asset-relationships`
+- `/api/topology`
+- `/api/networks`
+- `/api/asset-interfaces`
+- `/api/asset-types` and `/api/relationship-types`
+- `/api/custom-fields` and asset custom-field values
+- read-only `/api/audit-events`
+- protected `/api/system-settings`
 
 Collection routes support `GET` and `POST`; resource routes support `GET`,
 `PATCH`, and `DELETE` where applicable; audit events intentionally have no
 mutation route. The corresponding web screens include
 `/customers`, `/sites`, `/assets`, `/assets/<id>`, and `/topology`, together
-with profile and permitted administration pages. `/manual-assets` remains a
+with profile and permitted administration pages. `/api/manual-assets` remains a
 compatibility route for earlier clients and is subject to the same authorization
 policy.
 
@@ -268,11 +310,12 @@ policy.
 8. Verify cookie authentication from a terminal:
 
    ```bash
-   curl -c /tmp/atlas-cookies -X POST "$NEXT_PUBLIC_API_URL/auth/login" \
+   ATLAS_API_URL=http://localhost:8000/api
+   curl -c /tmp/atlas-cookies -X POST "$ATLAS_API_URL/auth/login" \
      -H 'Content-Type: application/json' \
      -d '{"email":"admin@example.com","password":"your-admin-password"}'
 
-   curl -b /tmp/atlas-cookies "$NEXT_PUBLIC_API_URL/auth/me"
+   curl -b /tmp/atlas-cookies "$ATLAS_API_URL/auth/me"
    ```
 
    Delete the temporary cookie jar after testing.

@@ -55,8 +55,8 @@ successful password change increment `users.session_version`, so previously
 issued sessions for that account stop working even if their signed expiry has
 not passed. Rotating `AUTH_SECRET_KEY` invalidates every signed session.
 
-An account marked `force_password_change` is restricted to `/auth/me`, profile,
-password-change, logout, and the read-only `/context` selector until the
+An account marked `force_password_change` is restricted to `/api/auth/me`, profile,
+password-change, logout, and the read-only `/api/context` selector until the
 password is replaced. The selector exposes only authorized customer/site IDs,
 names, and statuses so the protected shell can initialize the password-change
 page; it does not expose inventory or administrative records. All
@@ -182,6 +182,11 @@ Administration routes use the same policy layer as inventory routes:
 - User APIs return safe identity/profile fields and assignment summaries, never
   password hashes. Temporary passwords are write-only and require a change on
   next login.
+- An authenticated user can update only their own display name and accent
+  colour through `/api/auth/profile`. Accent values are restricted to a single
+  six-digit hex colour, normalized to uppercase, and never interpolated into
+  raw CSS; `null` resets the account to the Atlas default. Administrators do not
+  receive a separate accent-management path for other users.
 - Role and permission APIs expose built-in mappings. Protected records and the
   last-master invariant cannot be bypassed with direct IDs.
 - Customer/site deletion is allowed only when no dependent records would be

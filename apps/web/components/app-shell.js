@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authenticatedHome, useAuth } from "./auth-context";
+import { AtlasBrand } from "./atlas-brand.mjs";
 import { ContextSelector } from "./context-selector";
 import { Navigation } from "./navigation";
 import { useWorkspaceContext } from "./workspace-context";
 import { logout } from "../lib/auth";
+import { accentThemeStyle } from "../lib/accent-theme.mjs";
 
 export function AppShell({ children }) {
   const router = useRouter();
@@ -31,12 +33,9 @@ export function AppShell({ children }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={accentThemeStyle(user.accent_colour)}>
       <aside className="sidebar">
-        <Link className="brand" href={authenticatedHome(user)}>
-          <span className="brand-mark" aria-hidden="true">A</span>
-          Atlas
-        </Link>
+        <AtlasBrand href={authenticatedHome(user)} />
         <p className="nav-label">Workspace</p>
         <Navigation />
         <div className="sidebar-footer">

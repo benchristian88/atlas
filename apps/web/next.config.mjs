@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const allowedDevOrigins = (process.env.NEXT_ALLOWED_DEV_ORIGINS || "192.168.3.147")
+const allowedDevOrigins = (process.env.NEXT_ALLOWED_DEV_ORIGINS || "localhost")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);

@@ -48,7 +48,7 @@ the only production Master Administrator.
 - [ ] Repeated failures trigger the temporary lock behavior without
   revealing whether an email exists.
 - [ ] Disabled and locked users cannot log in.
-- [ ] `/auth/me` and a protected data page remain authenticated after refresh.
+- [ ] `/api/auth/me` and a protected data page remain authenticated after refresh.
 - [ ] The header shows the current user's display name and profile access on
   every protected page.
 - [ ] Logout works from every protected page, removes the cookie, invalidates
@@ -95,7 +95,7 @@ the only production Master Administrator.
 - [ ] Users without `users.view`, `roles.view`, managed-type permissions, or
   `audit.view` do not see those sections and cannot open them directly.
 - [ ] Permission-dependent navigation does not flash inaccessible controls while
-  `/auth/me` is loading.
+  `/api/auth/me` is loading.
 - [ ] The final usable global Master Administrator cannot be disabled, demoted,
   or stripped of its last master assignment.
 

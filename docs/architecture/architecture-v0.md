@@ -10,9 +10,9 @@ single-site homelab and a multi-customer MSP installation.
 
 ```mermaid
 flowchart LR
-    Browser[Browser] -->|HTTPS, HttpOnly session cookie| Web[Next.js web UI]
-    Browser -->|JSON API, credentials included| API[FastAPI API]
-    Web -. browser-public API URL .-> API
+    Browser[Browser] -->|HTTPS, HttpOnly cookie and same-origin /api JSON| Proxy[Operator reverse proxy]
+    Proxy -->|all other paths| Web[Next.js web UI]
+    Proxy -->|/api preserved| API[FastAPI API]
     API --> DB[(PostgreSQL)]
     API --> Redis[(Redis)]
     Redis --> Worker[Python worker]
@@ -53,8 +53,9 @@ permission-aware administration. It does not persist authentication tokens in
 browser storage. Navigation hiding improves usability but is not a security
 control.
 
-Only `NEXT_PUBLIC_API_URL` and development-origin configuration enter the web
-container. Database, session-signing, and bootstrap secrets remain API-side.
+The browser API base defaults to `/api`; `NEXT_PUBLIC_API_URL` is an optional
+split-origin development override. Only browser-public configuration enters the
+web container. Database, session-signing, and bootstrap secrets remain API-side.
 
 ### FastAPI API
 
@@ -75,7 +76,7 @@ The API owns:
 Application-data requests follow this order: authenticate, enforce
 forced-password-change state, require a permission, resolve accessible
 contexts, validate object ownership, then query or mutate. Authentication and
-profile operations plus the slim, scope-filtered `/context` shell bootstrap are
+profile operations plus the slim, scope-filtered `/api/context` shell bootstrap are
 the documented exceptions. FastAPI response models exclude password and
 session material.
 

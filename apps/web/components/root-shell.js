@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getCurrentUser } from "../lib/auth";
+import {
+  checkSession,
+  checkingSessionState,
+  publicSessionState,
+} from "../lib/session-state.mjs";
 import { AppShell } from "./app-shell";
 import {
   authenticatedHome,
@@ -23,32 +28,28 @@ export function RootShell({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const publicRoute = isPublicRoute(pathname);
-  const [authState, setAuthState] = useState({
-    status: "checking",
-    user: null,
-  });
+  const [authState, setAuthState] = useState(checkingSessionState);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (publicRoute) {
-      setAuthState({ status: "public", user: null });
+      setAuthState(publicSessionState);
       return;
     }
 
     let active = true;
-    setAuthState({ status: "checking", user: null });
+    setAuthState(checkingSessionState);
     async function protectRoute() {
-      try {
-        const user = await getCurrentUser();
-        if (!active) return;
-        setAuthState({ status: "authenticated", user });
-      } catch {
-        if (!active) return;
+      const nextState = await checkSession(getCurrentUser, () => active);
+      if (!nextState) return;
+      setAuthState(nextState);
+      if (nextState.status === "unauthenticated") {
         router.replace("/login");
       }
     }
     protectRoute();
     return () => { active = false; };
-  }, [publicRoute, router]);
+  }, [publicRoute, retryKey, router]);
 
   const updateUser = useCallback((nextUser) => {
     setAuthState((current) => ({
@@ -85,10 +86,34 @@ export function RootShell({ children }) {
   }, [authState.user, passwordChangeRequired, redirectHome, router]);
 
   if (publicRoute) return children;
+  if (authState.status === "error") {
+    return (
+      <main className="route-loading">
+        <section className="error-panel session-error" role="alert">
+          <h1>Atlas could not verify your session</h1>
+          <p>The Atlas API could not complete the session check. Check API routing and availability, then try again.</p>
+          <p className="session-error-detail">{authState.error}</p>
+          <div className="form-actions">
+            <button className="button button-primary" onClick={() => setRetryKey((value) => value + 1)} type="button">Try again</button>
+            <button className="button button-secondary" onClick={() => router.replace("/login")} type="button">Go to sign in</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+  if (authState.status === "unauthenticated") {
+    return (
+      <main className="route-loading" aria-live="polite">
+        <div className="status-banner" role="status">Opening sign in…</div>
+      </main>
+    );
+  }
   if (authState.status !== "authenticated" || passwordChangeRequired || redirectHome) {
     return (
       <main className="route-loading" aria-live="polite">
-        <div className="status-banner" role="status">Checking your Atlas session…</div>
+        <div className="status-banner" role="status">
+          {authState.status === "checking" ? "Checking your Atlas session…" : "Opening Atlas…"}
+        </div>
       </main>
     );
   }

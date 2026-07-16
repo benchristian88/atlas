@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import (
     COOKIE_NAME,
@@ -12,7 +13,7 @@ from app.auth import (
     verify_password,
 )
 from app.database import get_db
-from app.main import app
+from app.main import allowed_origins, app
 from app.models import AccessAssignment, AuditEvent, Permission, Role, User
 
 
@@ -89,6 +90,7 @@ def user() -> User:
         id=uuid.uuid4(),
         email="admin@example.com",
         display_name="Atlas Admin",
+        accent_colour=None,
         password_hash=hash_password("correct horse battery staple"),
         is_active=True,
         force_password_change=False,
@@ -123,22 +125,97 @@ def test_login_uses_http_only_cookie_without_exposing_token(user: User) -> None:
     db = AuthDatabase(user)
     with client_for(db) as client:
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"email": "ADMIN@example.com", "password": "correct horse battery staple"},
         )
         assert response.status_code == 200
         assert "access_token" not in response.json()
         assert response.json()["user"]["email"] == user.email
+        assert response.json()["user"]["accent_colour"] is None
         assert "HttpOnly" in response.headers["set-cookie"]
         assert "SameSite=lax" in response.headers["set-cookie"]
+        assert "Path=/" in response.headers["set-cookie"]
         claims = decode_session_token(client.cookies[COOKIE_NAME])
         assert claims.user_id == user.id
         assert claims.session_version == 1
-        assert client.get("/auth/me").status_code == 200
+        assert client.get("/api/auth/me").status_code == 200
     assert any(
         isinstance(item, AuditEvent) and item.event_type == "auth.login_succeeded"
         for item in db.added
     )
+
+
+def test_unauthenticated_current_user_is_rejected() -> None:
+    with client_for(AuthDatabase(None)) as client:
+        assert client.get("/api/auth/me").status_code == 401
+
+
+def test_profile_accent_colour_is_normalised_and_can_be_reset(user: User) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        ).status_code == 200
+        updated = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": "#2563eb"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["accent_colour"] == "#2563EB"
+        assert user.accent_colour == "#2563EB"
+
+        reset = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": None},
+        )
+        assert reset.status_code == 200
+        assert reset.json()["accent_colour"] is None
+        assert user.accent_colour is None
+
+
+@pytest.mark.parametrize(
+    "unsafe_colour",
+    ["red", "#FFF", "#11223344", "rgb(1, 2, 3)", "#123456; color:red", "url(x)", "<style>"],
+)
+def test_profile_rejects_unsafe_accent_colours(user: User, unsafe_colour: str) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        ).status_code == 200
+        response = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": unsafe_colour},
+        )
+        assert response.status_code == 422
+        assert user.accent_colour is None
+
+
+def test_profile_cannot_target_another_user(user: User) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        ).status_code == 200
+        response = client.patch(
+            "/api/auth/profile",
+            json={
+                "display_name": user.display_name,
+                "accent_colour": "#2563EB",
+                "user_id": str(uuid.uuid4()),
+            },
+        )
+        assert response.status_code == 422
+        assert user.accent_colour is None
+
+
+def test_unauthenticated_profile_update_is_rejected(user: User) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        response = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": "#2563EB"},
+        )
+        assert response.status_code == 401
 
 
 @pytest.mark.parametrize("password", ["wrong password", "another wrong password"])
@@ -146,7 +223,7 @@ def test_invalid_login_is_generic_and_audited(user: User, password: str) -> None
     db = AuthDatabase(user)
     with client_for(db) as client:
         response = client.post(
-            "/auth/login", json={"email": user.email, "password": password}
+            "/api/auth/login", json={"email": user.email, "password": password}
         )
         assert response.status_code == 401
         assert response.json() == {"detail": "Invalid email or password"}
@@ -161,7 +238,7 @@ def test_disabled_user_cannot_log_in(user: User) -> None:
     user.is_active = False
     with client_for(AuthDatabase(user)) as client:
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"email": user.email, "password": "correct horse battery staple"},
         )
         assert response.status_code == 401
@@ -171,12 +248,12 @@ def test_password_change_requires_current_password_and_rotates_sessions(user: Us
     db = AuthDatabase(user)
     with client_for(db) as client:
         assert client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"email": user.email, "password": "correct horse battery staple"},
         ).status_code == 200
         old_cookie = client.cookies[COOKIE_NAME]
         wrong = client.post(
-            "/auth/change-password",
+            "/api/auth/change-password",
             json={
                 "current_password": "not the current password",
                 "new_password": "a completely new password",
@@ -185,7 +262,7 @@ def test_password_change_requires_current_password_and_rotates_sessions(user: Us
         )
         assert wrong.status_code == 400
         changed = client.post(
-            "/auth/change-password",
+            "/api/auth/change-password",
             json={
                 "current_password": "correct horse battery staple",
                 "new_password": "a completely new password",
@@ -203,10 +280,10 @@ def test_logout_invalidates_the_session_generation(user: User) -> None:
     db = AuthDatabase(user)
     with client_for(db) as client:
         assert client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"email": user.email, "password": "correct horse battery staple"},
         ).status_code == 200
-        response = client.post("/auth/logout")
+        response = client.post("/api/auth/logout")
         assert response.status_code == 204
         assert COOKIE_NAME not in client.cookies
     assert user.session_version == 2
@@ -222,19 +299,40 @@ def test_session_token_carries_revocation_generation(user: User) -> None:
 def test_cross_origin_state_change_is_rejected(user: User) -> None:
     with client_for(AuthDatabase(user)) as client:
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             headers={"Origin": "https://attacker.example"},
             json={"email": user.email, "password": "correct horse battery staple"},
         )
         assert response.status_code == 403
 
 
-def test_web_origin_can_send_context_headers(user: User) -> None:
+def test_same_origin_state_change_is_allowed(user: User) -> None:
     with client_for(AuthDatabase(user)) as client:
+        response = client.post(
+            "/api/auth/login",
+            headers={"Origin": "http://testserver"},
+            json={"email": user.email, "password": "correct horse battery staple"},
+        )
+        assert response.status_code == 200
+
+
+def test_configured_split_origin_can_send_context_headers(
+    user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CORS_ORIGINS", "  http://web.test/, ,invalid  ")
+    assert allowed_origins() == ["http://web.test"]
+    cors_app = CORSMiddleware(
+        app,
+        allow_origins=allowed_origins(),
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Atlas-Customer-ID", "X-Atlas-Site-ID"],
+    )
+    with TestClient(cors_app) as client:
         response = client.options(
-            "/assets",
+            "/api/assets",
             headers={
-                "Origin": "http://localhost:3000",
+                "Origin": "http://web.test",
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": (
                     "x-atlas-customer-id,x-atlas-site-id,content-type"
@@ -245,3 +343,13 @@ def test_web_origin_can_send_context_headers(user: User) -> None:
         allowed = response.headers["access-control-allow-headers"].lower()
         assert "x-atlas-customer-id" in allowed
         assert "x-atlas-site-id" in allowed
+
+
+def test_health_and_documentation_use_api_namespace() -> None:
+    with TestClient(app) as client:
+        assert client.get("/api/health").json() == {"status": "ok"}
+        assert client.get("/api/docs").status_code == 200
+        assert client.get("/api/openapi.json").status_code == 200
+        assert client.get("/health").status_code == 404
+        assert client.get("/docs").status_code == 404
+        assert client.get("/auth/me").status_code == 404

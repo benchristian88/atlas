@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -46,6 +47,15 @@ def _trim_nonempty(value: str | None) -> str:
     return value
 
 
+def _normalize_accent_colour(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+        raise ValueError("Accent colour must be a six-digit hexadecimal colour")
+    return value.upper()
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=1024)
@@ -88,6 +98,7 @@ class UserResponse(ORMResponse):
     id: uuid.UUID
     email: EmailStr
     display_name: str
+    accent_colour: str | None
     is_active: bool
     force_password_change: bool
     last_login_at: datetime | None
@@ -110,9 +121,13 @@ class LoginResponse(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     display_name: str = Field(min_length=1, max_length=255)
+    accent_colour: str | None = None
 
     _display_name = field_validator("display_name")(_trim_nonempty)
+    _accent_colour = field_validator("accent_colour")(_normalize_accent_colour)
 
 
 class PasswordChangeRequest(BaseModel):

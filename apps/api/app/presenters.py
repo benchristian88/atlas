@@ -16,6 +16,7 @@ def user_response_data(principal: Principal, *, administrative: bool = False) ->
         "id": user.id,
         "email": user.email,
         "display_name": user.display_name,
+        "accent_colour": user.accent_colour,
         "is_active": user.is_active,
         "force_password_change": user.force_password_change,
         "last_login_at": user.last_login_at,

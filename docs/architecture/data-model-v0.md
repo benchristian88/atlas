@@ -57,6 +57,7 @@ erDiagram
         string auth_provider
         string external_subject
         boolean mfa_enabled
+        string accent_colour "nullable #RRGGBB preference"
     }
     ROLE {
         uuid id PK
@@ -225,6 +226,9 @@ use, and `session_version` invalidates already-issued signed sessions.
 
 `auth_provider`, `external_subject`, and `mfa_enabled` are extension points; this
 release implements local passwords, not external identity or MFA.
+`accent_colour` is a nullable, per-user presentation preference stored as a
+canonical uppercase `#RRGGBB` value. A null value selects the Atlas default
+theme and preserves the existing appearance for upgraded accounts.
 
 ### Role, Permission, and AccessAssignment
 

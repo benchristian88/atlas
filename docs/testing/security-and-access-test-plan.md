@@ -49,7 +49,7 @@ PostgreSQL; an in-memory/model-only test is not a substitute.
 | Valid login | Updates last login/failure state, audits success, and sets the expected HttpOnly/SameSite cookie. |
 | Invalid login | Generic `401`, no cookie, failure count/lock behavior, safe audit event, and unknown-email timing hash path. |
 | Disabled/locked account | Cannot log in or continue using an old signed session. |
-| Forced change | Normal protected APIs return `403` while profile/password/logout and the slim, scope-filtered `/context` bootstrap response remain reachable. |
+| Forced change | Normal protected APIs return `403` while profile/password/logout and the slim, scope-filtered `/api/context` bootstrap response remain reachable. |
 | Profile update | Only display name changes; role/scope/mass-assignment fields are ignored or rejected. |
 | Password change | Requires current password and matching strong replacement, hashes it, clears forced state, increments session version, and audits safely. |
 | Logout | Clears cookie, increments session version, and rejects the captured old cookie. |
