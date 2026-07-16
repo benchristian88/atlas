@@ -15,8 +15,13 @@ from app.models import (
     Asset,
     AssetFact,
     AssetRelationship,
+    AssetType,
     DiscoveryRun,
     Document,
+    Customer,
+    Integration,
+    RelationshipType,
+    Site,
 )
 from app.services.markdown_docs import generate_asset_document
 
@@ -36,9 +41,7 @@ class AtlasDiscoverySync:
         """Save raw data and normalized data in one database transaction."""
 
         try:
-            run = self.db.get(DiscoveryRun, context.discovery_run_id)
-            if run is None or run.integration_id != context.integration_id:
-                raise SyncError("Discovery run does not match the sync context")
+            run = self._validate_context(context)
 
             run.raw_payload = deepcopy(discovery.raw_payload)
             run.started_at = run.started_at or discovery.observed_at
@@ -75,6 +78,7 @@ class AtlasDiscoverySync:
         """Implement SyncBackend when raw persistence is managed separately."""
 
         try:
+            self._validate_context(context)
             observed_at = datetime.now(timezone.utc)
             result = self._sync(context, normalized, observed_at)
             self._upsert_documents(context, normalized, observed_at)
@@ -86,15 +90,88 @@ class AtlasDiscoverySync:
                 raise
             raise SyncError("Could not synchronize normalized assets") from exc
 
+    def _validate_context(self, context: SyncContext) -> DiscoveryRun:
+        run = self.db.get(DiscoveryRun, context.discovery_run_id)
+        if run is None or run.integration_id != context.integration_id:
+            raise SyncError("Discovery run does not match the sync context")
+        integration = self.db.get(Integration, context.integration_id)
+        customer = self.db.get(Customer, context.customer_id)
+        site = self.db.get(Site, context.site_id) if context.site_id is not None else None
+        if (
+            integration is None
+            or customer is None
+            or site is None
+            or integration.customer_id != context.customer_id
+            or integration.site_id != context.site_id
+            or customer.workspace_id != context.workspace_id
+            or site.customer_id != context.customer_id
+        ):
+            raise SyncError("Discovery context does not match the integration ownership")
+        return run
+
     def _sync(
         self,
         context: SyncContext,
         normalized: NormalizationResult,
         observed_at: datetime,
     ) -> SyncResult:
+        if context.site_id is None:
+            raise SyncError("Discovery synchronization requires a site context")
         external_ids = {asset.external_id for asset in normalized.assets}
         if len(external_ids) != len(normalized.assets):
             raise SyncError("Normalized results contain duplicate asset identities")
+
+        # Discovery plugins use stable string keys. Register previously unseen
+        # keys as editable managed reference data rather than bypassing the FK
+        # or breaking an otherwise valid discovery run.
+        asset_type_keys = {item.asset_type for item in normalized.assets}
+        asset_types = {
+            item.key: item
+            for item in self.db.scalars(
+                select(AssetType).where(AssetType.key.in_(asset_type_keys))
+            )
+        }
+        for key in sorted(asset_type_keys - set(asset_types)):
+            item = AssetType(
+                key=key,
+                name=key.replace("_", " ").title(),
+                description="Registered by discovery",
+                category="discovered",
+                system_defined=False,
+                active=True,
+                sort_order=1000,
+            )
+            self.db.add(item)
+            asset_types[key] = item
+        relationship_type_keys = {
+            item.relationship_type for item in normalized.relationships
+        }
+        relationship_types = {
+            item.key: item
+            for item in self.db.scalars(
+                select(RelationshipType).where(
+                    RelationshipType.key.in_(relationship_type_keys)
+                )
+            )
+        }
+        for key in sorted(relationship_type_keys - set(relationship_types)):
+            label = key.replace("_", " ").title()
+            item = RelationshipType(
+                key=key,
+                name=label,
+                description="Registered by discovery",
+                source_label=label,
+                target_label=label,
+                directional=True,
+                system_defined=False,
+                active=True,
+                sort_order=1000,
+                allowed_source_asset_type_keys=[],
+                allowed_target_asset_type_keys=[],
+            )
+            self.db.add(item)
+            relationship_types[key] = item
+        self.db.flush()
 
         existing_assets = list(
             self.db.scalars(
@@ -112,6 +189,13 @@ class AtlasDiscoverySync:
 
         for normalized_asset in normalized.assets:
             asset = assets_by_external_id.get(normalized_asset.external_id)
+            asset_type = asset_types[normalized_asset.asset_type]
+            if not asset_type.active and (
+                asset is None or asset.asset_type != normalized_asset.asset_type
+            ):
+                raise SyncError(
+                    f"Discovery cannot assign inactive asset type {asset_type.key}"
+                )
             values = {
                 "workspace_id": context.workspace_id,
                 "customer_id": context.customer_id,
@@ -205,6 +289,13 @@ class AtlasDiscoverySync:
             )
             if source is None or target is None:
                 raise SyncError("Relationship references an unknown normalized asset")
+            if (
+                source.customer_id != target.customer_id
+                or source.site_id != target.site_id
+            ):
+                raise SyncError(
+                    "Discovery relationships must remain within one customer and site"
+                )
             identity = (
                 source.id,
                 target.id,
@@ -212,10 +303,34 @@ class AtlasDiscoverySync:
             )
             relationship = relationships_by_identity.get(identity)
             if relationship is None:
+                relationship_type = relationship_types[
+                    normalized_relationship.relationship_type
+                ]
+                if not relationship_type.active:
+                    raise SyncError(
+                        "Discovery cannot create a relationship with an inactive type"
+                    )
+                allowed_sources = (
+                    relationship_type.allowed_source_asset_type_keys or []
+                )
+                allowed_targets = (
+                    relationship_type.allowed_target_asset_type_keys or []
+                )
+                if allowed_sources and source.asset_type not in allowed_sources:
+                    raise SyncError(
+                        "Discovery relationship type does not allow the source asset type"
+                    )
+                if allowed_targets and target.asset_type not in allowed_targets:
+                    raise SyncError(
+                        "Discovery relationship type does not allow the target asset type"
+                    )
                 relationship = AssetRelationship(
                     source_asset_id=source.id,
                     target_asset_id=target.id,
+                    customer_id=source.customer_id,
+                    site_id=source.site_id,
                     relationship_type=normalized_relationship.relationship_type,
+                    legacy_cross_context=False,
                     metadata_=dict(normalized_relationship.metadata),
                 )
                 self.db.add(relationship)

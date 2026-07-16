@@ -1,5 +1,5 @@
 import { ApiError } from "./api-error";
-import { clearToken, getToken } from "./auth-token";
+import { getRequestContext } from "./context-store";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -25,16 +25,28 @@ async function responseBody(response) {
 
 export async function apiRequest(path, options = {}) {
   const baseUrl = configuredApiUrl();
-  const token = getToken();
+  const {
+    omitContext = false,
+    redirectOnUnauthorized = true,
+    ...fetchOptions
+  } = options;
+  const headers = new Headers(fetchOptions.headers || {});
+  const bodyIsFormData = typeof FormData !== "undefined" && fetchOptions.body instanceof FormData;
+  if (fetchOptions.body && !bodyIsFormData && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (!omitContext) {
+    const { customerId, siteId } = getRequestContext();
+    if (customerId) headers.set("X-Atlas-Customer-ID", customerId);
+    if (siteId) headers.set("X-Atlas-Site-ID", siteId);
+  }
+
   let response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
-      ...options,
-      headers: {
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
+      ...fetchOptions,
+      credentials: "include",
+      headers,
     });
   } catch {
     throw new ApiError(
@@ -45,12 +57,21 @@ export async function apiRequest(path, options = {}) {
 
   const body = await responseBody(response);
   if (!response.ok) {
-    if (response.status === 401 && typeof window !== "undefined") {
-      try {
-        clearToken();
-      } finally {
-        window.location.replace("/login");
-      }
+    if (
+      response.status === 401
+      && redirectOnUnauthorized
+      && typeof window !== "undefined"
+      && window.location.pathname !== "/login"
+    ) {
+      window.location.replace("/login");
+    }
+    if (
+      response.status === 403
+      && typeof body?.detail === "string"
+      && body.detail.startsWith("The selected ")
+      && typeof window !== "undefined"
+    ) {
+      window.dispatchEvent(new Event("atlas:context-invalid"));
     }
     let detail = `Atlas API request failed with status ${response.status}.`;
     if (typeof body?.detail === "string") detail = body.detail;

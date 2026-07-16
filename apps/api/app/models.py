@@ -1,18 +1,24 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     MetaData,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -50,10 +56,196 @@ class TimestampMixin:
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint(
+            "auth_provider",
+            "external_subject",
+            name="uq_users_auth_provider_external_subject",
+        ),
+        Index("uq_users_email_lower", text("lower(email)"), unique=True),
+    )
 
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    force_password_change: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    session_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1"
+    )
+    auth_provider: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="local", index=True
+    )
+    external_subject: Mapped[str | None] = mapped_column(String(255))
+    mfa_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+
+
+class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "roles"
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+
+
+class Permission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "permissions"
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(100), index=True)
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    )
+    permission_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AccessAssignment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "access_assignments"
+    __table_args__ = (
+        CheckConstraint(
+            "(scope_type = 'global' AND customer_id IS NULL AND site_id IS NULL) OR "
+            "(scope_type = 'customer' AND customer_id IS NOT NULL AND site_id IS NULL) OR "
+            "(scope_type = 'site' AND customer_id IS NOT NULL AND site_id IS NOT NULL)",
+            name="valid_scope",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_access_assignments_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_access_assignments_global",
+            "user_id",
+            "role_id",
+            unique=True,
+            postgresql_where=text("scope_type = 'global'"),
+        ),
+        Index(
+            "uq_access_assignments_customer",
+            "user_id",
+            "role_id",
+            "customer_id",
+            unique=True,
+            postgresql_where=text("scope_type = 'customer'"),
+        ),
+        Index(
+            "uq_access_assignments_site",
+            "user_id",
+            "role_id",
+            "site_id",
+            unique=True,
+            postgresql_where=text("scope_type = 'site'"),
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    scope_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+
+
+class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "asset_types"
+    __table_args__ = (
+        Index("uq_asset_types_name_lower", text("lower(name)"), unique=True),
+    )
+
+    key: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(100), index=True)
+    default_icon_url: Mapped[str | None] = mapped_column(String(2048))
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", index=True
+    )
+
+
+class RelationshipType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "relationship_types"
+    __table_args__ = (
+        Index(
+            "uq_relationship_types_name_lower",
+            text("lower(name)"),
+            unique=True,
+        ),
+    )
+
+    key: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    source_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    inverse_label: Mapped[str | None] = mapped_column(String(255))
+    directional: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", index=True
+    )
+    allowed_source_asset_type_keys: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
+    allowed_target_asset_type_keys: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
 
 
 class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -83,6 +275,7 @@ class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "sites"
     __table_args__ = (
         UniqueConstraint("customer_id", "name", name="uq_sites_customer_name"),
+        UniqueConstraint("customer_id", "id", name="uq_sites_customer_id_id"),
     )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
@@ -98,13 +291,19 @@ class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "integrations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_integrations_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    site_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("sites.id", ondelete="SET NULL"), index=True
-    )
+    site_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     plugin_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
@@ -142,6 +341,15 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "external_id",
             name="uq_assets_source_external_id",
         ),
+        UniqueConstraint(
+            "id", "customer_id", "site_id", name="uq_assets_id_customer_site"
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_assets_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
         Index("ix_assets_customer_type", "customer_id", "asset_type"),
     )
 
@@ -151,15 +359,19 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    site_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("sites.id", ondelete="SET NULL"), index=True
-    )
+    site_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     source_integration_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("integrations.id", ondelete="SET NULL"), index=True
     )
     external_id: Mapped[str | None] = mapped_column(String(1024))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    asset_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    asset_type: Mapped[str] = mapped_column(
+        String(100),
+        ForeignKey("asset_types.key", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    icon_url: Mapped[str | None] = mapped_column(String(2048))
     vendor: Mapped[str | None] = mapped_column(String(100), index=True)
     model: Mapped[str | None] = mapped_column(String(255))
     hostname: Mapped[str | None] = mapped_column(String(255), index=True)
@@ -189,16 +401,32 @@ class AssetRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "relationship_type",
             name="uq_asset_relationships_edge_type",
         ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_asset_relationships_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
     )
 
     source_asset_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     target_asset_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     relationship_type: Mapped[str] = mapped_column(
-        String(100), nullable=False, index=True
+        String(100),
+        ForeignKey("relationship_types.key", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    legacy_cross_context: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", index=True
     )
     notes: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
@@ -210,14 +438,18 @@ class Network(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "networks"
     __table_args__ = (
         UniqueConstraint("customer_id", "site_id", "name", name="uq_networks_customer_site_name"),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_networks_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
     )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    site_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("sites.id", ondelete="SET NULL"), index=True
-    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     network_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     vlan_id: Mapped[int | None] = mapped_column(Integer)
@@ -263,6 +495,116 @@ class AssetFact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     source: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+class CustomFieldDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "custom_field_definitions"
+    __table_args__ = (
+        CheckConstraint(
+            "data_type IN ('text', 'multiline_text', 'number', 'date', "
+            "'boolean', 'url', 'dropdown')",
+            name="valid_data_type",
+        ),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    help_text: Mapped[str | None] = mapped_column(Text)
+    data_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", index=True
+    )
+    applies_to_all_asset_types: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+
+
+class CustomFieldAssetType(Base):
+    __tablename__ = "custom_field_asset_types"
+
+    field_definition_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("custom_field_definitions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    asset_type_key: Mapped[str] = mapped_column(
+        ForeignKey("asset_types.key", ondelete="RESTRICT"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class CustomFieldOption(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "custom_field_options"
+    __table_args__ = (
+        UniqueConstraint(
+            "field_definition_id", "value", name="uq_custom_field_options_value"
+        ),
+        UniqueConstraint(
+            "field_definition_id",
+            "id",
+            name="uq_custom_field_options_definition_id_id",
+        ),
+    )
+
+    field_definition_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("custom_field_definitions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+
+
+class AssetCustomFieldValue(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "asset_custom_field_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_id",
+            "field_definition_id",
+            name="uq_asset_custom_field_values_asset_definition",
+        ),
+        CheckConstraint(
+            "num_nonnulls(value_text, value_number, value_date, value_bool, "
+            "value_option_id) = 1",
+            name="exactly_one_typed_value",
+        ),
+        ForeignKeyConstraint(
+            ["field_definition_id", "value_option_id"],
+            ["custom_field_options.field_definition_id", "custom_field_options.id"],
+            name="fk_asset_custom_field_values_definition_option",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    field_definition_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("custom_field_definitions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    value_text: Mapped[str | None] = mapped_column(Text)
+    value_number: Mapped[Decimal | None] = mapped_column(Numeric(24, 8))
+    value_date: Mapped[date | None] = mapped_column(Date)
+    value_bool: Mapped[bool | None] = mapped_column(Boolean)
+    value_option_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), index=True
+    )
+
+
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "documents"
 
@@ -279,18 +621,56 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class AuditEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "audit_events"
 
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), index=True
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
+    actor_email: Mapped[str | None] = mapped_column(String(320), index=True)
+    actor_display_name: Mapped[str | None] = mapped_column(String(255))
     event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     target_type: Mapped[str] = mapped_column(String(100), nullable=False)
     target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("customers.id", ondelete="SET NULL"), index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("sites.id", ondelete="SET NULL"), index=True
+    )
+    success: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    summary: Mapped[str | None] = mapped_column(Text)
+    source_ip: Mapped[str | None] = mapped_column(String(45), index=True)
+    request_id: Mapped[str | None] = mapped_column(String(100), index=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+
+    @property
+    def actor_snapshot(self) -> str | None:
+        if self.actor_display_name and self.actor_email:
+            return f"{self.actor_display_name} <{self.actor_email}>"
+        return self.actor_display_name or self.actor_email
+
+    @property
+    def change_summary(self) -> str | None:
+        return self.summary
+
+
+class SystemSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "system_settings"
+
+    key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    value_: Mapped[Any] = mapped_column("value", JSONB, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    sensitive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )

@@ -1,6 +1,9 @@
 "use client";
 
+import { AccessDenied } from "../../components/access-denied";
+import { useAuth } from "../../components/auth-context";
 import { CrudScreen } from "../../components/crud-screen";
+import { useWorkspaceContext } from "../../components/workspace-context";
 import { NETWORK_TYPES, taxonomyLabel } from "../../lib/taxonomy";
 
 const dependencies = [
@@ -32,14 +35,34 @@ const columns = [
 ];
 
 export default function NetworksPage() {
+  const {
+    hasPermission,
+    hasPermissionForObject,
+    hasPermissionInContext,
+  } = useAuth();
+  const { customerId, reloadKey, siteId } = useWorkspaceContext();
+  if (!hasPermissionInContext("networks.view", customerId, siteId)) return <AccessDenied />;
+  const availableDependencies = dependencies.filter((dependency) => (
+    dependency.key === "customers"
+      ? hasPermission("customers.view")
+      : hasPermission("sites.view")
+  ));
   return <CrudScreen
+    canCreate={hasPermissionInContext("networks.create", customerId, siteId)}
+    canDelete={(row) => hasPermissionForObject("networks.delete", row.customer_id, row.site_id)}
+    canEdit={(row) => hasPermissionForObject("networks.edit", row.customer_id, row.site_id)}
     columns={columns}
-    dependencies={dependencies}
+    contextReloadKey={reloadKey}
+    dependencies={availableDependencies}
     description="Define LANs, VLANs, routed zones, overlays, and other network segments."
-    emptyValues={{ customer_id: "", site_id: "", name: "", network_type: "vlan", vlan_id: "", cidr: "", gateway: "", purpose: "", zone: "", notes: "" }}
+    emptyValues={{ customer_id: customerId || "", site_id: siteId || "", name: "", network_type: "vlan", vlan_id: "", cidr: "", gateway: "", purpose: "", zone: "", notes: "" }}
     endpoint="/networks"
     eyebrow="Connectivity"
-    fields={fields}
+    fields={fields.map((field) => (
+      field.name === "customer_id" && customerId
+        ? { ...field, disabled: true }
+        : field.name === "site_id" && siteId ? { ...field, disabled: true } : field
+    ))}
     preparePayload={(form) => ({
       ...form,
       site_id: form.site_id || null,

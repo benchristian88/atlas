@@ -1,100 +1,100 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { AccessDenied } from "../../../../components/access-denied";
+import { AssetForm } from "../../../../components/asset-form";
+import { useAuth } from "../../../../components/auth-context";
 import { PageHeader } from "../../../../components/page-header";
+import { useWorkspaceContext } from "../../../../components/workspace-context";
 import { apiRequest } from "../../../../lib/api";
-import { ASSET_TYPES, taxonomyLabel } from "../../../../lib/taxonomy";
 
 export default function EditAssetPage() {
   const { id } = useParams();
   const router = useRouter();
-  const [customers, setCustomers] = useState([]);
-  const [sites, setSites] = useState([]);
-  const [form, setForm] = useState(null);
-  const [metadata, setMetadata] = useState({});
+  const { hasPermission, hasPermissionForObject } = useAuth();
+  const workspace = useWorkspaceContext();
+  const [asset, setAsset] = useState(null);
+  const [assetTypes, setAssetTypes] = useState([]);
+  const [customFields, setCustomFields] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const started = useRef(false);
+  const canEdit = hasPermission("assets.edit");
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    Promise.all([apiRequest(`/assets/${id}`), apiRequest("/customers"), apiRequest("/sites")])
-      .then(([asset, allCustomers, allSites]) => {
-        setCustomers(allCustomers);
-        setSites(allSites);
-        setMetadata(asset.metadata || {});
-        setForm({
-          customer_id: asset.customer_id,
-          site_id: asset.site_id || "",
-          name: asset.name,
-          asset_type: asset.asset_type,
-          vendor: asset.vendor || "",
-          model: asset.model || "",
-          hostname: asset.hostname || "",
-          management_url: asset.metadata?.management_url || "",
-          tags: (asset.metadata?.tags || []).join(", "),
-          status: asset.status,
-          description: asset.description || "",
-        });
-      })
-      .catch((requestError) => setError(requestError.message || "Atlas could not load this asset."));
-  }, [id]);
+    if (!canEdit) return;
+    let active = true;
+    async function load() {
+      try {
+        const [assetRecord, typeRecords, fieldRecords] = await Promise.all([
+          apiRequest(`/assets/${id}`),
+          hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
+          hasPermission("custom_fields.view") ? apiRequest("/custom-fields?active_only=true") : Promise.resolve([]),
+        ]);
+        if (!active) return;
+        setAsset(assetRecord);
+        setAssetTypes(typeRecords);
+        setCustomFields(fieldRecords);
+      } catch (requestError) {
+        if (active) setError(requestError.message || "Atlas could not load this asset.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => { active = false; };
+  }, [canEdit, hasPermission, id]);
 
-  function change(name, value, extra = {}) {
-    setForm((current) => ({ ...current, [name]: value, ...extra }));
-  }
+  if (!canEdit) return <AccessDenied description="You need assets.edit permission to change inventory records." />;
 
-  async function submit(event) {
-    event.preventDefault();
+  async function save(payload) {
     setSaving(true);
     setError("");
     try {
-      await apiRequest(`/assets/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          customer_id: form.customer_id,
-          site_id: form.site_id || null,
-          name: form.name,
-          asset_type: form.asset_type,
-          vendor: form.vendor || null,
-          model: form.model || null,
-          hostname: form.hostname || null,
-          status: form.status,
-          description: form.description || null,
-          metadata: {
-            ...metadata,
-            management_url: form.management_url || null,
-            tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-          },
-        }),
-      });
+      await apiRequest(`/assets/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
       router.replace(`/assets/${id}?updated=1`);
     } catch (requestError) {
       setError(requestError.message || "Atlas could not update this asset.");
+    } finally {
       setSaving(false);
     }
   }
 
-  if (!form && !error) return <div className="status-banner" role="status">Loading asset…</div>;
+  if (loading) return <div className="status-banner" role="status">Loading asset…</div>;
+  if (!asset) return <div className="error-banner" role="alert">{error || "Asset not found."}</div>;
+  if (!hasPermissionForObject("assets.edit", asset.customer_id, asset.site_id)) {
+    return <AccessDenied description="You cannot edit assets in this customer and site." />;
+  }
+  const editableSites = workspace.sites.filter((site) => (
+    hasPermissionForObject("assets.edit", site.customer_id, site.id)
+  ));
+  const editableCustomerIds = new Set(editableSites.map((site) => site.customer_id));
+  const editableCustomers = workspace.customers.filter(
+    (customer) => editableCustomerIds.has(customer.id),
+  );
+  const contextMismatch = (workspace.customerId && workspace.customerId !== asset.customer_id)
+    || (workspace.siteId && workspace.siteId !== asset.site_id);
 
-  return <>
-    <PageHeader eyebrow="Asset" title="Edit asset" description="Update identity and inventory fields. IP addresses are managed through interfaces." />
-    {error && <div className="error-banner" role="alert">{error}</div>}
-    {form && <section className="form-card"><form className="resource-form" onSubmit={submit}><div className="form-grid">
-      <label className="field"><span>Customer *</span><select required value={form.customer_id} onChange={(event) => change("customer_id", event.target.value, { site_id: "" })}>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
-      <label className="field"><span>Site</span><select value={form.site_id} onChange={(event) => change("site_id", event.target.value)}><option value="">No site</option>{sites.filter((site) => site.customer_id === form.customer_id).map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></label>
-      <label className="field"><span>Name *</span><input required value={form.name} onChange={(event) => change("name", event.target.value)} /></label>
-      <label className="field"><span>Asset type *</span><select required value={form.asset_type} onChange={(event) => change("asset_type", event.target.value)}>{!ASSET_TYPES.includes(form.asset_type) && <option value={form.asset_type}>{form.asset_type} (existing custom value)</option>}{ASSET_TYPES.map((value) => <option key={value} value={value}>{taxonomyLabel(value)}</option>)}</select></label>
-      <label className="field"><span>Vendor</span><input value={form.vendor} onChange={(event) => change("vendor", event.target.value)} /></label>
-      <label className="field"><span>Model</span><input value={form.model} onChange={(event) => change("model", event.target.value)} /></label>
-      <label className="field"><span>Hostname</span><input value={form.hostname} onChange={(event) => change("hostname", event.target.value)} /></label>
-      <label className="field"><span>Management URL</span><input type="url" value={form.management_url} onChange={(event) => change("management_url", event.target.value)} /></label>
-      <label className="field"><span>Status</span><select value={form.status} onChange={(event) => change("status", event.target.value)}><option value="active">Active</option><option value="stale">Stale</option><option value="unknown">Unknown</option></select></label>
-      <label className="field"><span>Tags</span><input value={form.tags} onChange={(event) => change("tags", event.target.value)} placeholder="homelab, production" /></label>
-      <label className="field field-wide"><span>Description</span><textarea rows="4" value={form.description} onChange={(event) => change("description", event.target.value)} /></label>
-    </div><div className="form-actions"><Link className="button button-secondary" href={`/assets/${id}`}>Cancel</Link><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save changes"}</button></div></form></section>}
-  </>;
+  return (
+    <>
+      <PageHeader eyebrow="Asset" title={`Edit ${asset.name}`} description="Update identity, ownership, icon, inventory metadata, and custom enrichment." />
+      {contextMismatch && <div className="warning-banner">This asset is outside the active header context. Switch to its customer and site before saving changes.</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      <section className="form-card">
+        <AssetForm
+          asset={asset}
+          assetTypes={assetTypes}
+          context={{ customerId: workspace.customerId, siteId: workspace.siteId }}
+          customFieldDefinitions={customFields}
+          customers={editableCustomers}
+          onCancel={() => router.push(`/assets/${id}`)}
+          onSubmit={save}
+          saving={saving}
+          sites={editableSites}
+          submitLabel="Save changes"
+        />
+      </section>
+    </>
+  );
 }
