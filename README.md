@@ -33,6 +33,8 @@ Atlas defaults to a single browser origin. The web UI uses the relative API
 base `/api`; an operator-selected reverse proxy forwards `/api/*` unchanged to
 FastAPI and all other paths to Next.js. No public hostname is compiled into
 Atlas, and normal production browser traffic does not depend on CORS.
+The reference web image runs the Next.js standalone production server, not the
+development/HMR server.
 
 See [single-origin deployment](docs/deployment/single-origin.md),
 [reverse-proxy examples](docs/deployment/reverse-proxy-examples.md), and the

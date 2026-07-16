@@ -37,11 +37,10 @@ services:
     build:
       context: ../../apps/web
       dockerfile: Dockerfile
-    environment:
-      # Pass only public browser configuration to Next.js. Never inject the
-      # complete .env file (database, auth and bootstrap secrets) into web.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
-      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-localhost}
+      args:
+        # NEXT_PUBLIC values are browser-public and compiled by Next.js. Never
+        # pass database, auth, or bootstrap secrets as web build arguments.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     ports:
       - "3000:3000"
     depends_on:

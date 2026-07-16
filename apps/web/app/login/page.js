@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authenticatedHome } from "../../components/auth-context";
 import { getCurrentUser, login } from "../../lib/auth";
+import { checkSession } from "../../lib/session-state.mjs";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,14 +18,12 @@ export default function LoginPage() {
     let active = true;
     async function validateExistingSession() {
       try {
-        const user = await getCurrentUser();
-        if (active) {
-          router.replace(authenticatedHome(user));
-        }
-      } catch (requestError) {
-        if (!active) return;
-        if (requestError.status !== 401) {
-          setError(`Atlas could not check your existing session. ${requestError.message}`);
+        const session = await checkSession(getCurrentUser, () => active);
+        if (!session) return;
+        if (session.status === "authenticated") {
+          router.replace(authenticatedHome(session.user));
+        } else if (session.status === "error") {
+          setError(`Atlas could not check your existing session. ${session.error}`);
         }
       } finally {
         if (active) setCheckingSession(false);
