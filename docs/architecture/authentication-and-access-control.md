@@ -182,6 +182,11 @@ Administration routes use the same policy layer as inventory routes:
 - User APIs return safe identity/profile fields and assignment summaries, never
   password hashes. Temporary passwords are write-only and require a change on
   next login.
+- An authenticated user can update only their own display name and accent
+  colour through `/api/auth/profile`. Accent values are restricted to a single
+  six-digit hex colour, normalized to uppercase, and never interpolated into
+  raw CSS; `null` resets the account to the Atlas default. Administrators do not
+  receive a separate accent-management path for other users.
 - Role and permission APIs expose built-in mappings. Protected records and the
   last-master invariant cannot be bypassed with direct IDs.
 - Customer/site deletion is allowed only when no dependent records would be

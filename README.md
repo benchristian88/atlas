@@ -148,9 +148,17 @@ include the cookie and the API remains authoritative for every permission and
 scope decision.
 
 The profile menu shows the login email, editable display name, assigned roles,
-and available customer/site scope. Password changes require the current
-password and a policy-compliant confirmed replacement. Logout and password
-changes advance the user's session version, invalidating previously issued
+available customer/site scope, and an Appearance control. Each user can choose
+an accent with the colour picker, enter a six-digit hex value, select a preset,
+or reset to the Atlas default. The preference is stored on the user account, so
+it follows that user across browsers and devices. It changes the primary accent
+family and derived sidebar treatment while success, warning, error, and neutral
+status colours remain semantic. Derived text and focus colours are selected for
+accessible contrast.
+
+Password changes require the current password and a policy-compliant confirmed
+replacement. Logout and password changes advance the user's session version,
+invalidating previously issued
 sessions; disabling a user also prevents authentication. Passwords, hashes,
 cookies, and session tokens are excluded from API responses and audit details.
 

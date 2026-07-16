@@ -1,3 +1,6 @@
+import importlib
+from unittest.mock import Mock
+
 from app.models import Base
 
 
@@ -34,7 +37,7 @@ CRITICAL_COLUMNS = {
         "id", "email", "password_hash", "display_name", "is_active",
         "force_password_change", "last_login_at", "failed_login_count",
         "locked_until", "session_version", "auth_provider", "external_subject",
-        "mfa_enabled", "created_at", "updated_at",
+        "mfa_enabled", "accent_colour", "created_at", "updated_at",
     },
     "access_assignments": {
         "id", "user_id", "role_id", "scope_type", "customer_id", "site_id",
@@ -118,6 +121,21 @@ def test_case_insensitive_identity_and_type_name_indexes_are_declared() -> None:
     assert "uq_asset_types_name_lower" in {
         index.name for index in Base.metadata.tables["asset_types"].indexes
     }
+
+
+def test_accent_colour_migration_is_nullable_and_preserves_existing_users(
+    monkeypatch,
+) -> None:
+    migration = importlib.import_module(
+        "migrations.versions.20260717_0005_user_accent_colour"
+    )
+    operation = Mock()
+    monkeypatch.setattr(migration, "op", operation)
+    migration.upgrade()
+    table_name, column = operation.add_column.call_args.args
+    assert table_name == "users"
+    assert column.name == "accent_colour"
+    assert column.nullable is True
     assert "uq_relationship_types_name_lower" in {
         index.name for index in Base.metadata.tables["relationship_types"].indexes
     }

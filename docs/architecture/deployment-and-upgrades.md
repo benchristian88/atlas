@@ -156,6 +156,15 @@ legacy inventory:
 The migration does not drop and recreate the database. Check migration logs and
 compare per-customer assets/relationships before and after upgrading.
 
+## User accent preference migration
+
+Revision `20260717_0005` adds the nullable `users.accent_colour` column. It does
+not rewrite or delete existing user records: a null value deliberately retains
+the Atlas default theme. Normal API startup applies the revision through
+`alembic upgrade head`; no preference backfill or operator input is required.
+The downgrade removes only this preference column, so export any chosen accent
+values first if they need to be retained across a rollback.
+
 ## Backup example
 
 The following creates a PostgreSQL custom-format backup on the Docker host. The

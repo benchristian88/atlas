@@ -144,15 +144,21 @@ def update_profile(
 ) -> UserResponse:
     user = principal.user
     previous_name = user.display_name
+    previous_accent = user.accent_colour
     user.display_name = payload.display_name.strip()
+    if "accent_colour" in payload.model_fields_set:
+        user.accent_colour = payload.accent_colour
     add_audit_event(
         db,
         action="profile.updated",
         target_type="user",
         target_id=user.id,
         actor=user,
-        summary="Display name updated",
-        metadata={"display_name": {"from": previous_name, "to": user.display_name}},
+        summary="Profile preferences updated",
+        metadata={
+            "display_name": {"from": previous_name, "to": user.display_name},
+            "accent_colour": {"from": previous_accent, "to": user.accent_colour},
+        },
         request=request,
     )
     db.commit()

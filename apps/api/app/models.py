@@ -68,6 +68,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    accent_colour: Mapped[str | None] = mapped_column(String(7))
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
     )

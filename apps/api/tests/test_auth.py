@@ -90,6 +90,7 @@ def user() -> User:
         id=uuid.uuid4(),
         email="admin@example.com",
         display_name="Atlas Admin",
+        accent_colour=None,
         password_hash=hash_password("correct horse battery staple"),
         is_active=True,
         force_password_change=False,
@@ -130,6 +131,7 @@ def test_login_uses_http_only_cookie_without_exposing_token(user: User) -> None:
         assert response.status_code == 200
         assert "access_token" not in response.json()
         assert response.json()["user"]["email"] == user.email
+        assert response.json()["user"]["accent_colour"] is None
         assert "HttpOnly" in response.headers["set-cookie"]
         assert "SameSite=lax" in response.headers["set-cookie"]
         assert "Path=/" in response.headers["set-cookie"]
@@ -146,6 +148,74 @@ def test_login_uses_http_only_cookie_without_exposing_token(user: User) -> None:
 def test_unauthenticated_current_user_is_rejected() -> None:
     with client_for(AuthDatabase(None)) as client:
         assert client.get("/api/auth/me").status_code == 401
+
+
+def test_profile_accent_colour_is_normalised_and_can_be_reset(user: User) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        ).status_code == 200
+        updated = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": "#2563eb"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["accent_colour"] == "#2563EB"
+        assert user.accent_colour == "#2563EB"
+
+        reset = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": None},
+        )
+        assert reset.status_code == 200
+        assert reset.json()["accent_colour"] is None
+        assert user.accent_colour is None
+
+
+@pytest.mark.parametrize(
+    "unsafe_colour",
+    ["red", "#FFF", "#11223344", "rgb(1, 2, 3)", "#123456; color:red", "url(x)", "<style>"],
+)
+def test_profile_rejects_unsafe_accent_colours(user: User, unsafe_colour: str) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        ).status_code == 200
+        response = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": unsafe_colour},
+        )
+        assert response.status_code == 422
+        assert user.accent_colour is None
+
+
+def test_profile_cannot_target_another_user(user: User) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        assert client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "correct horse battery staple"},
+        ).status_code == 200
+        response = client.patch(
+            "/api/auth/profile",
+            json={
+                "display_name": user.display_name,
+                "accent_colour": "#2563EB",
+                "user_id": str(uuid.uuid4()),
+            },
+        )
+        assert response.status_code == 422
+        assert user.accent_colour is None
+
+
+def test_unauthenticated_profile_update_is_rejected(user: User) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        response = client.patch(
+            "/api/auth/profile",
+            json={"display_name": user.display_name, "accent_colour": "#2563EB"},
+        )
+        assert response.status_code == 401
 
 
 @pytest.mark.parametrize("password", ["wrong password", "another wrong password"])
