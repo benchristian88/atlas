@@ -105,36 +105,44 @@ a { color: inherit; text-decoration: none; }
   width: 32px;
 }
 
-.nav-label {
+.nav-group-label {
   color: var(--sidebar-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  margin: 8px 10px 10px;
+  margin: 0 10px 8px;
   text-transform: uppercase;
 }
 
-.nav-list { display: grid; gap: 4px; }
+.nav-list { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
+.nav-primary-groups { display: grid; gap: 16px; }
+.nav-group { flex: 0 0 auto; }
+.nav-group-items { display: grid; gap: 4px; }
+.nav-system-group { margin-top: auto; padding-top: 24px; }
+.nav-profile { border-top: 1px solid rgba(255, 255, 255, 0.1); display: grid; margin-top: 12px; padding-top: 12px; }
 
 .nav-link {
+  border-left: 2px solid transparent;
   border-radius: 8px;
   color: #cad7d8;
+  display: block;
   font-size: 14px;
   font-weight: 550;
-  padding: 10px 12px;
+  padding: 9px 12px 9px 10px;
 }
 
 .nav-link:hover, .nav-link.active {
   background: rgba(255, 255, 255, 0.09);
   color: var(--sidebar-foreground);
 }
+.nav-link.active { border-left-color: var(--brand-mark); font-weight: 700; }
 
 .sidebar-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--sidebar-muted);
   font-size: 12px;
   line-height: 1.5;
-  margin-top: auto;
+  margin-top: 14px;
   padding: 18px 10px 0;
 }
 
@@ -617,8 +625,12 @@ tbody tr:hover { background: #fbfdfd; }
 @media (max-width: 900px) {
   .sidebar { padding: 14px; position: static; width: auto; }
   .brand { margin-bottom: 10px; max-width: 208px; }
-  .nav-label, .sidebar-footer { display: none; }
-  .nav-list { display: flex; overflow-x: auto; }
+  .sidebar-footer { display: none; }
+  .nav-list { align-items: flex-start; flex-direction: row; gap: 18px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+  .nav-primary-groups { display: flex; gap: 18px; }
+  .nav-group-items { display: flex; }
+  .nav-system-group { margin-top: 0; padding-top: 0; }
+  .nav-profile { border-left: 1px solid rgba(255, 255, 255, 0.1); border-top: 0; display: flex; margin: 18px 0 0; padding: 0 0 0 18px; }
   .nav-link { white-space: nowrap; }
   .content { margin-left: 0; }
   .topbar { min-height: 57px; padding: 9px 20px; }

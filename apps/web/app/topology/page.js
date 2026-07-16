@@ -94,7 +94,7 @@ export default function TopologyPage() {
 
   if (!canView) return <AccessDenied />;
   return <>
-    <PageHeader eyebrow="Topology workbench" title="Topology lenses" description="Use focused views of the same Atlas inventory instead of one unreadable infrastructure graph." />
+    <PageHeader eyebrow="Knowledge" title="Knowledge Graph" description="Explore recorded infrastructure and dependency relationships through focused topology lenses." />
     {error && <div className="error-banner" role="alert">{error}</div>}
     {!data && !error && <div className="status-banner" role="status">Loading topology…</div>}
     {data && <>
