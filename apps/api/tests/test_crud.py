@@ -162,7 +162,7 @@ def test_viewer_mutation_is_blocked_by_backend() -> None:
     app.dependency_overrides[get_db] = lambda: db
     with TestClient(app) as client:
         response = client.post(
-            "/assets",
+            "/api/assets",
             json={
                 "customer_id": str(uuid.uuid4()),
                 "site_id": str(uuid.uuid4()),
@@ -317,14 +317,25 @@ def test_cross_site_and_cross_customer_relationships_are_rejected() -> None:
 def test_openapi_exposes_administration_and_reference_endpoints() -> None:
     paths = app.openapi()["paths"]
     for path in (
-        "/users",
-        "/roles",
-        "/permissions",
-        "/asset-types",
-        "/relationship-types",
-        "/custom-fields",
-        "/audit-events",
-        "/context",
-        "/dashboard/summary",
+        "/api/users",
+        "/api/roles",
+        "/api/permissions",
+        "/api/asset-types",
+        "/api/relationship-types",
+        "/api/custom-fields",
+        "/api/audit-events",
+        "/api/context",
+        "/api/dashboard/summary",
+        "/api/customers",
+        "/api/sites",
+        "/api/assets",
+        "/api/asset-relationships",
+        "/api/networks",
+        "/api/asset-interfaces",
+        "/api/manual-assets",
+        "/api/topology",
     ):
         assert path in paths
+    assert all(path.startswith("/api/") for path in paths)
+    for old_path in ("/customers", "/sites", "/assets", "/topology"):
+        assert old_path not in paths

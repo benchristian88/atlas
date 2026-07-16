@@ -610,9 +610,9 @@ def test_forced_change_account_can_only_bootstrap_its_slim_context() -> None:
     app.dependency_overrides[get_principal] = lambda: principal
     app.dependency_overrides[get_db] = lambda: ContextDatabase()
     with TestClient(app) as client:
-        response = client.get("/context")
-        protected_response = client.get("/assets")
-        session_probe_response = client.get("/protected")
+        response = client.get("/api/context")
+        protected_response = client.get("/api/assets")
+        session_probe_response = client.get("/api/protected")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -638,7 +638,7 @@ def test_unauthorised_user_cannot_read_audit_log() -> None:
     app.dependency_overrides[get_principal] = lambda: viewer
     app.dependency_overrides[get_db] = lambda: AdminDatabase()
     with TestClient(app) as client:
-        response = client.get("/audit-events")
+        response = client.get("/api/audit-events")
     assert response.status_code == 403
 
 
@@ -648,7 +648,7 @@ def test_viewer_cannot_edit_asset_custom_field_values() -> None:
     app.dependency_overrides[get_db] = lambda: AdminDatabase()
     with TestClient(app) as client:
         response = client.put(
-            f"/assets/{uuid.uuid4()}/custom-fields",
+            f"/api/assets/{uuid.uuid4()}/custom-fields",
             json={"values": {"rack": 12}},
         )
     assert response.status_code == 403

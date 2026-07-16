@@ -10,7 +10,7 @@ services:
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY must be set}
       AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-480}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       # Optional and bootstrap-only. An empty set is a valid configuration once
       # an account exists; empty-table bootstrap rejects a partial/invalid set.
       ATLAS_BOOTSTRAP_ADMIN_EMAIL: ${ATLAS_BOOTSTRAP_ADMIN_EMAIL:-}
@@ -28,7 +28,7 @@ services:
         - CMD
         - python
         - -c
-        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health')
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,8 +40,8 @@ services:
     environment:
       # Pass only public browser configuration to Next.js. Never inject the
       # complete .env file (database, auth and bootstrap secrets) into web.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set}
-      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-localhost,192.168.5.9}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+      NEXT_ALLOWED_DEV_ORIGINS: ${NEXT_ALLOWED_DEV_ORIGINS:-localhost}
     ports:
       - "3000:3000"
     depends_on:

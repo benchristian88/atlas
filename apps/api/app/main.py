@@ -1,7 +1,8 @@
 import os
 import uuid
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -27,14 +28,30 @@ from app.routes import (
 
 
 def allowed_origins() -> list[str]:
-    return [
-        origin.strip()
-        for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-        if origin.strip()
-    ]
+    origins = []
+    for raw_origin in os.getenv("CORS_ORIGINS", "").split(","):
+        origin = raw_origin.strip().rstrip("/")
+        parsed = urlsplit(origin)
+        if origin and parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path in {"", "/"}:
+            origins.append(origin)
+    return origins
 
 
-app = FastAPI(title="Atlas API")
+def request_origin_is_allowed(request: Request, origin: str) -> bool:
+    normalized_origin = origin.rstrip("/")
+    if normalized_origin in allowed_origins():
+        return True
+    parsed = urlsplit(normalized_origin)
+    request_host = request.headers.get("host", "").lower()
+    return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == request_host
+
+
+app = FastAPI(
+    title="Atlas API",
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+    redoc_url="/api/redoc",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins(),
@@ -61,7 +78,7 @@ async def request_security(request: Request, call_next):
     if (
         request.method in {"POST", "PUT", "PATCH", "DELETE"}
         and origin is not None
-        and origin not in allowed_origins()
+        and not request_origin_is_allowed(request, origin)
     ):
         return JSONResponse(
             status_code=403,
@@ -73,29 +90,33 @@ async def request_security(request: Request, call_next):
     return response
 
 
-app.include_router(auth.router)
-app.include_router(context.router)
-app.include_router(users.router)
-app.include_router(roles.router)
-app.include_router(roles.permissions_router)
-app.include_router(customers.router)
-app.include_router(sites.router)
-app.include_router(reference_data.asset_types_router)
-app.include_router(reference_data.relationship_types_router)
-app.include_router(custom_fields.router)
-app.include_router(assets.router)
-app.include_router(custom_fields.asset_values_router)
-app.include_router(asset_relationships.router)
-app.include_router(networks.router)
-app.include_router(asset_interfaces.router)
-app.include_router(topology.router)
-app.include_router(audit.router)
-app.include_router(system_settings.router)
-app.include_router(manual_assets.router)
-app.include_router(protected.router)
+api_router = APIRouter()
+api_router.include_router(auth.router)
+api_router.include_router(context.router)
+api_router.include_router(users.router)
+api_router.include_router(roles.router)
+api_router.include_router(roles.permissions_router)
+api_router.include_router(customers.router)
+api_router.include_router(sites.router)
+api_router.include_router(reference_data.asset_types_router)
+api_router.include_router(reference_data.relationship_types_router)
+api_router.include_router(custom_fields.router)
+api_router.include_router(assets.router)
+api_router.include_router(custom_fields.asset_values_router)
+api_router.include_router(asset_relationships.router)
+api_router.include_router(networks.router)
+api_router.include_router(asset_interfaces.router)
+api_router.include_router(topology.router)
+api_router.include_router(audit.router)
+api_router.include_router(system_settings.router)
+api_router.include_router(manual_assets.router)
+api_router.include_router(protected.router)
 
 
-@app.get("/health", tags=["health"])
+@api_router.get("/health", tags=["health"])
 async def health() -> dict[str, str]:
     """Report whether the API process is available."""
     return {"status": "ok"}
+
+
+app.include_router(api_router, prefix="/api")

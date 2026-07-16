@@ -58,11 +58,11 @@ Instance / workspace -> Customer -> Site -> Assets and relationships
 ```
 
 Every interactive route must authenticate. Apart from the documented
-authentication/profile operations and the slim read-only `/context` selector
+authentication/profile operations and the slim read-only `/api/context` selector
 needed to initialize the forced-password-change shell, application routes must
 enforce forced-password-change state, require an explicit permission, and
 constrain their query or mutation to an authorized global/customer/site
-assignment. `/context` may expose only authorized customer/site IDs, names, and
+assignment. `/api/context` may expose only authorized customer/site IDs, names, and
 statuses. Never rely on navigation hiding, active-context headers,
 URL/query/body IDs, or browser storage as proof of access. Search, topology,
 dashboards, summaries, and counts must not reveal inaccessible records.

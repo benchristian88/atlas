@@ -20,10 +20,11 @@ Required operational settings are:
   development default is 480.
 - `AUTH_COOKIE_SECURE`: `false` only for local HTTP; `true` behind production
   HTTPS.
-- `CORS_ORIGINS`: exact comma-separated web origins allowed to send credentialed
-  browser requests. Do not use a wildcard.
-- `NEXT_PUBLIC_API_URL`: the API URL as seen by the user's browser, not the
-  web container's internal Docker hostname.
+- `CORS_ORIGINS`: optional exact comma-separated web origins for intentional
+  split-origin development. Leave blank for normal same-origin operation and
+  never use a wildcard with authenticated requests.
+- `NEXT_PUBLIC_API_URL`: optional browser API-base override. It defaults to
+  `/api`; use an absolute URL ending in `/api` only for split-origin development.
 - Database credentials and `DATABASE_URL`: replace the development values for
   any non-local deployment.
 
@@ -97,7 +98,7 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
    no database user. Setting them cannot repair or reset an existing account.
 7. Pull/build the matching web, API, and worker version, then start the stack.
    The API applies migrations before accepting traffic.
-8. Check API migration/startup logs, `/health`, login, forced-password-change
+8. Check API migration/startup logs, `/api/health`, login, forced-password-change
    state, context selection, a scope-limited account, and topology/inventory
    counts.
 9. Remove any bootstrap values after first use and recreate the API container.

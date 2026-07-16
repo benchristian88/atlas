@@ -55,8 +55,8 @@ successful password change increment `users.session_version`, so previously
 issued sessions for that account stop working even if their signed expiry has
 not passed. Rotating `AUTH_SECRET_KEY` invalidates every signed session.
 
-An account marked `force_password_change` is restricted to `/auth/me`, profile,
-password-change, logout, and the read-only `/context` selector until the
+An account marked `force_password_change` is restricted to `/api/auth/me`, profile,
+password-change, logout, and the read-only `/api/context` selector until the
 password is replaced. The selector exposes only authorized customer/site IDs,
 names, and statuses so the protected shell can initialize the password-change
 page; it does not expose inventory or administrative records. All
