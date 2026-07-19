@@ -12,6 +12,7 @@ import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
 import {
   KNOWLEDGE_GAP_REQUIREMENT_LEVELS,
+  KNOWLEDGE_GAP_ENTITY_TYPES,
   KNOWLEDGE_GAP_SEVERITIES,
   KNOWLEDGE_GAP_STATUSES,
   knowledgeGapFiltersHref,
@@ -55,7 +56,8 @@ function formatDate(value) {
 }
 
 function KnowledgeGapCard({ canDefer, canEdit, canExcept, deciding, item, onAction, onReopen }) {
-  const assetName = item.entity_name || "Unavailable asset";
+  const entityLabel = item.entity_type === "service" ? "Service" : "Asset";
+  const entityName = item.entity_name || `Unavailable ${entityLabel.toLowerCase()}`;
   const requirementName = item.requirement_name || "Knowledge requirement unavailable";
   const hasAssetLink = Boolean(item.entity_id);
 
@@ -71,8 +73,8 @@ function KnowledgeGapCard({ canDefer, canEdit, canExcept, deciding, item, onActi
     <div className="knowledge-gap-card-body">
       <div className="knowledge-gap-main">
         <section className="knowledge-gap-asset">
-          <span className="knowledge-gap-section-label">Asset name</span>
-          <h2>{assetName}</h2>
+          <span className="knowledge-gap-section-label">{entityLabel} name</span>
+          <h2>{entityName}</h2>
         </section>
         <section className="knowledge-gap-missing">
           <span className="knowledge-gap-section-label">Missing information</span>
@@ -83,7 +85,7 @@ function KnowledgeGapCard({ canDefer, canEdit, canExcept, deciding, item, onActi
           </div>
         </section>
       </div>
-      <aside className="knowledge-gap-support" aria-label={`Supporting information for ${assetName}`}>
+      <aside className="knowledge-gap-support" aria-label={`Supporting information for ${entityName}`}>
         <section>
           <h4 className="knowledge-gap-section-label">Dates</h4>
           <dl className="knowledge-gap-dates">
@@ -98,8 +100,8 @@ function KnowledgeGapCard({ canDefer, canEdit, canExcept, deciding, item, onActi
     <footer className="knowledge-gap-actions">
       <span className="knowledge-gap-section-label">Actions</span>
       <div className="knowledge-gap-action-row">
-        {hasAssetLink ? <Link className="button button-secondary" href={`/assets/${item.entity_id}`}>Open asset</Link> : <span className="secondary-text">Asset link unavailable</span>}
-        {hasAssetLink && canEdit && <Link className="button button-primary" href={`/assets/${item.entity_id}/edit`}>Provide information</Link>}
+        {hasAssetLink ? <Link className="button button-secondary" href={`/${item.entity_type === "service" ? "services" : "assets"}/${item.entity_id}`}>Open {entityLabel.toLowerCase()}</Link> : <span className="secondary-text">{entityLabel} link unavailable</span>}
+        {hasAssetLink && canEdit && <Link className="button button-primary" href={`/${item.entity_type === "service" ? "services" : "assets"}/${item.entity_id}/edit`}>Provide information</Link>}
         {canDefer && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onAction(item, "defer")} type="button">Defer</button>}
         {canExcept && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onAction(item, "exception")} type="button">Record exception</button>}
         {canExcept && item.status === "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onReopen(item)} type="button">Reopen</button>}
@@ -133,6 +135,7 @@ export default function KnowledgeGapsPage() {
     setLoading(true);
     setError("");
     const parameters = new URLSearchParams({ limit: "500" });
+    if (filters.entityType) parameters.set("entity_type", filters.entityType);
     if (filters.assetTypeId) parameters.set("asset_type_id", filters.assetTypeId);
     if (filters.requirementId) parameters.set("requirement_id", filters.requirementId);
     if (filters.severity) parameters.set("severity", filters.severity);
@@ -153,7 +156,7 @@ export default function KnowledgeGapsPage() {
     } finally {
       if (requestId.current === currentRequest) setLoading(false);
     }
-  }, [canView, dataFilterKey, filters.assetTypeId, filters.assignedUserId, filters.minimumAgeDays, filters.requirementId, filters.requirementLevel, filters.severity, filters.status, workspace.reloadKey]);
+  }, [canView, dataFilterKey, filters.assetTypeId, filters.assignedUserId, filters.entityType, filters.minimumAgeDays, filters.requirementId, filters.requirementLevel, filters.severity, filters.status, workspace.reloadKey]);
 
   useEffect(() => {
     load();
@@ -239,6 +242,7 @@ export default function KnowledgeGapsPage() {
   }
 
   const activeFilterCount = [
+    filters.entityType,
     filters.assetTypeId,
     filters.requirementId,
     filters.severity,
@@ -253,6 +257,7 @@ export default function KnowledgeGapsPage() {
   return <>
     <PageHeader eyebrow="Operations" title="Knowledge Gaps" description="Complete missing, stale or insufficient knowledge required for trusted operations, topology and recovery." />
     <FilterToolbar className="knowledge-gaps-toolbar" gridClassName="knowledge-gaps-filter-grid" onSubmit={(event) => event.preventDefault()} actions={<><span className="secondary-text">{activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : "Default view"}</span><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button></>}>
+      <label className="field"><span>Entity type</span><select onChange={(event) => updateFilters({ entityType: event.target.value, assetTypeId: event.target.value === "service" ? "" : filters.assetTypeId })} value={filters.entityType}><option value="">Assets and Services</option>{KNOWLEDGE_GAP_ENTITY_TYPES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
       <label className="field"><span>Asset type</span><select onChange={(event) => updateFilters({ assetTypeId: event.target.value })} value={filters.assetTypeId}><option value="">All types</option>{filterOptions.assetTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="field"><span>Requirement</span><select onChange={(event) => updateFilters({ requirementId: event.target.value })} value={filters.requirementId}><option value="">All requirements</option>{filterOptions.requirements.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="field"><span>Severity</span><select onChange={(event) => updateFilters({ severity: event.target.value })} value={filters.severity}><option value="">All severities</option>{KNOWLEDGE_GAP_SEVERITIES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
@@ -265,7 +270,7 @@ export default function KnowledgeGapsPage() {
     {!ready || loading ? <div className="status-banner" role="status">Loading knowledge gaps…</div> : <>
       <div className="timeline-summary">{items.length} knowledge gap{items.length === 1 ? "" : "s"}{criticalCount ? ` · ${criticalCount} critical` : ""}</div>
       <section className="knowledge-list">
-      {visibleItems.length === 0 ? <div className="empty-state detail-card"><p>No knowledge gaps match the current filters.</p>{activeFilterCount > 0 && <button className="text-button" onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button>}</div> : visibleItems.map((item) => <KnowledgeGapCard canDefer={hasPermission("knowledge_gaps.defer")} canEdit={hasPermission("assets.edit")} canExcept={hasPermission("knowledge_gaps.exception")} deciding={deciding} item={item} key={item.id} onAction={gapAction} onReopen={reopen} />)}
+      {visibleItems.length === 0 ? <div className="empty-state detail-card"><p>No knowledge gaps match the current filters.</p>{activeFilterCount > 0 && <button className="text-button" onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button>}</div> : visibleItems.map((item) => <KnowledgeGapCard canDefer={hasPermission("knowledge_gaps.defer")} canEdit={hasPermission(item.entity_type === "service" ? "services.edit" : "assets.edit")} canExcept={hasPermission("knowledge_gaps.exception")} deciding={deciding} item={item} key={item.id} onAction={gapAction} onReopen={reopen} />)}
       </section>
     </>}
     {ready && !loading && items.length > PAGE_SIZE && <div className="pagination"><button className="button button-secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, items.length)} of {items.length}</span><button className="button button-secondary" disabled={filters.offset + PAGE_SIZE >= items.length} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</button></div>}

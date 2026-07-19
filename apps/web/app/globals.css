@@ -877,7 +877,27 @@ tbody tr:hover { background: #fbfdfd; }
 .gap-history { margin-top: 1rem; }
 .completeness-panel, .gap-row, .gap-row > div { min-width: 0; overflow-wrap: anywhere; }
 .form-card select[multiple] { min-height: 7rem; }
+.compact-summary-grid { margin-bottom: 20px; }
+.compact-summary-grid .summary-card { min-height: 112px; text-align: left; }
+.duration-field { border: 0; margin: 0; min-width: 0; padding: 0; }
+.duration-field legend { color: var(--muted); font-size: 13px; font-weight: 700; margin-bottom: 7px; }
+.duration-control { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(110px, .65fr); }
+.dependency-list { display: grid; gap: 0; }
+.dependency-row { align-items: center; border-top: 1px solid var(--border); display: flex; gap: 16px; justify-content: space-between; min-width: 0; padding: 14px 0; }
+.dependency-row > div { display: flex; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
+.dependency-row strong { overflow-wrap: anywhere; }
+.dependency-row small, .dependency-row span { color: var(--muted); }
+.inline-dependency-form { align-items: end; border-top: 1px solid var(--border); display: grid; gap: 10px; grid-template-columns: minmax(150px, 1fr) minmax(140px, .75fr) minmax(150px, 1fr) auto auto; padding-top: 16px; }
+.inline-dependency-form input, .inline-dependency-form select { min-width: 0; width: 100%; }
+.service-graph-list { display: grid; gap: 8px; }
+.service-graph-list > div { align-items: center; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); padding: 12px; }
+.service-graph-list > div > :last-child { text-align: right; }
+.prose-content { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 700px) {
   .gap-row { align-items: flex-start; flex-direction: column; }
+  .inline-dependency-form { align-items: stretch; grid-template-columns: 1fr; }
+  .dependency-row { align-items: flex-start; }
+  .service-graph-list > div { grid-template-columns: 1fr; }
+  .service-graph-list > div > :last-child { text-align: left; }
 }

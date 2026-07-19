@@ -13,6 +13,7 @@ const USER_ID = "7aa91f2c-9d2c-4874-a629-a5031208ba22";
 
 test("knowledge-gap filters compose in the URL and survive parsing", () => {
   const href = knowledgeGapFiltersHref({
+    entityType: "asset",
     assetTypeId: ASSET_TYPE_ID,
     requirementId: REQUIREMENT_ID,
     severity: "critical",
@@ -23,8 +24,9 @@ test("knowledge-gap filters compose in the URL and survive parsing", () => {
     offset: 50,
   });
 
-  assert.equal(href, `/knowledge-gaps?asset_type_id=${ASSET_TYPE_ID}&requirement_id=${REQUIREMENT_ID}&severity=critical&requirement_level=required&status=open&assigned_user_id=${USER_ID}&minimum_age_days=30&offset=50`);
+  assert.equal(href, `/knowledge-gaps?entity_type=asset&asset_type_id=${ASSET_TYPE_ID}&requirement_id=${REQUIREMENT_ID}&severity=critical&requirement_level=required&status=open&assigned_user_id=${USER_ID}&minimum_age_days=30&offset=50`);
   assert.deepEqual(parseKnowledgeGapFilters(new URL(href, "http://atlas.test").searchParams, 25), {
+    entityType: "asset",
     assetTypeId: ASSET_TYPE_ID,
     requirementId: REQUIREMENT_ID,
     severity: "critical",
@@ -40,6 +42,7 @@ test("invalid values fall back safely and reset returns the canonical page", () 
   const filters = parseKnowledgeGapFilters(new URLSearchParams("asset_type_id=raw-id&requirement_id=nope&severity=urgent&requirement_level=mandatory&status=missing&assigned_user_id=unknown&minimum_age_days=-2&offset=37"), 25);
 
   assert.deepEqual(filters, {
+    entityType: "",
     assetTypeId: "",
     requirementId: "",
     severity: "",
@@ -63,7 +66,7 @@ test("Knowledge Gaps reuses the shared Changes toolbar with URL-backed controls"
   assert.match(page, /<FilterToolbar/);
   assert.match(changes, /<FilterToolbar/);
   assert.match(toolbar, /filter-toolbar-grid/);
-  for (const label of ["Asset type", "Requirement", "Severity", "Requirement level", "Status", "Assigned user", "Minimum age (days)"]) {
+  for (const label of ["Entity type", "Asset type", "Requirement", "Severity", "Requirement level", "Status", "Assigned user", "Minimum age (days)"]) {
     assert.ok(page.includes(`<span>${label}</span>`));
   }
   assert.match(page, /router\.push\(knowledgeGapFiltersHref/);
@@ -84,19 +87,19 @@ test("Knowledge Gap cards emphasize missing information with compact responsive 
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  for (const label of ["Asset name", "Missing information", "Details", "Dates", "First detected", "Last evaluated", "Next step", "Actions"]) {
+  for (const label of ["entityLabel", "Missing information", "Details", "Dates", "First detected", "Last evaluated", "Next step", "Actions"]) {
     assert.ok(page.includes(label));
   }
   assert.match(page, /function KnowledgeGapCard/);
   assert.match(page, /<StatusBadge status=\{taxonomyLabel\(item\.severity/);
   assert.match(page, /<StatusBadge status=\{taxonomyLabel\(item\.status/);
-  assert.match(page, /className="button button-primary" href=\{`\/assets\/\$\{item\.entity_id\}\/edit`\}>Provide information/);
+  assert.match(page, /Provide information/);
   const actionStart = page.indexOf("<footer className=\"knowledge-gap-actions\">");
   const actionMarkup = page.slice(actionStart, page.indexOf("</footer>", actionStart));
-  assert.ok(actionMarkup.indexOf("Open asset") < actionMarkup.indexOf("Provide information"));
+  assert.ok(actionMarkup.indexOf("Open {entityLabel.toLowerCase()}") < actionMarkup.indexOf("Provide information"));
   assert.ok(actionMarkup.indexOf("Provide information") < actionMarkup.indexOf("Defer"));
   assert.ok(actionMarkup.indexOf("Defer") < actionMarkup.indexOf("Record exception"));
-  assert.match(page, /Asset link unavailable/);
+  assert.match(page, /link unavailable/);
   assert.match(styles, /\.knowledge-gap-action-row \{[^}]*flex-wrap: wrap;/);
   assert.match(styles, /\.knowledge-gap-card-body \{[^}]*minmax\(0, 1\.5fr\)/);
   assert.match(styles, /\.knowledge-gap-missing h3 \{[^}]*overflow-wrap: anywhere;/);

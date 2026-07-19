@@ -1,6 +1,7 @@
 export const KNOWLEDGE_GAP_SEVERITIES = ["critical", "high", "medium", "low"];
 export const KNOWLEDGE_GAP_REQUIREMENT_LEVELS = ["required", "conditional", "recommended"];
 export const KNOWLEDGE_GAP_STATUSES = ["open", "deferred", "exception", "resolved", "superseded"];
+export const KNOWLEDGE_GAP_ENTITY_TYPES = ["asset", "service"];
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -24,6 +25,7 @@ export function parseKnowledgeGapFilters(searchParams, pageSize = 25) {
     : 0;
 
   return {
+    entityType: member(searchParams.get("entity_type") || "", KNOWLEDGE_GAP_ENTITY_TYPES),
     assetTypeId: uuid(searchParams.get("asset_type_id")),
     requirementId: uuid(searchParams.get("requirement_id")),
     severity: member(searchParams.get("severity") || "", KNOWLEDGE_GAP_SEVERITIES),
@@ -37,6 +39,7 @@ export function parseKnowledgeGapFilters(searchParams, pageSize = 25) {
 
 export function knowledgeGapFiltersHref(filters) {
   const params = new URLSearchParams();
+  if (filters.entityType) params.set("entity_type", filters.entityType);
   if (filters.assetTypeId) params.set("asset_type_id", filters.assetTypeId);
   if (filters.requirementId) params.set("requirement_id", filters.requirementId);
   if (filters.severity) params.set("severity", filters.severity);

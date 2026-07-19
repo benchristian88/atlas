@@ -1039,6 +1039,8 @@ def test_simulation_route_rolls_back_an_unexpected_failure(monkeypatch):
 def test_predicate_cardinality_distinguishes_scalar_and_multi_valued_knowledge():
     assert predicate_cardinality("asset_type") == "single"
     assert predicate_cardinality("interface") == "multi"
+    assert predicate_cardinality("owner") == "multi"
+    assert predicate_cardinality("service_owner") == "single"
     assert predicate_cardinality("runs_on", object_type="asset") == "multi"
 
 

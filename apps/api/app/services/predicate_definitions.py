@@ -16,6 +16,19 @@ SINGLE_VALUE_PREDICATES = frozenset(
         "observation_state",
         "platform",
         "lifecycle_state",
+        "service_type",
+        "purpose",
+        "lifecycle_status",
+        "operational_status",
+        "criticality",
+        "rto",
+        "rpo",
+        "service_owner",
+        "technical_contact",
+        "support_group",
+        "recovery_notes",
+        "runbook_url",
+        "documentation_url",
     }
 )
 

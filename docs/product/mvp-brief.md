@@ -76,6 +76,20 @@ are explicit.
 5. Atlas retains raw discovery results for debugging and generates readable
    Markdown documentation without copying secrets/raw payloads into pages.
 
+### Homelab Services and capabilities
+
+1. A user records an operational Service separately from the technical Assets
+   that implement it.
+2. The Service links to supporting Assets, upstream/downstream Services, and a
+   lightweight Business Function with typed, directional relationships.
+3. Owner/contact labels, criticality, RTO/RPO, recovery notes, runbook, and
+   documentation establish useful homelab operations knowledge without an
+   enterprise CMDB workflow.
+4. Manual fields and links retain assertions and meaningful change history;
+   configuration-driven requirements surface missing Service knowledge.
+5. Focused graph projections answer which infrastructure supports a Service and
+   which Assets are affected through a Business Function.
+
 ## Built-in access model
 
 - **Master Administrator**: every permission globally, including users, roles,
@@ -150,6 +164,9 @@ The MVP is successful when:
 
 ## Recommended next increment
 
-Deepen topology-context visualization after the scoped foundation, then connect
-plugin discovery/ingestion permissions to complete worker orchestration. Follow
-with SSO/MFA and external audit export before production hardening.
+Build on the C1 Service foundation with deliberate ownership association and
+impact-analysis traversal, without replacing the simple owner fields or focused
+graph in-place. Connect plugin discovery/ingestion permissions to complete
+worker orchestration, then follow with SSO/MFA and external audit export before
+production hardening. Person/Team ownership, formal Knowledge Objects,
+SLO/SLA/incident workflows, and service catalogs remain later-release work.

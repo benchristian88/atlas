@@ -47,12 +47,14 @@ test("viewer navigation uses implemented product domains without administration"
       "changes.view",
       "reconciliation.view",
       "knowledge_gaps.view",
+      "services.view",
+      "business_functions.view",
     ],
   }));
 
   assert.deepEqual(groupMap(groups), {
     Overview: ["Dashboard", "Changes"],
-    Knowledge: ["Knowledge Graph", "Assets", "Networks"],
+    Knowledge: ["Knowledge Graph", "Assets", "Services", "Business Functions", "Networks"],
     Operations: ["Discovery", "Reconciliation", "Knowledge Gaps"],
     Connections: ["Integrations"],
   });
@@ -82,7 +84,7 @@ test("system entries resolve only for their explicit permissions", () => {
 
 test("active matching covers renamed pages, child routes, and admin domains", () => {
   const allGroups = visibleNavigationGroups(access({
-    context: ["assets.view", "integrations.view", "customers.manage", "reconciliation.view", "knowledge_gaps.view", "changes.view"],
+    context: ["assets.view", "services.view", "business_functions.view", "integrations.view", "customers.manage", "reconciliation.view", "knowledge_gaps.view", "changes.view"],
     global: ["users.view", "asset_types.manage", "system_settings.manage"],
   }));
   const cases = [
@@ -92,6 +94,8 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
     ["discovery", "/discovery/simulate"],
     ["reconciliation", "/reconciliation"],
     ["knowledge-gaps", "/knowledge-gaps"],
+    ["services", "/services/service-1"],
+    ["business-functions", "/business-functions/function-1"],
     ["users-access", "/admin/roles/role-1"],
     ["reference-data", "/admin/custom-fields/field-1"],
     ["administration", "/admin"],
@@ -124,8 +128,6 @@ test("roadmap entries remain representable but never render broken links", () =>
   })).flatMap((group) => group.items.map((item) => item.label));
 
   assert.deepEqual(roadmapLabels, [
-    "Services",
-    "Business Functions",
     "People & Teams",
     "Impact Analysis",
     "Backup & Recovery",

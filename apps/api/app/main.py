@@ -24,6 +24,9 @@ from app.routes import (
     reference_data,
     roles,
     sites,
+    services,
+    service_reference_data,
+    business_functions,
     system_settings,
     topology,
     users,
@@ -101,6 +104,10 @@ api_router.include_router(roles.router)
 api_router.include_router(roles.permissions_router)
 api_router.include_router(customers.router)
 api_router.include_router(sites.router)
+api_router.include_router(service_reference_data.service_types_router)
+api_router.include_router(service_reference_data.criticality_router)
+api_router.include_router(services.router)
+api_router.include_router(business_functions.router)
 api_router.include_router(reference_data.asset_types_router)
 api_router.include_router(reference_data.relationship_types_router)
 api_router.include_router(custom_fields.router)

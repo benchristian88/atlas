@@ -38,6 +38,18 @@ export const ADMIN_SECTIONS = [
     permissions: ["relationship_types.view"],
   },
   {
+    href: "/admin/service-types",
+    label: "Service types",
+    description: "Operational capability taxonomy and dependency expectations.",
+    permissions: ["service_types.view"],
+  },
+  {
+    href: "/admin/criticality-levels",
+    label: "Criticality levels",
+    description: "Ranked Service criticality with suggested recovery targets.",
+    permissions: ["criticality_levels.view"],
+  },
+  {
     href: "/admin/custom-fields",
     label: "Custom fields",
     description: "Typed enrichment fields for selected asset types.",

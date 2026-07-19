@@ -12,6 +12,8 @@ const cards = [
   { key: "customers", label: "Customers", href: "/admin/customers", description: "Managed organisations", permission: "customers.view" },
   { key: "sites", label: "Sites", href: "/admin/sites", description: "Customer locations", permission: "sites.view" },
   { key: "assets", label: "Assets", href: "/assets", description: "Managed infrastructure", permission: "assets.view" },
+  { key: "services", label: "Services", href: "/services", description: "Operational capabilities", permission: "services.view" },
+  { key: "business_functions", label: "Business Functions", href: "/business-functions", description: "Capabilities Services support", permission: "business_functions.view" },
   { key: "networks", label: "Networks", href: "/networks", description: "VLANs and network segments", permission: "networks.view" },
   { key: "relationships", label: "Relationships", href: "/topology", description: "Connections between assets", permission: "relationships.view" },
   { key: "reconciliation", label: "Reconciliation", href: "/reconciliation", description: "Open knowledge decisions", permission: "reconciliation.view" },
@@ -26,7 +28,7 @@ export default function DashboardPage() {
   const [reconciliation, setReconciliation] = useState(null);
   const [recentChanges, setRecentChanges] = useState([]);
   const [error, setError] = useState("");
-  const canView = hasAnyPermission(["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view"]);
+  const canView = hasAnyPermission(["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view", "services.view", "business_functions.view"]);
 
   useEffect(() => {
     if (!canView) return;
@@ -69,6 +71,7 @@ export default function DashboardPage() {
         ))}
       </section>
       {hasPermission("knowledge_gaps.view") && counts && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Completeness</p><h2>Knowledge health</h2></div><Link className="card-link" href="/knowledge-gaps">Review knowledge gaps →</Link></div><div className="detail-grid"><div><span>Critical gaps</span><strong>{counts.critical_knowledge_gap_count}</strong></div><div><span>High gaps</span><strong>{counts.high_knowledge_gap_count}</strong></div><div><span>Assets with critical gaps</span><strong>{counts.assets_with_critical_gaps}</strong></div><div><span>Not evaluated</span><strong>{counts.assets_not_evaluated}</strong></div><div><span>Operationally complete</span><strong>{counts.assets_operationally_complete}</strong></div><div><span>Expired exceptions</span><strong>{counts.expired_exception_count}</strong></div></div></section>}
+      {hasPermission("knowledge_gaps.view") && counts && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Services</p><h2>Service knowledge health</h2></div><Link className="card-link" href="/services?attention=required_gaps">Review Services →</Link></div><div className="detail-grid"><div><span>Total Services</span><strong>{counts.services}</strong></div><div><span>Critical Services</span><strong>{counts.critical_services}</strong></div><div><span>Services with required gaps</span><strong>{counts.services_with_required_gaps}</strong></div><div><span>Missing recovery targets</span><strong>{counts.services_missing_recovery_targets}</strong></div><div><span>Missing Asset dependencies</span><strong>{counts.services_missing_dependencies}</strong></div></div></section>}
       {hasPermission("reconciliation.view") && reconciliation && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Reconciliation</p><h2>Decision queues</h2></div><Link className="card-link" href="/reconciliation">Review queues →</Link></div><div className="detail-grid"><div><span>Open</span><strong>{reconciliation.by_status.open || 0}</strong></div><div><span>Deferred</span><strong>{reconciliation.by_status.deferred || 0}</strong></div><div><span>Exceptions</span><strong>{reconciliation.by_status.exception || 0}</strong></div><div><span>Actionable</span><strong>{reconciliation.actionable}</strong></div></div></section>}
       {hasPermission("changes.view") && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Knowledge</p><h2>Recent meaningful changes</h2></div><Link className="card-link" href="/changes">View timeline →</Link></div>{recentChanges.length === 0 ? <p className="secondary-text">No meaningful changes yet.</p> : <div className="dashboard-change-list">{recentChanges.map((change) => <div key={change.id}><span><strong>{change.entity_name_snapshot}</strong> — {change.summary}</span><time>{new Date(change.occurred_at).toLocaleString()}</time></div>)}</div>}</section>}
       {hasPermission("assets.view") && <section className="dashboard-prompt">

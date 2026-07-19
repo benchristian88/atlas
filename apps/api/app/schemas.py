@@ -56,6 +56,18 @@ def _normalize_accent_colour(value: str | None) -> str | None:
     return value.upper()
 
 
+def _validate_optional_http_url(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    value = value.strip()
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("URL must be an absolute HTTP or HTTPS URL")
+    if parsed.username or parsed.password:
+        raise ValueError("URL must not contain credentials")
+    return value
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=1024)
@@ -502,6 +514,22 @@ class AssetTypeResponse(ORMResponse):
     updated_at: datetime
 
 
+class RelationshipTypeApplicabilityInput(BaseModel):
+    source_entity_type: Literal["asset", "service", "business_function"]
+    target_entity_type: Literal["asset", "service", "business_function"]
+    active: bool = True
+
+
+class RelationshipTypeApplicabilityResponse(ORMResponse):
+    id: uuid.UUID
+    relationship_type_id: uuid.UUID
+    source_entity_type: str
+    target_entity_type: str
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class RelationshipTypeCreate(BaseModel):
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
@@ -514,6 +542,7 @@ class RelationshipTypeCreate(BaseModel):
     sort_order: int = Field(default=100, ge=0)
     allowed_source_asset_type_keys: list[str] = Field(default_factory=list)
     allowed_target_asset_type_keys: list[str] = Field(default_factory=list)
+    applicability: list[RelationshipTypeApplicabilityInput] = Field(default_factory=list)
 
     _name = field_validator("name")(_trim_nonempty)
     _labels = field_validator("source_label", "target_label")(_trim_nonempty)
@@ -530,6 +559,7 @@ class RelationshipTypeUpdate(BaseModel):
     sort_order: int | None = Field(default=None, ge=0)
     allowed_source_asset_type_keys: list[str] | None = None
     allowed_target_asset_type_keys: list[str] | None = None
+    applicability: list[RelationshipTypeApplicabilityInput] | None = None
 
     _name = field_validator("name")(_trim_nonempty)
     _labels = field_validator("source_label", "target_label")(_trim_nonempty)
@@ -549,6 +579,7 @@ class RelationshipTypeResponse(ORMResponse):
     sort_order: int
     allowed_source_asset_type_keys: list[str]
     allowed_target_asset_type_keys: list[str]
+    applicability: list[RelationshipTypeApplicabilityResponse] = Field(default_factory=list)
     in_use_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -682,6 +713,13 @@ class DashboardSummaryResponse(BaseModel):
     assets_not_evaluated: int
     assets_operationally_complete: int
     expired_exception_count: int
+    services: int = 0
+    business_functions: int = 0
+    services_with_critical_gaps: int = 0
+    critical_services: int = 0
+    services_with_required_gaps: int = 0
+    services_missing_recovery_targets: int = 0
+    services_missing_dependencies: int = 0
 
 
 class AuditEventResponse(ORMResponse):
@@ -1115,8 +1153,9 @@ GapStatus = Literal["open", "deferred", "exception", "resolved", "superseded"]
 class KnowledgeRequirementBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=10000)
-    entity_type: Literal["asset"] = "asset"
+    entity_type: Literal["asset", "service"] = "asset"
     asset_type_id: uuid.UUID | None = None
+    service_type_id: uuid.UUID | None = None
     requirement_level: RequirementLevel
     severity: GapSeverity
     rule_type: str = Field(min_length=1, max_length=80)
@@ -1154,6 +1193,8 @@ class KnowledgeRequirementResponse(ORMResponse):
     entity_type: str
     asset_type_id: uuid.UUID | None
     asset_type_name: str | None = None
+    service_type_id: uuid.UUID | None = None
+    service_type_name: str | None = None
     requirement_level: str
     severity: str
     rule_type: str
@@ -1231,6 +1272,363 @@ class KnowledgeCompletenessSummaryResponse(ORMResponse):
     exception_count: int
     completeness_status: str
     last_evaluated_at: datetime | None
+
+
+# C1 first-class Service contracts -------------------------------------------------
+
+class ServiceTypeCreate(BaseModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    icon_key: str | None = Field(default=None, max_length=100)
+    active: bool = True
+    sort_order: int = Field(default=100, ge=0)
+    requires_asset_dependency: bool = True
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class ServiceTypeUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    icon_key: str | None = Field(default=None, max_length=100)
+    sort_order: int | None = Field(default=None, ge=0)
+    requires_asset_dependency: bool | None = None
+    active: bool | None = None
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class ServiceTypeResponse(ORMResponse):
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str | None
+    icon_key: str | None
+    active: bool
+    system_defined: bool
+    sort_order: int
+    requires_asset_dependency: bool
+    in_use_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CriticalityLevelCreate(BaseModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    rank: int = Field(ge=0)
+    default_rto_minutes: int | None = Field(default=None, ge=0)
+    default_rpo_minutes: int | None = Field(default=None, ge=0)
+    active: bool = True
+    sort_order: int = Field(default=100, ge=0)
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class CriticalityLevelUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    rank: int | None = Field(default=None, ge=0)
+    default_rto_minutes: int | None = Field(default=None, ge=0)
+    default_rpo_minutes: int | None = Field(default=None, ge=0)
+    sort_order: int | None = Field(default=None, ge=0)
+    active: bool | None = None
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class CriticalityLevelResponse(ORMResponse):
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str | None
+    rank: int
+    default_rto_minutes: int | None
+    default_rpo_minutes: int | None
+    active: bool
+    system_defined: bool
+    sort_order: int
+    in_use_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class ServiceBase(BaseModel):
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=255)
+    slug: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=255)
+    description: str | None = Field(default=None, max_length=20000)
+    purpose: str | None = Field(default=None, max_length=20000)
+    service_type_id: uuid.UUID
+    criticality_level_id: uuid.UUID
+    lifecycle_status: str = Field(default="active", min_length=1, max_length=50)
+    operational_status: str = Field(default="unknown", min_length=1, max_length=50)
+    owner_name: str | None = Field(default=None, max_length=255)
+    technical_contact: str | None = Field(default=None, max_length=255)
+    support_group: str | None = Field(default=None, max_length=255)
+    documentation_url: str | None = Field(default=None, max_length=2048)
+    runbook_url: str | None = Field(default=None, max_length=2048)
+    rto_minutes: int | None = Field(default=None, ge=0)
+    rpo_minutes: int | None = Field(default=None, ge=0)
+    backup_notes: str | None = Field(default=None, max_length=20000)
+    recovery_notes: str | None = Field(default=None, max_length=20000)
+    notes: str | None = Field(default=None, max_length=20000)
+    _name = field_validator("name")(_trim_nonempty)
+    _urls = field_validator("documentation_url", "runbook_url")(_validate_optional_http_url)
+
+
+class ServiceCreate(ServiceBase):
+    pass
+
+
+class ServiceUpdate(BaseModel):
+    site_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=255)
+    description: str | None = Field(default=None, max_length=20000)
+    purpose: str | None = Field(default=None, max_length=20000)
+    service_type_id: uuid.UUID | None = None
+    criticality_level_id: uuid.UUID | None = None
+    lifecycle_status: str | None = Field(default=None, min_length=1, max_length=50)
+    operational_status: str | None = Field(default=None, min_length=1, max_length=50)
+    owner_name: str | None = Field(default=None, max_length=255)
+    technical_contact: str | None = Field(default=None, max_length=255)
+    support_group: str | None = Field(default=None, max_length=255)
+    documentation_url: str | None = Field(default=None, max_length=2048)
+    runbook_url: str | None = Field(default=None, max_length=2048)
+    rto_minutes: int | None = Field(default=None, ge=0)
+    rpo_minutes: int | None = Field(default=None, ge=0)
+    backup_notes: str | None = Field(default=None, max_length=20000)
+    recovery_notes: str | None = Field(default=None, max_length=20000)
+    notes: str | None = Field(default=None, max_length=20000)
+    _name = field_validator("name")(_trim_nonempty)
+    _urls = field_validator("documentation_url", "runbook_url")(_validate_optional_http_url)
+
+
+class ServiceResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    name: str
+    slug: str
+    description: str | None
+    purpose: str | None
+    service_type_id: uuid.UUID
+    service_type_key: str | None = None
+    service_type_name: str | None = None
+    criticality_level_id: uuid.UUID
+    criticality_key: str | None = None
+    criticality_name: str | None = None
+    criticality_rank: int | None = None
+    suggested_rto_minutes: int | None = None
+    suggested_rpo_minutes: int | None = None
+    lifecycle_status: str
+    operational_status: str
+    owner_name: str | None
+    technical_contact: str | None
+    support_group: str | None
+    documentation_url: str | None
+    runbook_url: str | None
+    rto_minutes: int | None
+    rpo_minutes: int | None
+    backup_notes: str | None
+    recovery_notes: str | None
+    notes: str | None
+    source: str
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    asset_dependency_count: int = 0
+    service_dependency_count: int = 0
+    business_function_count: int = 0
+    completeness_status: str = "not_evaluated"
+    open_gap_count: int = 0
+    required_gap_count: int = 0
+    recommended_gap_count: int = 0
+
+
+class ServiceSummaryResponse(BaseModel):
+    total: int
+    active: int
+    archived: int
+    critical: int
+    high: int
+    incomplete: int
+    with_required_gaps: int
+    missing_owner: int
+    missing_dependencies: int
+    missing_recovery_targets: int
+
+
+class ServiceArchiveRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceAssetDependencyCreate(BaseModel):
+    asset_id: uuid.UUID
+    relationship_type_id: uuid.UUID
+    required_for_operation: bool = True
+    description: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceAssetDependencyUpdate(BaseModel):
+    relationship_type_id: uuid.UUID | None = None
+    required_for_operation: bool | None = None
+    description: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceAssetDependencyResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    service_id: uuid.UUID
+    service_name: str | None = None
+    asset_id: uuid.UUID
+    asset_name: str | None = None
+    asset_type: str | None = None
+    relationship_type_id: uuid.UUID
+    relationship_type_name: str | None = None
+    source_label: str | None = None
+    target_label: str | None = None
+    required_for_operation: bool
+    description: str | None
+    source: str
+    valid_from: datetime
+    valid_to: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ServiceDependencyCreate(BaseModel):
+    target_service_id: uuid.UUID
+    relationship_type_id: uuid.UUID
+    required_for_operation: bool = True
+    description: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceDependencyUpdate(BaseModel):
+    relationship_type_id: uuid.UUID | None = None
+    required_for_operation: bool | None = None
+    description: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceDependencyResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    source_service_id: uuid.UUID
+    source_service_name: str | None = None
+    target_service_id: uuid.UUID
+    target_service_name: str | None = None
+    relationship_type_id: uuid.UUID
+    relationship_type_name: str | None = None
+    source_label: str | None = None
+    target_label: str | None = None
+    required_for_operation: bool
+    description: str | None
+    valid_from: datetime
+    valid_to: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BusinessFunctionCreate(BaseModel):
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=20000)
+    owner_name: str | None = Field(default=None, max_length=255)
+    criticality_level_id: uuid.UUID | None = None
+    active: bool = True
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class BusinessFunctionUpdate(BaseModel):
+    site_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=20000)
+    owner_name: str | None = Field(default=None, max_length=255)
+    criticality_level_id: uuid.UUID | None = None
+    active: bool | None = None
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class BusinessFunctionResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    name: str
+    description: str | None
+    owner_name: str | None
+    criticality_level_id: uuid.UUID | None
+    criticality_name: str | None = None
+    active: bool
+    service_count: int = 0
+    open_gap_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class ServiceBusinessFunctionCreate(BaseModel):
+    business_function_id: uuid.UUID
+    relationship_type_id: uuid.UUID | None = None
+    is_primary: bool = False
+    importance: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceBusinessFunctionUpdate(BaseModel):
+    relationship_type_id: uuid.UUID | None = None
+    is_primary: bool | None = None
+    importance: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=10000)
+
+
+class ServiceBusinessFunctionResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    service_id: uuid.UUID
+    service_name: str | None = None
+    business_function_id: uuid.UUID
+    business_function_name: str | None = None
+    relationship_type_id: uuid.UUID | None
+    relationship_type_name: str | None = None
+    relationship_label: str = "Supports"
+    is_primary: bool
+    importance: str | None
+    description: str | None
+    valid_from: datetime
+    valid_to: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ServiceCompletenessResponse(BaseModel):
+    service_id: uuid.UUID
+    summary: KnowledgeCompletenessSummaryResponse
+    active_gaps: list[KnowledgeGapResponse]
+    resolved_gaps: list[KnowledgeGapResponse]
+
+
+class ServiceGraphNode(BaseModel):
+    id: uuid.UUID
+    entity_type: Literal["service", "asset", "business_function"]
+    name: str
+    subtitle: str | None = None
+    href: str
+
+
+class ServiceGraphEdge(BaseModel):
+    id: uuid.UUID
+    source_id: uuid.UUID
+    target_id: uuid.UUID
+    label: str
+    edge_type: Literal["service_asset", "service_service", "service_business_function", "asset_asset"]
+
+
+class ServiceGraphResponse(BaseModel):
+    nodes: list[ServiceGraphNode]
+    edges: list[ServiceGraphEdge]
 
 
 class AssetCompletenessResponse(BaseModel):
