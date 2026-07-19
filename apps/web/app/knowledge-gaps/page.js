@@ -2,22 +2,22 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
+import { FilterToolbar } from "../../components/filter-toolbar";
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
+import {
+  KNOWLEDGE_GAP_REQUIREMENT_LEVELS,
+  KNOWLEDGE_GAP_SEVERITIES,
+  KNOWLEDGE_GAP_STATUSES,
+  knowledgeGapFiltersHref,
+  parseKnowledgeGapFilters,
+} from "../../lib/knowledge-gap-filters.mjs";
 
 const PAGE_SIZE = 25;
-const EMPTY_FILTERS = {
-  asset_type_id: "",
-  requirement_id: "",
-  severity: "",
-  requirement_level: "",
-  status: "",
-  assigned_user_id: "",
-  minimum_age_days: "",
-};
 
 function optionsFromGaps(gaps) {
   return {
@@ -36,15 +36,32 @@ function optionsFromGaps(gaps) {
   };
 }
 
+function mergeOptions(...groups) {
+  return Array.from(
+    new Map(groups.flat().filter((item) => item?.id).map((item) => [item.id, item])),
+    ([, item]) => item,
+  ).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function taxonomyLabel(value) {
+  return value.replaceAll("_", " ");
+}
+
 export default function KnowledgeGapsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { hasPermission } = useAuth();
   const workspace = useWorkspaceContext();
   const canView = hasPermission("knowledge_gaps.view");
+  const canViewAssetTypes = hasPermission("asset_types.view");
+  const canViewRequirements = hasPermission("knowledge_requirements.view");
+  const canViewUsers = hasPermission("users.view");
+  const filters = useMemo(() => parseKnowledgeGapFilters(searchParams, PAGE_SIZE), [searchParams]);
+  const dataFilterKey = knowledgeGapFiltersHref({ ...filters, offset: 0 });
   const [items, setItems] = useState([]);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [filterOptions, setFilterOptions] = useState({ assetTypes: [], requirements: [], users: [] });
-  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadedKey, setLoadedKey] = useState("");
   const [deciding, setDeciding] = useState("");
   const [error, setError] = useState("");
   const requestId = useRef(0);
@@ -55,21 +72,27 @@ export default function KnowledgeGapsPage() {
     setLoading(true);
     setError("");
     const parameters = new URLSearchParams({ limit: "500" });
-    for (const [key, filterValue] of Object.entries(filters)) {
-      if (filterValue !== "") parameters.set(key, filterValue);
-    }
+    if (filters.assetTypeId) parameters.set("asset_type_id", filters.assetTypeId);
+    if (filters.requirementId) parameters.set("requirement_id", filters.requirementId);
+    if (filters.severity) parameters.set("severity", filters.severity);
+    if (filters.requirementLevel) parameters.set("requirement_level", filters.requirementLevel);
+    if (filters.status) parameters.set("status", filters.status);
+    if (filters.assignedUserId) parameters.set("assigned_user_id", filters.assignedUserId);
+    if (filters.minimumAgeDays !== "") parameters.set("minimum_age_days", filters.minimumAgeDays);
     try {
       const gaps = await apiRequest(`/knowledge-gaps?${parameters}`);
       if (requestId.current !== currentRequest) return;
       setItems(gaps);
+      setLoadedKey(dataFilterKey);
     } catch (requestError) {
       if (requestId.current !== currentRequest) return;
       setItems([]);
+      setLoadedKey(dataFilterKey);
       setError(requestError.message || "Atlas could not load knowledge gaps.");
     } finally {
       if (requestId.current === currentRequest) setLoading(false);
     }
-  }, [canView, filters, workspace.reloadKey]);
+  }, [canView, dataFilterKey, filters.assetTypeId, filters.assignedUserId, filters.minimumAgeDays, filters.requirementId, filters.requirementLevel, filters.severity, filters.status, workspace.reloadKey]);
 
   useEffect(() => {
     load();
@@ -79,22 +102,40 @@ export default function KnowledgeGapsPage() {
   useEffect(() => {
     if (!canView) return undefined;
     let active = true;
-    apiRequest("/knowledge-gaps?limit=500")
-      .then((gaps) => { if (active) setFilterOptions(optionsFromGaps(gaps)); })
-      .catch(() => { /* The main request provides the visible error state. */ });
+    async function loadOptions() {
+      const [gaps, assetTypes, users] = await Promise.all([
+        apiRequest("/knowledge-gaps?limit=500").catch(() => []),
+        canViewAssetTypes ? apiRequest("/asset-types?active_only=true").catch(() => []) : Promise.resolve([]),
+        canViewUsers ? apiRequest("/users?limit=500").catch(() => []) : Promise.resolve([]),
+      ]);
+      const fallback = optionsFromGaps(gaps);
+      let requirements = [];
+      if (canViewRequirements && assetTypes.length) {
+        const responses = await Promise.all(
+          assetTypes.map((assetType) => apiRequest(`/asset-types/${assetType.id}/knowledge-requirements`).catch(() => [])),
+        );
+        requirements = responses.flat().map((item) => ({ id: item.id, name: item.name }));
+      }
+      if (!active) return;
+      setFilterOptions({
+        assetTypes: mergeOptions(fallback.assetTypes, assetTypes.map((item) => ({ id: item.id, name: item.name }))),
+        requirements: mergeOptions(fallback.requirements, requirements),
+        users: mergeOptions(fallback.users, users.map((item) => ({ id: item.id, name: item.display_name || item.email }))),
+      });
+    }
+    loadOptions();
     return () => { active = false; };
-  }, [canView, workspace.reloadKey]);
+  }, [canView, canViewAssetTypes, canViewRequirements, canViewUsers, workspace.reloadKey]);
 
   const visibleItems = useMemo(
-    () => items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [items, page],
+    () => items.slice(filters.offset, filters.offset + PAGE_SIZE),
+    [filters.offset, items],
   );
 
   if (!canView) return <AccessDenied />;
 
-  function updateFilter(key, filterValue) {
-    setPage(0);
-    setFilters((current) => ({ ...current, [key]: filterValue }));
+  function updateFilters(patch) {
+    router.push(knowledgeGapFiltersHref({ ...filters, ...patch, offset: patch.offset ?? 0 }));
   }
 
   async function gapAction(item, action) {
@@ -136,21 +177,34 @@ export default function KnowledgeGapsPage() {
     }
   }
 
+  const activeFilterCount = [
+    filters.assetTypeId,
+    filters.requirementId,
+    filters.severity,
+    filters.requirementLevel,
+    filters.status,
+    filters.assignedUserId,
+    filters.minimumAgeDays,
+  ].filter((value) => value !== "").length;
+  const ready = loadedKey === dataFilterKey;
+  const criticalCount = items.filter((item) => item.severity === "critical").length;
+
   return <>
     <PageHeader eyebrow="Operations" title="Knowledge Gaps" description="Complete missing, stale or insufficient knowledge required for trusted operations, topology and recovery." />
-    <div className="filter-bar">
-      <label className="field"><span>Asset type</span><select onChange={(event) => updateFilter("asset_type_id", event.target.value)} value={filters.asset_type_id}><option value="">All types</option>{filterOptions.assetTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label className="field"><span>Requirement</span><select onChange={(event) => updateFilter("requirement_id", event.target.value)} value={filters.requirement_id}><option value="">All requirements</option>{filterOptions.requirements.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label className="field"><span>Severity</span><select onChange={(event) => updateFilter("severity", event.target.value)} value={filters.severity}><option value="">All severities</option>{["critical", "high", "medium", "low"].map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label className="field"><span>Requirement level</span><select onChange={(event) => updateFilter("requirement_level", event.target.value)} value={filters.requirement_level}><option value="">All levels</option>{["required", "conditional", "recommended"].map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label className="field"><span>Status</span><select onChange={(event) => updateFilter("status", event.target.value)} value={filters.status}><option value="">Active</option>{["open", "deferred", "exception", "resolved", "superseded"].map((item) => <option key={item}>{item}</option>)}</select></label>
-      <label className="field"><span>Assigned user</span><select onChange={(event) => updateFilter("assigned_user_id", event.target.value)} value={filters.assigned_user_id}><option value="">Anyone</option>{filterOptions.users.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label className="field"><span>Minimum age (days)</span><input min="0" onChange={(event) => updateFilter("minimum_age_days", event.target.value)} type="number" value={filters.minimum_age_days} /></label>
-      <button className="text-button" onClick={() => { setFilters(EMPTY_FILTERS); setPage(0); }} type="button">Clear filters</button>
-    </div>
-    {error && <div className="error-banner" role="alert">{error}</div>}
-    {loading ? <div className="status-banner" role="status">Loading knowledge gaps…</div> : <section className="knowledge-list">
-      {visibleItems.length === 0 ? <div className="empty-state detail-card">No knowledge gaps match these filters.</div> : visibleItems.map((item) => <article className="detail-card reconciliation-card" key={item.id}>
+    <FilterToolbar className="knowledge-gaps-toolbar" gridClassName="knowledge-gaps-filter-grid" onSubmit={(event) => event.preventDefault()} actions={<><span className="secondary-text">{activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : "Default view"}</span><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button></>}>
+      <label className="field"><span>Asset type</span><select onChange={(event) => updateFilters({ assetTypeId: event.target.value })} value={filters.assetTypeId}><option value="">All types</option>{filterOptions.assetTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="field"><span>Requirement</span><select onChange={(event) => updateFilters({ requirementId: event.target.value })} value={filters.requirementId}><option value="">All requirements</option>{filterOptions.requirements.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="field"><span>Severity</span><select onChange={(event) => updateFilters({ severity: event.target.value })} value={filters.severity}><option value="">All severities</option>{KNOWLEDGE_GAP_SEVERITIES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
+      <label className="field"><span>Requirement level</span><select onChange={(event) => updateFilters({ requirementLevel: event.target.value })} value={filters.requirementLevel}><option value="">All levels</option>{KNOWLEDGE_GAP_REQUIREMENT_LEVELS.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
+      <label className="field"><span>Status</span><select onChange={(event) => updateFilters({ status: event.target.value })} value={filters.status}><option value="">Active gaps</option>{KNOWLEDGE_GAP_STATUSES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
+      <label className="field"><span>Assigned user</span><select onChange={(event) => updateFilters({ assignedUserId: event.target.value })} value={filters.assignedUserId}><option value="">Anyone</option>{filterOptions.users.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="field"><span>Minimum age (days)</span><input inputMode="numeric" min="0" onChange={(event) => updateFilters({ minimumAgeDays: event.target.value })} placeholder="Any age" type="number" value={filters.minimumAgeDays} /></label>
+    </FilterToolbar>
+    {ready && error && <div className="error-banner" role="alert">{error}</div>}
+    {!ready || loading ? <div className="status-banner" role="status">Loading knowledge gaps…</div> : <>
+      <div className="timeline-summary">{items.length} knowledge gap{items.length === 1 ? "" : "s"}{criticalCount ? ` · ${criticalCount} critical` : ""}</div>
+      <section className="knowledge-list">
+      {visibleItems.length === 0 ? <div className="empty-state detail-card"><p>No knowledge gaps match the current filters.</p>{activeFilterCount > 0 && <button className="text-button" onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button>}</div> : visibleItems.map((item) => <article className="detail-card reconciliation-card" key={item.id}>
         <div className="reconciliation-heading"><div><p className="eyebrow">{item.severity} · {item.requirement_level}{item.asset_type_name ? ` · ${item.asset_type_name}` : ""}</p><h2>{item.entity_name || "Asset"}</h2></div><span className="secondary-text">{item.status.replaceAll("_", " ")}</span></div>
         <h3>{item.requirement_name || "Knowledge requirement"}</h3>
         <p>{item.summary}</p>
@@ -158,7 +212,8 @@ export default function KnowledgeGapsPage() {
         {item.remediation_hint && <p className="secondary-text">Next step: {item.remediation_hint}</p>}
         <div className="form-actions"><Link className="button button-secondary" href={`/assets/${item.entity_id}`}>Open asset</Link>{hasPermission("assets.edit") && <Link className="button button-secondary" href={`/assets/${item.entity_id}/edit`}>Provide information</Link>}{hasPermission("knowledge_gaps.defer") && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => gapAction(item, "defer")} type="button">Defer</button>}{hasPermission("knowledge_gaps.exception") && item.status !== "exception" && <button className="button button-primary" disabled={deciding === item.id} onClick={() => gapAction(item, "exception")} type="button">Record exception</button>}{hasPermission("knowledge_gaps.exception") && item.status === "exception" && <button className="button button-primary" disabled={deciding === item.id} onClick={() => reopen(item)} type="button">Reopen</button>}</div>
       </article>)}
-    </section>}
-    {!loading && items.length > PAGE_SIZE && <div className="pagination"><button className="button button-secondary" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Previous</button><span>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, items.length)} of {items.length}</span><button className="button button-secondary" disabled={(page + 1) * PAGE_SIZE >= items.length} onClick={() => setPage((current) => current + 1)} type="button">Next</button></div>}
+      </section>
+    </>}
+    {ready && !loading && items.length > PAGE_SIZE && <div className="pagination"><button className="button button-secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, items.length)} of {items.length}</span><button className="button button-secondary" disabled={filters.offset + PAGE_SIZE >= items.length} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</button></div>}
   </>;
 }

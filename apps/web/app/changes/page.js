@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
+import { FilterToolbar } from "../../components/filter-toolbar";
 import { PageHeader } from "../../components/page-header";
 import { StatusBadge } from "../../components/status-badge";
 import { TimelineEvent } from "../../components/timeline-event";
@@ -134,16 +135,15 @@ export default function ChangesPage() {
 
   return <>
     <PageHeader eyebrow="Knowledge" title="Changes" description="Meaningful knowledge changes across Atlas. Security and access activity remains in Audit." />
-    <form className="changes-toolbar" onSubmit={(event) => { event.preventDefault(); updateFilters({ search: searchDraft.trim() }); }}>
-      <div className="changes-filter-grid">
+    <FilterToolbar gridClassName="changes-filter-grid" onSubmit={(event) => { event.preventDefault(); updateFilters({ search: searchDraft.trim() }); }} actions={<>
+      <label className="checkbox-field"><input checked={filters.attentionOnly} onChange={(event) => updateFilters({ attentionOnly: event.target.checked })} type="checkbox" /><span>Needs attention</span></label><span className="secondary-text">{activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : "Default view"}</span><button className="button button-secondary" type="submit">Apply search</button><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/changes")} type="button">Reset filters</button>
+    </>}>
         <label className="field changes-period-filter"><span>Date period</span><select onChange={(event) => updateFilters({ period: event.target.value })} value={filters.period}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="">All time</option></select></label>
         <label className="field"><span>Change type</span><select onChange={(event) => updateFilters({ changeType: event.target.value })} value={filters.changeType}><option value="">All changes</option>{CHANGE_TYPES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
         <label className="field"><span>Entity type</span><select onChange={(event) => updateFilters({ entityType: event.target.value })} value={filters.entityType}><option value="">All entities</option>{CHANGE_ENTITY_TYPES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
         {canViewSources && <label className="field"><span>Source</span><select onChange={(event) => updateFilters({ source: event.target.value })} value={filters.source}><option value="">All sources</option>{sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select></label>}
         <label className="field changes-search-filter"><span>Search</span><input onChange={(event) => setSearchDraft(event.target.value)} placeholder="Entity or summary" value={searchDraft} /></label>
-      </div>
-      <div className="changes-toolbar-actions"><label className="checkbox-field"><input checked={filters.attentionOnly} onChange={(event) => updateFilters({ attentionOnly: event.target.checked })} type="checkbox" /><span>Needs attention</span></label><span className="secondary-text">{activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : "Default view"}</span><button className="button button-secondary" type="submit">Apply search</button><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/changes")} type="button">Reset filters</button></div>
-    </form>
+    </FilterToolbar>
     {ready && error && <div className="error-banner" role="alert">{error}</div>}
     {!ready || loading ? <div className="status-banner" role="status">Loading changes…</div> : <>
       <div className="timeline-summary">{result.total} meaningful change{result.total === 1 ? "" : "s"}</div>

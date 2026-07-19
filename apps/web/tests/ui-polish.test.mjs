@@ -38,7 +38,7 @@ test("Changes uses a compact grouped shared timeline and complete action metadat
   assert.match(page, /Review reconciliation/);
   assert.match(page, /Open discovery run/);
   assert.match(page, /Reset filters/);
-  assert.match(styles, /\.changes-toolbar/);
+  assert.match(styles, /\.filter-toolbar/);
   assert.match(styles, /\.change-timeline-list/);
   assert.match(styles, /word-break: break-word/);
 });
