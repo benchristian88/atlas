@@ -22,9 +22,11 @@ test("discovery UI makes complete snapshot semantics explicit", async () => {
 
 test("reconciliation exposes stable queues and absence dispositions", async () => {
   const reconciliation = await readFile(new URL("../app/reconciliation/page.js", import.meta.url), "utf8");
-  for (const label of ["All open", "No longer observed", "Deferred", "Resolved", "Exceptions"]) {
-    assert.match(reconciliation, new RegExp(label));
+  const queues = await readFile(new URL("../lib/reconciliation-queues.mjs", import.meta.url), "utf8");
+  for (const label of ["All Open", "No longer observed", "Deferred", "Resolved"]) {
+    assert.match(queues, new RegExp(label));
   }
+  assert.doesNotMatch(queues, /Knowledge Gaps|Missing knowledge|Exceptions/);
   for (const disposition of ["mark_missing", "mark_inactive", "retire", "keep_active", "exception"]) {
     assert.match(reconciliation, new RegExp(disposition));
   }

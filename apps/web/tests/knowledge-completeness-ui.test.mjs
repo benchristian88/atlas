@@ -12,12 +12,16 @@ test("asset detail renders completeness counts, grouped gaps, and reasoned actio
   assert.match(panel, /Reason \*/);
 });
 
-test("missing knowledge remains a dedicated reconciliation queue", async () => {
+test("knowledge gaps use a dedicated workflow outside reconciliation", async () => {
   const reconciliation = await readFile(new URL("../app/reconciliation/page.js", import.meta.url), "utf8");
-  assert.match(reconciliation, /Missing knowledge/);
-  assert.match(reconciliation, /\/knowledge-gaps/);
-  assert.match(reconciliation, /Provide information/);
-  assert.match(reconciliation, /Record exception/);
+  const gaps = await readFile(new URL("../app/knowledge-gaps/page.js", import.meta.url), "utf8");
+  assert.doesNotMatch(reconciliation, /knowledge-gaps|Missing knowledge/);
+  assert.match(gaps, /title="Knowledge Gaps"/);
+  assert.match(gaps, /\/knowledge-gaps/);
+  assert.match(gaps, /Provide information/);
+  assert.match(gaps, /Record exception/);
+  assert.match(gaps, /Reopen/);
+  assert.match(gaps, /pagination/);
 });
 
 test("knowledge profile editor uses dynamic reference records and structured rules", async () => {
@@ -34,6 +38,7 @@ test("dashboard and asset list consume API-computed completeness summaries", asy
   const dashboard = await readFile(new URL("../app/dashboard/page.js", import.meta.url), "utf8");
   const assets = await readFile(new URL("../app/assets/page.js", import.meta.url), "utf8");
   assert.match(dashboard, /open_knowledge_gap_count/);
+  assert.match(dashboard, /href: "\/knowledge-gaps"/);
   assert.match(dashboard, /assets_operationally_complete/);
   assert.match(assets, /has_critical_gaps/);
   assert.match(assets, /has_open_knowledge_gaps/);

@@ -641,9 +641,14 @@ Atlas can define a database-driven Knowledge Profile for each Asset Type and
 evaluate assets after fields, custom fields, interfaces, relationships, or
 accepted discovery data change. Missing or stale knowledge creates a separate
 Knowledge Gap without blocking or deleting the operational asset. Asset detail,
-the Reconciliation **Missing knowledge** queue, the Assets list, and Dashboard
-show scoped completeness state. Authorized users can provide information,
-defer a gap, record a reasoned exception, reopen it, or reevaluate the asset.
+the Operations **Knowledge Gaps** page, the Assets list, and Dashboard show
+scoped completeness state. Authorized users can provide information, defer a
+gap, record a reasoned exception, reopen it, or reevaluate the asset.
+
+The Operations workflows remain deliberately separate: **Reconciliation**
+handles proposed evidence decisions, while **Knowledge Gaps** handles absent or
+insufficient knowledge. **Changes** remains under Overview as the meaningful
+knowledge timeline.
 
 Start in **Administration → Asset types → Knowledge profile**. Select existing
 Asset Types, Relationship Types, and Custom Field Definitions in the structured

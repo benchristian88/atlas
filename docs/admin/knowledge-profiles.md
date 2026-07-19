@@ -16,7 +16,7 @@ Rules reference stable record IDs, so renaming display names is safe. Atlas bloc
 
 Changing a profile may open or resolve gaps on its assets. Atlas performs a bounded synchronous pass and exposes a batch reevaluation API for controlled follow-up. Existing assets remain valid even when policy finds gaps.
 
-Gap actions live on Asset detail and in Reconciliation's **Missing knowledge** queue:
+Gap actions live on Asset detail and the Operations **Knowledge Gaps** page:
 
 - Provide information opens the relevant asset editor.
 - Defer records a reason and optional review time.

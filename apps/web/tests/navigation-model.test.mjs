@@ -47,13 +47,14 @@ test("viewer navigation uses implemented product domains without administration"
       "custom_fields.view",
       "changes.view",
       "reconciliation.view",
+      "knowledge_gaps.view",
     ],
   }));
 
   assert.deepEqual(groupMap(groups), {
     Overview: ["Dashboard", "Changes"],
     Knowledge: ["Knowledge Graph", "Assets", "Networks"],
-    Operations: ["Discovery", "Reconciliation"],
+    Operations: ["Discovery", "Reconciliation", "Knowledge Gaps"],
     Connections: ["Integrations"],
   });
   assert.equal(resolvedItem(groups, "users-access"), undefined);
@@ -83,7 +84,7 @@ test("system entries resolve only for their explicit permissions", () => {
 
 test("active matching covers renamed pages, child routes, and admin domains", () => {
   const allGroups = visibleNavigationGroups(access({
-    context: ["assets.view", "integrations.view", "customers.manage", "reconciliation.view", "changes.view"],
+    context: ["assets.view", "integrations.view", "customers.manage", "reconciliation.view", "knowledge_gaps.view", "changes.view"],
     global: ["users.view", "asset_types.manage", "system_settings.manage"],
   }));
   const cases = [
@@ -92,6 +93,7 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
     ["discovery", "/discovery-runs/run-1"],
     ["discovery", "/discovery/simulate"],
     ["reconciliation", "/reconciliation"],
+    ["knowledge-gaps", "/knowledge-gaps"],
     ["users-access", "/admin/roles/role-1"],
     ["reference-data", "/admin/custom-fields/field-1"],
     ["system-settings", "/admin/system-settings/security"],
@@ -102,6 +104,16 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
   }
   assert.equal(navigationItemIsActive(PROFILE_NAVIGATION_ITEM, "/profile"), true);
   assert.equal(navigationItemIsActive(PROFILE_NAVIGATION_ITEM, "/profiles"), false);
+});
+
+test("operations entries retain independent permission visibility", () => {
+  const reconciliationOnly = visibleNavigationGroups(access({ context: ["reconciliation.view"] }));
+  assert.equal(resolvedItem(reconciliationOnly, "reconciliation")?.href, "/reconciliation");
+  assert.equal(resolvedItem(reconciliationOnly, "knowledge-gaps"), undefined);
+
+  const gapsOnly = visibleNavigationGroups(access({ context: ["knowledge_gaps.view"] }));
+  assert.equal(resolvedItem(gapsOnly, "reconciliation"), undefined);
+  assert.equal(resolvedItem(gapsOnly, "knowledge-gaps")?.href, "/knowledge-gaps");
 });
 
 test("roadmap entries remain representable but never render broken links", () => {

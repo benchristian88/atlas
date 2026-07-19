@@ -30,6 +30,7 @@ export const NAVIGATION_GROUPS = [
     items: [
       { id: "discovery", href: "/discovery-runs", label: "Discovery", permission: "integrations.view", activeRoutes: ["/discovery-runs", "/discovery"] },
       { id: "reconciliation", href: "/reconciliation", label: "Reconciliation", permission: "reconciliation.view" },
+      { id: "knowledge-gaps", href: "/knowledge-gaps", label: "Knowledge Gaps", permission: "knowledge_gaps.view" },
       { id: "impact-analysis", label: "Impact Analysis", available: false },
       { id: "backup-recovery", label: "Backup & Recovery", available: false },
       { id: "documentation", label: "Documentation", available: false },

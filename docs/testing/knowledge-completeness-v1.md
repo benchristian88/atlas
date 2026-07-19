@@ -10,7 +10,7 @@ Run backend tests from `apps/api` with `pytest`, web tests from `apps/web` with 
 
 1. Select an existing workload-like Asset Type and open its Knowledge profile.
 2. Add a critical required outgoing relationship rule, selecting the existing hosting relationship and allowed host Asset Type.
-3. Create a workload with no relationship. Confirm it saves, shows a critical gap, appears in Missing knowledge, and updates dashboard counts.
+3. Create a workload with no relationship. Confirm it saves, shows a critical gap, appears in Knowledge Gaps, and updates dashboard counts.
 4. Add the required relationship. Confirm the gap resolves, both endpoints reevaluate, the Asset status changes, and Changes contains one resolution event.
 5. Reevaluate twice and confirm no duplicate active gap or timeline event appears.
 
@@ -36,7 +36,7 @@ Run backend tests from `apps/api` with `pytest`, web tests from `apps/web` with 
 
 1. Verify a Viewer can read completeness but cannot edit requirements or create exceptions.
 2. Verify a scoped administrator sees and acts only within assigned customer/site scope.
-3. Change customer/site context and confirm dashboard, Asset filters, Missing knowledge, and summaries agree.
+3. Change customer/site context and confirm dashboard, Asset filters, Knowledge Gaps, and summaries agree.
 4. Deactivate a referenced definition and confirm an admin warning rather than an HTTP 500 or false `complete` result.
 
 No test should reset the database. Browser Network should remain idle after page loads; completeness pages do not poll.
