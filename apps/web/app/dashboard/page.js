@@ -13,7 +13,7 @@ const cards = [
   { key: "assets", label: "Assets", href: "/assets", description: "Managed infrastructure", permission: "assets.view" },
   { key: "networks", label: "Networks", href: "/networks", description: "VLANs and network segments", permission: "networks.view" },
   { key: "relationships", label: "Relationships", href: "/topology", description: "Connections between assets", permission: "relationships.view" },
-  { key: "topology", label: "Topology", href: "/topology", description: "Five focused infrastructure lenses", value: "5", permission: "assets.view" },
+  { key: "topology", label: "Knowledge Graph", href: "/topology", description: "Five focused infrastructure lenses", value: "5", permission: "assets.view" },
 ];
 
 export default function DashboardPage() {

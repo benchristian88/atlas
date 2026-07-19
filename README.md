@@ -207,6 +207,40 @@ security boundary. Direct ID, URL, query, and request-body substitutions are
 checked by the API and rejected with `403` (or a non-disclosing not-found
 response where appropriate).
 
+## Navigation domains
+
+The authenticated sidebar is organised around stable product domains rather
+than one link per technical page:
+
+- **Overview:** Dashboard.
+- **Knowledge:** Knowledge Graph, Assets, and Networks. Knowledge Graph is the
+  user-facing name for the existing `/topology` capability; topology remains a
+  technical lens within that graph.
+- **Operations:** Discovery, which currently opens discovery-run activity at
+  `/discovery-runs`.
+- **Connections:** Integrations.
+- **System:** permission-filtered Users & Access, Reference Data, and System
+  Settings links into the existing administration routes.
+- **Profile:** kept separate because it contains user-specific identity,
+  password, access-summary, and appearance preferences.
+
+The configuration reserves the following roadmap positions without rendering
+links or placeholder pages:
+
+```text
+OVERVIEW       Dashboard; Changes (roadmap)
+KNOWLEDGE      Knowledge Graph; Assets; Services (roadmap);
+               Business Functions (roadmap); People & Teams (roadmap); Networks
+OPERATIONS     Discovery; Reconciliation (roadmap); Impact Analysis (roadmap);
+               Backup & Recovery (roadmap); Documentation (roadmap)
+CONNECTIONS    Integrations
+SYSTEM         Users & Access; Reference Data; System Settings
+PROFILE        Profile
+```
+
+Future usable features should be enabled within these domains rather than
+added as arbitrary top-level links.
+
 ## Customer and site context
 
 Atlas always models inventory as `Customer -> Site -> assets/relationships`,
@@ -222,10 +256,10 @@ New relationships require both endpoints in that same customer and site. The
 API validates context independently of browser state and rejects stale or
 unauthorized selections.
 
-## Administration and managed data
+## System administration and managed data
 
-The permission-aware **Administration** area provides the functions available
-to the current user:
+The permission-aware **System** navigation group deep-links into the existing
+administration routes and shows only the domains available to the current user:
 
 - Users, roles, permissions, and global/customer/site assignments.
 - Customers and sites, including activation/deactivation and guarded deletion.
@@ -329,7 +363,7 @@ After signing in, verify the persistent manual-data workflow:
 3. Open **Assets**, select the customer and site, enter an asset name, type, and hostname, then create it. Add IP addresses from the asset detail interface section.
 4. Create a second asset, open the first asset by selecting its name, and add a relationship to the second asset.
 5. Refresh the asset detail page and confirm the asset fields and relationship remain.
-6. Open **Topology** and confirm the customer → site → assets tree and relationship label appear.
+6. Open **Knowledge Graph** (`/topology`) and confirm the customer → site → assets tree and relationship label appear.
 7. Return to **Dashboard** and confirm the live customer, site, asset, and relationship counts.
 
 The API container runs `alembic upgrade head` at startup. Existing deployments
@@ -344,7 +378,7 @@ below; do not drop/recreate the database.
 4. Create asset **nginx-proxy-manager** with type `docker_container` or `application`.
 5. Open an asset detail page and create `docker01` → `runs_on` → `pve1`.
 6. Create `nginx-proxy-manager` → `runs_on` → `docker01`.
-7. Open **Topology**, switch between **Platform** and **All relationships**, and verify node details and edge labels.
+7. Open **Knowledge Graph**, switch between **Platform** and **All relationships**, and verify node details and edge labels.
 8. Filter the topology by Home Lab, Home, and an asset type; clear each filter and confirm the graph remains stable.
 9. Refresh the browser and confirm all assets and relationships remain present without repeated idle API requests.
 
@@ -361,7 +395,7 @@ but is not used by the web workflow.
 4. Create asset **docker01**, then open its asset detail page.
 5. Add interface **eth0** with IP `192.168.5.8`, select **Apps VLAN**, and mark it primary.
 6. Refresh the asset detail page and confirm the interface and network remain present.
-7. Open **Topology**, select **Network / VLAN**, and confirm docker01 appears under `VLAN 5 — Apps VLAN — 192.168.5.0/24`.
+7. Open **Knowledge Graph**, select **Network / VLAN**, and confirm docker01 appears under `VLAN 5 — Apps VLAN — 192.168.5.0/24`.
 8. Confirm an asset without an interface appears under **Unassigned network** rather than being assigned from its primary IP silently.
 9. Edit Apps VLAN, refresh the page, then delete a disposable network and confirm the list updates only after those user actions.
 

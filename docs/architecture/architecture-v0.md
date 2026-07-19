@@ -53,6 +53,13 @@ permission-aware administration. It does not persist authentication tokens in
 browser storage. Navigation hiding improves usability but is not a security
 control.
 
+The sidebar uses stable Overview, Knowledge, Operations, Connections, and
+System domains, with Profile kept separate. The current topology route is
+labelled Knowledge Graph and discovery-run activity is labelled Discovery.
+Roadmap entries remain disabled in the declarative navigation model until a
+usable route exists; System entries resolve directly to existing authorised
+administration sections.
+
 The browser API base defaults to `/api`; `NEXT_PUBLIC_API_URL` is an optional
 split-origin development override. Only browser-public configuration enters the
 web container. Database, session-signing, and bootstrap secrets remain API-side.

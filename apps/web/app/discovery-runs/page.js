@@ -19,5 +19,5 @@ const columns = [
 export default function DiscoveryRunsPage() {
   const { hasPermission } = useAuth();
   if (!hasPermission("integrations.view")) return <AccessDenied />;
-  return <MockPage eyebrow="History" title="Discovery runs" description="Recent discovery activity and outcomes from configured integrations." columns={columns} rows={discoveryRuns} />;
+  return <MockPage eyebrow="Operations" title="Discovery" description="Review recent discovery runs and outcomes from configured integrations." columns={columns} rows={discoveryRuns} />;
 }

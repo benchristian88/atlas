@@ -36,7 +36,6 @@ export function AppShell({ children }) {
     <div className="app-shell" style={accentThemeStyle(user.accent_colour)}>
       <aside className="sidebar">
         <AtlasBrand href={authenticatedHome(user)} />
-        <p className="nav-label">Workspace</p>
         <Navigation />
         <div className="sidebar-footer">
           Atlas MVP<br />Local development
