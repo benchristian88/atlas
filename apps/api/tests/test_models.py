@@ -148,6 +148,47 @@ def test_entity_source_links_are_unique_and_customer_site_safe() -> None:
     assert ("assets.id", "assets.customer_id", "assets.site_id") in composite_targets
 
 
+def test_knowledge_v2_models_use_atlas_uuid_server_defaults() -> None:
+    for table_name in ("run_observed_entities", "knowledge_changes"):
+        id_column = Base.metadata.tables[table_name].c.id
+        assert id_column.primary_key is True
+        assert id_column.nullable is False
+        assert id_column.server_default is not None
+        assert str(id_column.server_default.arg).lower() == "gen_random_uuid()"
+
+    observations = Base.metadata.tables["run_observed_entities"]
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in observations.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    }
+    assert ("discovery_run_id", "entity_type", "external_id") in unique_columns
+
+
+def test_uuid_default_repair_migration_is_additive(monkeypatch) -> None:
+    migration = importlib.import_module(
+        "migrations.versions.20260719_0010_fix_knowledge_uuid_defaults"
+    )
+    assert migration.down_revision == "20260719_0009"
+    operation = Mock()
+    monkeypatch.setattr(migration, "op", operation)
+
+    migration.upgrade()
+
+    assert [call.args[:2] for call in operation.alter_column.call_args_list] == [
+        ("run_observed_entities", "id"),
+        ("knowledge_changes", "id"),
+    ]
+    assert all(
+        str(call.kwargs["server_default"]).lower() == "gen_random_uuid()"
+        for call in operation.alter_column.call_args_list
+    )
+    assert all(
+        call.kwargs["existing_nullable"] is False
+        for call in operation.alter_column.call_args_list
+    )
+
+
 def test_case_insensitive_identity_and_type_name_indexes_are_declared() -> None:
     assert "uq_users_email_lower" in {
         index.name for index in Base.metadata.tables["users"].indexes

@@ -269,6 +269,10 @@ def test_simulation_creates_run_evidence_assertions_and_new_asset_item():
     assert len([row for row in db.records if isinstance(row, DataSource)]) == 1
     assert len([row for row in db.records if isinstance(row, DiscoveryRun)]) == 1
     assert len([row for row in db.records if isinstance(row, EvidenceRecord)]) == 1
+    observations = [row for row in db.records if isinstance(row, RunObservedEntity)]
+    assert len(observations) == 1
+    assert isinstance(observations[0].id, uuid.UUID)
+    assert observations[0].external_id == "manual:docker01"
     assert len([row for row in db.records if isinstance(row, KnowledgeAssertion)]) == 6
     assert any(item.category == "newly_discovered" for item in items)
     assert any(item.entity_type == "asset_relationship" for item in items)
@@ -284,6 +288,36 @@ def test_simulation_creates_run_evidence_assertions_and_new_asset_item():
     assert len([row for row in db.records if isinstance(row, DataSource)]) == 1
     assert len([row for row in db.records if isinstance(row, KnowledgeAssertion)]) == 6
     assert len([row for row in db.records if isinstance(row, ReconciliationItem)]) == 2
+    assert len([row for row in db.records if isinstance(row, RunObservedEntity)]) == 2
+
+
+def test_run_observed_entity_flush_populates_uuid_without_explicit_id():
+    customer, site = context_records()
+    source = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Test source", source_type="simulated_discovery", status="active",
+    )
+    run = DiscoveryRun(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        data_source_id=source.id, status="running", coverage_key="test",
+        is_complete_snapshot=False, completeness_status="unknown",
+    )
+    row = RunObservedEntity(
+        discovery_run_id=run.id,
+        data_source_id=source.id,
+        customer_id=customer.id,
+        site_id=site.id,
+        coverage_key="test",
+        entity_type="asset",
+        external_id="manual:docker01",
+        observed_at=datetime.now(timezone.utc),
+    )
+    assert row.id is None
+    db = KnowledgeSession(customer, site, source, run, row)
+
+    db.flush()
+
+    assert isinstance(row.id, uuid.UUID)
 
 
 def complete_payload(customer, site, names):
@@ -921,6 +955,13 @@ def test_simulated_relationship_route_returns_json_safe_resolution_ids():
     assert relationship["resolved_source_asset_id"] == str(docker.id)
     assert relationship["resolved_target_asset_id"] == str(pve.id)
     assert relationship["observed_value_json"]["resolved_source_asset_id"] == str(docker.id)
+    observations = [row for row in db.records if isinstance(row, RunObservedEntity)]
+    assert len(observations) == 2
+    assert {row.external_id for row in observations} == {
+        "manual:pve1",
+        "manual:docker01",
+    }
+    assert all(isinstance(row.id, uuid.UUID) for row in observations)
     assert db.commits == 1
     json.dumps(to_json_value(response))
 
