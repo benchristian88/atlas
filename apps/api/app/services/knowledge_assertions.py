@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import KnowledgeAssertion
+from app.utils.json_values import to_json_value
 
 
 def _same_claim(left: KnowledgeAssertion, value: Any, object_external_id: str | None) -> bool:
@@ -95,6 +96,7 @@ def record_assertion(
     """Record a current assertion, coalescing identical observations from one source."""
 
     observed_at = observed_at or datetime.now(timezone.utc)
+    value = to_json_value(value)
     current = list(
         db.scalars(
             select(KnowledgeAssertion).where(

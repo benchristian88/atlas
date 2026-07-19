@@ -227,30 +227,36 @@ def simulate_discovery(
         run, evidence_count, assertion_count, items = run_simulation(
             db, payload=payload, user_id=principal.user.id
         )
+        add_audit_event(
+            db,
+            action="discovery.simulated",
+            target_type="discovery_run",
+            target_id=run.id,
+            actor=principal.user,
+            workspace_id=customer.workspace_id,
+            customer_id=payload.customer_id,
+            site_id=payload.site_id,
+            summary="Simulated discovery completed",
+            metadata=run.summary or {},
+            request=request,
+        )
+        response = {
+            "run": run_response(db, run),
+            "evidence_records_created": evidence_count,
+            "assertions_created": assertion_count,
+            "reconciliation_items_created": len(items),
+            "reconciliation_items": [
+                reconciliation_response(db, item) for item in items
+            ],
+        }
+        commit(db, "Simulated discovery")
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    add_audit_event(
-        db,
-        action="discovery.simulated",
-        target_type="discovery_run",
-        target_id=run.id,
-        actor=principal.user,
-        workspace_id=customer.workspace_id,
-        customer_id=payload.customer_id,
-        site_id=payload.site_id,
-        summary="Simulated discovery completed",
-        metadata=run.summary or {},
-        request=request,
-    )
-    commit(db, "Simulated discovery")
-    return {
-        "run": run_response(db, run),
-        "evidence_records_created": evidence_count,
-        "assertions_created": assertion_count,
-        "reconciliation_items_created": len(items),
-        "reconciliation_items": [reconciliation_response(db, item) for item in items],
-    }
+    except Exception:
+        db.rollback()
+        raise
+    return response
 
 
 @router.get("/assertions", response_model=list[KnowledgeAssertionResponse])

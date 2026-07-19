@@ -12,6 +12,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.models import AuditEvent, User
+from app.utils.json_values import to_json_value
 
 _SENSITIVE_FRAGMENTS = (
     "password",
@@ -25,6 +26,8 @@ _SENSITIVE_FRAGMENTS = (
 
 
 def _safe_value(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return _safe_value(value.model_dump(mode="json"))
     if isinstance(value, Mapping):
         return {
             str(key): "[redacted]"
@@ -77,7 +80,7 @@ def add_audit_event(
         request_id=(
             getattr(request.state, "request_id", None) if request is not None else None
         ),
-        metadata_=_safe_value(dict(metadata or {})),
+        metadata_=to_json_value(_safe_value(dict(metadata or {}))),
     )
     db.add(event)
     return event

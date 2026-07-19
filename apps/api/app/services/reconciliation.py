@@ -29,6 +29,7 @@ from app.services.entity_resolution import (
     resolve_asset_identity,
 )
 from app.services.knowledge_assertions import confirm, reject
+from app.utils.json_values import to_json_value
 
 
 SAFE_ASSET_FIELDS = {
@@ -47,6 +48,12 @@ class RelationshipResolutionError(Exception):
     def __init__(self, payload: dict[str, Any]):
         super().__init__(payload["detail"])
         self.payload = payload
+
+
+def _uuid_value(value: Any) -> uuid.UUID | None:
+    if value is None or isinstance(value, uuid.UUID):
+        return value
+    return uuid.UUID(str(value))
 
 
 def create_item(
@@ -78,8 +85,8 @@ def create_item(
         entity_id=entity_id,
         candidate_external_id=candidate_external_id,
         assertion_id=assertion.id,
-        current_value_json=current_value,
-        observed_value_json=observed_value,
+        current_value_json=to_json_value(current_value),
+        observed_value_json=to_json_value(observed_value),
         recommended_action=recommended_action,
     )
     db.add(item)
@@ -360,8 +367,9 @@ def relationship_resolution(
         ),
         "current_relationship_id": current.id if current else None,
     }
-    item.observed_value_json = result
-    item.current_value_json = (
+    safe_result = to_json_value(result)
+    item.observed_value_json = safe_result
+    item.current_value_json = to_json_value(
         {
             "relationship_id": current.id,
             "source_asset_id": source.asset.id,
@@ -373,13 +381,13 @@ def relationship_resolution(
         if current
         else "No current relationship"
     )
-    return result
+    return safe_result
 
 
 def _accept_relationship(db: Session, item: ReconciliationItem) -> AssetRelationship:
     value = relationship_resolution(db, item)
-    source = db.get(Asset, value.get("resolved_source_asset_id"))
-    target = db.get(Asset, value.get("resolved_target_asset_id"))
+    source = db.get(Asset, _uuid_value(value.get("resolved_source_asset_id")))
+    target = db.get(Asset, _uuid_value(value.get("resolved_target_asset_id")))
     if source is None or target is None:
         raise RelationshipResolutionError(
             {
@@ -411,7 +419,7 @@ def _accept_relationship(db: Session, item: ReconciliationItem) -> AssetRelation
     if existing is not None:
         item.entity_id = existing.id
         return existing
-    current_relationship_id = value.get("current_relationship_id")
+    current_relationship_id = _uuid_value(value.get("current_relationship_id"))
     if item.category == "contradiction" and current_relationship_id:
         current = db.get(AssetRelationship, current_relationship_id)
         if (

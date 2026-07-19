@@ -25,6 +25,7 @@ from app.services.entity_resolution import (
 )
 from app.services.knowledge_assertions import confirm, record_assertion
 from app.services.reconciliation import create_item
+from app.utils.json_values import to_json_value
 
 
 def _payload_hash(payload: dict) -> str:
@@ -129,7 +130,7 @@ def run_simulation(
         external_id = observation.external_id or (
             f"simulated:{observation.asset_type}:{observation.name}"
         )
-        raw = observation.model_dump(mode="json")
+        raw = to_json_value(observation)
         evidence = EvidenceRecord(
             discovery_run_id=run.id,
             data_source_id=source.id,
@@ -137,7 +138,7 @@ def run_simulation(
             site_id=payload.site_id,
             external_id=external_id,
             entity_kind=observation.entity_kind,
-            payload_json=raw,
+            payload_json=to_json_value(raw),
             payload_hash=_payload_hash(raw),
             observed_at=now,
         )
@@ -430,11 +431,11 @@ def run_simulation(
     run.status = "completed"
     run.finished_at = datetime.now(timezone.utc)
     run.completed_at = run.finished_at
-    run.summary = {
+    run.summary = to_json_value({
         "observations": len(payload.observations),
         "evidence_records_created": evidence_count,
         "assertions_created": assertions_created,
         "reconciliation_items_created": len(items),
-    }
+    })
     source.last_success_at = run.finished_at
     return run, evidence_count, assertions_created, items
