@@ -5,7 +5,6 @@ import { readFile } from "node:fs/promises";
 import {
   NAVIGATION_GROUPS,
   navigationItemIsActive,
-  PROFILE_NAVIGATION_ITEM,
   visibleNavigationGroups,
 } from "../lib/navigation-model.mjs";
 
@@ -60,7 +59,6 @@ test("viewer navigation uses implemented product domains without administration"
   assert.equal(resolvedItem(groups, "users-access"), undefined);
   assert.equal(resolvedItem(groups, "reference-data"), undefined);
   assert.equal(resolvedItem(groups, "administration"), undefined);
-  assert.equal(PROFILE_NAVIGATION_ITEM.label, "Profile");
 });
 
 test("system entries resolve only for their explicit permissions", () => {
@@ -103,8 +101,6 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
   for (const [itemId, pathname] of cases) {
     assert.equal(navigationItemIsActive(resolvedItem(allGroups, itemId), pathname), true);
   }
-  assert.equal(navigationItemIsActive(PROFILE_NAVIGATION_ITEM, "/profile"), true);
-  assert.equal(navigationItemIsActive(PROFILE_NAVIGATION_ITEM, "/profiles"), false);
 });
 
 test("operations entries retain independent permission visibility", () => {
@@ -141,17 +137,20 @@ test("roadmap entries remain representable but never render broken links", () =>
 
 test("shell regression keeps workspace context, profile access, and logout intact", async () => {
   const shell = await readFile(new URL("../components/app-shell.js", import.meta.url), "utf8");
+  const accountMenu = await readFile(new URL("../components/account-menu.js", import.meta.url), "utf8");
   const navigation = await readFile(new URL("../components/navigation.js", import.meta.url), "utf8");
   const topologyPage = await readFile(new URL("../app/topology/page.js", import.meta.url), "utf8");
   const discoveryPage = await readFile(new URL("../app/discovery-runs/page.js", import.meta.url), "utf8");
 
   assert.match(shell, /<ContextSelector \/>/);
-  assert.match(shell, /href="\/profile"/);
+  assert.match(shell, /<AccountMenu/);
   assert.match(shell, /await logout\(\)/);
+  assert.match(accountMenu, /href="\/profile"/);
   assert.match(shell, /<Navigation \/>/);
   assert.match(navigation, /customerId/);
   assert.match(navigation, /siteId/);
   assert.match(navigation, /aria-current/);
+  assert.doesNotMatch(navigation, /PROFILE_NAVIGATION_ITEM|nav-profile/);
   assert.match(topologyPage, /title="Knowledge Graph"/);
   assert.match(discoveryPage, /title="Discovery"/);
 });

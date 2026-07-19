@@ -203,7 +203,7 @@ export default function ProfilePage() {
     <>
       <PageHeader
         eyebrow="Account"
-        title="Profile"
+        title="My profile"
         description="Manage your Atlas identity and review the access assigned to you."
       />
 
@@ -218,7 +218,7 @@ export default function ProfilePage() {
           <div className="form-card-header">
             <div>
               <p className="eyebrow">Identity</p>
-              <h2 id="profile-details-title">Profile details</h2>
+              <h2 id="profile-details-title">Personal details</h2>
             </div>
           </div>
           {profileStatus.error && <div className="error-banner" role="alert">{profileStatus.error}</div>}

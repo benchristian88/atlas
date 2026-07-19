@@ -87,12 +87,6 @@ export const NAVIGATION_GROUPS = [
   },
 ];
 
-export const PROFILE_NAVIGATION_ITEM = {
-  id: "profile",
-  href: "/profile",
-  label: "Profile",
-};
-
 function mayUseDestination(destination, access) {
   if (destination.globalPermission) {
     return access.hasGlobalPermission(destination.globalPermission);

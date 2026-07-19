@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AccountMenu } from "./account-menu";
 import { authenticatedHome, useAuth } from "./auth-context";
 import { AtlasBrand } from "./atlas-brand.mjs";
 import { ContextSelector } from "./context-selector";
@@ -44,20 +44,7 @@ export function AppShell({ children }) {
       <div className="content">
         <header className="topbar">
           <ContextSelector />
-          <div className="account-menu">
-            <Link className="account-identity" href="/profile">
-              <strong>{user.display_name || user.email}</strong>
-              {user.display_name && <span>{user.email}</span>}
-            </Link>
-            <button
-              className="button button-secondary"
-              disabled={signingOut}
-              onClick={signOut}
-              type="button"
-            >
-              {signingOut ? "Signing out…" : "Logout"}
-            </button>
-          </div>
+          <AccountMenu onLogout={signOut} signingOut={signingOut} user={user} />
         </header>
         {workspace.error && (
           <div className="shell-error error-banner" role="alert">

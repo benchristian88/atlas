@@ -6,7 +6,6 @@ import { useAuth } from "./auth-context";
 import { useWorkspaceContext } from "./workspace-context";
 import {
   navigationItemIsActive,
-  PROFILE_NAVIGATION_ITEM,
   visibleNavigationGroups,
 } from "../lib/navigation-model.mjs";
 
@@ -29,9 +28,6 @@ export function Navigation() {
         {primaryGroups.map((group) => <NavigationGroup group={group} key={group.id} pathname={pathname} />)}
       </div>
       {systemGroup && <NavigationGroup className="nav-system-group" group={systemGroup} pathname={pathname} />}
-      <div className="nav-profile">
-        <NavigationLink item={PROFILE_NAVIGATION_ITEM} pathname={pathname} />
-      </div>
     </nav>
   );
 }
