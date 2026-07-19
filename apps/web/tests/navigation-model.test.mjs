@@ -45,11 +45,13 @@ test("viewer navigation uses implemented product domains without administration"
       "asset_types.view",
       "relationship_types.view",
       "custom_fields.view",
+      "changes.view",
+      "reconciliation.view",
     ],
   }));
 
   assert.deepEqual(groupMap(groups), {
-    Overview: ["Dashboard"],
+    Overview: ["Dashboard", "Changes"],
     Knowledge: ["Knowledge Graph", "Assets", "Networks"],
     Operations: ["Discovery", "Reconciliation"],
     Connections: ["Integrations"],
@@ -81,7 +83,7 @@ test("system entries resolve only for their explicit permissions", () => {
 
 test("active matching covers renamed pages, child routes, and admin domains", () => {
   const allGroups = visibleNavigationGroups(access({
-    context: ["assets.view", "integrations.view", "customers.manage"],
+    context: ["assets.view", "integrations.view", "customers.manage", "reconciliation.view", "changes.view"],
     global: ["users.view", "asset_types.manage", "system_settings.manage"],
   }));
   const cases = [
@@ -113,7 +115,6 @@ test("roadmap entries remain representable but never render broken links", () =>
   })).flatMap((group) => group.items.map((item) => item.label));
 
   assert.deepEqual(roadmapLabels, [
-    "Changes",
     "Services",
     "Business Functions",
     "People & Teams",

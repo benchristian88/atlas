@@ -399,6 +399,10 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
             name="valid_status",
         ),
+        CheckConstraint(
+            "completeness_status IN ('complete', 'partial', 'failed', 'unknown')",
+            name="valid_completeness_status",
+        ),
         ForeignKeyConstraint(
             ["customer_id", "site_id"],
             ["sites.customer_id", "sites.id"],
@@ -439,6 +443,55 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     archive_reason: Mapped[str | None] = mapped_column(Text)
+    coverage_key: Mapped[str | None] = mapped_column(String(1024), index=True)
+    is_complete_snapshot: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", index=True
+    )
+    completeness_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="unknown", index=True
+    )
+
+
+class RunObservedEntity(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "run_observed_entities"
+    __table_args__ = (
+        UniqueConstraint(
+            "discovery_run_id",
+            "entity_type",
+            "external_id",
+            name="uq_run_observed_entities_run_type_external",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_run_observed_entities_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    discovery_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    coverage_key: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    evidence_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="SET NULL"), index=True
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class EvidenceRecord(UUIDPrimaryKeyMixin, Base):
@@ -591,6 +644,76 @@ class ReconciliationItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KnowledgeChange(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "knowledge_changes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_knowledge_changes_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_knowledge_changes_customer_site_occurred",
+            "customer_id",
+            "site_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_knowledge_changes_entity_occurred",
+            "entity_type",
+            "entity_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_knowledge_changes_type_occurred",
+            "change_type",
+            "occurred_at",
+        ),
+        Index(
+            "ix_knowledge_changes_source_run",
+            "data_source_id",
+            "discovery_run_id",
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    change_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    entity_name_snapshot: Mapped[str] = mapped_column(String(1024), nullable=False)
+    predicate: Mapped[str | None] = mapped_column(String(255), index=True)
+    previous_value_json: Mapped[Any | None] = mapped_column(JSONB)
+    new_value_json: Mapped[Any | None] = mapped_column(JSONB)
+    truth_classification: Mapped[str | None] = mapped_column(String(30), index=True)
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="SET NULL"), index=True
+    )
+    discovery_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="SET NULL"), index=True
+    )
+    assertion_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("knowledge_assertions.id", ondelete="SET NULL"), index=True
+    )
+    reconciliation_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("reconciliation_items.id", ondelete="SET NULL"), index=True
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):

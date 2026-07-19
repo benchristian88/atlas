@@ -41,6 +41,22 @@ a { color: inherit; text-decoration: none; }
 
 .knowledge-json-input { min-height: 420px; resize: vertical; }
 .knowledge-list { display: grid; gap: 16px; }
+.change-timeline { display: grid; gap: 14px; }
+.change-entry h2 { font-size: 18px; margin: 0; }
+.change-entry p { margin: 12px 0; }
+.change-values { align-items: center; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.change-values span { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-mono, monospace); font-size: 12px; overflow-wrap: anywhere; padding: 10px; }
+.change-meta { align-items: center; color: var(--muted); display: flex; flex-wrap: wrap; font-size: 12px; gap: 14px; margin-top: 12px; }
+.pagination { align-items: center; display: flex; gap: 14px; justify-content: center; margin-top: 20px; }
+.dashboard-change-list { display: grid; gap: 0; }
+.dashboard-change-list > div { align-items: center; border-top: 1px solid var(--border); display: flex; gap: 16px; justify-content: space-between; padding: 12px 0; }
+.dashboard-change-list time { color: var(--muted); flex: 0 0 auto; font-size: 12px; }
+.fact-history-list { display: grid; gap: 10px; }
+.fact-history-list details { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.fact-history-list summary { align-items: center; cursor: pointer; display: flex; justify-content: space-between; padding: 12px; text-transform: capitalize; }
+.fact-history-list summary span { color: var(--muted); font-size: 12px; }
+.fact-history-list table { margin: 0; }
+.fact-history-list code { overflow-wrap: anywhere; white-space: pre-wrap; }
 .reconciliation-card h2 { font-size: 20px; margin: 0; text-transform: capitalize; }
 .reconciliation-heading { align-items: start; display: flex; gap: 20px; justify-content: space-between; }
 .reconciliation-heading .eyebrow { margin-bottom: 4px; }
@@ -394,6 +410,8 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 .admin-tabs a:hover, .admin-tabs a.active { background: var(--accent-soft); color: var(--accent); }
+.admin-tabs button { background: transparent; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; font: inherit; padding: 8px 12px; }
+.admin-tabs button:hover, .admin-tabs button.active { background: var(--accent-soft); color: var(--accent); }
 .admin-card-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .admin-card {
   background: var(--surface);

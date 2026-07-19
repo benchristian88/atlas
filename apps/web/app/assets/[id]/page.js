@@ -51,6 +51,7 @@ export default function AssetDetailPage() {
   const [networks, setNetworks] = useState([]);
   const [interfaces, setInterfaces] = useState([]);
   const [assertions, setAssertions] = useState([]);
+  const [factHistory, setFactHistory] = useState({});
   const [relationshipForm, setRelationshipForm] = useState({ target_asset_id: "", relationship_type: "", notes: "" });
   const [interfaceForm, setInterfaceForm] = useState({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: true, notes: "" });
   const [showRelationshipForm, setShowRelationshipForm] = useState(false);
@@ -76,7 +77,7 @@ export default function AssetDetailPage() {
         current.customer_id,
         current.site_id,
       );
-      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions] = await Promise.all([
+      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions, history] = await Promise.all([
         mayViewRelationships ? apiRequest("/assets") : Promise.resolve([]),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields") : Promise.resolve([]),
@@ -85,6 +86,7 @@ export default function AssetDetailPage() {
         mayViewNetworks ? apiRequest("/networks") : Promise.resolve([]),
         mayViewNetworks ? apiRequest(`/asset-interfaces?asset_id=${id}`) : Promise.resolve([]),
         apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
+        apiRequest(`/assets/${id}/fact-history`),
       ]);
       setAsset(current);
       setAssets(allAssets);
@@ -95,6 +97,7 @@ export default function AssetDetailPage() {
       setNetworks(allNetworks);
       setInterfaces(assetInterfaces);
       setAssertions(assetAssertions);
+      setFactHistory(history.facts || {});
     } catch (requestError) {
       setError(requestError.message || "Atlas could not load this asset.");
     } finally {
@@ -232,6 +235,7 @@ export default function AssetDetailPage() {
       </section><section className="table-card"><div className="table-meta"><span>{relationships.length} relationships</span></div>{relationships.length === 0 ? <p className="empty-state">No relationships yet.</p> : <div className="relationship-list">{relationships.map((edge) => { const type = relationshipTypes.find((item) => item.key === edge.relationship_type); return <div className="relationship-row" key={edge.id}><span><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name || "Unknown"}</strong> → {type?.name || edge.relationship_type} → <strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name || "Unknown"}</strong>{edge.notes ? ` — ${edge.notes}` : ""}</span>{canDeleteRelationship && <button className="text-button text-danger" onClick={() => removeRelationship(edge)} type="button">Delete</button>}</div>; })}</div>}</section></>}
 
       <AssertionsPanel assertions={assertions} assetsById={assetsById} canDelete={canDeleteAssertions} canRetract={canRetractAssertions} onChanged={refreshAssertions} />
+      <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Knowledge history</p><h2>Fact history</h2></div></div>{Object.keys(factHistory).length === 0 ? <p className="secondary-text">No sourced fact history yet.</p> : <div className="fact-history-list">{Object.entries(factHistory).map(([predicate, entries]) => <details key={predicate}><summary><strong>{predicate.replaceAll("_", " ")}</strong><span>{entries.length} observation{entries.length === 1 ? "" : "s"}</span></summary><div className="responsive-table"><table><thead><tr><th>Value</th><th>Source</th><th>Truth</th><th>Status</th><th>Observed</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.assertion_id}><td><code>{typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value)}</code></td><td>{entry.source_name || "Unavailable"}</td><td>{entry.truth_classification || "—"}</td><td>{entry.is_current ? "Current" : entry.confirmation_status || "Historical"}</td><td>{entry.last_observed_at ? new Date(entry.last_observed_at).toLocaleString() : "—"}</td></tr>)}</tbody></table></div></details>)}</div>}</section>
     </>
   );
 }

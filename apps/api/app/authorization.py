@@ -25,6 +25,9 @@ _CONTEXTUAL_PERMISSION_PREFIXES = (
     "integrations.",
     "discovery_runs.",
     "assertions.",
+    "changes.",
+    "reconciliation.",
+    "discovery.",
 )
 
 

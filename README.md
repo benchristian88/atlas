@@ -212,7 +212,7 @@ response where appropriate).
 The authenticated sidebar is organised around stable product domains rather
 than one link per technical page:
 
-- **Overview:** Dashboard.
+- **Overview:** Dashboard and the meaningful Changes timeline.
 - **Knowledge:** Knowledge Graph, Assets, and Networks. Knowledge Graph is the
   user-facing name for the existing `/topology` capability; topology remains a
   technical lens within that graph.
@@ -228,7 +228,7 @@ The configuration reserves the following roadmap positions without rendering
 links or placeholder pages:
 
 ```text
-OVERVIEW       Dashboard; Changes (roadmap)
+OVERVIEW       Dashboard; Changes
 KNOWLEDGE      Knowledge Graph; Assets; Services (roadmap);
                Business Functions (roadmap); People & Teams (roadmap); Networks
 OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
@@ -316,7 +316,8 @@ The authenticated API surface is canonical beneath `/api` and includes:
 - `/api/asset-interfaces`
 - `/api/asset-types` and `/api/relationship-types`
 - `/api/data-sources`, `/api/discovery-runs`, and `/api/discovery/simulate`
-- `/api/assertions` and `/api/reconciliation-items`
+- `/api/assertions`, `/api/reconciliation-items`, and `/api/changes`
+- `/api/assets/<id>/fact-history`
 - `/api/custom-fields` and asset custom-field values
 - read-only `/api/audit-events`
 - protected `/api/system-settings`
@@ -344,9 +345,25 @@ action and are never silently merged.
 Use **Discovery → Simulate discovery** to exercise this pipeline before a live
 integration is configured. Paste a customer/site-scoped JSON observation, run
 it, then review the generated items under **Reconciliation**. Asset detail pages
-show the current assertions linked to an accepted asset. The complete manual
-scenario is in
-[Knowledge Foundation v1 testing](docs/testing/knowledge-foundation-v1.md).
+show assertions and grouped fact history linked to an accepted asset.
+
+A simulation can be marked as a **complete snapshot** for a stable coverage
+key. Atlas compares only successful complete runs from the same data source,
+customer/site, and coverage key. An asset omitted from the next comparable run
+becomes a **No longer observed** reconciliation item; it is not deleted or
+silently retired. A reviewer can mark it missing or inactive, retire it, keep
+it active, or create an exception. If the external identity appears again,
+Atlas resolves the missing episode and records a re-observation; a retired
+asset is never silently reactivated.
+
+The **Changes** page is a product knowledge timeline: discoveries, accepted
+facts, relationship changes, missing/reobserved entities, source links, and
+assertion lifecycle decisions. It is intentionally separate from **Audit**,
+which records security and administrative activity. The architecture and test
+flows are documented in
+[knowledge changes and reconciliation](docs/architecture/knowledge-changes-and-reconciliation.md),
+[Knowledge Foundation v1 testing](docs/testing/knowledge-foundation-v1.md), and
+[Knowledge Foundation v2 testing](docs/testing/knowledge-foundation-v2.md).
 
 ## Manual authentication test
 

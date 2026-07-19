@@ -29,6 +29,7 @@ from app.services.entity_resolution import (
     resolve_asset_identity,
 )
 from app.services.knowledge_assertions import confirm, reject
+from app.services.knowledge_changes import record_assertion_change
 from app.utils.json_values import to_json_value
 
 
@@ -257,6 +258,68 @@ def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
     return asset
 
 
+def _accept_absence(
+    db: Session,
+    item: ReconciliationItem,
+    *,
+    disposition: str | None,
+    reason: str | None,
+    exception_review_at: datetime | None,
+    actor_user_id: uuid.UUID,
+) -> Asset:
+    asset = db.get(Asset, item.entity_id) if item.entity_id else None
+    if asset is None:
+        raise HTTPException(status_code=409, detail="The target asset no longer exists")
+    disposition = disposition or "mark_missing"
+    status_by_disposition = {
+        "mark_missing": "missing",
+        "mark_inactive": "inactive",
+        "mark_retired": "retired",
+        "retire": "retired",
+        "keep_active": asset.status,
+        "exception": asset.status,
+    }
+    if disposition not in status_by_disposition:
+        raise HTTPException(status_code=422, detail="Unsupported absence disposition")
+    previous_status = asset.status
+    asset.status = status_by_disposition[disposition]
+    item.decision_reason = reason or {
+        "mark_missing": "Marked missing after complete discovery snapshot",
+        "mark_inactive": "Marked inactive after complete discovery snapshot",
+        "mark_retired": "Retired after complete discovery snapshot",
+        "retire": "Retired after complete discovery snapshot",
+        "keep_active": "Kept active despite not being observed",
+        "exception": "Exception recorded for the missing observation",
+    }[disposition]
+    if disposition == "exception":
+        item.status = "exception"
+        current = dict(item.current_value_json or {})
+        current["exception_review_at"] = exception_review_at
+        current["disposition"] = disposition
+        item.current_value_json = to_json_value(current)
+    assertion = _assertion_for_item(db, item)
+    record_assertion_change(
+        db,
+        assertion=assertion,
+        item=item,
+        change_type=("exception_recorded" if disposition == "exception" else "lifecycle_changed"),
+        entity_name=asset.name,
+        summary=(
+            f"Recorded a no-longer-observed exception for {asset.name}"
+            if disposition == "exception"
+            else f"Kept {asset.name} active after absence review"
+            if disposition == "keep_active"
+            else f"{asset.name}: {previous_status} → {asset.status}"
+        ),
+        actor_user_id=actor_user_id,
+        previous_value=previous_status,
+        new_value=asset.status,
+        metadata={"disposition": disposition, "exception_review_at": exception_review_at},
+        occurred_at=datetime.now(timezone.utc),
+    )
+    return asset
+
+
 def _pending_resolution_status(
     db: Session,
     *,
@@ -447,22 +510,63 @@ def _accept_relationship(db: Session, item: ReconciliationItem) -> AssetRelation
     return relationship
 
 
-def accept_item(db: Session, item: ReconciliationItem, user: User) -> object:
+def accept_item(
+    db: Session,
+    item: ReconciliationItem,
+    user: User,
+    *,
+    disposition: str | None = None,
+    reason: str | None = None,
+    exception_review_at: datetime | None = None,
+) -> object:
     if item.status not in {"open", "deferred"}:
         raise HTTPException(status_code=409, detail="This item has already been decided")
     assertion = _assertion_for_item(db, item)
-    if item.entity_type == "asset" and item.category == "newly_discovered":
+    previous_value = item.current_value_json
+    if item.entity_type == "asset" and item.category in {"newly_discovered", "possible_duplicate"}:
         result = _accept_new_asset(db, item)
     elif item.entity_type == "asset" and item.category in {"changed", "contradiction"}:
         result = _accept_changed_fact(db, item)
     elif item.entity_type == "asset_relationship":
         result = _accept_relationship(db, item)
+    elif item.entity_type == "asset" and item.category == "no_longer_observed":
+        result = _accept_absence(
+            db,
+            item,
+            disposition=disposition,
+            reason=reason,
+            exception_review_at=exception_review_at,
+            actor_user_id=user.id,
+        )
     else:
         raise HTTPException(status_code=422, detail="This item cannot be applied automatically")
-    item.status = "accepted"
+    if item.status != "exception":
+        item.status = "accepted"
+    item.decision_reason = item.decision_reason or reason
     item.decided_by_user_id = user.id
     item.decided_at = datetime.now(timezone.utc)
     confirm(assertion)
+    if item.category != "no_longer_observed":
+        name = getattr(result, "name", None) or item.candidate_external_id or item.entity_type
+        change_type = (
+            "relationship_added"
+            if item.entity_type == "asset_relationship"
+            else "entity_accepted"
+            if item.category in {"newly_discovered", "possible_duplicate"}
+            else "fact_changed"
+        )
+        record_assertion_change(
+            db,
+            assertion=assertion,
+            item=item,
+            change_type=change_type,
+            entity_name=name,
+            summary=f"Accepted {item.category.replace('_', ' ')} for {name}",
+            actor_user_id=user.id,
+            previous_value=previous_value,
+            new_value=item.observed_value_json,
+            occurred_at=item.decided_at,
+        )
     return result
 
 
@@ -490,6 +594,18 @@ def link_item_to_asset(
     item.decided_by_user_id = user.id
     item.decided_at = datetime.now(timezone.utc)
     confirm(assertion)
+    record_assertion_change(
+        db,
+        assertion=assertion,
+        item=item,
+        change_type="source_linked",
+        entity_name=asset.name,
+        summary=f"Linked discovered identity {item.candidate_external_id} to {asset.name}",
+        actor_user_id=user.id,
+        previous_value=None,
+        new_value={"asset_id": asset.id, "external_id": item.candidate_external_id},
+        occurred_at=item.decided_at,
+    )
     for related in db.scalars(
         select(ReconciliationItem).where(
             ReconciliationItem.customer_id == item.customer_id,
@@ -512,6 +628,21 @@ def reject_item(db: Session, item: ReconciliationItem, user: User, reason: str |
     item.decision_reason = reason
     item.decided_by_user_id = user.id
     item.decided_at = datetime.now(timezone.utc)
+    if assertion is not None:
+        asset = db.get(Asset, item.entity_id) if item.entity_type == "asset" and item.entity_id else None
+        record_assertion_change(
+            db,
+            assertion=assertion,
+            item=item,
+            change_type="assertion_rejected",
+            entity_name=asset.name if asset else item.candidate_external_id or item.entity_type,
+            summary=f"Rejected {item.category.replace('_', ' ')}",
+            actor_user_id=user.id,
+            previous_value=item.observed_value_json,
+            new_value=None,
+            metadata={"reason": reason},
+            occurred_at=item.decided_at,
+        )
 
 
 def defer_item(db: Session, item: ReconciliationItem, user: User, reason: str | None) -> None:

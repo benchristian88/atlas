@@ -246,6 +246,14 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         "networks": 0,
         "relationships": 0,
         "reconciliation": 0,
+        "open_reconciliation_count": 0,
+        "newly_discovered_count": 0,
+        "changed_count": 0,
+        "no_longer_observed_count": 0,
+        "contradiction_count": 0,
+        "possible_duplicate_count": 0,
+        "oldest_open_item_at": None,
+        "knowledge_changes_last_7_days": 0,
     }
     assert all("WHERE" in statement for statement in db.statements)
 

@@ -5,6 +5,7 @@ from enum import Enum
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from pydantic import BaseModel
 from starlette.requests import Request
 
@@ -21,9 +22,11 @@ from app.models import (
     EntitySourceLink,
     EvidenceRecord,
     KnowledgeAssertion,
+    KnowledgeChange,
     Network,
     ReconciliationItem,
     RelationshipType,
+    RunObservedEntity,
     Site,
 )
 from app.schemas import SimulatedDiscoveryRequest
@@ -42,6 +45,7 @@ from app.services.reconciliation import (
 )
 from app.services.knowledge_assertions import record_assertion
 from app.services.simulated_discovery import run_simulation
+from app.services.discovery_observations import reconcile_complete_snapshot
 from app.utils.json_values import to_json_value
 
 
@@ -71,6 +75,9 @@ class KnowledgeSession:
                 "value_json",
                 "current_value_json",
                 "observed_value_json",
+                "previous_value_json",
+                "new_value_json",
+                "metadata_json",
                 "metadata_",
                 "value",
                 "value_",
@@ -135,6 +142,9 @@ class KnowledgeSession:
             "relationship_type": "relationship_type",
             "source_asset_id": "source_asset_id",
             "target_asset_id": "target_asset_id",
+            "discovery_run_id": "discovery_run_id",
+            "coverage_key": "coverage_key",
+            "completeness_status": "completeness_status",
         }
         for prefix, attribute in field_map.items():
             expected = value(prefix)
@@ -151,6 +161,12 @@ class KnowledgeSession:
 
     def scalar(self, statement):
         sql = str(statement)
+        if self._entity(statement) is DiscoveryRun and "discovery_runs.id !=" in sql:
+            params = self._params(statement)
+            excluded = next(value for key, value in params.items() if key.startswith("id_"))
+            rows = [row for row in self._matching(statement) if row.id != excluded]
+            rows.sort(key=lambda row: row.finished_at or row.started_at, reverse=True)
+            return rows[0] if rows else None
         if self._entity(statement) is KnowledgeAssertion and (
             "data_source_id !=" in sql or "data_source_id <>" in sql
         ):
@@ -270,6 +286,186 @@ def test_simulation_creates_run_evidence_assertions_and_new_asset_item():
     assert len([row for row in db.records if isinstance(row, ReconciliationItem)]) == 2
 
 
+def complete_payload(customer, site, names):
+    return SimulatedDiscoveryRequest.model_validate({
+        "customer_id": customer.id,
+        "site_id": site.id,
+        "coverage_key": "homelab-assets",
+        "is_complete_snapshot": True,
+        "observations": [{
+            "external_id": f"manual:{name}",
+            "entity_kind": "asset",
+            "asset_type": "hypervisor_node" if name == "pve1" else "virtual_machine",
+            "name": name,
+            "facts": {"hostname": name, "status": "active"},
+        } for name in names],
+    })
+
+
+def test_complete_snapshot_detects_missing_once_without_mutating_asset():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, pve, docker)
+
+    first, _, _, first_items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    second, _, _, second_items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1"]), user_id=uuid.uuid4()
+    )
+    missing = [item for item in second_items if item.category == "no_longer_observed"]
+
+    assert first.completeness_status == "complete"
+    assert first.snapshot_reconciliation.baseline_run_id is None
+    assert not [item for item in first_items if item.category == "no_longer_observed"]
+    assert second.snapshot_reconciliation.baseline_run_id == first.id
+    assert len(missing) == 1
+    assert missing[0].entity_id == docker.id
+    assert docker.status == "active"
+    assert any(
+        isinstance(row, KnowledgeChange)
+        and row.change_type == "entity_no_longer_observed"
+        for row in db.records
+    )
+
+    third, _, _, third_items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1"]), user_id=uuid.uuid4()
+    )
+    assert third.snapshot_reconciliation.no_longer_observed_count == 0
+    assert not [item for item in third_items if item.category == "no_longer_observed"]
+
+
+def test_partial_snapshot_never_creates_missing_items():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, pve, docker)
+    run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    payload = complete_payload(customer, site, ["pve1"])
+    payload.is_complete_snapshot = False
+    run, _, _, items = run_simulation(db, payload=payload, user_id=uuid.uuid4())
+    assert run.completeness_status == "partial"
+    assert not [item for item in items if item.category == "no_longer_observed"]
+
+
+def test_different_coverage_key_does_not_compare_snapshots():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, pve, docker)
+    run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    payload = complete_payload(customer, site, ["pve1"])
+    payload.coverage_key = "different-coverage"
+    run, _, _, items = run_simulation(db, payload=payload, user_id=uuid.uuid4())
+    assert run.snapshot_reconciliation.baseline_run_id is None
+    assert not [item for item in items if item.category == "no_longer_observed"]
+
+
+def test_failed_complete_run_cannot_process_absence():
+    customer, site = context_records()
+    source = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Test source", source_type="simulated_discovery", status="active",
+    )
+    run = DiscoveryRun(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        data_source_id=source.id, status="failed", coverage_key="homelab-assets",
+        is_complete_snapshot=True, completeness_status="complete",
+    )
+    db = KnowledgeSession(customer, site, source, run)
+    result = reconcile_complete_snapshot(db, run=run, user_id=uuid.uuid4())
+    assert result.no_longer_observed_count == 0
+    assert result.items == []
+
+
+def test_reobserved_entity_resolves_missing_episode():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, pve, docker)
+    run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    _, _, _, missing_items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1"]), user_id=uuid.uuid4()
+    )
+    missing = next(item for item in missing_items if item.category == "no_longer_observed")
+    run, _, _, _ = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    assert run.snapshot_reconciliation.reobserved_count == 1
+    assert missing.status == "accepted"
+    assert missing.decision_reason.startswith("Automatically resolved")
+    assert any(
+        isinstance(row, KnowledgeChange) and row.change_type == "entity_reobserved"
+        for row in db.records
+    )
+
+
+def test_absence_decision_changes_status_but_never_deletes_asset():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, pve, docker)
+    run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    _, _, _, items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1"]), user_id=uuid.uuid4()
+    )
+    item = next(row for row in items if row.category == "no_longer_observed")
+    user = SimpleNamespace(id=uuid.uuid4())
+
+    result = accept_item(
+        db,
+        item,
+        user,
+        disposition="mark_inactive",
+        reason="Removed from service",
+    )
+
+    assert result is docker
+    assert docker in db.records
+    assert docker.status == "inactive"
+    assert item.status == "accepted"
+    assert item.decision_reason == "Removed from service"
+    with pytest.raises(HTTPException, match="already been decided"):
+        accept_item(db, item, user, disposition="retire")
+
+
+def test_retired_asset_is_not_silently_reactivated_when_reobserved():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, pve, docker)
+    run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    _, _, _, items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1"]), user_id=uuid.uuid4()
+    )
+    missing = next(row for row in items if row.category == "no_longer_observed")
+    accept_item(
+        db,
+        missing,
+        SimpleNamespace(id=uuid.uuid4()),
+        disposition="mark_retired",
+    )
+    run, _, _, items = run_simulation(
+        db, payload=complete_payload(customer, site, ["pve1", "docker01"]), user_id=uuid.uuid4()
+    )
+    assert run.snapshot_reconciliation.reobserved_count == 1
+    assert docker.status == "retired"
+    assert not [
+        item for item in items
+        if item.category == "changed" and item.entity_id == docker.id
+    ]
+
 def test_accepting_new_asset_and_relationship_updates_operational_view():
     customer, site = context_records()
     asset_type = AssetType(key="virtual_machine", name="Virtual Machine", active=True)
@@ -307,6 +503,40 @@ def test_accepting_new_asset_and_relationship_updates_operational_view():
     assert edge.target_asset_id == pve.id
     assert edge.relationship_type == "runs_on"
     assert relationship_item.status == "accepted"
+    assert {row.change_type for row in db.records if isinstance(row, KnowledgeChange)} >= {
+        "entity_discovered",
+        "entity_accepted",
+        "relationship_added",
+    }
+
+
+def test_accepting_changed_fact_records_one_meaningful_change():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    asset.hostname = "docker01"
+    assertion = KnowledgeAssertion(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        subject_type="asset", subject_id=asset.id, subject_external_id="manual:docker01",
+        predicate="hostname", value_json="docker-prod-01", truth_classification="observed",
+        confirmation_status="unreviewed", confidence=1,
+        first_observed_at=site.created_at, last_observed_at=site.created_at,
+        is_current=True,
+    )
+    item = ReconciliationItem(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        category="changed", status="open", entity_type="asset", entity_id=asset.id,
+        assertion_id=assertion.id,
+        current_value_json={"field": "hostname", "value": "docker01"},
+        observed_value_json={"field": "hostname", "value": "docker-prod-01"},
+    )
+    db = KnowledgeSession(customer, site, asset, assertion, item)
+
+    accept_item(db, item, SimpleNamespace(id=uuid.uuid4()))
+
+    assert asset.hostname == "docker-prod-01"
+    changes = [row for row in db.records if isinstance(row, KnowledgeChange)]
+    assert [row.change_type for row in changes] == ["fact_changed"]
+    assert changes[0].previous_value_json["value"] == "docker01"
 
 
 def test_reject_and_defer_never_mutate_operational_asset():
@@ -528,6 +758,10 @@ def test_linking_asset_identity_unblocks_same_run_relationship():
     accept_item(db, relationship_item, user)
     assert relationship_item.status == "accepted"
     assert len([row for row in db.records if isinstance(row, Asset)]) == 2
+    assert any(
+        isinstance(row, KnowledgeChange) and row.change_type == "source_linked"
+        for row in db.records
+    )
 
 
 def assertion_record(customer, site):

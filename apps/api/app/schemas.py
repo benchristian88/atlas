@@ -653,6 +653,14 @@ class DashboardSummaryResponse(BaseModel):
     networks: int
     relationships: int
     reconciliation: int
+    open_reconciliation_count: int
+    newly_discovered_count: int
+    changed_count: int
+    no_longer_observed_count: int
+    contradiction_count: int
+    possible_duplicate_count: int
+    oldest_open_item_at: datetime | None
+    knowledge_changes_last_7_days: int
 
 
 class AuditEventResponse(ORMResponse):
@@ -765,6 +773,9 @@ class DiscoveryRunResponse(ORMResponse):
     archived_at: datetime | None
     archived_by_user_id: uuid.UUID | None
     archive_reason: str | None
+    coverage_key: str | None
+    is_complete_snapshot: bool
+    completeness_status: str
     source_name: str | None = None
     deletion_safety: "DeletionSafetyResponse | None" = None
     created_at: datetime
@@ -835,7 +846,19 @@ class SimulatedDiscoveryRequest(BaseModel):
     customer_id: uuid.UUID
     site_id: uuid.UUID | None = None
     data_source_id: uuid.UUID | None = None
+    coverage_key: str | None = Field(default=None, max_length=1024)
+    is_complete_snapshot: bool = False
     observations: list[SimulationObservation] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def unique_observed_identities(self):
+        identities = [
+            (item.entity_kind, item.external_id or f"simulated:{item.asset_type}:{item.name}")
+            for item in self.observations
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("A discovery snapshot cannot contain duplicate external identities")
+        return self
 
 
 class KnowledgeAssertionResponse(ORMResponse):
@@ -899,12 +922,33 @@ class ReconciliationItemResponse(ORMResponse):
     target_resolution_status: ResolutionStatus | None = None
     blocked_reason: str | None = None
     current_relationship_id: uuid.UUID | None = None
+    discovery_run_id: uuid.UUID | None = None
+    discovery_run_status: str | None = None
+    entity_name: str | None = None
+    last_observed_at: datetime | None = None
+    missing_since_run_id: uuid.UUID | None = None
+    missing_since_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
 
 class ReconciliationDecisionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=10000)
+    disposition: Literal[
+        "mark_missing",
+        "mark_inactive",
+        "mark_retired",
+        "retire",
+        "keep_active",
+        "exception",
+    ] | None = None
+    exception_review_at: datetime | None = None
+
+
+class ReconciliationSummaryResponse(BaseModel):
+    by_status: dict[str, int]
+    by_category: dict[str, int]
+    actionable: int
 
 
 class ReconciliationLinkAssetRequest(BaseModel):
@@ -918,6 +962,78 @@ class SimulatedDiscoveryResponse(BaseModel):
     assertions_created: int
     reconciliation_items_created: int
     reconciliation_items: list[ReconciliationItemResponse]
+    baseline_run_id: uuid.UUID | None = None
+    observed_count: int = 0
+    new_count: int = 0
+    changed_count: int = 0
+    no_longer_observed_count: int = 0
+    reobserved_count: int = 0
+
+
+class KnowledgeChangeResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    change_type: str
+    entity_type: str
+    entity_id: uuid.UUID | None
+    entity_name_snapshot: str
+    entity_name: str = ""
+    predicate: str | None
+    previous_value_json: Any | None
+    new_value_json: Any | None
+    previous_value: Any | None = None
+    new_value: Any | None = None
+    truth_classification: str | None
+    data_source_id: uuid.UUID | None
+    discovery_run_id: uuid.UUID | None
+    assertion_id: uuid.UUID | None
+    reconciliation_item_id: uuid.UUID | None
+    actor_user_id: uuid.UUID | None
+    summary: str
+    occurred_at: datetime
+    metadata_json: dict[str, Any] | None
+    source_name: str | None = None
+    discovery_run_status: str | None = None
+    reconciliation_status: str | None = None
+    actor_display_name: str | None = None
+    attention_required: bool = False
+    links: dict[str, str] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class KnowledgeChangeListResponse(BaseModel):
+    items: list[KnowledgeChangeResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class KnowledgeChangeSummaryResponse(BaseModel):
+    total: int
+    by_type: dict[str, int]
+    last_24_hours: int
+    last_7_days: int
+    unresolved_attention_count: int
+
+
+class AssetFactHistoryItem(BaseModel):
+    predicate: str
+    value: Any | None
+    truth_classification: str | None
+    source_name: str | None
+    discovery_run_id: uuid.UUID | None
+    assertion_id: uuid.UUID | None
+    confirmation_status: str | None
+    first_observed_at: datetime | None
+    last_observed_at: datetime | None
+    is_current: bool
+    retracted_at: datetime | None
+
+
+class AssetFactHistoryResponse(BaseModel):
+    asset_id: uuid.UUID
+    facts: dict[str, list[AssetFactHistoryItem]]
 
 
 class TopologyResponse(BaseModel):

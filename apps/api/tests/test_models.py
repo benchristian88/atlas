@@ -20,6 +20,8 @@ EXPECTED_TABLES = {
     "evidence_records",
     "knowledge_assertions",
     "reconciliation_items",
+    "run_observed_entities",
+    "knowledge_changes",
     "asset_types",
     "relationship_types",
     "assets",
@@ -81,6 +83,18 @@ CRITICAL_COLUMNS = {
         "id", "workspace_id", "user_id", "actor_email", "actor_display_name",
         "event_type", "target_type", "target_id", "customer_id", "site_id",
         "success", "summary", "source_ip", "request_id", "metadata", "created_at",
+    },
+    "run_observed_entities": {
+        "id", "discovery_run_id", "data_source_id", "customer_id", "site_id",
+        "coverage_key", "entity_type", "external_id", "entity_id",
+        "evidence_record_id", "observed_at", "created_at",
+    },
+    "knowledge_changes": {
+        "id", "customer_id", "site_id", "change_type", "entity_type",
+        "entity_id", "entity_name_snapshot", "predicate", "previous_value_json",
+        "new_value_json", "truth_classification", "data_source_id",
+        "discovery_run_id", "assertion_id", "reconciliation_item_id",
+        "actor_user_id", "summary", "occurred_at", "metadata_json", "created_at",
     },
 }
 

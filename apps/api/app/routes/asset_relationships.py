@@ -9,6 +9,7 @@ from app.authorization import Principal, RequestContext, require_permission, req
 from app.database import get_db
 from app.models import Asset, AssetRelationship, Customer, RelationshipType, Site
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
+from app.services.knowledge_changes import record_change
 from app.schemas import (
     AssetRelationshipCreate,
     AssetRelationshipResponse,
@@ -187,6 +188,25 @@ def create_asset_relationship(
         },
         request=request,
     )
+    record_change(
+        db,
+        customer_id=source.customer_id,
+        site_id=source.site_id,
+        change_type="relationship_added",
+        entity_type="asset_relationship",
+        entity_id=relationship.id,
+        entity_name=f"{source.name} → {target.name}",
+        predicate=relationship.relationship_type,
+        previous_value=None,
+        new_value={
+            "source_asset_id": source.id,
+            "target_asset_id": target.id,
+            "relationship_type": relationship.relationship_type,
+        },
+        truth_classification="declared",
+        actor_user_id=principal.user.id,
+        summary=f"Added {relationship.relationship_type} relationship from {source.name} to {target.name}",
+    )
     commit(db, "Asset relationship")
     db.refresh(relationship)
     return relationship_response(db, relationship)
@@ -219,6 +239,7 @@ def update_asset_relationship(
         raise not_found("Asset relationship")
     source = db.get(Asset, relationship.source_asset_id)
     target = db.get(Asset, relationship.target_asset_id)
+    target = db.get(Asset, relationship.target_asset_id)
     changes = payload.model_dump(exclude_unset=True)
     if "relationship_type" in changes:
         _relationship_type_for_assets(db, changes["relationship_type"], source, target)
@@ -235,6 +256,25 @@ def update_asset_relationship(
         summary="Asset relationship updated",
         metadata={"changed_fields": sorted(changes)},
         request=request,
+    )
+    record_change(
+        db,
+        customer_id=source.customer_id,
+        site_id=source.site_id,
+        change_type="relationship_removed",
+        entity_type="asset_relationship",
+        entity_id=relationship.id,
+        entity_name=f"{source.name} → {target.name if target else relationship.target_asset_id}",
+        predicate=relationship.relationship_type,
+        previous_value={
+            "source_asset_id": relationship.source_asset_id,
+            "target_asset_id": relationship.target_asset_id,
+            "relationship_type": relationship.relationship_type,
+        },
+        new_value=None,
+        truth_classification="declared",
+        actor_user_id=principal.user.id,
+        summary=f"Removed {relationship.relationship_type} relationship from {source.name}",
     )
     commit(db, "Asset relationship")
     db.refresh(relationship)
