@@ -51,6 +51,7 @@ class AtlasDiscoverySync:
             )
             run.status = "completed"
             run.completed_at = datetime.now(timezone.utc)
+            run.finished_at = run.completed_at
             run.error_message = None
             run.summary = {
                 "raw_items": len(discovery.items),

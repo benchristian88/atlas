@@ -12,7 +12,7 @@ from app.authorization import (
     scope_condition,
 )
 from app.database import get_db
-from app.models import Asset, AssetRelationship, Customer, Network, Site
+from app.models import Asset, AssetRelationship, Customer, Network, ReconciliationItem, Site
 from app.schemas import ContextResponse, DashboardSummaryResponse
 
 router = APIRouter(tags=["context"])
@@ -87,6 +87,15 @@ def dashboard_summary(
         principal, "networks.view", Network.customer_id, Network.site_id
     )
     network_query = select(func.count()).select_from(Network).where(network_predicate)
+    reconciliation_query = select(func.count()).select_from(ReconciliationItem).where(
+        scope_condition(
+            principal,
+            "assets.view",
+            ReconciliationItem.customer_id,
+            ReconciliationItem.site_id,
+        ),
+        ReconciliationItem.status == "open",
+    )
 
     source = aliased(Asset)
     target = aliased(Asset)
@@ -108,6 +117,9 @@ def dashboard_summary(
         site_query = site_query.where(Site.customer_id == context.customer_id)
         asset_query = asset_query.where(Asset.customer_id == context.customer_id)
         network_query = network_query.where(Network.customer_id == context.customer_id)
+        reconciliation_query = reconciliation_query.where(
+            ReconciliationItem.customer_id == context.customer_id
+        )
         relationship_query = relationship_query.where(
             source.customer_id == context.customer_id,
             target.customer_id == context.customer_id,
@@ -117,6 +129,9 @@ def dashboard_summary(
         asset_query = asset_query.where(Asset.site_id == context.site_id)
         network_query = network_query.where(
             or_(Network.site_id == context.site_id, Network.site_id.is_(None))
+        )
+        reconciliation_query = reconciliation_query.where(
+            ReconciliationItem.site_id == context.site_id
         )
         relationship_query = relationship_query.where(
             source.site_id == context.site_id,
@@ -128,4 +143,5 @@ def dashboard_summary(
         "assets": int(db.scalar(asset_query) or 0),
         "networks": int(db.scalar(network_query) or 0),
         "relationships": int(db.scalar(relationship_query) or 0),
+        "reconciliation": int(db.scalar(reconciliation_query) or 0),
     }

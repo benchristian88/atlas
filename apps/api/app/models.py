@@ -318,20 +318,222 @@ class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
-class DiscoveryRun(UUIDPrimaryKeyMixin, Base):
-    __tablename__ = "discovery_runs"
-
-    integration_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("integrations.id", ondelete="RESTRICT"), nullable=False, index=True
+class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "data_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('manual', 'simulated_discovery', 'proxmox', 'pbs', "
+            "'docker', 'unifi', 'netbox', 'imported_file', 'generated_inference')",
+            name="valid_source_type",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_data_sources_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
     )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="active", index=True
+    )
+    trust_level: Mapped[str | None] = mapped_column(String(50))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "discovery_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
+            name="valid_status",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_discovery_runs_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    integration_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("integrations.id", ondelete="RESTRICT"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="RESTRICT"), index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="pending", index=True
     )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Retained for compatibility with the existing plugin synchronization path.
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     raw_payload: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSONB)
     summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class EvidenceRecord(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "evidence_records"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_evidence_records_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    discovery_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    external_id: Mapped[str | None] = mapped_column(String(1024), index=True)
+    entity_kind: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    payload_json: Mapped[dict[str, Any] | list[Any]] = mapped_column(JSONB, nullable=False)
+    payload_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "knowledge_assertions"
+    __table_args__ = (
+        CheckConstraint(
+            "truth_classification IN ('observed', 'declared', 'intended', 'inferred')",
+            name="valid_truth_classification",
+        ),
+        CheckConstraint(
+            "confirmation_status IN ('unreviewed', 'confirmed', 'rejected', "
+            "'superseded', 'conflicted')",
+            name="valid_confirmation_status",
+        ),
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="valid_confidence"),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_knowledge_assertions_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    subject_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    subject_external_id: Mapped[str | None] = mapped_column(String(1024), index=True)
+    predicate: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    value_json: Mapped[Any | None] = mapped_column(JSONB)
+    object_type: Mapped[str | None] = mapped_column(String(100), index=True)
+    object_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    object_external_id: Mapped[str | None] = mapped_column(String(1024), index=True)
+    truth_classification: Mapped[str] = mapped_column(
+        String(30), nullable=False, index=True
+    )
+    confirmation_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="unreviewed", index=True
+    )
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="SET NULL"), index=True
+    )
+    discovery_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="SET NULL"), index=True
+    )
+    evidence_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="SET NULL"), index=True
+    )
+    confidence: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), nullable=False, server_default="1.0"
+    )
+    first_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("knowledge_assertions.id", ondelete="SET NULL"), index=True
+    )
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+
+
+class ReconciliationItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "reconciliation_items"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('newly_discovered', 'changed', 'no_longer_observed', "
+            "'contradiction', 'possible_duplicate', 'missing_classification', "
+            "'inferred_relationship', 'stale_human_knowledge')",
+            name="valid_category",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'accepted', 'rejected', 'deferred', 'exception')",
+            name="valid_status",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_reconciliation_items_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="open", index=True
+    )
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    candidate_external_id: Mapped[str | None] = mapped_column(String(1024), index=True)
+    assertion_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_assertions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    current_value_json: Mapped[Any | None] = mapped_column(JSONB)
+    observed_value_json: Mapped[Any | None] = mapped_column(JSONB)
+    recommended_action: Mapped[str | None] = mapped_column(String(255))
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):

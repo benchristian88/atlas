@@ -245,6 +245,7 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         "assets": 0,
         "networks": 0,
         "relationships": 0,
+        "reconciliation": 0,
     }
     assert all("WHERE" in statement for statement in db.statements)
 

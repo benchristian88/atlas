@@ -216,8 +216,8 @@ than one link per technical page:
 - **Knowledge:** Knowledge Graph, Assets, and Networks. Knowledge Graph is the
   user-facing name for the existing `/topology` capability; topology remains a
   technical lens within that graph.
-- **Operations:** Discovery, which currently opens discovery-run activity at
-  `/discovery-runs`.
+- **Operations:** Discovery run activity and simulation, plus Reconciliation
+  for reviewing sourced changes before they enter the operational model.
 - **Connections:** Integrations.
 - **System:** permission-filtered Users & Access, Reference Data, and System
   Settings links into the existing administration routes.
@@ -231,7 +231,7 @@ links or placeholder pages:
 OVERVIEW       Dashboard; Changes (roadmap)
 KNOWLEDGE      Knowledge Graph; Assets; Services (roadmap);
                Business Functions (roadmap); People & Teams (roadmap); Networks
-OPERATIONS     Discovery; Reconciliation (roadmap); Impact Analysis (roadmap);
+OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
                Backup & Recovery (roadmap); Documentation (roadmap)
 CONNECTIONS    Integrations
 SYSTEM         Users & Access; Reference Data; System Settings
@@ -315,6 +315,8 @@ The authenticated API surface is canonical beneath `/api` and includes:
 - `/api/networks`
 - `/api/asset-interfaces`
 - `/api/asset-types` and `/api/relationship-types`
+- `/api/data-sources`, `/api/discovery-runs`, and `/api/discovery/simulate`
+- `/api/assertions` and `/api/reconciliation-items`
 - `/api/custom-fields` and asset custom-field values
 - read-only `/api/audit-events`
 - protected `/api/system-settings`
@@ -326,6 +328,21 @@ mutation route. The corresponding web screens include
 with profile and permitted administration pages. `/api/manual-assets` remains a
 compatibility route for earlier clients and is subject to the same authorization
 policy.
+
+## Knowledge provenance and reconciliation
+
+Discovery observations do not silently overwrite accepted inventory. Atlas
+stores their raw evidence, current sourced assertions, and reviewable
+reconciliation items alongside the existing Asset and AssetRelationship tables.
+Only accepting a supported reconciliation item creates or updates the
+operational model used by topology; reject and defer leave it unchanged.
+
+Use **Discovery → Simulate discovery** to exercise this pipeline before a live
+integration is configured. Paste a customer/site-scoped JSON observation, run
+it, then review the generated items under **Reconciliation**. Asset detail pages
+show the current assertions linked to an accepted asset. The complete manual
+scenario is in
+[Knowledge Foundation v1 testing](docs/testing/knowledge-foundation-v1.md).
 
 ## Manual authentication test
 

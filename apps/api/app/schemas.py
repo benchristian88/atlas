@@ -652,6 +652,7 @@ class DashboardSummaryResponse(BaseModel):
     assets: int
     networks: int
     relationships: int
+    reconciliation: int
 
 
 class AuditEventResponse(ORMResponse):
@@ -683,6 +684,189 @@ class SystemSettingResponse(ORMResponse):
 
 class SystemSettingUpdate(BaseModel):
     value: Any
+
+
+DataSourceType = Literal[
+    "manual",
+    "simulated_discovery",
+    "proxmox",
+    "pbs",
+    "docker",
+    "unifi",
+    "netbox",
+    "imported_file",
+    "generated_inference",
+]
+DiscoveryRunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
+TruthClassification = Literal["observed", "declared", "intended", "inferred"]
+ConfirmationStatus = Literal[
+    "unreviewed", "confirmed", "rejected", "superseded", "conflicted"
+]
+ReconciliationCategory = Literal[
+    "newly_discovered",
+    "changed",
+    "no_longer_observed",
+    "contradiction",
+    "possible_duplicate",
+    "missing_classification",
+    "inferred_relationship",
+    "stale_human_knowledge",
+]
+ReconciliationStatus = Literal["open", "accepted", "rejected", "deferred", "exception"]
+
+
+class DataSourceCreate(BaseModel):
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=255)
+    source_type: DataSourceType
+    status: str = Field(default="active", min_length=1, max_length=50)
+    trust_level: str | None = Field(default=None, max_length=50)
+    notes: str | None = Field(default=None, max_length=10000)
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class DataSourceResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    name: str
+    source_type: str
+    status: str
+    trust_level: str | None
+    last_success_at: datetime | None
+    last_error_at: datetime | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DiscoveryRunResponse(ORMResponse):
+    id: uuid.UUID
+    integration_id: uuid.UUID | None
+    data_source_id: uuid.UUID | None
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    summary: dict[str, Any] | None
+    error_message: str | None
+    created_by_user_id: uuid.UUID | None
+    source_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SimulationInterface(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    ip_address: str | None = Field(default=None, max_length=45)
+    mac_address: str | None = Field(default=None, max_length=17)
+    network_name: str | None = Field(default=None, max_length=255)
+    is_primary: bool = False
+
+    _name = field_validator("name")(_trim_nonempty)
+
+    @field_validator("ip_address")
+    @classmethod
+    def valid_ip(cls, value: str | None) -> str | None:
+        return str(ipaddress.ip_address(value)) if value else None
+
+
+class SimulationRelationship(BaseModel):
+    relationship_type: str = Field(min_length=1, max_length=100)
+    target_external_id: str = Field(min_length=1, max_length=1024)
+
+    _relationship_type = field_validator("relationship_type")(_trim_nonempty)
+    _target = field_validator("target_external_id")(_trim_nonempty)
+
+
+class SimulationObservation(BaseModel):
+    external_id: str | None = Field(default=None, max_length=1024)
+    entity_kind: Literal[
+        "asset", "asset_interface", "network", "relationship", "backup", "service"
+    ] = "asset"
+    asset_type: str | None = Field(default=None, max_length=100)
+    name: str | None = Field(default=None, max_length=255)
+    facts: dict[str, Any] = Field(default_factory=dict)
+    interfaces: list[SimulationInterface] = Field(default_factory=list)
+    relationships: list[SimulationRelationship] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def asset_identity(self):
+        if self.entity_kind == "asset" and (not self.asset_type or not self.name):
+            raise ValueError("Asset observations require asset_type and name")
+        return self
+
+
+class SimulatedDiscoveryRequest(BaseModel):
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None = None
+    data_source_id: uuid.UUID | None = None
+    observations: list[SimulationObservation] = Field(min_length=1, max_length=500)
+
+
+class KnowledgeAssertionResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    subject_type: str
+    subject_id: uuid.UUID | None
+    subject_external_id: str | None
+    predicate: str
+    value_json: Any | None
+    object_type: str | None
+    object_id: uuid.UUID | None
+    object_external_id: str | None
+    truth_classification: str
+    confirmation_status: str
+    data_source_id: uuid.UUID | None
+    discovery_run_id: uuid.UUID | None
+    evidence_record_id: uuid.UUID | None
+    confidence: float
+    first_observed_at: datetime
+    last_observed_at: datetime
+    valid_from: datetime | None
+    valid_to: datetime | None
+    superseded_by_id: uuid.UUID | None
+    is_current: bool
+    source_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReconciliationItemResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    category: str
+    status: str
+    entity_type: str
+    entity_id: uuid.UUID | None
+    candidate_external_id: str | None
+    assertion_id: uuid.UUID
+    current_value_json: Any | None
+    observed_value_json: Any | None
+    recommended_action: str | None
+    decision_reason: str | None
+    decided_by_user_id: uuid.UUID | None
+    decided_at: datetime | None
+    source_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReconciliationDecisionRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=10000)
+
+
+class SimulatedDiscoveryResponse(BaseModel):
+    run: DiscoveryRunResponse
+    evidence_records_created: int
+    assertions_created: int
+    reconciliation_items_created: int
+    reconciliation_items: list[ReconciliationItemResponse]
 
 
 class TopologyResponse(BaseModel):
