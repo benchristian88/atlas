@@ -1,0 +1,84 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+import {
+  assetListFiltersHref,
+  orderedAssetTypeCounts,
+  parseAssetListFilters,
+} from "../lib/asset-list-filters.mjs";
+import {
+  changeFiltersHref,
+  parseChangeFilters,
+} from "../lib/change-filters.mjs";
+
+test("Changes filters have canonical query state and safe invalid fallbacks", () => {
+  const parsed = parseChangeFilters(new URLSearchParams("period=90&change_type=fact_changed&entity_type=asset&attention=true&search=docker&offset=61"), 30);
+  assert.deepEqual(parsed, {
+    period: "90",
+    changeType: "fact_changed",
+    entityType: "asset",
+    source: "",
+    attentionOnly: true,
+    search: "docker",
+    offset: 60,
+  });
+  assert.equal(changeFiltersHref(parsed), "/changes?period=90&change_type=fact_changed&entity_type=asset&attention=true&search=docker&offset=60");
+  const invalid = parseChangeFilters(new URLSearchParams("period=never&change_type=nope&entity_type=nope&source=nope&offset=-1"), 30);
+  assert.equal(changeFiltersHref(invalid), "/changes");
+});
+
+test("Changes uses a compact grouped shared timeline and complete action metadata", async () => {
+  const page = await readFile(new URL("../app/changes/page.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(page, /groupChanges/);
+  assert.match(page, /<TimelineEvent/);
+  assert.match(page, /actor_display_name/);
+  assert.match(page, /truth_classification/);
+  assert.match(page, /Review reconciliation/);
+  assert.match(page, /Open discovery run/);
+  assert.match(page, /Reset filters/);
+  assert.match(styles, /\.changes-toolbar/);
+  assert.match(styles, /\.change-timeline-list/);
+  assert.match(styles, /word-break: break-word/);
+});
+
+test("Asset Type counts are ordered deterministically and filters compose in the URL", () => {
+  const ordered = orderedAssetTypeCounts({ by_asset_type: [
+    { asset_type_id: "3", asset_type_name: "Switch", count: 2 },
+    { asset_type_id: "2", asset_type_name: "Container", count: 4 },
+    { asset_type_id: "1", asset_type_name: "Application", count: 4 },
+    { asset_type_id: "4", asset_type_name: "Unused", count: 0 },
+  ] });
+  assert.deepEqual(ordered.map((item) => item.asset_type_name), ["Application", "Container", "Switch"]);
+
+  const typeId = "a0877d05-048a-4c8f-a6cf-025e4b9317f5";
+  const href = assetListFiltersHref({ assetTypeId: typeId, completeness: "incomplete", search: "docker", offset: 30 });
+  assert.equal(href, `/assets?asset_type_id=${typeId}&completeness=incomplete&search=docker&offset=30`);
+  assert.deepEqual(parseAssetListFilters(new URL(href, "http://atlas.test").searchParams, 30), {
+    assetTypeId: typeId,
+    completeness: "incomplete",
+    search: "docker",
+    offset: 30,
+  });
+});
+
+test("Assets exposes ten direct selectors, accessible More, and scoped summary data", async () => {
+  const page = await readFile(new URL("../app/assets/page.js", import.meta.url), "utf8");
+  assert.match(page, /apiRequest\("\/assets\/summary"\)/);
+  assert.match(page, /typeCounts\.slice\(0, 10\)/);
+  assert.match(page, /typeCounts\.slice\(10\)/);
+  assert.match(page, /aria-pressed/);
+  assert.match(page, /aria-label="More asset types"/);
+  assert.match(page, /No assets match the current filters\./);
+  assert.match(page, /Clear filters/);
+});
+
+test("System navigation opens Administration while retaining its settings subsection", async () => {
+  const navigation = await readFile(new URL("../lib/navigation-model.mjs", import.meta.url), "utf8");
+  const sections = await readFile(new URL("../components/admin-sections.js", import.meta.url), "utf8");
+  assert.match(navigation, /id: "administration"/);
+  assert.match(navigation, /href: "\/admin"/);
+  assert.match(navigation, /activeRoutes: \["\/admin"\]/);
+  assert.match(sections, /href: "\/admin\/system-settings"/);
+});

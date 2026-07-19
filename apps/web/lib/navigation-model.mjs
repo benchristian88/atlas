@@ -76,12 +76,12 @@ export const NAVIGATION_GROUPS = [
         ],
       },
       {
-        id: "system-settings",
-        label: "System Settings",
+        id: "administration",
+        label: "Administration",
         destinations: [
-          { href: "/admin/system-settings", globalPermission: "system_settings.manage" },
+          { href: "/admin", globalPermission: "system_settings.manage" },
         ],
-        activeRoutes: ["/admin/system-settings"],
+        activeRoutes: ["/admin"],
       },
     ],
   },

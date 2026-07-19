@@ -328,6 +328,17 @@ class ManualAssetResponse(ORMResponse):
     updated_at: datetime
 
 
+class AssetTypeCountResponse(BaseModel):
+    asset_type_id: uuid.UUID
+    asset_type_name: str
+    count: int
+
+
+class AssetSummaryResponse(BaseModel):
+    total: int
+    by_asset_type: list[AssetTypeCountResponse]
+
+
 class AssetRelationshipCreate(BaseModel):
     source_asset_id: uuid.UUID
     target_asset_id: uuid.UUID

@@ -40,6 +40,7 @@ def _change_response(db: Session, change: KnowledgeChange) -> dict:
     run = db.get(DiscoveryRun, change.discovery_run_id) if change.discovery_run_id else None
     item = db.get(ReconciliationItem, change.reconciliation_item_id) if change.reconciliation_item_id else None
     actor = db.get(User, change.actor_user_id) if change.actor_user_id else None
+    linked_asset = db.get(Asset, change.entity_id) if change.entity_type == "asset" and change.entity_id else None
     result["source_name"] = source.name if source else None
     result.update(
         {
@@ -51,7 +52,7 @@ def _change_response(db: Session, change: KnowledgeChange) -> dict:
             "actor_display_name": (actor.display_name or actor.email) if actor else None,
             "attention_required": bool(item and item.status in {"open", "deferred"}),
             "links": {
-                **({"asset": f"/assets/{change.entity_id}"} if change.entity_type == "asset" and change.entity_id else {}),
+                **({"asset": f"/assets/{change.entity_id}"} if linked_asset else {}),
                 **({"reconciliation": "/reconciliation"} if item else {}),
                 **({"discovery_run": f"/discovery-runs/{run.id}"} if run else {}),
             },

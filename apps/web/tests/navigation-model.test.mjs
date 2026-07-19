@@ -59,7 +59,7 @@ test("viewer navigation uses implemented product domains without administration"
   });
   assert.equal(resolvedItem(groups, "users-access"), undefined);
   assert.equal(resolvedItem(groups, "reference-data"), undefined);
-  assert.equal(resolvedItem(groups, "system-settings"), undefined);
+  assert.equal(resolvedItem(groups, "administration"), undefined);
   assert.equal(PROFILE_NAVIGATION_ITEM.label, "Profile");
 });
 
@@ -73,13 +73,13 @@ test("system entries resolve only for their explicit permissions", () => {
 
   const scopedReferenceAdmin = visibleNavigationGroups(access({ context: ["customers.manage"] }));
   assert.equal(resolvedItem(scopedReferenceAdmin, "reference-data").href, "/admin/customers");
-  assert.equal(resolvedItem(scopedReferenceAdmin, "system-settings"), undefined);
+  assert.equal(resolvedItem(scopedReferenceAdmin, "administration"), undefined);
 
   const globalReferenceAdmin = visibleNavigationGroups(access({ global: ["asset_types.manage"] }));
   assert.equal(resolvedItem(globalReferenceAdmin, "reference-data").href, "/admin/asset-types");
 
   const systemAdministrator = visibleNavigationGroups(access({ global: ["system_settings.manage"] }));
-  assert.equal(resolvedItem(systemAdministrator, "system-settings").href, "/admin/system-settings");
+  assert.equal(resolvedItem(systemAdministrator, "administration").href, "/admin");
 });
 
 test("active matching covers renamed pages, child routes, and admin domains", () => {
@@ -96,7 +96,8 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
     ["knowledge-gaps", "/knowledge-gaps"],
     ["users-access", "/admin/roles/role-1"],
     ["reference-data", "/admin/custom-fields/field-1"],
-    ["system-settings", "/admin/system-settings/security"],
+    ["administration", "/admin"],
+    ["administration", "/admin/system-settings"],
   ];
 
   for (const [itemId, pathname] of cases) {
@@ -135,7 +136,7 @@ test("roadmap entries remain representable but never render broken links", () =>
     "Documentation",
   ]);
   assert.equal(roadmapLabels.some((label) => visibleLabels.includes(label)), false);
-  assert.equal(visibleLabels.includes("Administration"), false);
+  assert.equal(visibleLabels.includes("Administration"), true);
 });
 
 test("shell regression keeps workspace context, profile access, and logout intact", async () => {

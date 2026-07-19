@@ -25,7 +25,12 @@ from app.models import (
 )
 from app.presenters import asset_response_data
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
-from app.schemas import ManualAssetCreate, ManualAssetResponse, ManualAssetUpdate
+from app.schemas import (
+    AssetSummaryResponse,
+    ManualAssetCreate,
+    ManualAssetResponse,
+    ManualAssetUpdate,
+)
 from app.services.custom_fields import applicable_definitions, custom_field_values, set_asset_custom_fields
 from app.services.manual_knowledge import (
     MANUAL_ASSET_KNOWLEDGE_FIELDS,
@@ -85,6 +90,8 @@ def list_assets(
     has_critical_gaps: bool | None = None,
     has_open_knowledge_gaps: bool | None = None,
     not_evaluated: bool | None = None,
+    asset_type_id: uuid.UUID | None = None,
+    search: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -121,6 +128,22 @@ def list_assets(
         query = query.where(Asset.customer_id == customer_id)
     if site_id is not None:
         query = query.where(Asset.site_id == site_id)
+    if asset_type_id is not None:
+        asset_type_key = db.scalar(select(AssetType.key).where(AssetType.id == asset_type_id))
+        if asset_type_key is None:
+            return []
+        query = query.where(Asset.asset_type == asset_type_key)
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                Asset.name.ilike(pattern),
+                Asset.hostname.ilike(pattern),
+                Asset.ip_address.ilike(pattern),
+                Asset.vendor.ilike(pattern),
+                Asset.model.ilike(pattern),
+            )
+        )
     if completeness_status or has_critical_gaps is not None or has_open_knowledge_gaps is not None or not_evaluated is not None:
         query = query.outerjoin(
             KnowledgeCompletenessSummary,
@@ -137,6 +160,51 @@ def list_assets(
         unevaluated = or_(KnowledgeCompletenessSummary.id.is_(None), KnowledgeCompletenessSummary.completeness_status == "not_evaluated")
         query = query.where(unevaluated if not_evaluated else ~unevaluated)
     return [asset_response_data(db, asset) for asset in db.scalars(query)]
+
+
+@router.get("/summary", response_model=AssetSummaryResponse)
+def asset_summary(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("assets.view")),
+    db: Session = Depends(get_db),
+):
+    customer_id = context.customer_id
+    site_id = context.site_id
+    _explicit_scope(db, principal, customer_id, site_id)
+    conditions = [
+        scope_condition(principal, "assets.view", Asset.customer_id, Asset.site_id)
+    ]
+    if customer_id is not None:
+        conditions.append(Asset.customer_id == customer_id)
+    if site_id is not None:
+        conditions.append(Asset.site_id == site_id)
+
+    total = int(
+        db.scalar(select(func.count()).select_from(Asset).where(*conditions)) or 0
+    )
+    rows = db.execute(
+        select(
+            AssetType.id,
+            AssetType.name,
+            func.count(Asset.id).label("asset_count"),
+        )
+        .join(Asset, Asset.asset_type == AssetType.key)
+        .where(*conditions)
+        .group_by(AssetType.id, AssetType.name)
+        .having(func.count(Asset.id) > 0)
+        .order_by(func.count(Asset.id).desc(), AssetType.name.asc())
+    )
+    return {
+        "total": total,
+        "by_asset_type": [
+            {
+                "asset_type_id": row.id,
+                "asset_type_name": row.name,
+                "count": int(row.asset_count),
+            }
+            for row in rows
+        ],
+    }
 
 
 @router.post("", response_model=ManualAssetResponse, status_code=status.HTTP_201_CREATED)

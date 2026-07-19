@@ -219,8 +219,8 @@ than one link per technical page:
 - **Operations:** Discovery run activity and simulation, plus Reconciliation
   for reviewing sourced changes before they enter the operational model.
 - **Connections:** Integrations.
-- **System:** permission-filtered Users & Access, Reference Data, and System
-  Settings links into the existing administration routes.
+- **System:** permission-filtered Users & Access, Reference Data, and an
+  Administration landing page linking to available administration sections.
 - **Profile:** kept separate because it contains user-specific identity,
   password, access-summary, and appearance preferences.
 
@@ -234,7 +234,7 @@ KNOWLEDGE      Knowledge Graph; Assets; Services (roadmap);
 OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
                Backup & Recovery (roadmap); Documentation (roadmap)
 CONNECTIONS    Integrations
-SYSTEM         Users & Access; Reference Data; System Settings
+SYSTEM         Users & Access; Reference Data; Administration
 PROFILE        Profile
 ```
 
