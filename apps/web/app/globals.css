@@ -104,6 +104,10 @@ a { color: inherit; text-decoration: none; }
   padding: 24px;
 }
 
+.login-panel { max-width: 430px; width: 100%; }
+.login-logo { align-items: center; background: transparent; border: 0; box-shadow: none; display: flex; justify-content: center; margin: 0 0 22px; padding: 0; }
+.login-logo-image { display: block; height: auto; max-width: 240px; object-fit: contain; width: min(100%, 240px); }
+.login-logo-fallback { color: #ffffff; font-size: 28px; font-weight: 750; letter-spacing: -0.03em; }
 .login-card {
   background: var(--surface);
   border-radius: 14px;
@@ -113,7 +117,6 @@ a { color: inherit; text-decoration: none; }
   width: 100%;
 }
 
-.login-brand { align-items: center; display: flex; font-size: 20px; font-weight: 750; gap: 10px; margin-bottom: 30px; }
 .login-card h1 { font-size: 28px; letter-spacing: -0.035em; margin: 0; }
 .login-card .page-description { margin-bottom: 24px; }
 .login-form { display: grid; gap: 17px; }
@@ -148,18 +151,6 @@ a { color: inherit; text-decoration: none; }
 
 .atlas-brand-logo { display: block; height: auto; max-height: 40px; max-width: 180px; object-fit: contain; width: 100%; }
 .atlas-brand-fallback { color: #ffffff; font-size: 20px; font-weight: 750; letter-spacing: -0.02em; }
-
-.brand-mark {
-  align-items: center;
-  background: var(--brand-mark);
-  border-radius: 9px;
-  color: var(--brand-mark-foreground);
-  display: inline-flex;
-  font-size: 14px;
-  height: 32px;
-  justify-content: center;
-  width: 32px;
-}
 
 .nav-group-label {
   color: var(--sidebar-muted);
@@ -712,6 +703,7 @@ tbody tr:hover { background: #fbfdfd; }
 .topology-assets span { color: var(--muted); font-size: 11px; }
 .topology-toolbar { align-items: end; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; gap: 24px; justify-content: space-between; margin-bottom: 20px; padding: 16px; }
 .topology-workbench { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; padding: 16px; }
+.selector-control-text { font-family: inherit; font-size: 13px; font-weight: 650; line-height: normal; }
 .lens-selector { display: flex; flex-wrap: wrap; gap: 8px; }
 .lens-description { color: var(--muted); font-size: 13px; margin: 12px 0 16px; }
 .topology-filters-wide { grid-template-columns: repeat(5, minmax(130px, 1fr)); max-width: none; }
@@ -719,11 +711,11 @@ tbody tr:hover { background: #fbfdfd; }
 .focus-control select { min-width: 0; }
 .asset-filter-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 18px; min-width: 0; padding: 14px; }
 .asset-type-filters { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.asset-type-filter { align-items: center; background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); cursor: pointer; display: flex; font: inherit; gap: 8px; max-width: 220px; padding: 8px 10px; }
+.asset-type-filter { align-items: center; background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); cursor: pointer; display: flex; gap: 8px; max-width: 220px; min-height: 36px; padding: 8px 10px; }
 .asset-type-filter span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asset-type-filter strong { background: var(--surface-muted); border-radius: 999px; color: var(--text); font-size: 11px; padding: 2px 6px; }
 .asset-type-filter:hover, .asset-type-filter.active, .asset-type-more.active select { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
-.asset-type-filter.active { font-weight: 700; }
+.asset-type-filter.active { font-weight: 650; }
 .asset-type-more select { min-height: 36px; max-width: 230px; padding-bottom: 6px; padding-top: 6px; }
 .asset-list-toolbar { align-items: end; border-top: 1px solid var(--border); display: grid; gap: 12px; grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) auto auto; margin-top: 14px; padding-top: 14px; }
 .asset-list-toolbar .field { min-width: 0; }

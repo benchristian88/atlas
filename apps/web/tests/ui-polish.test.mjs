@@ -64,7 +64,11 @@ test("Asset Type counts are ordered deterministically and filters compose in the
 });
 
 test("Assets exposes ten direct selectors, accessible More, and scoped summary data", async () => {
-  const page = await readFile(new URL("../app/assets/page.js", import.meta.url), "utf8");
+  const [page, topology, styles] = await Promise.all([
+    readFile(new URL("../app/assets/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/topology/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
   assert.match(page, /apiRequest\("\/assets\/summary"\)/);
   assert.match(page, /typeCounts\.slice\(0, 10\)/);
   assert.match(page, /typeCounts\.slice\(10\)/);
@@ -72,6 +76,11 @@ test("Assets exposes ten direct selectors, accessible More, and scoped summary d
   assert.match(page, /aria-label="More asset types"/);
   assert.match(page, /No assets match the current filters\./);
   assert.match(page, /Clear filters/);
+  assert.match(page, /asset-type-filter selector-control-text/);
+  assert.match(page, /<select aria-label="More asset types" className="selector-control-text"/);
+  assert.match(topology, /button selector-control-text/);
+  assert.match(styles, /\.selector-control-text \{[^}]*font-size: 13px;[^}]*font-weight: 650;[^}]*line-height: normal;/);
+  assert.match(styles, /\.asset-type-filter \{[^}]*min-height: 36px;/);
 });
 
 test("System navigation opens Administration while retaining its settings subsection", async () => {
