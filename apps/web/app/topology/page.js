@@ -99,7 +99,7 @@ export default function TopologyPage() {
     {!data && !error && <div className="status-banner" role="status">Loading topology…</div>}
     {data && <>
       <div className="topology-workbench">
-        <div className="lens-selector" aria-label="Topology lens">{Object.entries(lenses).map(([key, lens]) => <button className={`button ${mode === key ? "button-primary" : "button-secondary"}`} key={key} onClick={() => setMode(key)} type="button">{lens.label}</button>)}</div>
+        <div className="lens-selector" aria-label="Topology lens">{Object.entries(lenses).map(([key, lens]) => <button className={`button selector-control-text ${mode === key ? "button-primary" : "button-secondary"}`} key={key} onClick={() => setMode(key)} type="button">{lens.label}</button>)}</div>
         <p className="lens-description">{lenses[mode].description}</p>
         <div className="topology-filters topology-filters-wide">
           <Filter label="Customer" value={filters.customer} onChange={(value) => updateFilter("customer", value)} options={data.customers.map((item) => [item.id, item.name])} emptyLabel="All customers" />

@@ -399,6 +399,10 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
             name="valid_status",
         ),
+        CheckConstraint(
+            "completeness_status IN ('complete', 'partial', 'failed', 'unknown')",
+            name="valid_completeness_status",
+        ),
         ForeignKeyConstraint(
             ["customer_id", "site_id"],
             ["sites.customer_id", "sites.id"],
@@ -439,6 +443,55 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     archive_reason: Mapped[str | None] = mapped_column(Text)
+    coverage_key: Mapped[str | None] = mapped_column(String(1024), index=True)
+    is_complete_snapshot: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", index=True
+    )
+    completeness_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="unknown", index=True
+    )
+
+
+class RunObservedEntity(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "run_observed_entities"
+    __table_args__ = (
+        UniqueConstraint(
+            "discovery_run_id",
+            "entity_type",
+            "external_id",
+            name="uq_run_observed_entities_run_type_external",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_run_observed_entities_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    discovery_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    coverage_key: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    evidence_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="SET NULL"), index=True
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class EvidenceRecord(UUIDPrimaryKeyMixin, Base):
@@ -493,6 +546,20 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_knowledge_assertions_customer_site_sites",
             ondelete="RESTRICT",
         ),
+        Index(
+            "uq_knowledge_assertions_single_accepted",
+            "subject_type",
+            "subject_id",
+            "predicate",
+            unique=True,
+            postgresql_where=text(
+                "is_accepted = true AND retracted_at IS NULL "
+                "AND subject_id IS NOT NULL AND predicate IN "
+                "('name', 'hostname', 'asset_type', 'status', "
+                "'operational_state', 'observation_state', 'platform', "
+                "'lifecycle_state')"
+            ),
+        ),
     )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
@@ -538,6 +605,18 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
+    )
+    # ``is_current`` remains a compatibility mirror of ``is_source_current``.
+    # It never means that Atlas has accepted this assertion as canonical truth.
+    is_source_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    is_accepted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", index=True
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     retracted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
@@ -591,6 +670,240 @@ class ReconciliationItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KnowledgeChange(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "knowledge_changes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_knowledge_changes_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_knowledge_changes_customer_site_occurred",
+            "customer_id",
+            "site_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_knowledge_changes_entity_occurred",
+            "entity_type",
+            "entity_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_knowledge_changes_type_occurred",
+            "change_type",
+            "occurred_at",
+        ),
+        Index(
+            "ix_knowledge_changes_source_run",
+            "data_source_id",
+            "discovery_run_id",
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    change_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    entity_name_snapshot: Mapped[str] = mapped_column(String(1024), nullable=False)
+    predicate: Mapped[str | None] = mapped_column(String(255), index=True)
+    previous_value_json: Mapped[Any | None] = mapped_column(JSONB)
+    new_value_json: Mapped[Any | None] = mapped_column(JSONB)
+    truth_classification: Mapped[str | None] = mapped_column(String(30), index=True)
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="SET NULL"), index=True
+    )
+    discovery_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="SET NULL"), index=True
+    )
+    assertion_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("knowledge_assertions.id", ondelete="SET NULL"), index=True
+    )
+    reconciliation_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("reconciliation_items.id", ondelete="SET NULL"), index=True
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class KnowledgeRequirementDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "knowledge_requirement_definitions"
+    __table_args__ = (
+        CheckConstraint("entity_type IN ('asset')", name="supported_entity_type"),
+        CheckConstraint(
+            "requirement_level IN ('required', 'conditional', 'recommended')",
+            name="valid_requirement_level",
+        ),
+        CheckConstraint(
+            "severity IN ('critical', 'high', 'medium', 'low')",
+            name="valid_severity",
+        ),
+    )
+
+    key: Mapped[str] = mapped_column(String(150), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    entity_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="asset", index=True
+    )
+    asset_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("asset_types.id", ondelete="RESTRICT"), index=True
+    )
+    requirement_level: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    rule_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    rule_config_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="100"
+    )
+    remediation_hint: Mapped[str | None] = mapped_column(Text)
+    configuration_valid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    configuration_error: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class KnowledgeGap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "knowledge_gaps"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open', 'deferred', 'exception', 'resolved', 'superseded')",
+            name="valid_status",
+        ),
+        CheckConstraint(
+            "requirement_level IN ('required', 'conditional', 'recommended')",
+            name="valid_requirement_level",
+        ),
+        CheckConstraint(
+            "severity IN ('critical', 'high', 'medium', 'low')",
+            name="valid_severity",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_knowledge_gaps_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_knowledge_gaps_active_requirement_entity",
+            "requirement_definition_id",
+            "entity_type",
+            "entity_id",
+            unique=True,
+            postgresql_where=text("status IN ('open', 'deferred', 'exception')"),
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    requirement_definition_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_requirement_definitions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    asset_type_id_snapshot: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("asset_types.id", ondelete="SET NULL"), index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="open", index=True
+    )
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    requirement_level: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    details_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    first_detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    last_state_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    resolution_reason: Mapped[str | None] = mapped_column(Text)
+    exception_reason: Mapped[str | None] = mapped_column(Text)
+    exception_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exception_created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    exception_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    deferred_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    deferred_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class KnowledgeCompletenessSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "knowledge_completeness_summaries"
+    __table_args__ = (
+        UniqueConstraint("entity_type", "entity_id", name="uq_completeness_entity"),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_completeness_summaries_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "completeness_status IN ('not_evaluated', 'complete', "
+            "'operationally_complete', 'incomplete', 'critical_gaps', "
+            "'exception_accepted')",
+            name="valid_completeness_status",
+        ),
+    )
+
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    required_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    required_satisfied: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    recommended_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    recommended_satisfied: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    critical_gap_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    high_gap_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    open_gap_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    exception_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    completeness_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_evaluated", index=True
+    )
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):

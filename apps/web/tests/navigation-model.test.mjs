@@ -5,7 +5,6 @@ import { readFile } from "node:fs/promises";
 import {
   NAVIGATION_GROUPS,
   navigationItemIsActive,
-  PROFILE_NAVIGATION_ITEM,
   visibleNavigationGroups,
 } from "../lib/navigation-model.mjs";
 
@@ -45,19 +44,21 @@ test("viewer navigation uses implemented product domains without administration"
       "asset_types.view",
       "relationship_types.view",
       "custom_fields.view",
+      "changes.view",
+      "reconciliation.view",
+      "knowledge_gaps.view",
     ],
   }));
 
   assert.deepEqual(groupMap(groups), {
-    Overview: ["Dashboard"],
+    Overview: ["Dashboard", "Changes"],
     Knowledge: ["Knowledge Graph", "Assets", "Networks"],
-    Operations: ["Discovery", "Reconciliation"],
+    Operations: ["Discovery", "Reconciliation", "Knowledge Gaps"],
     Connections: ["Integrations"],
   });
   assert.equal(resolvedItem(groups, "users-access"), undefined);
   assert.equal(resolvedItem(groups, "reference-data"), undefined);
-  assert.equal(resolvedItem(groups, "system-settings"), undefined);
-  assert.equal(PROFILE_NAVIGATION_ITEM.label, "Profile");
+  assert.equal(resolvedItem(groups, "administration"), undefined);
 });
 
 test("system entries resolve only for their explicit permissions", () => {
@@ -70,18 +71,18 @@ test("system entries resolve only for their explicit permissions", () => {
 
   const scopedReferenceAdmin = visibleNavigationGroups(access({ context: ["customers.manage"] }));
   assert.equal(resolvedItem(scopedReferenceAdmin, "reference-data").href, "/admin/customers");
-  assert.equal(resolvedItem(scopedReferenceAdmin, "system-settings"), undefined);
+  assert.equal(resolvedItem(scopedReferenceAdmin, "administration"), undefined);
 
   const globalReferenceAdmin = visibleNavigationGroups(access({ global: ["asset_types.manage"] }));
   assert.equal(resolvedItem(globalReferenceAdmin, "reference-data").href, "/admin/asset-types");
 
   const systemAdministrator = visibleNavigationGroups(access({ global: ["system_settings.manage"] }));
-  assert.equal(resolvedItem(systemAdministrator, "system-settings").href, "/admin/system-settings");
+  assert.equal(resolvedItem(systemAdministrator, "administration").href, "/admin");
 });
 
 test("active matching covers renamed pages, child routes, and admin domains", () => {
   const allGroups = visibleNavigationGroups(access({
-    context: ["assets.view", "integrations.view", "customers.manage"],
+    context: ["assets.view", "integrations.view", "customers.manage", "reconciliation.view", "knowledge_gaps.view", "changes.view"],
     global: ["users.view", "asset_types.manage", "system_settings.manage"],
   }));
   const cases = [
@@ -90,16 +91,26 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
     ["discovery", "/discovery-runs/run-1"],
     ["discovery", "/discovery/simulate"],
     ["reconciliation", "/reconciliation"],
+    ["knowledge-gaps", "/knowledge-gaps"],
     ["users-access", "/admin/roles/role-1"],
     ["reference-data", "/admin/custom-fields/field-1"],
-    ["system-settings", "/admin/system-settings/security"],
+    ["administration", "/admin"],
+    ["administration", "/admin/system-settings"],
   ];
 
   for (const [itemId, pathname] of cases) {
     assert.equal(navigationItemIsActive(resolvedItem(allGroups, itemId), pathname), true);
   }
-  assert.equal(navigationItemIsActive(PROFILE_NAVIGATION_ITEM, "/profile"), true);
-  assert.equal(navigationItemIsActive(PROFILE_NAVIGATION_ITEM, "/profiles"), false);
+});
+
+test("operations entries retain independent permission visibility", () => {
+  const reconciliationOnly = visibleNavigationGroups(access({ context: ["reconciliation.view"] }));
+  assert.equal(resolvedItem(reconciliationOnly, "reconciliation")?.href, "/reconciliation");
+  assert.equal(resolvedItem(reconciliationOnly, "knowledge-gaps"), undefined);
+
+  const gapsOnly = visibleNavigationGroups(access({ context: ["knowledge_gaps.view"] }));
+  assert.equal(resolvedItem(gapsOnly, "reconciliation"), undefined);
+  assert.equal(resolvedItem(gapsOnly, "knowledge-gaps")?.href, "/knowledge-gaps");
 });
 
 test("roadmap entries remain representable but never render broken links", () => {
@@ -113,7 +124,6 @@ test("roadmap entries remain representable but never render broken links", () =>
   })).flatMap((group) => group.items.map((item) => item.label));
 
   assert.deepEqual(roadmapLabels, [
-    "Changes",
     "Services",
     "Business Functions",
     "People & Teams",
@@ -122,22 +132,25 @@ test("roadmap entries remain representable but never render broken links", () =>
     "Documentation",
   ]);
   assert.equal(roadmapLabels.some((label) => visibleLabels.includes(label)), false);
-  assert.equal(visibleLabels.includes("Administration"), false);
+  assert.equal(visibleLabels.includes("Administration"), true);
 });
 
 test("shell regression keeps workspace context, profile access, and logout intact", async () => {
   const shell = await readFile(new URL("../components/app-shell.js", import.meta.url), "utf8");
+  const accountMenu = await readFile(new URL("../components/account-menu.js", import.meta.url), "utf8");
   const navigation = await readFile(new URL("../components/navigation.js", import.meta.url), "utf8");
   const topologyPage = await readFile(new URL("../app/topology/page.js", import.meta.url), "utf8");
   const discoveryPage = await readFile(new URL("../app/discovery-runs/page.js", import.meta.url), "utf8");
 
   assert.match(shell, /<ContextSelector \/>/);
-  assert.match(shell, /href="\/profile"/);
+  assert.match(shell, /<AccountMenu/);
   assert.match(shell, /await logout\(\)/);
+  assert.match(accountMenu, /href="\/profile"/);
   assert.match(shell, /<Navigation \/>/);
   assert.match(navigation, /customerId/);
   assert.match(navigation, /siteId/);
   assert.match(navigation, /aria-current/);
+  assert.doesNotMatch(navigation, /PROFILE_NAVIGATION_ITEM|nav-profile/);
   assert.match(topologyPage, /title="Knowledge Graph"/);
   assert.match(discoveryPage, /title="Discovery"/);
 });

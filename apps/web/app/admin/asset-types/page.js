@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AccessDenied } from "../../../components/access-denied";
 import { AssetIcon } from "../../../components/asset-icon";
 import { useAuth } from "../../../components/auth-context";
@@ -22,6 +23,7 @@ const columns = [
   { key: "category", label: "Category", render: (row) => row.category || "—" },
   { key: "active", label: "State", render: (row) => row.active ? "Active" : "Inactive" },
   { key: "in_use_count", label: "Assets", render: (row) => row.in_use_count },
+  { key: "knowledge_profile", label: "Knowledge profile", render: (row) => <Link className="text-button" href={`/admin/asset-types/${row.id}/knowledge-profile`}>Configure</Link> },
   { key: "system_defined", label: "Origin", render: (row) => row.system_defined ? "Built-in" : "Custom" },
 ];
 

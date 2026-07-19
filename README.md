@@ -212,15 +212,15 @@ response where appropriate).
 The authenticated sidebar is organised around stable product domains rather
 than one link per technical page:
 
-- **Overview:** Dashboard.
+- **Overview:** Dashboard and the meaningful Changes timeline.
 - **Knowledge:** Knowledge Graph, Assets, and Networks. Knowledge Graph is the
   user-facing name for the existing `/topology` capability; topology remains a
   technical lens within that graph.
 - **Operations:** Discovery run activity and simulation, plus Reconciliation
   for reviewing sourced changes before they enter the operational model.
 - **Connections:** Integrations.
-- **System:** permission-filtered Users & Access, Reference Data, and System
-  Settings links into the existing administration routes.
+- **System:** permission-filtered Users & Access, Reference Data, and an
+  Administration landing page linking to available administration sections.
 - **Profile:** kept separate because it contains user-specific identity,
   password, access-summary, and appearance preferences.
 
@@ -228,13 +228,13 @@ The configuration reserves the following roadmap positions without rendering
 links or placeholder pages:
 
 ```text
-OVERVIEW       Dashboard; Changes (roadmap)
+OVERVIEW       Dashboard; Changes
 KNOWLEDGE      Knowledge Graph; Assets; Services (roadmap);
                Business Functions (roadmap); People & Teams (roadmap); Networks
 OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
                Backup & Recovery (roadmap); Documentation (roadmap)
 CONNECTIONS    Integrations
-SYSTEM         Users & Access; Reference Data; System Settings
+SYSTEM         Users & Access; Reference Data; Administration
 PROFILE        Profile
 ```
 
@@ -316,7 +316,9 @@ The authenticated API surface is canonical beneath `/api` and includes:
 - `/api/asset-interfaces`
 - `/api/asset-types` and `/api/relationship-types`
 - `/api/data-sources`, `/api/discovery-runs`, and `/api/discovery/simulate`
-- `/api/assertions` and `/api/reconciliation-items`
+- `/api/assertions`, `/api/reconciliation-items`, and `/api/changes`
+- `/api/assets/<id>/fact-history`
+- `/api/assets/<id>/knowledge-summary`
 - `/api/custom-fields` and asset custom-field values
 - read-only `/api/audit-events`
 - protected `/api/system-settings`
@@ -332,7 +334,7 @@ policy.
 ## Knowledge provenance and reconciliation
 
 Discovery observations do not silently overwrite accepted inventory. Atlas
-stores their raw evidence, current sourced assertions, and reviewable
+stores their raw evidence, source-current assertions, accepted assertions, and reviewable
 reconciliation items alongside the existing Asset and AssetRelationship tables.
 Only accepting a supported reconciliation item creates or updates the
 operational model used by topology; reject and defer leave it unchanged.
@@ -341,12 +343,35 @@ one same-customer/site Atlas asset. Exact normalized name/type matches can be
 linked automatically; ambiguous matches require the explicit **Link asset**
 action and are never silently merged.
 
+`is_source_current` means “latest valid claim from this source”; `is_accepted`
+means “canonical Atlas knowledge.” Single-valued predicates can have only one
+accepted value, while interfaces, memberships, relationships, owners, and
+dependencies may have several. Manual asset edits create accepted **Declared**
+assertions and meaningful history without deleting conflicting observations.
+
 Use **Discovery → Simulate discovery** to exercise this pipeline before a live
 integration is configured. Paste a customer/site-scoped JSON observation, run
 it, then review the generated items under **Reconciliation**. Asset detail pages
-show the current assertions linked to an accepted asset. The complete manual
-scenario is in
-[Knowledge Foundation v1 testing](docs/testing/knowledge-foundation-v1.md).
+show a rolled-up Knowledge Summary by default, a human history timeline, and
+collapsed raw assertion groups linked to an accepted asset.
+
+A simulation can be marked as a **complete snapshot** for a stable coverage
+key. Atlas compares only successful complete runs from the same data source,
+customer/site, and coverage key. An asset omitted from the next comparable run
+becomes a **No longer observed** reconciliation item; it is not deleted or
+silently retired. A reviewer can mark it missing or inactive, retire it, keep
+it active, or create an exception. If the external identity appears again,
+Atlas resolves the missing episode and records a re-observation; a retired
+asset is never silently reactivated.
+
+The **Changes** page is a product knowledge timeline: discoveries, accepted
+facts, relationship changes, missing/reobserved entities, source links, and
+assertion lifecycle decisions. It is intentionally separate from **Audit**,
+which records security and administrative activity. The architecture and test
+flows are documented in
+[knowledge changes and reconciliation](docs/architecture/knowledge-changes-and-reconciliation.md),
+[Knowledge Foundation v1 testing](docs/testing/knowledge-foundation-v1.md), and
+[Knowledge Foundation v2 testing](docs/testing/knowledge-foundation-v2.md).
 
 ## Manual authentication test
 
@@ -609,3 +634,25 @@ PYTHONPATH=plugins/sdk:plugins/proxmox python3 -m pytest plugins/proxmox/tests
 The worker is currently a long-running placeholder. Queue consumption and job
 orchestration will be added in a later increment; discovery, normalization,
 and persistence services are implemented but are not yet dispatched by Redis.
+
+## Knowledge completeness
+
+Atlas can define a database-driven Knowledge Profile for each Asset Type and
+evaluate assets after fields, custom fields, interfaces, relationships, or
+accepted discovery data change. Missing or stale knowledge creates a separate
+Knowledge Gap without blocking or deleting the operational asset. Asset detail,
+the Operations **Knowledge Gaps** page, the Assets list, and Dashboard show
+scoped completeness state. Authorized users can provide information, defer a
+gap, record a reasoned exception, reopen it, or reevaluate the asset.
+
+The Operations workflows remain deliberately separate: **Reconciliation**
+handles proposed evidence decisions, while **Knowledge Gaps** handles absent or
+insufficient knowledge. **Changes** remains under Overview as the meaningful
+knowledge timeline.
+
+Start in **Administration → Asset types → Knowledge profile**. Select existing
+Asset Types, Relationship Types, and Custom Field Definitions in the structured
+editor; no fixed homelab type names or pasted UUIDs are required. See the
+[architecture](docs/architecture/knowledge-completeness.md),
+[administrator guide](docs/admin/knowledge-profiles.md), and
+[manual test plan](docs/testing/knowledge-completeness-v1.md).

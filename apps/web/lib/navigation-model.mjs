@@ -9,7 +9,7 @@ export const NAVIGATION_GROUPS = [
         label: "Dashboard",
         anyPermission: ["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view"],
       },
-      { id: "changes", label: "Changes", available: false },
+      { id: "changes", href: "/changes", label: "Changes", permission: "changes.view" },
     ],
   },
   {
@@ -29,7 +29,8 @@ export const NAVIGATION_GROUPS = [
     label: "Operations",
     items: [
       { id: "discovery", href: "/discovery-runs", label: "Discovery", permission: "integrations.view", activeRoutes: ["/discovery-runs", "/discovery"] },
-      { id: "reconciliation", href: "/reconciliation", label: "Reconciliation", permission: "assets.view" },
+      { id: "reconciliation", href: "/reconciliation", label: "Reconciliation", permission: "reconciliation.view" },
+      { id: "knowledge-gaps", href: "/knowledge-gaps", label: "Knowledge Gaps", permission: "knowledge_gaps.view" },
       { id: "impact-analysis", label: "Impact Analysis", available: false },
       { id: "backup-recovery", label: "Backup & Recovery", available: false },
       { id: "documentation", label: "Documentation", available: false },
@@ -75,22 +76,16 @@ export const NAVIGATION_GROUPS = [
         ],
       },
       {
-        id: "system-settings",
-        label: "System Settings",
+        id: "administration",
+        label: "Administration",
         destinations: [
-          { href: "/admin/system-settings", globalPermission: "system_settings.manage" },
+          { href: "/admin", globalPermission: "system_settings.manage" },
         ],
-        activeRoutes: ["/admin/system-settings"],
+        activeRoutes: ["/admin"],
       },
     ],
   },
 ];
-
-export const PROFILE_NAVIGATION_ITEM = {
-  id: "profile",
-  href: "/profile",
-  label: "Profile",
-};
 
 function mayUseDestination(destination, access) {
   if (destination.globalPermission) {

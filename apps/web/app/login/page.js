@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AtlasLogo } from "../../components/atlas-brand.mjs";
 import { authenticatedHome } from "../../components/auth-context";
 import { getCurrentUser, login } from "../../lib/auth";
 import { checkSession } from "../../lib/session-state.mjs";
@@ -54,48 +55,49 @@ export default function LoginPage() {
 
   return (
     <main className="login-page">
-      <section className="login-card" aria-labelledby="login-title">
-        <div className="login-brand">
-          <span className="brand-mark" aria-hidden="true">A</span>
-          Atlas
+      <div className="login-panel">
+        <div className="login-logo">
+          <AtlasLogo className="login-logo-image" fallbackClassName="login-logo-fallback" />
         </div>
-        <p className="eyebrow">Welcome back</p>
-        <h1 id="login-title">Sign in to Atlas</h1>
-        <p className="page-description">Use your database-backed Atlas account.</p>
-        {error && <div className="error-banner" role="alert">{error}</div>}
-        <form className="login-form" onSubmit={submit}>
-          <label className="field">
-            <span>Email</span>
-            <input
-              autoComplete="email"
-              autoFocus
+        <section className="login-card" aria-labelledby="login-title">
+          <p className="eyebrow">Welcome back</p>
+          <h1 id="login-title">Sign in</h1>
+          <p className="page-description">Use your database-backed Atlas account.</p>
+          {error && <div className="error-banner" role="alert">{error}</div>}
+          <form className="login-form" onSubmit={submit}>
+            <label className="field">
+              <span>Email</span>
+              <input
+                autoComplete="email"
+                autoFocus
+                disabled={submitting || checkingSession}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                type="email"
+                value={email}
+              />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                autoComplete="current-password"
+                disabled={submitting || checkingSession}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </label>
+            <button
+              className="button button-primary login-submit"
               disabled={submitting || checkingSession}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              value={email}
-            />
-          </label>
-          <label className="field">
-            <span>Password</span>
-            <input
-              autoComplete="current-password"
-              disabled={submitting || checkingSession}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </label>
-          <button
-            className="button button-primary login-submit"
-            disabled={submitting || checkingSession}
-            type="submit"
-          >
-            {checkingSession ? "Checking session…" : submitting ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </section>
+              type="submit"
+            >
+              {checkingSession ? "Checking session…" : submitting ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        </section>
+      </div>
     </main>
   );
 }

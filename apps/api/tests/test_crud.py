@@ -11,7 +11,7 @@ from app.database import get_db
 from app.main import app
 from app.models import Asset, Customer, User
 from app.routes.asset_relationships import create_asset_relationship
-from app.routes.assets import create_asset, get_asset, list_assets
+from app.routes.assets import asset_summary, create_asset, get_asset, list_assets
 from app.routes.context import dashboard_summary
 from app.routes.manual_assets import list_manual_assets
 from app.routes.networks import list_networks
@@ -246,8 +246,38 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         "networks": 0,
         "relationships": 0,
         "reconciliation": 0,
+        "open_reconciliation_count": 0,
+        "newly_discovered_count": 0,
+        "changed_count": 0,
+        "no_longer_observed_count": 0,
+        "contradiction_count": 0,
+        "possible_duplicate_count": 0,
+        "oldest_open_item_at": None,
+        "knowledge_changes_last_7_days": 0,
+        "open_knowledge_gap_count": 0,
+        "critical_knowledge_gap_count": 0,
+        "high_knowledge_gap_count": 0,
+        "assets_with_critical_gaps": 0,
+        "assets_not_evaluated": 0,
+        "assets_operationally_complete": 0,
+        "expired_exception_count": 0,
     }
     assert all("WHERE" in statement for statement in db.statements)
+
+
+def test_asset_type_summary_is_scoped_and_database_ordered() -> None:
+    customer_id = uuid.uuid4()
+    scoped_user = principal(
+        {"assets.view"}, scope_type="customer", customer_id=customer_id
+    )
+    db = EmptyDatabase()
+    summary = asset_summary(ActiveContext(customer_id, None), scoped_user, db)
+    assert summary == {"total": 0, "by_asset_type": []}
+    sql = "\n".join(db.statements)
+    assert "assets.customer_id IN" in sql
+    assert "assets.customer_id =" in sql
+    assert "count(assets.id) DESC" in sql
+    assert "asset_types.name ASC" in sql
 
 
 def test_asset_creation_must_match_active_context() -> None:
@@ -330,6 +360,7 @@ def test_openapi_exposes_administration_and_reference_endpoints() -> None:
         "/api/customers",
         "/api/sites",
         "/api/assets",
+        "/api/assets/summary",
         "/api/asset-relationships",
         "/api/networks",
         "/api/asset-interfaces",

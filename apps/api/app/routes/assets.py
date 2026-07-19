@@ -19,12 +19,23 @@ from app.models import (
     AssetRelationship,
     AssetType,
     Customer,
+    KnowledgeCompletenessSummary,
+    KnowledgeGap,
     Site,
 )
 from app.presenters import asset_response_data
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
-from app.schemas import ManualAssetCreate, ManualAssetResponse, ManualAssetUpdate
+from app.schemas import (
+    AssetSummaryResponse,
+    ManualAssetCreate,
+    ManualAssetResponse,
+    ManualAssetUpdate,
+)
 from app.services.custom_fields import applicable_definitions, custom_field_values, set_asset_custom_fields
+from app.services.manual_knowledge import (
+    MANUAL_ASSET_KNOWLEDGE_FIELDS,
+    declare_asset_changes,
+)
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -75,6 +86,12 @@ def list_assets(
     principal: Principal = Depends(require_permission("assets.view")),
     customer_id: uuid.UUID | None = None,
     site_id: uuid.UUID | None = None,
+    completeness_status: str | None = None,
+    has_critical_gaps: bool | None = None,
+    has_open_knowledge_gaps: bool | None = None,
+    not_evaluated: bool | None = None,
+    asset_type_id: uuid.UUID | None = None,
+    search: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -111,7 +128,83 @@ def list_assets(
         query = query.where(Asset.customer_id == customer_id)
     if site_id is not None:
         query = query.where(Asset.site_id == site_id)
+    if asset_type_id is not None:
+        asset_type_key = db.scalar(select(AssetType.key).where(AssetType.id == asset_type_id))
+        if asset_type_key is None:
+            return []
+        query = query.where(Asset.asset_type == asset_type_key)
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                Asset.name.ilike(pattern),
+                Asset.hostname.ilike(pattern),
+                Asset.ip_address.ilike(pattern),
+                Asset.vendor.ilike(pattern),
+                Asset.model.ilike(pattern),
+            )
+        )
+    if completeness_status or has_critical_gaps is not None or has_open_knowledge_gaps is not None or not_evaluated is not None:
+        query = query.outerjoin(
+            KnowledgeCompletenessSummary,
+            (KnowledgeCompletenessSummary.entity_type == "asset")
+            & (KnowledgeCompletenessSummary.entity_id == Asset.id),
+        )
+    if completeness_status:
+        query = query.where(KnowledgeCompletenessSummary.completeness_status == completeness_status)
+    if has_critical_gaps is not None:
+        query = query.where((func.coalesce(KnowledgeCompletenessSummary.critical_gap_count, 0) > 0) if has_critical_gaps else (func.coalesce(KnowledgeCompletenessSummary.critical_gap_count, 0) == 0))
+    if has_open_knowledge_gaps is not None:
+        query = query.where((func.coalesce(KnowledgeCompletenessSummary.open_gap_count, 0) > 0) if has_open_knowledge_gaps else (func.coalesce(KnowledgeCompletenessSummary.open_gap_count, 0) == 0))
+    if not_evaluated is not None:
+        unevaluated = or_(KnowledgeCompletenessSummary.id.is_(None), KnowledgeCompletenessSummary.completeness_status == "not_evaluated")
+        query = query.where(unevaluated if not_evaluated else ~unevaluated)
     return [asset_response_data(db, asset) for asset in db.scalars(query)]
+
+
+@router.get("/summary", response_model=AssetSummaryResponse)
+def asset_summary(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("assets.view")),
+    db: Session = Depends(get_db),
+):
+    customer_id = context.customer_id
+    site_id = context.site_id
+    _explicit_scope(db, principal, customer_id, site_id)
+    conditions = [
+        scope_condition(principal, "assets.view", Asset.customer_id, Asset.site_id)
+    ]
+    if customer_id is not None:
+        conditions.append(Asset.customer_id == customer_id)
+    if site_id is not None:
+        conditions.append(Asset.site_id == site_id)
+
+    total = int(
+        db.scalar(select(func.count()).select_from(Asset).where(*conditions)) or 0
+    )
+    rows = db.execute(
+        select(
+            AssetType.id,
+            AssetType.name,
+            func.count(Asset.id).label("asset_count"),
+        )
+        .join(Asset, Asset.asset_type == AssetType.key)
+        .where(*conditions)
+        .group_by(AssetType.id, AssetType.name)
+        .having(func.count(Asset.id) > 0)
+        .order_by(func.count(Asset.id).desc(), AssetType.name.asc())
+    )
+    return {
+        "total": total,
+        "by_asset_type": [
+            {
+                "asset_type_id": row.id,
+                "asset_type_name": row.name,
+                "count": int(row.asset_count),
+            }
+            for row in rows
+        ],
+    }
 
 
 @router.post("", response_model=ManualAssetResponse, status_code=status.HTTP_201_CREATED)
@@ -142,9 +235,17 @@ def create_asset(
     )
     db.add(asset)
     flush(db, "Asset")
+    declare_asset_changes(
+        db,
+        asset=asset,
+        previous_values={field: None for field in MANUAL_ASSET_KNOWLEDGE_FIELDS},
+        actor_user_id=principal.user.id,
+    )
     set_asset_custom_fields(
         db, asset, payload.custom_fields, replace_active=True
     )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_created", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset.created",
@@ -242,8 +343,19 @@ def update_asset(
     if "metadata" in changes:
         changes["metadata_"] = changes.pop("metadata")
     changes["workspace_id"] = customer.workspace_id
+    previous_knowledge_values = {
+        field: getattr(asset, field)
+        for field in MANUAL_ASSET_KNOWLEDGE_FIELDS
+        if field in changes
+    }
     apply_changes(asset, changes)
     flush(db, "Asset")
+    declare_asset_changes(
+        db,
+        asset=asset,
+        previous_values=previous_knowledge_values,
+        actor_user_id=principal.user.id,
+    )
     if payload.custom_fields is not None:
         set_asset_custom_fields(
             db, asset, payload.custom_fields, replace_active=True
@@ -260,6 +372,8 @@ def update_asset(
             {key: value for key, value in stored_values.items() if key in active_keys},
             replace_active=False,
         )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_updated", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset.updated",
@@ -319,6 +433,18 @@ def delete_asset(
         metadata={"name": asset.name, "asset_type": asset.asset_type},
         request=request,
     )
+    for gap in db.scalars(select(KnowledgeGap).where(
+        KnowledgeGap.entity_type == "asset", KnowledgeGap.entity_id == asset.id,
+        KnowledgeGap.status.in_(("open", "deferred", "exception")),
+    )):
+        gap.status = "superseded"
+        gap.resolution_reason = "Asset was deleted"
+    summary = db.scalar(select(KnowledgeCompletenessSummary).where(
+        KnowledgeCompletenessSummary.entity_type == "asset",
+        KnowledgeCompletenessSummary.entity_id == asset.id,
+    ))
+    if summary:
+        db.delete(summary)
     db.delete(asset)
     commit(db, "Asset")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

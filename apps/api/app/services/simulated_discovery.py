@@ -23,7 +23,15 @@ from app.services.entity_resolution import (
     normalized_name,
     resolve_asset_identity,
 )
-from app.services.knowledge_assertions import confirm, record_assertion
+from app.services.data_sources import manual_inventory_source
+from app.services.knowledge_assertions import accept_assertion, confirm, record_assertion
+from app.services.discovery_observations import (
+    SnapshotReconciliation,
+    default_coverage_key,
+    reconcile_complete_snapshot,
+    record_observed_entity,
+)
+from app.services.knowledge_changes import record_assertion_change
 from app.services.reconciliation import create_item
 from app.utils.json_values import to_json_value
 
@@ -67,32 +75,6 @@ def _source(db: Session, payload: SimulatedDiscoveryRequest) -> DataSource:
     return source
 
 
-def _manual_source(
-    db: Session, customer_id: uuid.UUID, site_id: uuid.UUID | None
-) -> DataSource:
-    source = db.scalar(
-        select(DataSource).where(
-            DataSource.customer_id == customer_id,
-            DataSource.site_id == site_id,
-            DataSource.name == "Atlas Manual Inventory",
-            DataSource.source_type == "manual",
-        )
-    )
-    if source is None:
-        source = DataSource(
-            customer_id=customer_id,
-            site_id=site_id,
-            name="Atlas Manual Inventory",
-            source_type="manual",
-            status="active",
-            trust_level="declared",
-            notes="Represents accepted operational knowledge entered in Atlas.",
-        )
-        db.add(source)
-        db.flush()
-    return source
-
-
 def run_simulation(
     db: Session,
     *,
@@ -107,6 +89,10 @@ def run_simulation(
         customer_id=payload.customer_id,
         site_id=payload.site_id,
         status="running",
+        coverage_key=payload.coverage_key
+        or default_coverage_key(payload.customer_id, payload.site_id),
+        is_complete_snapshot=payload.is_complete_snapshot,
+        completeness_status="unknown",
         started_at=now,
         created_by_user_id=user_id,
         summary={},
@@ -146,6 +132,15 @@ def run_simulation(
         db.flush()
         evidence_count += 1
         if observation.entity_kind != "asset":
+            record_observed_entity(
+                db,
+                run=run,
+                entity_type=observation.entity_kind,
+                external_id=external_id,
+                entity_id=None,
+                evidence_record_id=evidence.id,
+                observed_at=now,
+            )
             continue
 
         resolution = resolve_asset_identity(
@@ -164,6 +159,15 @@ def run_simulation(
             resolution.status = "pending_asset_acceptance"
         run_map[external_id] = resolution
         asset = resolution.asset
+        record_observed_entity(
+            db,
+            run=run,
+            entity_type="asset",
+            external_id=external_id,
+            entity_id=asset.id if asset else None,
+            evidence_record_id=evidence.id,
+            observed_at=now,
+        )
         assertion_by_field = {}
         selected = {
             "asset_type": observation.asset_type,
@@ -216,8 +220,7 @@ def run_simulation(
         if asset is None:
             anchor = assertion_by_field.get("name") or assertion_by_field["asset_type"]
             possible_duplicate = resolution.status == "possible_duplicate"
-            remember(
-                create_item(
+            result = create_item(
                     db,
                     assertion=anchor,
                     category=("possible_duplicate" if possible_duplicate else "newly_discovered"),
@@ -253,7 +256,18 @@ def run_simulation(
                         else "Create asset or link to an existing asset"
                     ),
                 )
-            )
+            remember(result)
+            if result[1]:
+                record_assertion_change(
+                    db,
+                    assertion=anchor,
+                    item=result[0],
+                    change_type="entity_discovered",
+                    entity_name=observation.name,
+                    summary=f"Discovered {observation.name}",
+                    actor_user_id=user_id,
+                    new_value=result[0].observed_value_json,
+                )
         else:
             for field, assertion in assertion_by_field.items():
                 current_value = getattr(asset, field, None)
@@ -366,6 +380,20 @@ def run_simulation(
                 )
             if existing_relationship is not None:
                 confirm(assertion)
+                if created:
+                    record_assertion_change(
+                        db,
+                        assertion=assertion,
+                        change_type="assertion_confirmed",
+                        entity_name=f"{source_asset.name} → {target_asset.name}",
+                        summary=f"Confirmed {source_asset.name} {relationship.relationship_type.replace('_', ' ')} {target_asset.name}",
+                        actor_user_id=user_id,
+                        new_value={
+                            "source_asset_id": source_asset.id,
+                            "target_asset_id": target_asset.id,
+                            "relationship_type": relationship.relationship_type,
+                        },
+                    )
                 for stale_item in db.scalars(
                     select(ReconciliationItem).where(
                         ReconciliationItem.assertion_id == assertion.id,
@@ -380,7 +408,9 @@ def run_simulation(
                     )
                     stale_item.decided_by_user_id = user_id
                     stale_item.decided_at = now
-                manual = _manual_source(db, payload.customer_id, payload.site_id)
+                manual = manual_inventory_source(
+                    db, payload.customer_id, payload.site_id
+                )
                 declared, declared_created = record_assertion(
                     db,
                     customer_id=payload.customer_id,
@@ -394,7 +424,7 @@ def run_simulation(
                     data_source_id=manual.id,
                     observed_at=existing_relationship.created_at or now,
                 )
-                confirm(declared)
+                accept_assertion(db, declared, user_id=user_id)
                 assertions_created += int(declared_created)
                 continue
             remember(
@@ -431,11 +461,29 @@ def run_simulation(
     run.status = "completed"
     run.finished_at = datetime.now(timezone.utc)
     run.completed_at = run.finished_at
+    run.completeness_status = (
+        "complete" if run.is_complete_snapshot else "partial"
+    )
+    db.flush()
+    snapshot = reconcile_complete_snapshot(
+        db,
+        run=run,
+        user_id=user_id,
+        observed_at=run.finished_at,
+    )
+    items.extend(snapshot.items)
     run.summary = to_json_value({
         "observations": len(payload.observations),
         "evidence_records_created": evidence_count,
         "assertions_created": assertions_created,
         "reconciliation_items_created": len(items),
+        "coverage_key": run.coverage_key,
+        "is_complete_snapshot": run.is_complete_snapshot,
+        "completeness_status": run.completeness_status,
+        "baseline_run_id": snapshot.baseline_run_id,
+        "no_longer_observed_count": snapshot.no_longer_observed_count,
+        "reobserved_count": snapshot.reobserved_count,
     })
     source.last_success_at = run.finished_at
+    run.snapshot_reconciliation = snapshot
     return run, evidence_count, assertions_created, items

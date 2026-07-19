@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models import (
     Customer,
     Asset,
+    AssetRelationship,
     DataSource,
     DiscoveryRun,
     Integration,
@@ -33,6 +34,7 @@ from app.schemas import (
     ReconciliationDecisionRequest,
     ReconciliationLinkAssetRequest,
     ReconciliationItemResponse,
+    ReconciliationSummaryResponse,
     SimulatedDiscoveryRequest,
     SimulatedDiscoveryResponse,
 )
@@ -57,6 +59,7 @@ from app.services.knowledge_lifecycle import (
     retract_assertion,
 )
 from app.services.simulated_discovery import run_simulation
+from app.services.knowledge_changes import record_assertion_change
 from app.utils.json_values import to_json_value
 
 router = APIRouter(tags=["knowledge"])
@@ -107,6 +110,9 @@ def run_response(
         "archived_at": run.archived_at,
         "archived_by_user_id": run.archived_by_user_id,
         "archive_reason": run.archive_reason,
+        "coverage_key": run.coverage_key,
+        "is_complete_snapshot": run.is_complete_snapshot,
+        "completeness_status": run.completeness_status,
         "source_name": source_name,
         "deletion_safety": (
             can_delete_discovery_run(db, run).as_dict()
@@ -121,6 +127,17 @@ def run_response(
 def assertion_response(
     db: Session, assertion: KnowledgeAssertion, *, include_deletion_safety: bool = True
 ) -> dict:
+    # Server defaults are populated in PostgreSQL. These fallbacks keep the
+    # presenter safe for detached/pre-migration objects used by imports and
+    # tests without conflating source freshness with acceptance.
+    if assertion.is_source_current is None:
+        assertion.is_source_current = bool(assertion.is_current)
+    if assertion.is_accepted is None:
+        assertion.is_accepted = bool(
+            assertion.is_current
+            and assertion.confirmation_status == "confirmed"
+            and assertion.retracted_at is None
+        )
     result = KnowledgeAssertionResponse.model_validate(assertion).model_dump()
     result["value_json"] = to_json_value(assertion.value_json)
     result["source_name"] = _source_name(db, assertion.data_source_id)
@@ -137,6 +154,19 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
     result = ReconciliationItemResponse.model_validate(item).model_dump()
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     result["source_name"] = _source_name(db, assertion.data_source_id) if assertion else None
+    run = db.get(DiscoveryRun, assertion.discovery_run_id) if assertion and assertion.discovery_run_id else None
+    asset = db.get(Asset, item.entity_id) if item.entity_type == "asset" and item.entity_id else None
+    observed = item.observed_value_json if isinstance(item.observed_value_json, dict) else {}
+    result.update(
+        {
+            "discovery_run_id": assertion.discovery_run_id if assertion else None,
+            "discovery_run_status": run.status if run else None,
+            "entity_name": asset.name if asset else item.candidate_external_id,
+            "last_observed_at": observed.get("last_observed_at"),
+            "missing_since_run_id": observed.get("missing_since_run_id"),
+            "missing_since_at": assertion.first_observed_at if assertion and item.category == "no_longer_observed" else None,
+        }
+    )
     if item.entity_type == "asset_relationship" and assertion is not None:
         resolution = relationship_resolution(db, item, persist_links=False)
         for field in (
@@ -154,7 +184,7 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
             result[field] = resolution.get(field)
         result["current_value_json"] = item.current_value_json
         result["observed_value_json"] = resolution
-    return result
+    return to_json_value(result)
 
 
 @router.get("/data-sources", response_model=list[DataSourceResponse])
@@ -393,11 +423,15 @@ def simulate_discovery(
     payload: SimulatedDiscoveryRequest,
     request: Request,
     context: RequestContext,
-    principal: Principal = Depends(require_permission("integrations.manage")),
+    principal: Principal = Depends(require_permission("discovery.simulate")),
     db: Session = Depends(get_db),
 ):
     _context_match(context, payload.customer_id, payload.site_id)
-    require_scope(principal, "integrations.manage", payload.customer_id, payload.site_id)
+    if principal.can("discovery.simulate", payload.customer_id, payload.site_id):
+        require_scope(principal, "discovery.simulate", payload.customer_id, payload.site_id)
+    else:
+        # Compatibility for callers holding the pre-v2 integration-management grant.
+        require_scope(principal, "integrations.manage", payload.customer_id, payload.site_id)
     customer = _validate_context(db, payload.customer_id, payload.site_id)
     if customer.status != "active":
         raise HTTPException(status_code=409, detail="Discovery cannot run for an inactive customer")
@@ -409,6 +443,7 @@ def simulate_discovery(
         run, evidence_count, assertion_count, items = run_simulation(
             db, payload=payload, user_id=principal.user.id
         )
+        snapshot = run.snapshot_reconciliation
         add_audit_event(
             db,
             action="discovery.simulated",
@@ -430,6 +465,12 @@ def simulate_discovery(
             "reconciliation_items": [
                 reconciliation_response(db, item) for item in items
             ],
+            "baseline_run_id": snapshot.baseline_run_id,
+            "observed_count": len(payload.observations),
+            "new_count": sum(item.category in {"newly_discovered", "possible_duplicate"} for item in items),
+            "changed_count": sum(item.category in {"changed", "contradiction", "inferred_relationship"} for item in items),
+            "no_longer_observed_count": snapshot.no_longer_observed_count,
+            "reobserved_count": snapshot.reobserved_count,
         }
         commit(db, "Simulated discovery")
     except ValueError as exc:
@@ -463,7 +504,7 @@ def list_assertions(
     if subject_id:
         query = query.where(KnowledgeAssertion.subject_id == subject_id)
     if current_only:
-        query = query.where(KnowledgeAssertion.is_current.is_(True))
+        query = query.where(KnowledgeAssertion.is_source_current.is_(True))
     assertions = db.scalars(query.order_by(KnowledgeAssertion.last_observed_at.desc()).limit(limit))
     return [assertion_response(db, assertion) for assertion in assertions]
 
@@ -580,6 +621,19 @@ def retract_knowledge_assertion(
             reason=payload.reason,
             confirm_provenance_gap=payload.confirm_provenance_gap,
         )
+        asset = db.get(Asset, assertion.subject_id) if assertion.subject_type == "asset" and assertion.subject_id else None
+        record_assertion_change(
+            db,
+            assertion=assertion,
+            change_type="assertion_retracted",
+            entity_name=asset.name if asset else assertion.subject_external_id or assertion.subject_type,
+            summary=f"Retracted {assertion.predicate} assertion",
+            actor_user_id=principal.user.id,
+            previous_value=assertion.value_json,
+            new_value=None,
+            metadata={"reason": payload.reason, "provenance_gap": provenance_gap},
+            occurred_at=assertion.retracted_at,
+        )
         _audit_assertion_lifecycle(
             db,
             request=request,
@@ -617,13 +671,17 @@ def retract_knowledge_assertion(
 @router.get("/reconciliation-items", response_model=list[ReconciliationItemResponse])
 def list_reconciliation_items(
     context: RequestContext,
-    principal: Principal = Depends(require_permission("assets.view")),
+    principal: Principal = Depends(require_permission("reconciliation.view")),
     item_status: str | None = Query(default="open", alias="status"),
+    category: str | None = None,
+    source_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
     limit: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
     query = select(ReconciliationItem).where(
-        scope_condition(principal, "assets.view", ReconciliationItem.customer_id, ReconciliationItem.site_id)
+        scope_condition(principal, "reconciliation.view", ReconciliationItem.customer_id, ReconciliationItem.site_id)
     )
     if context.customer_id is not None:
         query = query.where(ReconciliationItem.customer_id == context.customer_id)
@@ -631,15 +689,61 @@ def list_reconciliation_items(
         query = query.where(ReconciliationItem.site_id == context.site_id)
     if item_status:
         query = query.where(ReconciliationItem.status == item_status)
+    if category:
+        query = query.where(ReconciliationItem.category == category)
+    if entity_type:
+        query = query.where(ReconciliationItem.entity_type == entity_type)
+    if source_id or run_id:
+        query = query.join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id)
+        if source_id:
+            query = query.where(KnowledgeAssertion.data_source_id == source_id)
+        if run_id:
+            query = query.where(KnowledgeAssertion.discovery_run_id == run_id)
     items = db.scalars(query.order_by(ReconciliationItem.created_at.desc()).limit(limit))
     return [reconciliation_response(db, item) for item in items]
+
+
+@router.get("/reconciliation-items/summary", response_model=ReconciliationSummaryResponse)
+def reconciliation_summary(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("reconciliation.view")),
+    db: Session = Depends(get_db),
+):
+    query = select(ReconciliationItem).where(
+        scope_condition(
+            principal,
+            "reconciliation.view",
+            ReconciliationItem.customer_id,
+            ReconciliationItem.site_id,
+        )
+    )
+    if context.customer_id is not None:
+        query = query.where(ReconciliationItem.customer_id == context.customer_id)
+    if context.site_id is not None:
+        query = query.where(ReconciliationItem.site_id == context.site_id)
+    rows = list(db.scalars(query))
+    by_status: dict[str, int] = {}
+    by_category: dict[str, int] = {}
+    for item in rows:
+        by_status[item.status] = by_status.get(item.status, 0) + 1
+        by_category[item.category] = by_category.get(item.category, 0) + 1
+    return {
+        "by_status": by_status,
+        "by_category": by_category,
+        "actionable": sum(by_status.get(status, 0) for status in ("open", "deferred")),
+    }
 
 
 def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID) -> ReconciliationItem:
     item = db.get(ReconciliationItem, item_id)
     if item is None:
         raise not_found("Reconciliation item")
-    require_scope(principal, "assets.edit", item.customer_id, item.site_id, hide_existence=True)
+    permission = (
+        "reconciliation.decide"
+        if principal.can("reconciliation.decide", item.customer_id, item.site_id)
+        else "assets.edit"
+    )
+    require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
     return item
 
 
@@ -676,18 +780,34 @@ def accept_reconciliation_item(
     item_id: uuid.UUID,
     request: Request,
     payload: ReconciliationDecisionRequest | None = None,
-    principal: Principal = Depends(require_permission("assets.edit")),
+    principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
 ):
     item = _decision_item(db, principal, item_id)
     if item.entity_type == "asset_relationship":
         require_scope(principal, "relationships.create", item.customer_id, item.site_id)
     try:
-        accept_item(db, item, principal.user)
+        accepted = accept_item(
+            db,
+            item,
+            principal.user,
+            disposition=payload.disposition if payload else None,
+            reason=payload.reason if payload else None,
+            exception_review_at=payload.exception_review_at if payload else None,
+        )
     except RelationshipResolutionError as exc:
         db.rollback()
         return JSONResponse(status_code=409, content=exc.payload)
-    item.decision_reason = payload.reason if payload else None
+    if payload and payload.reason is not None:
+        item.decision_reason = payload.reason
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    if isinstance(accepted, Asset):
+        evaluate_asset_safely(db, accepted, trigger_context="reconciliation_accepted", actor_user_id=principal.user.id)
+    elif isinstance(accepted, AssetRelationship):
+        for endpoint_id in {accepted.source_asset_id, accepted.target_asset_id}:
+            endpoint = db.get(Asset, endpoint_id)
+            if endpoint:
+                evaluate_asset_safely(db, endpoint, trigger_context="reconciliation_relationship_accepted", actor_user_id=principal.user.id)
     _audit_decision(db, request=request, principal=principal, item=item, action="accepted")
     commit(db, "Reconciliation decision")
     db.refresh(item)
@@ -702,7 +822,7 @@ def link_reconciliation_asset(
     item_id: uuid.UUID,
     payload: ReconciliationLinkAssetRequest,
     request: Request,
-    principal: Principal = Depends(require_permission("assets.edit")),
+    principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
 ):
     item = _decision_item(db, principal, item_id)
@@ -723,6 +843,8 @@ def link_reconciliation_asset(
         user=principal.user,
         reason=payload.reason,
     )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="reconciliation_identity_linked", actor_user_id=principal.user.id)
     _audit_decision(db, request=request, principal=principal, item=item, action="linked")
     commit(db, "Asset identity link")
     db.refresh(item)
@@ -734,7 +856,7 @@ def reject_reconciliation_item(
     item_id: uuid.UUID,
     request: Request,
     payload: ReconciliationDecisionRequest | None = None,
-    principal: Principal = Depends(require_permission("assets.edit")),
+    principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
 ):
     item = _decision_item(db, principal, item_id)
@@ -750,7 +872,7 @@ def defer_reconciliation_item(
     item_id: uuid.UUID,
     request: Request,
     payload: ReconciliationDecisionRequest | None = None,
-    principal: Principal = Depends(require_permission("assets.edit")),
+    principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
 ):
     item = _decision_item(db, principal, item_id)

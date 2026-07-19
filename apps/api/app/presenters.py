@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.authorization import Principal, role_names
-from app.models import Asset, AssetType
+from app.models import Asset, AssetType, KnowledgeCompletenessSummary
 from app.services.custom_fields import custom_field_values
 
 
@@ -49,6 +49,14 @@ def user_response_data(principal: Principal, *, administrative: bool = False) ->
 
 def asset_response_data(db: Session, asset: Asset) -> dict:
     asset_type = db.scalar(select(AssetType).where(AssetType.key == asset.asset_type))
+    completeness = db.scalar(
+        select(KnowledgeCompletenessSummary).where(
+            KnowledgeCompletenessSummary.entity_type == "asset",
+            KnowledgeCompletenessSummary.entity_id == asset.id,
+        )
+    )
+    if not isinstance(completeness, KnowledgeCompletenessSummary):
+        completeness = None
     return {
         "id": asset.id,
         "workspace_id": asset.workspace_id,
@@ -69,6 +77,9 @@ def asset_response_data(db: Session, asset: Asset) -> dict:
         "source": asset.source,
         "metadata_": asset.metadata_,
         "custom_fields": custom_field_values(db, asset),
+        "completeness_status": completeness.completeness_status if completeness else "not_evaluated",
+        "open_knowledge_gap_count": completeness.open_gap_count if completeness else 0,
+        "critical_knowledge_gap_count": completeness.critical_gap_count if completeness else 0,
         "created_at": asset.created_at,
         "updated_at": asset.updated_at,
     }

@@ -321,8 +321,22 @@ class ManualAssetResponse(ORMResponse):
     source: str
     metadata: dict[str, Any] = Field(validation_alias="metadata_")
     custom_fields: dict[str, Any] = Field(default_factory=dict)
+    completeness_status: str = "not_evaluated"
+    open_knowledge_gap_count: int = 0
+    critical_knowledge_gap_count: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class AssetTypeCountResponse(BaseModel):
+    asset_type_id: uuid.UUID
+    asset_type_name: str
+    count: int
+
+
+class AssetSummaryResponse(BaseModel):
+    total: int
+    by_asset_type: list[AssetTypeCountResponse]
 
 
 class AssetRelationshipCreate(BaseModel):
@@ -653,6 +667,21 @@ class DashboardSummaryResponse(BaseModel):
     networks: int
     relationships: int
     reconciliation: int
+    open_reconciliation_count: int
+    newly_discovered_count: int
+    changed_count: int
+    no_longer_observed_count: int
+    contradiction_count: int
+    possible_duplicate_count: int
+    oldest_open_item_at: datetime | None
+    knowledge_changes_last_7_days: int
+    open_knowledge_gap_count: int
+    critical_knowledge_gap_count: int
+    high_knowledge_gap_count: int
+    assets_with_critical_gaps: int
+    assets_not_evaluated: int
+    assets_operationally_complete: int
+    expired_exception_count: int
 
 
 class AuditEventResponse(ORMResponse):
@@ -765,6 +794,9 @@ class DiscoveryRunResponse(ORMResponse):
     archived_at: datetime | None
     archived_by_user_id: uuid.UUID | None
     archive_reason: str | None
+    coverage_key: str | None
+    is_complete_snapshot: bool
+    completeness_status: str
     source_name: str | None = None
     deletion_safety: "DeletionSafetyResponse | None" = None
     created_at: datetime
@@ -835,7 +867,19 @@ class SimulatedDiscoveryRequest(BaseModel):
     customer_id: uuid.UUID
     site_id: uuid.UUID | None = None
     data_source_id: uuid.UUID | None = None
+    coverage_key: str | None = Field(default=None, max_length=1024)
+    is_complete_snapshot: bool = False
     observations: list[SimulationObservation] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def unique_observed_identities(self):
+        identities = [
+            (item.entity_kind, item.external_id or f"simulated:{item.asset_type}:{item.name}")
+            for item in self.observations
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("A discovery snapshot cannot contain duplicate external identities")
+        return self
 
 
 class KnowledgeAssertionResponse(ORMResponse):
@@ -862,6 +906,10 @@ class KnowledgeAssertionResponse(ORMResponse):
     valid_to: datetime | None
     superseded_by_id: uuid.UUID | None
     is_current: bool
+    is_source_current: bool
+    is_accepted: bool
+    accepted_at: datetime | None
+    accepted_by_user_id: uuid.UUID | None
     retracted_at: datetime | None
     retracted_by_user_id: uuid.UUID | None
     retraction_reason: str | None
@@ -899,12 +947,33 @@ class ReconciliationItemResponse(ORMResponse):
     target_resolution_status: ResolutionStatus | None = None
     blocked_reason: str | None = None
     current_relationship_id: uuid.UUID | None = None
+    discovery_run_id: uuid.UUID | None = None
+    discovery_run_status: str | None = None
+    entity_name: str | None = None
+    last_observed_at: datetime | None = None
+    missing_since_run_id: uuid.UUID | None = None
+    missing_since_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
 
 class ReconciliationDecisionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=10000)
+    disposition: Literal[
+        "mark_missing",
+        "mark_inactive",
+        "mark_retired",
+        "retire",
+        "keep_active",
+        "exception",
+    ] | None = None
+    exception_review_at: datetime | None = None
+
+
+class ReconciliationSummaryResponse(BaseModel):
+    by_status: dict[str, int]
+    by_category: dict[str, int]
+    actionable: int
 
 
 class ReconciliationLinkAssetRequest(BaseModel):
@@ -918,6 +987,294 @@ class SimulatedDiscoveryResponse(BaseModel):
     assertions_created: int
     reconciliation_items_created: int
     reconciliation_items: list[ReconciliationItemResponse]
+    baseline_run_id: uuid.UUID | None = None
+    observed_count: int = 0
+    new_count: int = 0
+    changed_count: int = 0
+    no_longer_observed_count: int = 0
+    reobserved_count: int = 0
+
+
+class KnowledgeChangeResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    change_type: str
+    entity_type: str
+    entity_id: uuid.UUID | None
+    entity_name_snapshot: str
+    entity_name: str = ""
+    predicate: str | None
+    previous_value_json: Any | None
+    new_value_json: Any | None
+    previous_value: Any | None = None
+    new_value: Any | None = None
+    truth_classification: str | None
+    data_source_id: uuid.UUID | None
+    discovery_run_id: uuid.UUID | None
+    assertion_id: uuid.UUID | None
+    reconciliation_item_id: uuid.UUID | None
+    actor_user_id: uuid.UUID | None
+    summary: str
+    occurred_at: datetime
+    metadata_json: dict[str, Any] | None
+    source_name: str | None = None
+    discovery_run_status: str | None = None
+    reconciliation_status: str | None = None
+    actor_display_name: str | None = None
+    attention_required: bool = False
+    links: dict[str, str] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class KnowledgeChangeListResponse(BaseModel):
+    items: list[KnowledgeChangeResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class KnowledgeChangeSummaryResponse(BaseModel):
+    total: int
+    by_type: dict[str, int]
+    last_24_hours: int
+    last_7_days: int
+    unresolved_attention_count: int
+
+
+class AssetFactHistoryItem(BaseModel):
+    predicate: str
+    value: Any | None
+    truth_classification: str | None
+    source_name: str | None
+    discovery_run_id: uuid.UUID | None
+    assertion_id: uuid.UUID | None
+    confirmation_status: str | None
+    first_observed_at: datetime | None
+    last_observed_at: datetime | None
+    is_current: bool
+    is_source_current: bool
+    is_accepted: bool
+    retracted_at: datetime | None
+
+
+class AssetFactHistoryResponse(BaseModel):
+    asset_id: uuid.UUID
+    facts: dict[str, list[AssetFactHistoryItem]]
+
+
+class KnowledgeSummaryValue(BaseModel):
+    assertion_id: uuid.UUID
+    value: Any | None
+    truth_classification: str
+    confirmation_status: str
+    source_id: uuid.UUID | None
+    source_name: str | None
+    first_observed_at: datetime
+    last_observed_at: datetime
+    accepted_at: datetime | None = None
+    confirmed_at: datetime | None = None
+    accepted_by_user_id: uuid.UUID | None = None
+    accepted_by_name: str | None = None
+    actor_name: str | None = None
+    is_source_current: bool
+    is_accepted: bool
+    conflicts_with_accepted: bool = False
+
+
+class KnowledgePredicateSummary(BaseModel):
+    predicate: str
+    label: str
+    cardinality: Literal["single", "multi"]
+    accepted: KnowledgeSummaryValue | None = None
+    accepted_values: list[KnowledgeSummaryValue] = Field(default_factory=list)
+    latest_observations: list[KnowledgeSummaryValue] = Field(default_factory=list)
+    active_source_count: int
+    source_count: int
+    distinct_active_value_count: int
+    assertion_count: int
+    historical_count: int
+    conflict: bool
+    unresolved: bool
+    last_observed_at: datetime | None
+    freshness: Literal["current", "historical", "unknown"]
+
+
+class AssetKnowledgeSummaryResponse(BaseModel):
+    asset_id: uuid.UUID
+    groups: list[KnowledgePredicateSummary]
+    conflict_count: int
+    unresolved_count: int
+
+
+RequirementLevel = Literal["required", "conditional", "recommended"]
+GapSeverity = Literal["critical", "high", "medium", "low"]
+GapStatus = Literal["open", "deferred", "exception", "resolved", "superseded"]
+
+
+class KnowledgeRequirementBase(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    entity_type: Literal["asset"] = "asset"
+    asset_type_id: uuid.UUID | None = None
+    requirement_level: RequirementLevel
+    severity: GapSeverity
+    rule_type: str = Field(min_length=1, max_length=80)
+    rule_config_json: dict[str, Any] = Field(default_factory=dict)
+    active: bool = True
+    sort_order: int = Field(default=100, ge=0)
+    remediation_hint: str | None = Field(default=None, max_length=10000)
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class KnowledgeRequirementCreate(KnowledgeRequirementBase):
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{1,149}$")
+
+
+class KnowledgeRequirementUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    requirement_level: RequirementLevel | None = None
+    severity: GapSeverity | None = None
+    rule_type: str | None = Field(default=None, min_length=1, max_length=80)
+    rule_config_json: dict[str, Any] | None = None
+    active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+    remediation_hint: str | None = Field(default=None, max_length=10000)
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class KnowledgeRequirementResponse(ORMResponse):
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str | None
+    entity_type: str
+    asset_type_id: uuid.UUID | None
+    asset_type_name: str | None = None
+    requirement_level: str
+    severity: str
+    rule_type: str
+    rule_config_json: dict[str, Any]
+    rule_summary: str = ""
+    active: bool
+    system_defined: bool
+    sort_order: int
+    remediation_hint: str | None
+    configuration_valid: bool
+    configuration_error: str | None
+    created_by_user_id: uuid.UUID | None
+    updated_by_user_id: uuid.UUID | None
+    affected_asset_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeRequirementValidationRequest(BaseModel):
+    rule_type: str = Field(min_length=1, max_length=80)
+    rule_config_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeRequirementValidationResponse(BaseModel):
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    interpretation: str
+
+
+class KnowledgeGapResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    requirement_definition_id: uuid.UUID
+    requirement_name: str | None = None
+    remediation_hint: str | None = None
+    entity_type: str
+    entity_id: uuid.UUID
+    entity_name: str | None = None
+    asset_type_id_snapshot: uuid.UUID | None
+    asset_type_name: str | None = None
+    status: str
+    severity: str
+    requirement_level: str
+    summary: str
+    details_json: dict[str, Any] | None
+    first_detected_at: datetime
+    last_evaluated_at: datetime
+    last_state_changed_at: datetime
+    resolved_at: datetime | None
+    resolved_by_user_id: uuid.UUID | None
+    resolution_reason: str | None
+    exception_reason: str | None
+    exception_created_at: datetime | None
+    exception_created_by_user_id: uuid.UUID | None
+    exception_expires_at: datetime | None
+    deferred_until: datetime | None
+    deferred_by_user_id: uuid.UUID | None
+    assigned_to_user_id: uuid.UUID | None
+    assigned_to_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeCompletenessSummaryResponse(ORMResponse):
+    entity_type: str
+    entity_id: uuid.UUID
+    required_total: int
+    required_satisfied: int
+    recommended_total: int
+    recommended_satisfied: int
+    critical_gap_count: int
+    high_gap_count: int
+    open_gap_count: int
+    exception_count: int
+    completeness_status: str
+    last_evaluated_at: datetime | None
+
+
+class AssetCompletenessResponse(BaseModel):
+    asset_id: uuid.UUID
+    summary: KnowledgeCompletenessSummaryResponse
+    active_gaps: list[KnowledgeGapResponse]
+    resolved_gaps: list[KnowledgeGapResponse]
+
+
+class GapSummaryResponse(BaseModel):
+    open_knowledge_gap_count: int
+    critical_knowledge_gap_count: int
+    high_knowledge_gap_count: int
+    assets_with_critical_gaps: int
+    assets_not_evaluated: int
+    assets_operationally_complete: int
+    expired_exception_count: int
+
+
+class GapDeferRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=10000)
+    deferred_until: datetime
+
+    _reason = field_validator("reason")(_trim_nonempty)
+
+
+class GapExceptionRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=10000)
+    expires_at: datetime | None = None
+
+    _reason = field_validator("reason")(_trim_nonempty)
+
+
+class GapReopenRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=10000)
+
+
+class GapAssignRequest(BaseModel):
+    user_id: uuid.UUID | None
+
+
+class CompletenessBatchRequest(BaseModel):
+    asset_type_id: uuid.UUID | None = None
+    limit: int = Field(default=100, ge=1, le=500)
 
 
 class TopologyResponse(BaseModel):
