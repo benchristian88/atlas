@@ -57,6 +57,7 @@ from app.services.knowledge_lifecycle import (
     retract_assertion,
 )
 from app.services.simulated_discovery import run_simulation
+from app.utils.json_values import to_json_value
 
 router = APIRouter(tags=["knowledge"])
 
@@ -121,6 +122,7 @@ def assertion_response(
     db: Session, assertion: KnowledgeAssertion, *, include_deletion_safety: bool = True
 ) -> dict:
     result = KnowledgeAssertionResponse.model_validate(assertion).model_dump()
+    result["value_json"] = to_json_value(assertion.value_json)
     result["source_name"] = _source_name(db, assertion.data_source_id)
     result["deletion_safety"] = (
         can_delete_assertion(db, assertion).as_dict()
@@ -128,7 +130,7 @@ def assertion_response(
         else None
     )
     result["provenance_gap_warning"] = assertion_has_provenance_gap(db, assertion)
-    return result
+    return to_json_value(result)
 
 
 def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:

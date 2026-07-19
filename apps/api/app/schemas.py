@@ -783,8 +783,10 @@ class AssertionRetractionRequest(LifecycleReasonRequest):
 
 class DeletionSafetyResponse(BaseModel):
     allowed: bool
+    reasons: list[str] = Field(default_factory=list)
     blocking_reasons: list[str] = Field(default_factory=list)
     counts: dict[str, int] = Field(default_factory=dict)
+    identifiers: dict[str, str | None] = Field(default_factory=dict)
     recommended_alternative: str | None = None
 
 

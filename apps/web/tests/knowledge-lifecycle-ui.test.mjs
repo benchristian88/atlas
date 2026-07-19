@@ -19,6 +19,7 @@ test("assertion management preserves operational data and requires a retraction 
   assert.match(panel, /deletion_safety\?\.allowed/);
   assert.match(panel, /Retraction reason \*/);
   assert.match(panel, /does not reverse or alter the current asset/);
+  assert.match(panel, /source_name \|\| "Unavailable"/);
   assert.match(panel, /JSON\.stringify\(dialog\.assertion\.value_json, null, 2\)/);
   assert.match(assetPage, /current_only=false/);
   assert.match(assetPage, /<AssertionsPanel/);

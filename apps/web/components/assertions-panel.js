@@ -13,7 +13,7 @@ function assertionValue(assertion, assetsById) {
   return assertion.object_external_id
     || assetsById[assertion.object_id]?.name
     || assertion.object_id
-    || "—";
+    || "Unavailable";
 }
 
 function dateTime(value) {
@@ -93,7 +93,7 @@ export function AssertionsPanel({
       const value = assertionValue(assertion, assetsById);
       const mayDelete = canDelete && assertion.deletion_safety?.allowed;
       const mayRetract = canRetract && !assertion.retracted_at && assertion.confirmation_status === "confirmed";
-      return <tr key={assertion.id}><td><span className="assertion-truncate primary-cell" title={assertion.predicate}>{assertion.predicate}</span></td><td><code className="assertion-truncate" title={value}>{value}</code></td><td><StatusBadge status={assertion.truth_classification} /></td><td className="assertion-source-column"><span className="assertion-truncate" title={assertion.source_name || "Unknown"}>{assertion.source_name || "Unknown"}</span></td><td><StatusBadge status={displayStatus(assertion)} /></td><td className="assertion-observed-column"><span className="secondary-text">{dateTime(assertion.last_observed_at)}</span></td><td><div className="table-actions"><button className="text-button" onClick={() => openDialog("details", assertion)} type="button">View details</button>{mayDelete && <button className="text-button text-danger" onClick={() => openDialog("delete", assertion)} type="button">Delete</button>}{mayRetract && <button className="text-button text-danger" onClick={() => openDialog("retract", assertion)} type="button">Retract</button>}</div></td></tr>;
+      return <tr key={assertion.id}><td><span className="assertion-truncate primary-cell" title={assertion.predicate}>{assertion.predicate}</span></td><td><code className="assertion-truncate" title={value}>{value}</code></td><td><StatusBadge status={assertion.truth_classification} /></td><td className="assertion-source-column"><span className="assertion-truncate" title={assertion.source_name || "Unavailable"}>{assertion.source_name || "Unavailable"}</span></td><td><StatusBadge status={displayStatus(assertion)} /></td><td className="assertion-observed-column"><span className="secondary-text">{dateTime(assertion.last_observed_at)}</span></td><td><div className="table-actions"><button className="text-button" onClick={() => openDialog("details", assertion)} type="button">View details</button>{mayDelete && <button className="text-button text-danger" onClick={() => openDialog("delete", assertion)} type="button">Delete</button>}{mayRetract && <button className="text-button text-danger" onClick={() => openDialog("retract", assertion)} type="button">Retract</button>}</div></td></tr>;
     })}</tbody></table></div>}
 
     {dialog && <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>

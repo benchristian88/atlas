@@ -18,6 +18,7 @@ from app.models import (
     ReconciliationItem,
     User,
 )
+from app.utils.json_values import to_json_value
 
 ACCEPTED_RECONCILIATION_STATUSES = ("accepted", "merged", "exception")
 DELETABLE_ASSERTION_STATUSES = ("unreviewed", "rejected", "superseded")
@@ -30,23 +31,28 @@ class DeletionSafety:
     allowed: bool
     blocking_reasons: tuple[str, ...] = ()
     counts: dict[str, int] = field(default_factory=dict)
+    identifiers: dict[str, uuid.UUID | str | None] = field(default_factory=dict)
     recommended_alternative: str | None = None
 
     def as_dict(self) -> dict:
-        return {
+        return to_json_value({
             "allowed": self.allowed,
+            "reasons": list(self.blocking_reasons),
             "blocking_reasons": list(self.blocking_reasons),
             "counts": self.counts,
+            "identifiers": self.identifiers,
             "recommended_alternative": self.recommended_alternative,
-        }
+        })
 
     def conflict_payload(self, detail: str) -> dict:
-        return {
+        return to_json_value({
             "detail": detail,
             **self.counts,
+            "reasons": list(self.blocking_reasons),
             "blocking_reasons": list(self.blocking_reasons),
+            "identifiers": self.identifiers,
             "recommended_action": self.recommended_alternative,
-        }
+        })
 
 
 class UnsafeDeletionError(Exception):
@@ -181,6 +187,7 @@ def can_delete_discovery_run(db: Session, run: DiscoveryRun) -> DeletionSafety:
         allowed=not reasons,
         blocking_reasons=tuple(reasons),
         counts=counts,
+        identifiers={"discovery_run_id": run.id},
         recommended_alternative="archive" if reasons else None,
     )
 
@@ -236,24 +243,28 @@ def assertion_has_provenance_gap(db: Session, assertion: KnowledgeAssertion) -> 
         return False
     if assertion.subject_id is None and assertion.object_id is None:
         return False
-    alternative = db.scalar(
-        select(KnowledgeAssertion.id).where(
+    candidates = db.scalars(
+        select(KnowledgeAssertion).where(
             KnowledgeAssertion.id != assertion.id,
             KnowledgeAssertion.customer_id == assertion.customer_id,
             KnowledgeAssertion.site_id == assertion.site_id,
             KnowledgeAssertion.subject_type == assertion.subject_type,
             KnowledgeAssertion.subject_id == assertion.subject_id,
             KnowledgeAssertion.predicate == assertion.predicate,
-            KnowledgeAssertion.value_json == assertion.value_json,
-            KnowledgeAssertion.object_type == assertion.object_type,
-            KnowledgeAssertion.object_id == assertion.object_id,
-            KnowledgeAssertion.object_external_id == assertion.object_external_id,
             KnowledgeAssertion.confirmation_status == "confirmed",
             KnowledgeAssertion.retracted_at.is_(None),
             KnowledgeAssertion.is_current.is_(True),
         )
     )
-    return alternative is None
+    for candidate in candidates:
+        if (
+            candidate.value_json == assertion.value_json
+            and candidate.object_type == assertion.object_type
+            and candidate.object_id == assertion.object_id
+            and candidate.object_external_id == assertion.object_external_id
+        ):
+            return False
+    return True
 
 
 def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> DeletionSafety:
@@ -304,6 +315,11 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
         allowed=not reasons,
         blocking_reasons=tuple(reasons),
         counts=counts,
+        identifiers={
+            "assertion_id": assertion.id,
+            "discovery_run_id": assertion.discovery_run_id,
+            "evidence_record_id": assertion.evidence_record_id,
+        },
         recommended_alternative="retract" if reasons else None,
     )
 
