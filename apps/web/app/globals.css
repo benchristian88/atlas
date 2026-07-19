@@ -784,7 +784,8 @@ tbody tr:hover { background: #fbfdfd; }
   .knowledge-summary-grid { padding: 12px; }
   .knowledge-observations > div { align-items: start; grid-template-columns: 1fr; }
 }
-.completeness-meter { height: .55rem; overflow: hidden; border-radius: 999px; background: var(--surface-muted, #e7e9ee); margin: .75rem 0 1rem; }
+.completeness-body { min-width: 0; padding: 0 22px 22px; }
+.completeness-meter { height: .55rem; overflow: hidden; border-radius: 999px; background: var(--surface-muted, #e7e9ee); margin: 0 0 1rem; width: 100%; }
 .completeness-meter span { display: block; height: 100%; background: var(--accent); transition: width .2s ease; }
 .completeness-counts { margin-bottom: 1rem; }
 .gap-group { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
