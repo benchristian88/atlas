@@ -762,9 +762,30 @@ class DiscoveryRunResponse(ORMResponse):
     summary: dict[str, Any] | None
     error_message: str | None
     created_by_user_id: uuid.UUID | None
+    archived_at: datetime | None
+    archived_by_user_id: uuid.UUID | None
+    archive_reason: str | None
     source_name: str | None = None
+    deletion_safety: "DeletionSafetyResponse | None" = None
     created_at: datetime
     updated_at: datetime
+
+
+class LifecycleReasonRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=10000)
+
+    _reason = field_validator("reason")(_trim_nonempty)
+
+
+class AssertionRetractionRequest(LifecycleReasonRequest):
+    confirm_provenance_gap: bool = False
+
+
+class DeletionSafetyResponse(BaseModel):
+    allowed: bool
+    blocking_reasons: list[str] = Field(default_factory=list)
+    counts: dict[str, int] = Field(default_factory=dict)
+    recommended_alternative: str | None = None
 
 
 class SimulationInterface(BaseModel):
@@ -839,7 +860,12 @@ class KnowledgeAssertionResponse(ORMResponse):
     valid_to: datetime | None
     superseded_by_id: uuid.UUID | None
     is_current: bool
+    retracted_at: datetime | None
+    retracted_by_user_id: uuid.UUID | None
+    retraction_reason: str | None
     source_name: str | None = None
+    deletion_safety: DeletionSafetyResponse | None = None
+    provenance_gap_warning: bool = False
     created_at: datetime
     updated_at: datetime
 

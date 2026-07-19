@@ -41,6 +41,10 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "audit.view": ("View audit events", "Audit"),
     "integrations.view": ("View integrations and discovery runs", "Integrations"),
     "integrations.manage": ("Manage integrations and discovery runs", "Integrations"),
+    "discovery_runs.archive": ("Archive and restore discovery runs", "Discovery"),
+    "discovery_runs.delete": ("Safely delete unused discovery runs", "Discovery"),
+    "assertions.retract": ("Retract knowledge assertions", "Knowledge"),
+    "assertions.delete": ("Safely delete unused knowledge assertions", "Knowledge"),
     "system_settings.manage": ("Manage system settings", "System"),
 }
 
@@ -80,6 +84,10 @@ ROLE_PERMISSION_KEYS: dict[str, set[str]] = {
         "custom_fields.view",
         "integrations.view",
         "integrations.manage",
+        "discovery_runs.archive",
+        "discovery_runs.delete",
+        "assertions.retract",
+        "assertions.delete",
     },
     VIEWER: {
         "customers.view",
@@ -93,4 +101,3 @@ ROLE_PERMISSION_KEYS: dict[str, set[str]] = {
         "integrations.view",
     },
 }
-

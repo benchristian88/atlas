@@ -5,9 +5,11 @@ without bypassing Atlas's accepted operational asset and relationship model.
 
 ## Prerequisites
 
-- Apply migrations through `20260719_0007` and start the API and web services.
+- Apply migrations through `20260719_0008` and start the API and web services.
 - Sign in as a user with `integrations.manage`, `assets.view`, `assets.edit`,
-  `relationships.create`, and access to the test customer/site.
+  `relationships.create`, `discovery_runs.archive`, `discovery_runs.delete`,
+  `assertions.retract`, `assertions.delete`, and access to the test
+  customer/site.
 - Create customer **Home Lab**, site **Home**, and an asset named **pve1**.
 - Ensure `virtual_machine` is an active asset type and `runs_on` is an active
   relationship type.
@@ -65,11 +67,43 @@ without bypassing Atlas's accepted operational asset and relationship model.
 3. Refresh the page. Confirm the accepted asset, relationship, and assertions
    persist and no page makes repeated requests while idle.
 
+## Safe cleanup and lifecycle controls
+
+Deletion is only for unused development/test evidence. Archive a run whenever
+it supports confirmed assertions, accepted reconciliation decisions, source
+identity links, or later provenance. Archiving keeps the run, evidence,
+assertions, source links, and reconciliation history in PostgreSQL.
+
+Retraction preserves assertion and evidence history while marking the assertion
+non-current. Deleting or retracting an assertion does not reverse accepted
+assets, interfaces, relationships, networks, or facts. Reversing operational
+knowledge requires a separate reconciliation workflow.
+
+1. Run a simulation and leave every reconciliation item unaccepted.
+2. Open **Discovery**, delete that run, and confirm its evidence, assertions,
+   and unaccepted reconciliation items disappear. Confirm the DataSource
+   remains.
+3. Run another simulation and accept an asset or relationship.
+4. Confirm **Delete** is unavailable for that run. Archive it with a reason and
+   confirm the operational asset and its provenance remain.
+5. Enable **Include archived**, confirm the Archived badge and reason, then
+   restore the run.
+6. Open an asset with assertions. Delete an unused unreviewed assertion and
+   confirm its asset and evidence are unchanged.
+7. Retract a confirmed assertion with a reason. If Atlas warns that this is the
+   only current provenance, explicitly confirm the gap.
+8. Confirm the assertion displays **Retracted**, its details and evidence remain
+   available, and the operational asset is unchanged.
+9. Resize the asset page. Confirm the assertions table remains within its card,
+   scrolls horizontally where needed, and long JSON values are contained in the
+   details dialog.
+
 ## Scope and audit checks
 
 1. Repeat list calls as a user scoped to a different customer/site and confirm
    the test run, assertions, and reconciliation items are absent.
 2. Confirm the audit log includes the simulated run and each reconciliation
-   decision without raw credentials or tokens.
+   decision, archive/restore/delete action, and assertion retraction/deletion
+   without raw credentials or tokens.
 3. Confirm existing manual assets, networks, interfaces, and topology views
    still behave as before.

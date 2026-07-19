@@ -432,6 +432,13 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    archived_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    archive_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class EvidenceRecord(UUIDPrimaryKeyMixin, Base):
@@ -532,6 +539,13 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
     )
+    retracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    retracted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    retraction_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class ReconciliationItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):

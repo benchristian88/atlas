@@ -24,10 +24,12 @@ from app.models import (
 )
 from app.routes.crud_helpers import commit, flush, not_found
 from app.schemas import (
+    AssertionRetractionRequest,
     DataSourceCreate,
     DataSourceResponse,
     DiscoveryRunResponse,
     KnowledgeAssertionResponse,
+    LifecycleReasonRequest,
     ReconciliationDecisionRequest,
     ReconciliationLinkAssetRequest,
     ReconciliationItemResponse,
@@ -41,6 +43,18 @@ from app.services.reconciliation import (
     link_item_to_asset,
     relationship_resolution,
     reject_item,
+)
+from app.services.knowledge_lifecycle import (
+    ProvenanceGapConfirmationRequired,
+    UnsafeDeletionError,
+    archive_discovery_run,
+    assertion_has_provenance_gap,
+    can_delete_assertion,
+    can_delete_discovery_run,
+    delete_assertion,
+    delete_discovery_run,
+    restore_discovery_run,
+    retract_assertion,
 )
 from app.services.simulated_discovery import run_simulation
 
@@ -70,7 +84,9 @@ def _source_name(db: Session, source_id: uuid.UUID | None) -> str | None:
     return source.name if source else None
 
 
-def run_response(db: Session, run: DiscoveryRun) -> dict:
+def run_response(
+    db: Session, run: DiscoveryRun, *, include_deletion_safety: bool = False
+) -> dict:
     source_name = _source_name(db, run.data_source_id)
     if source_name is None and run.integration_id is not None:
         integration = db.get(Integration, run.integration_id)
@@ -87,15 +103,31 @@ def run_response(db: Session, run: DiscoveryRun) -> dict:
         "summary": run.summary,
         "error_message": run.error_message,
         "created_by_user_id": run.created_by_user_id,
+        "archived_at": run.archived_at,
+        "archived_by_user_id": run.archived_by_user_id,
+        "archive_reason": run.archive_reason,
         "source_name": source_name,
+        "deletion_safety": (
+            can_delete_discovery_run(db, run).as_dict()
+            if include_deletion_safety
+            else None
+        ),
         "created_at": run.created_at,
         "updated_at": run.updated_at,
     }
 
 
-def assertion_response(db: Session, assertion: KnowledgeAssertion) -> dict:
+def assertion_response(
+    db: Session, assertion: KnowledgeAssertion, *, include_deletion_safety: bool = True
+) -> dict:
     result = KnowledgeAssertionResponse.model_validate(assertion).model_dump()
     result["source_name"] = _source_name(db, assertion.data_source_id)
+    result["deletion_safety"] = (
+        can_delete_assertion(db, assertion).as_dict()
+        if include_deletion_safety
+        else None
+    )
+    result["provenance_gap_warning"] = assertion_has_provenance_gap(db, assertion)
     return result
 
 
@@ -180,6 +212,7 @@ def list_discovery_runs(
     context: RequestContext,
     principal: Principal = Depends(require_permission("integrations.view")),
     limit: int = Query(default=100, ge=1, le=500),
+    include_archived: bool = False,
     db: Session = Depends(get_db),
 ):
     query = select(DiscoveryRun).where(
@@ -189,8 +222,10 @@ def list_discovery_runs(
         query = query.where(DiscoveryRun.customer_id == context.customer_id)
     if context.site_id is not None:
         query = query.where(DiscoveryRun.site_id == context.site_id)
+    if not include_archived:
+        query = query.where(DiscoveryRun.archived_at.is_(None))
     runs = db.scalars(query.order_by(DiscoveryRun.started_at.desc()).limit(limit))
-    return [run_response(db, run) for run in runs]
+    return [run_response(db, run, include_deletion_safety=True) for run in runs]
 
 
 @router.get("/discovery-runs/{run_id}", response_model=DiscoveryRunResponse)
@@ -203,7 +238,152 @@ def get_discovery_run(
     if run is None:
         raise not_found("Discovery run")
     require_scope(principal, "integrations.view", run.customer_id, run.site_id, hide_existence=True)
-    return run_response(db, run)
+    return run_response(db, run, include_deletion_safety=True)
+
+
+def _lifecycle_run(
+    db: Session, principal: Principal, run_id: uuid.UUID, permission: str
+) -> DiscoveryRun:
+    run = db.get(DiscoveryRun, run_id)
+    if run is None:
+        raise not_found("Discovery run")
+    require_scope(
+        principal,
+        permission,
+        run.customer_id,
+        run.site_id,
+        hide_existence=True,
+    )
+    return run
+
+
+def _audit_run_lifecycle(
+    db: Session,
+    *,
+    request: Request,
+    principal: Principal,
+    run: DiscoveryRun,
+    action: str,
+    metadata: dict | None = None,
+) -> None:
+    customer = db.get(Customer, run.customer_id)
+    add_audit_event(
+        db,
+        action=f"discovery_run.{action}",
+        target_type="discovery_run",
+        target_id=run.id,
+        actor=principal.user,
+        workspace_id=customer.workspace_id if customer else None,
+        customer_id=run.customer_id,
+        site_id=run.site_id,
+        summary=f"Discovery run {action}",
+        metadata=metadata or {},
+        request=request,
+    )
+
+
+@router.post(
+    "/discovery-runs/{run_id}/archive", response_model=DiscoveryRunResponse
+)
+def archive_run(
+    run_id: uuid.UUID,
+    payload: LifecycleReasonRequest,
+    request: Request,
+    principal: Principal = Depends(require_permission("discovery_runs.archive")),
+    db: Session = Depends(get_db),
+):
+    run = _lifecycle_run(db, principal, run_id, "discovery_runs.archive")
+    try:
+        archive_discovery_run(run, user=principal.user, reason=payload.reason)
+        _audit_run_lifecycle(
+            db,
+            request=request,
+            principal=principal,
+            run=run,
+            action="archived",
+            metadata={"reason": payload.reason},
+        )
+        commit(db, "Discovery run archive")
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(run)
+    return run_response(db, run, include_deletion_safety=True)
+
+
+@router.post(
+    "/discovery-runs/{run_id}/restore", response_model=DiscoveryRunResponse
+)
+def restore_run(
+    run_id: uuid.UUID,
+    request: Request,
+    principal: Principal = Depends(require_permission("discovery_runs.archive")),
+    db: Session = Depends(get_db),
+):
+    run = _lifecycle_run(db, principal, run_id, "discovery_runs.archive")
+    previous_reason = run.archive_reason
+    try:
+        restore_discovery_run(run)
+        _audit_run_lifecycle(
+            db,
+            request=request,
+            principal=principal,
+            run=run,
+            action="restored",
+            metadata={"previous_archive_reason": previous_reason},
+        )
+        commit(db, "Discovery run restore")
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(run)
+    return run_response(db, run, include_deletion_safety=True)
+
+
+@router.delete("/discovery-runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_run(
+    run_id: uuid.UUID,
+    request: Request,
+    principal: Principal = Depends(require_permission("discovery_runs.delete")),
+    db: Session = Depends(get_db),
+):
+    run = _lifecycle_run(db, principal, run_id, "discovery_runs.delete")
+    try:
+        safety = can_delete_discovery_run(db, run)
+        if not safety.allowed:
+            return JSONResponse(
+                status_code=409,
+                content=safety.conflict_payload(
+                    "Discovery run cannot be deleted because it supports accepted knowledge"
+                ),
+            )
+        audit_metadata = {"source_name": _source_name(db, run.data_source_id)}
+        _audit_run_lifecycle(
+            db,
+            request=request,
+            principal=principal,
+            run=run,
+            action="deleted",
+            metadata=audit_metadata,
+        )
+        delete_discovery_run(db, run)
+        commit(db, "Discovery run deletion")
+    except UnsafeDeletionError as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content=exc.safety.conflict_payload(exc.detail),
+        )
+    except Exception:
+        db.rollback()
+        raise
+    return None
 
 
 @router.post("/discovery/simulate", response_model=SimulatedDiscoveryResponse)
@@ -284,6 +464,152 @@ def list_assertions(
         query = query.where(KnowledgeAssertion.is_current.is_(True))
     assertions = db.scalars(query.order_by(KnowledgeAssertion.last_observed_at.desc()).limit(limit))
     return [assertion_response(db, assertion) for assertion in assertions]
+
+
+def _lifecycle_assertion(
+    db: Session, principal: Principal, assertion_id: uuid.UUID, permission: str
+) -> KnowledgeAssertion:
+    assertion = db.get(KnowledgeAssertion, assertion_id)
+    if assertion is None:
+        raise not_found("Assertion")
+    require_scope(
+        principal,
+        permission,
+        assertion.customer_id,
+        assertion.site_id,
+        hide_existence=True,
+    )
+    return assertion
+
+
+def _audit_assertion_lifecycle(
+    db: Session,
+    *,
+    request: Request,
+    principal: Principal,
+    assertion: KnowledgeAssertion,
+    action: str,
+    metadata: dict | None = None,
+) -> None:
+    customer = db.get(Customer, assertion.customer_id)
+    add_audit_event(
+        db,
+        action=f"assertion.{action}",
+        target_type="knowledge_assertion",
+        target_id=assertion.id,
+        actor=principal.user,
+        workspace_id=customer.workspace_id if customer else None,
+        customer_id=assertion.customer_id,
+        site_id=assertion.site_id,
+        summary=f"Knowledge assertion {action}",
+        metadata={
+            "predicate": assertion.predicate,
+            "subject_type": assertion.subject_type,
+            **(metadata or {}),
+        },
+        request=request,
+    )
+
+
+@router.get("/assertions/{assertion_id}", response_model=KnowledgeAssertionResponse)
+def get_assertion(
+    assertion_id: uuid.UUID,
+    principal: Principal = Depends(require_permission("assets.view")),
+    db: Session = Depends(get_db),
+):
+    assertion = _lifecycle_assertion(db, principal, assertion_id, "assets.view")
+    return assertion_response(db, assertion)
+
+
+@router.delete("/assertions/{assertion_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_assertion(
+    assertion_id: uuid.UUID,
+    request: Request,
+    principal: Principal = Depends(require_permission("assertions.delete")),
+    db: Session = Depends(get_db),
+):
+    assertion = _lifecycle_assertion(db, principal, assertion_id, "assertions.delete")
+    safety = can_delete_assertion(db, assertion)
+    if not safety.allowed:
+        return JSONResponse(
+            status_code=409,
+            content=safety.conflict_payload(
+                "Assertion cannot be deleted because it supports accepted knowledge"
+            ),
+        )
+    try:
+        _audit_assertion_lifecycle(
+            db,
+            request=request,
+            principal=principal,
+            assertion=assertion,
+            action="deleted",
+        )
+        delete_assertion(db, assertion)
+        commit(db, "Assertion deletion")
+    except UnsafeDeletionError as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content=exc.safety.conflict_payload(exc.detail),
+        )
+    except Exception:
+        db.rollback()
+        raise
+    return None
+
+
+@router.post(
+    "/assertions/{assertion_id}/retract", response_model=KnowledgeAssertionResponse
+)
+def retract_knowledge_assertion(
+    assertion_id: uuid.UUID,
+    payload: AssertionRetractionRequest,
+    request: Request,
+    principal: Principal = Depends(require_permission("assertions.retract")),
+    db: Session = Depends(get_db),
+):
+    assertion = _lifecycle_assertion(db, principal, assertion_id, "assertions.retract")
+    try:
+        provenance_gap = retract_assertion(
+            db,
+            assertion,
+            user=principal.user,
+            reason=payload.reason,
+            confirm_provenance_gap=payload.confirm_provenance_gap,
+        )
+        _audit_assertion_lifecycle(
+            db,
+            request=request,
+            principal=principal,
+            assertion=assertion,
+            action="retracted",
+            metadata={
+                "reason": payload.reason,
+                "provenance_gap": provenance_gap,
+                "operational_data_unchanged": True,
+            },
+        )
+        commit(db, "Assertion retraction")
+    except ProvenanceGapConfirmationRequired as exc:
+        db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "requires_confirmation": True,
+                "operational_data_unchanged": True,
+                "recommended_action": "retract_with_confirmation",
+            },
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(assertion)
+    return assertion_response(db, assertion)
 
 
 @router.get("/reconciliation-items", response_model=list[ReconciliationItemResponse])
