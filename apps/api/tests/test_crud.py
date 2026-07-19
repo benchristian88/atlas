@@ -254,6 +254,13 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         "possible_duplicate_count": 0,
         "oldest_open_item_at": None,
         "knowledge_changes_last_7_days": 0,
+        "open_knowledge_gap_count": 0,
+        "critical_knowledge_gap_count": 0,
+        "high_knowledge_gap_count": 0,
+        "assets_with_critical_gaps": 0,
+        "assets_not_evaluated": 0,
+        "assets_operationally_complete": 0,
+        "expired_exception_count": 0,
     }
     assert all("WHERE" in statement for statement in db.statements)
 

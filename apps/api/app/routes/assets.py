@@ -19,6 +19,8 @@ from app.models import (
     AssetRelationship,
     AssetType,
     Customer,
+    KnowledgeCompletenessSummary,
+    KnowledgeGap,
     Site,
 )
 from app.presenters import asset_response_data
@@ -79,6 +81,10 @@ def list_assets(
     principal: Principal = Depends(require_permission("assets.view")),
     customer_id: uuid.UUID | None = None,
     site_id: uuid.UUID | None = None,
+    completeness_status: str | None = None,
+    has_critical_gaps: bool | None = None,
+    has_open_knowledge_gaps: bool | None = None,
+    not_evaluated: bool | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -115,6 +121,21 @@ def list_assets(
         query = query.where(Asset.customer_id == customer_id)
     if site_id is not None:
         query = query.where(Asset.site_id == site_id)
+    if completeness_status or has_critical_gaps is not None or has_open_knowledge_gaps is not None or not_evaluated is not None:
+        query = query.outerjoin(
+            KnowledgeCompletenessSummary,
+            (KnowledgeCompletenessSummary.entity_type == "asset")
+            & (KnowledgeCompletenessSummary.entity_id == Asset.id),
+        )
+    if completeness_status:
+        query = query.where(KnowledgeCompletenessSummary.completeness_status == completeness_status)
+    if has_critical_gaps is not None:
+        query = query.where((func.coalesce(KnowledgeCompletenessSummary.critical_gap_count, 0) > 0) if has_critical_gaps else (func.coalesce(KnowledgeCompletenessSummary.critical_gap_count, 0) == 0))
+    if has_open_knowledge_gaps is not None:
+        query = query.where((func.coalesce(KnowledgeCompletenessSummary.open_gap_count, 0) > 0) if has_open_knowledge_gaps else (func.coalesce(KnowledgeCompletenessSummary.open_gap_count, 0) == 0))
+    if not_evaluated is not None:
+        unevaluated = or_(KnowledgeCompletenessSummary.id.is_(None), KnowledgeCompletenessSummary.completeness_status == "not_evaluated")
+        query = query.where(unevaluated if not_evaluated else ~unevaluated)
     return [asset_response_data(db, asset) for asset in db.scalars(query)]
 
 
@@ -155,6 +176,8 @@ def create_asset(
     set_asset_custom_fields(
         db, asset, payload.custom_fields, replace_active=True
     )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_created", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset.created",
@@ -281,6 +304,8 @@ def update_asset(
             {key: value for key, value in stored_values.items() if key in active_keys},
             replace_active=False,
         )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_updated", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset.updated",
@@ -340,6 +365,18 @@ def delete_asset(
         metadata={"name": asset.name, "asset_type": asset.asset_type},
         request=request,
     )
+    for gap in db.scalars(select(KnowledgeGap).where(
+        KnowledgeGap.entity_type == "asset", KnowledgeGap.entity_id == asset.id,
+        KnowledgeGap.status.in_(("open", "deferred", "exception")),
+    )):
+        gap.status = "superseded"
+        gap.resolution_reason = "Asset was deleted"
+    summary = db.scalar(select(KnowledgeCompletenessSummary).where(
+        KnowledgeCompletenessSummary.entity_type == "asset",
+        KnowledgeCompletenessSummary.entity_id == asset.id,
+    ))
+    if summary:
+        db.delete(summary)
     db.delete(asset)
     commit(db, "Asset")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

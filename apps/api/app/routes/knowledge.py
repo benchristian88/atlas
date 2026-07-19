@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models import (
     Customer,
     Asset,
+    AssetRelationship,
     DataSource,
     DiscoveryRun,
     Integration,
@@ -786,7 +787,7 @@ def accept_reconciliation_item(
     if item.entity_type == "asset_relationship":
         require_scope(principal, "relationships.create", item.customer_id, item.site_id)
     try:
-        accept_item(
+        accepted = accept_item(
             db,
             item,
             principal.user,
@@ -799,6 +800,14 @@ def accept_reconciliation_item(
         return JSONResponse(status_code=409, content=exc.payload)
     if payload and payload.reason is not None:
         item.decision_reason = payload.reason
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    if isinstance(accepted, Asset):
+        evaluate_asset_safely(db, accepted, trigger_context="reconciliation_accepted", actor_user_id=principal.user.id)
+    elif isinstance(accepted, AssetRelationship):
+        for endpoint_id in {accepted.source_asset_id, accepted.target_asset_id}:
+            endpoint = db.get(Asset, endpoint_id)
+            if endpoint:
+                evaluate_asset_safely(db, endpoint, trigger_context="reconciliation_relationship_accepted", actor_user_id=principal.user.id)
     _audit_decision(db, request=request, principal=principal, item=item, action="accepted")
     commit(db, "Reconciliation decision")
     db.refresh(item)
@@ -834,6 +843,8 @@ def link_reconciliation_asset(
         user=principal.user,
         reason=payload.reason,
     )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="reconciliation_identity_linked", actor_user_id=principal.user.id)
     _audit_decision(db, request=request, principal=principal, item=item, action="linked")
     commit(db, "Asset identity link")
     db.refresh(item)

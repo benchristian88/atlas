@@ -207,6 +207,9 @@ def create_asset_relationship(
         actor_user_id=principal.user.id,
         summary=f"Added {relationship.relationship_type} relationship from {source.name} to {target.name}",
     )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, source, trigger_context="relationship_created", actor_user_id=principal.user.id)
+    evaluate_asset_safely(db, target, trigger_context="relationship_created", actor_user_id=principal.user.id)
     commit(db, "Asset relationship")
     db.refresh(relationship)
     return relationship_response(db, relationship)
@@ -239,11 +242,17 @@ def update_asset_relationship(
         raise not_found("Asset relationship")
     source = db.get(Asset, relationship.source_asset_id)
     target = db.get(Asset, relationship.target_asset_id)
-    target = db.get(Asset, relationship.target_asset_id)
     changes = payload.model_dump(exclude_unset=True)
+    previous_relationship = {
+        "source_asset_id": relationship.source_asset_id,
+        "target_asset_id": relationship.target_asset_id,
+        "relationship_type": relationship.relationship_type,
+        "notes": relationship.notes,
+    }
     if "relationship_type" in changes:
         _relationship_type_for_assets(db, changes["relationship_type"], source, target)
     apply_changes(relationship, changes)
+    flush(db, "Asset relationship")
     add_audit_event(
         db,
         action="relationship.updated",
@@ -261,21 +270,26 @@ def update_asset_relationship(
         db,
         customer_id=source.customer_id,
         site_id=source.site_id,
-        change_type="relationship_removed",
+        change_type="relationship_changed",
         entity_type="asset_relationship",
         entity_id=relationship.id,
         entity_name=f"{source.name} → {target.name if target else relationship.target_asset_id}",
         predicate=relationship.relationship_type,
-        previous_value={
+        previous_value=previous_relationship,
+        new_value={
             "source_asset_id": relationship.source_asset_id,
             "target_asset_id": relationship.target_asset_id,
             "relationship_type": relationship.relationship_type,
+            "notes": relationship.notes,
         },
-        new_value=None,
         truth_classification="declared",
         actor_user_id=principal.user.id,
-        summary=f"Removed {relationship.relationship_type} relationship from {source.name}",
+        summary=f"Updated {relationship.relationship_type} relationship from {source.name}",
     )
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, source, trigger_context="relationship_updated", actor_user_id=principal.user.id)
+    if target:
+        evaluate_asset_safely(db, target, trigger_context="relationship_updated", actor_user_id=principal.user.id)
     commit(db, "Asset relationship")
     db.refresh(relationship)
     return relationship_response(db, relationship)
@@ -293,6 +307,7 @@ def delete_asset_relationship(
     if relationship is None:
         raise not_found("Asset relationship")
     source = db.get(Asset, relationship.source_asset_id)
+    target = db.get(Asset, relationship.target_asset_id)
     add_audit_event(
         db,
         action="relationship.deleted",
@@ -307,5 +322,11 @@ def delete_asset_relationship(
         request=request,
     )
     db.delete(relationship)
+    flush(db, "Asset relationship")
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    if source:
+        evaluate_asset_safely(db, source, trigger_context="relationship_deleted", actor_user_id=principal.user.id)
+    if target:
+        evaluate_asset_safely(db, target, trigger_context="relationship_deleted", actor_user_id=principal.user.id)
     commit(db, "Asset relationship")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

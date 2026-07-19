@@ -634,3 +634,20 @@ PYTHONPATH=plugins/sdk:plugins/proxmox python3 -m pytest plugins/proxmox/tests
 The worker is currently a long-running placeholder. Queue consumption and job
 orchestration will be added in a later increment; discovery, normalization,
 and persistence services are implemented but are not yet dispatched by Redis.
+
+## Knowledge completeness
+
+Atlas can define a database-driven Knowledge Profile for each Asset Type and
+evaluate assets after fields, custom fields, interfaces, relationships, or
+accepted discovery data change. Missing or stale knowledge creates a separate
+Knowledge Gap without blocking or deleting the operational asset. Asset detail,
+the Reconciliation **Missing knowledge** queue, the Assets list, and Dashboard
+show scoped completeness state. Authorized users can provide information,
+defer a gap, record a reasoned exception, reopen it, or reevaluate the asset.
+
+Start in **Administration → Asset types → Knowledge profile**. Select existing
+Asset Types, Relationship Types, and Custom Field Definitions in the structured
+editor; no fixed homelab type names or pasted UUIDs are required. See the
+[architecture](docs/architecture/knowledge-completeness.md),
+[administrator guide](docs/admin/knowledge-profiles.md), and
+[manual test plan](docs/testing/knowledge-completeness-v1.md).

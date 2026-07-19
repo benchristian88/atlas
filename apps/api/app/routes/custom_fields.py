@@ -38,6 +38,10 @@ from app.services.custom_fields import (
     lock_field_limit,
     set_asset_custom_fields,
 )
+from app.services.knowledge_requirement_references import (
+    invalidate_referencing_requirements,
+    requirements_referencing,
+)
 
 router = APIRouter(prefix="/custom-fields", tags=["custom fields"])
 asset_values_router = APIRouter(prefix="/assets", tags=["asset custom fields"])
@@ -292,8 +296,14 @@ def update_custom_field(
     changes = payload.model_dump(
         exclude_unset=True, exclude={"asset_type_keys", "options"}
     )
+    referenced_requirements = requirements_referencing(db, definition.id) if changes.get("active") is False else []
     for key, value in changes.items():
         setattr(definition, key, value)
+    if changes.get("active") is False:
+        invalidate_referencing_requirements(db, definition.id, "Custom Field Definition")
+        from app.services.knowledge_completeness import evaluate_assets_for_asset_type
+        for profile_id in {requirement.asset_type_id for requirement in referenced_requirements}:
+            evaluate_assets_for_asset_type(db, profile_id, actor_user_id=principal.user.id)
     applies_to_all = definition.applies_to_all_asset_types
     if payload.asset_type_keys is not None or payload.applies_to_all_asset_types is not None:
         current_keys = list(
@@ -372,6 +382,10 @@ def delete_custom_field(
             status_code=409,
             detail="Custom field has values. Deactivate it instead of deleting it.",
         )
+    requirement_references = requirements_referencing(db, definition.id)
+    if requirement_references:
+        names = ", ".join(requirement.name for requirement in requirement_references[:5])
+        raise HTTPException(status_code=409, detail=f"Custom field is referenced by knowledge requirements: {names}. Deactivate it or update the requirements first.")
     add_audit_event(
         db,
         action="custom_field.deleted",
@@ -422,6 +436,8 @@ def update_asset_custom_fields(
         principal, "assets.edit", asset.customer_id, asset.site_id, hide_existence=True
     )
     set_asset_custom_fields(db, asset, payload.values, replace_active=True)
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="custom_fields_updated", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset.custom_fields_updated",

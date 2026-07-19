@@ -18,6 +18,7 @@ from app.routes import (
     customers,
     manual_assets,
     knowledge,
+    knowledge_completeness,
     networks,
     protected,
     reference_data,
@@ -113,6 +114,7 @@ api_router.include_router(audit.router)
 api_router.include_router(system_settings.router)
 api_router.include_router(manual_assets.router)
 api_router.include_router(knowledge.router)
+api_router.include_router(knowledge_completeness.router)
 api_router.include_router(changes.router)
 api_router.include_router(protected.router)
 

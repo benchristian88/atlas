@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AccessDenied } from "../../components/access-denied";
 import { AssetForm } from "../../components/asset-form";
 import { AssetIcon } from "../../components/asset-icon";
@@ -12,6 +13,7 @@ import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
 
 export default function AssetsPage() {
+  const router = useRouter();
   const { hasPermission, hasPermissionForObject, hasPermissionInContext } = useAuth();
   const workspace = useWorkspaceContext();
   const [assets, setAssets] = useState([]);
@@ -22,6 +24,7 @@ export default function AssetsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [completenessFilter, setCompletenessFilter] = useState("");
   const canView = hasPermissionInContext(
     "assets.view",
     workspace.customerId,
@@ -40,8 +43,9 @@ export default function AssetsPage() {
     setLoading(true);
     setError("");
     try {
+      const filterQuery = completenessFilter === "has_critical_gaps" ? "?has_critical_gaps=true" : completenessFilter === "has_open_knowledge_gaps" ? "?has_open_knowledge_gaps=true" : completenessFilter === "not_evaluated" ? "?not_evaluated=true" : completenessFilter ? `?completeness_status=${completenessFilter}` : "";
       const [assetRecords, typeRecords, fieldRecords] = await Promise.all([
-        apiRequest("/assets"),
+        apiRequest(`/assets${filterQuery}`),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields?active_only=true") : Promise.resolve([]),
       ]);
@@ -53,7 +57,7 @@ export default function AssetsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, hasPermission]);
+  }, [canView, completenessFilter, hasPermission]);
 
   useEffect(() => { load(); }, [load]);
   const assetTypesByKey = useMemo(
@@ -75,10 +79,10 @@ export default function AssetsPage() {
     setError("");
     setSuccess("");
     try {
-      await apiRequest("/assets", { method: "POST", body: JSON.stringify(payload) });
+      const created = await apiRequest("/assets", { method: "POST", body: JSON.stringify(payload) });
       setShowCreate(false);
-      setSuccess("Asset created.");
-      await load();
+      setSuccess("Asset created. Reviewing knowledge completeness…");
+      router.push(`/assets/${created.id}`);
     } catch (requestError) {
       setError(requestError.message || "Atlas could not create this asset.");
     } finally {
@@ -110,17 +114,19 @@ export default function AssetsPage() {
       {success && <div className="success-banner" role="status">{success}</div>}
       {showCreate && <section className="form-card"><div className="form-card-header"><h2>Add asset</h2><button className="icon-button" aria-label="Close form" onClick={() => setShowCreate(false)} type="button">×</button></div><AssetForm assetTypes={assetTypes} context={{ customerId: workspace.customerId, siteId: workspace.siteId }} customFieldDefinitions={customFields} customers={creatableCustomers} onCancel={() => setShowCreate(false)} onSubmit={createAsset} saving={saving} sites={creatableSites} submitLabel="Create asset" /></section>}
 
+      {hasPermission("knowledge_gaps.view") && <div className="filter-bar"><label className="field"><span>Completeness</span><select onChange={(event) => setCompletenessFilter(event.target.value)} value={completenessFilter}><option value="">All completeness states</option><option value="has_critical_gaps">Has critical gaps</option><option value="has_open_knowledge_gaps">Has open gaps</option><option value="critical_gaps">Critical gaps status</option><option value="incomplete">Incomplete</option><option value="operationally_complete">Operationally complete</option><option value="complete">Complete</option><option value="exception_accepted">Exception accepted</option><option value="not_evaluated">Not evaluated</option></select></label></div>}
+
       <section className="table-card" aria-label="Assets list">
         <div className="table-meta"><span>{loading ? "Loading…" : `${assets.length} assets`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>
-        <div className="table-scroll"><table><thead><tr><th>Asset</th><th>Type</th><th>Customer</th><th>Site</th><th>Hostname / IP</th><th>Status</th>{showActions && <th>Actions</th>}</tr></thead><tbody>
-          {!loading && assets.length === 0 && <tr><td className="empty-state" colSpan={showActions ? 7 : 6}>No assets match the active context.</td></tr>}
+        <div className="table-scroll"><table><thead><tr><th>Asset</th><th>Type</th><th>Customer</th><th>Site</th><th>Hostname / IP</th><th>Status</th>{hasPermission("knowledge_gaps.view") && <th>Completeness</th>}{showActions && <th>Actions</th>}</tr></thead><tbody>
+          {!loading && assets.length === 0 && <tr><td className="empty-state" colSpan={showActions ? 8 : 7}>No assets match the active context.</td></tr>}
           {assets.map((asset) => {
             const type = assetTypesByKey[asset.asset_type];
             const customer = workspace.customers.find((item) => item.id === asset.customer_id);
             const site = workspace.sites.find((item) => item.id === asset.site_id);
             const canEditAsset = canEdit && hasPermissionForObject("assets.edit", asset.customer_id, asset.site_id);
             const canDeleteAsset = canDelete && hasPermissionForObject("assets.delete", asset.customer_id, asset.site_id);
-            return <tr key={asset.id}><td><Link className="asset-table-identity" href={`/assets/${asset.id}`}><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} assetType={type} size={38} /><span><strong>{asset.name}</strong><small>{asset.vendor || asset.model ? [asset.vendor, asset.model].filter(Boolean).join(" ") : "View documentation"}</small></span></Link></td><td>{type?.name || asset.asset_type}</td><td>{customer?.name || "Unknown"}</td><td>{site?.name || "Unknown"}</td><td><span className="mono">{asset.ip_address || asset.hostname || "—"}</span></td><td><StatusBadge status={asset.status} /></td>{showActions && <td><div className="row-actions">{canEditAsset && <Link className="text-button" href={`/assets/${asset.id}/edit`}>Edit</Link>}{canDeleteAsset && <button className="text-button text-danger" onClick={() => removeAsset(asset)} type="button">Delete</button>}</div></td>}</tr>;
+            return <tr key={asset.id}><td><Link className="asset-table-identity" href={`/assets/${asset.id}`}><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} assetType={type} size={38} /><span><strong>{asset.name}</strong><small>{asset.vendor || asset.model ? [asset.vendor, asset.model].filter(Boolean).join(" ") : "View documentation"}</small></span></Link></td><td>{type?.name || asset.asset_type}</td><td>{customer?.name || "Unknown"}</td><td>{site?.name || "Unknown"}</td><td><span className="mono">{asset.ip_address || asset.hostname || "—"}</span></td><td><StatusBadge status={asset.status} /></td>{hasPermission("knowledge_gaps.view") && <td><StatusBadge status={asset.completeness_status.replaceAll("_", " ")} />{asset.open_knowledge_gap_count > 0 && <small className="secondary-text">{asset.open_knowledge_gap_count} open</small>}</td>}{showActions && <td><div className="row-actions">{canEditAsset && <Link className="text-button" href={`/assets/${asset.id}/edit`}>Edit</Link>}{canDeleteAsset && <button className="text-button text-danger" onClick={() => removeAsset(asset)} type="button">Delete</button>}</div></td>}</tr>;
           })}
         </tbody></table></div>
       </section>

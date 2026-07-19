@@ -98,6 +98,8 @@ def create_asset_interface(
     interface = AssetInterface(**payload.model_dump())
     db.add(interface)
     flush(db, "Asset interface")
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_interface_created", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset_interface.created",
@@ -140,6 +142,9 @@ def update_asset_interface(
         raise not_found("Network")
     _validate_network(asset, network, principal, "networks.edit")
     apply_changes(interface, changes)
+    flush(db, "Asset interface")
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_interface_updated", actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset_interface.updated",
@@ -188,5 +193,8 @@ def delete_asset_interface(
         request=request,
     )
     db.delete(interface)
+    flush(db, "Asset interface")
+    from app.services.knowledge_completeness import evaluate_asset_safely
+    evaluate_asset_safely(db, asset, trigger_context="asset_interface_deleted", actor_user_id=principal.user.id)
     commit(db, "Asset interface")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

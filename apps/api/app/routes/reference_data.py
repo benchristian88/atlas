@@ -31,6 +31,10 @@ from app.schemas import (
     RelationshipTypeUpdate,
 )
 from app.routes.crud_helpers import commit, flush
+from app.services.knowledge_requirement_references import (
+    invalidate_referencing_requirements,
+    requirements_referencing,
+)
 
 asset_types_router = APIRouter(prefix="/asset-types", tags=["asset types"])
 relationship_types_router = APIRouter(
@@ -199,8 +203,14 @@ def update_asset_type(
     if item is None:
         raise HTTPException(status_code=404, detail="Asset type not found")
     changes = payload.model_dump(exclude_unset=True)
+    referenced_requirements = requirements_referencing(db, item.id) if changes.get("active") is False else []
     for key, value in changes.items():
         setattr(item, key, value)
+    if changes.get("active") is False:
+        invalidate_referencing_requirements(db, item.id, "Asset Type")
+        from app.services.knowledge_completeness import evaluate_assets_for_asset_type
+        for profile_id in {requirement.asset_type_id for requirement in referenced_requirements}:
+            evaluate_assets_for_asset_type(db, profile_id, actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="asset_type.updated",
@@ -233,6 +243,10 @@ def delete_asset_type(
         raise HTTPException(status_code=404, detail="Asset type not found")
     if item.system_defined:
         raise HTTPException(status_code=409, detail="System asset types cannot be deleted")
+    requirement_references = requirements_referencing(db, item.id)
+    if requirement_references:
+        names = ", ".join(requirement.name for requirement in requirement_references[:5])
+        raise HTTPException(status_code=409, detail=f"Asset type is referenced by knowledge requirements: {names}. Deactivate it or update the profile first.")
     asset_count = db.scalar(
         select(func.count()).select_from(Asset).where(Asset.asset_type == item.key)
     )
@@ -351,6 +365,7 @@ def update_relationship_type(
     if item is None:
         raise HTTPException(status_code=404, detail="Relationship type not found")
     changes = payload.model_dump(exclude_unset=True)
+    referenced_requirements = requirements_referencing(db, item.id) if changes.get("active") is False else []
     if "allowed_source_asset_type_keys" in changes:
         changes["allowed_source_asset_type_keys"] = _validated_asset_type_keys(
             db, changes["allowed_source_asset_type_keys"]
@@ -361,6 +376,11 @@ def update_relationship_type(
         )
     for key, value in changes.items():
         setattr(item, key, value)
+    if changes.get("active") is False:
+        invalidate_referencing_requirements(db, item.id, "Relationship Type")
+        from app.services.knowledge_completeness import evaluate_assets_for_asset_type
+        for profile_id in {requirement.asset_type_id for requirement in referenced_requirements}:
+            evaluate_assets_for_asset_type(db, profile_id, actor_user_id=principal.user.id)
     add_audit_event(
         db,
         action="relationship_type.updated",
@@ -395,6 +415,10 @@ def delete_relationship_type(
         raise HTTPException(status_code=404, detail="Relationship type not found")
     if item.system_defined:
         raise HTTPException(status_code=409, detail="System relationship types cannot be deleted")
+    requirement_references = requirements_referencing(db, item.id)
+    if requirement_references:
+        names = ", ".join(requirement.name for requirement in requirement_references[:5])
+        raise HTTPException(status_code=409, detail=f"Relationship type is referenced by knowledge requirements: {names}. Deactivate it or update the requirements first.")
     count = db.scalar(
         select(func.count())
         .select_from(AssetRelationship)

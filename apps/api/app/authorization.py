@@ -28,6 +28,8 @@ _CONTEXTUAL_PERMISSION_PREFIXES = (
     "changes.",
     "reconciliation.",
     "discovery.",
+    "knowledge_gaps.",
+    "knowledge_completeness.",
 )
 
 

@@ -784,3 +784,19 @@ tbody tr:hover { background: #fbfdfd; }
   .knowledge-summary-grid { padding: 12px; }
   .knowledge-observations > div { align-items: start; grid-template-columns: 1fr; }
 }
+.completeness-meter { height: .55rem; overflow: hidden; border-radius: 999px; background: var(--surface-muted, #e7e9ee); margin: .75rem 0 1rem; }
+.completeness-meter span { display: block; height: 100%; background: var(--accent); transition: width .2s ease; }
+.completeness-counts { margin-bottom: 1rem; }
+.gap-group { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
+.gap-group > h3 { text-transform: capitalize; font-size: .9rem; }
+.gap-row { display: flex; justify-content: space-between; gap: 1rem; padding: .85rem 0; border-top: 1px solid var(--border); }
+.gap-row p { margin: .35rem 0; }
+.gap-row small { display: block; color: var(--muted); }
+.gap-action-form { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
+.gap-history { margin-top: 1rem; }
+.completeness-panel, .gap-row, .gap-row > div { min-width: 0; overflow-wrap: anywhere; }
+.form-card select[multiple] { min-height: 7rem; }
+
+@media (max-width: 700px) {
+  .gap-row { align-items: flex-start; flex-direction: column; }
+}

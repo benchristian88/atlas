@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { AccessDenied } from "../../../components/access-denied";
 import { AssetIcon } from "../../../components/asset-icon";
 import { AssertionsPanel } from "../../../components/assertions-panel";
+import { CompletenessPanel } from "../../../components/completeness-panel";
 import { useAuth } from "../../../components/auth-context";
 import { PageHeader } from "../../../components/page-header";
 import { StatusBadge } from "../../../components/status-badge";
@@ -68,6 +69,7 @@ export default function AssetDetailPage() {
   const [assertions, setAssertions] = useState([]);
   const [factHistory, setFactHistory] = useState({});
   const [knowledgeSummary, setKnowledgeSummary] = useState(null);
+  const [completeness, setCompleteness] = useState(null);
   const [knowledgeTab, setKnowledgeTab] = useState("summary");
   const [relationshipForm, setRelationshipForm] = useState({ target_asset_id: "", relationship_type: "", notes: "" });
   const [interfaceForm, setInterfaceForm] = useState({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: true, notes: "" });
@@ -94,7 +96,7 @@ export default function AssetDetailPage() {
         current.customer_id,
         current.site_id,
       );
-      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions, history, summary] = await Promise.all([
+      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions, history, summary, completenessResult] = await Promise.all([
         mayViewRelationships ? apiRequest("/assets") : Promise.resolve([]),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields") : Promise.resolve([]),
@@ -105,6 +107,7 @@ export default function AssetDetailPage() {
         apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
         apiRequest(`/assets/${id}/fact-history`),
         apiRequest(`/assets/${id}/knowledge-summary`),
+        hasPermissionForObject("knowledge_gaps.view", current.customer_id, current.site_id) ? apiRequest(`/assets/${id}/completeness`) : Promise.resolve(null),
       ]);
       setAsset(current);
       setAssets(allAssets);
@@ -117,6 +120,7 @@ export default function AssetDetailPage() {
       setAssertions(assetAssertions);
       setFactHistory(history.facts || {});
       setKnowledgeSummary(summary);
+      setCompleteness(completenessResult);
     } catch (requestError) {
       setError(requestError.message || "Atlas could not load this asset.");
     } finally {
@@ -237,6 +241,11 @@ export default function AssetDetailPage() {
     }
   }
 
+  async function refreshCompleteness() {
+    const result = await apiRequest(`/assets/${id}/completeness`);
+    setCompleteness(result);
+  }
+
   return (
     <>
       <div className="page-heading-row"><div className="asset-detail-heading"><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} assetType={assetType} alt="" size={58} /><PageHeader eyebrow="Asset detail" title={asset.name} description={`${customer?.name || "Unknown customer"} / ${site?.name || "Unknown site"}`} /></div>{canEdit && <Link className="button button-secondary" href={`/assets/${id}/edit`}>Edit asset</Link>}</div>
@@ -250,6 +259,8 @@ export default function AssetDetailPage() {
       </div></section>
 
       {Object.keys(asset.custom_fields || {}).length > 0 && <section className="detail-card"><div className="form-card-header"><h2>Custom enrichment</h2></div><div className="detail-grid">{Object.entries(asset.custom_fields).map(([key, value]) => { const definition = customDefinitions.find((item) => item.key === key); return <div key={key}><span>{definition?.name || key}</span><strong>{displayCustomValue(definition, value)}</strong></div>; })}</div></section>}
+
+      {completeness && <CompletenessPanel assetId={asset.id} canDefer={hasPermissionForObject("knowledge_gaps.defer", asset.customer_id, asset.site_id)} canEvaluate={hasPermissionForObject("knowledge_completeness.evaluate", asset.customer_id, asset.site_id)} canExcept={hasPermissionForObject("knowledge_gaps.exception", asset.customer_id, asset.site_id)} completeness={completeness} onChanged={refreshCompleteness} />}
 
       {canViewNetworks && <section className="form-card"><div className="form-card-header"><h2>Interfaces and networks</h2>{canCreateInterface && !showInterfaceForm && <button className="button button-primary" onClick={() => setShowInterfaceForm(true)} type="button">Add interface</button>}</div>
         {showInterfaceForm && <form onSubmit={createInterface}><div className="form-grid"><label className="field"><span>Interface name *</span><input required value={interfaceForm.name} onChange={(event) => setInterfaceForm({ ...interfaceForm, name: event.target.value })} /></label><label className="field"><span>Network / VLAN</span><select value={interfaceForm.network_id} onChange={(event) => setInterfaceForm({ ...interfaceForm, network_id: event.target.value })}><option value="">Unassigned</option>{availableNetworks.map((network) => <option key={network.id} value={network.id}>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}</option>)}</select></label><label className="field"><span>IP address</span><input value={interfaceForm.ip_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, ip_address: event.target.value })} /></label><label className="field"><span>MAC address</span><input value={interfaceForm.mac_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, mac_address: event.target.value })} /></label><label className="field checkbox-field"><input checked={interfaceForm.is_primary} onChange={(event) => setInterfaceForm({ ...interfaceForm, is_primary: event.target.checked })} type="checkbox" /><span>Primary interface</span></label><label className="field field-wide"><span>Notes</span><textarea value={interfaceForm.notes} onChange={(event) => setInterfaceForm({ ...interfaceForm, notes: event.target.value })} /></label></div><div className="form-actions"><button className="button button-secondary" onClick={() => setShowInterfaceForm(false)} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">Add interface</button></div></form>}

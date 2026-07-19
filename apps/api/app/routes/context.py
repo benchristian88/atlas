@@ -14,7 +14,7 @@ from app.authorization import (
     scope_condition,
 )
 from app.database import get_db
-from app.models import Asset, AssetRelationship, Customer, KnowledgeChange, Network, ReconciliationItem, Site
+from app.models import Asset, AssetRelationship, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Site
 from app.schemas import ContextResponse, DashboardSummaryResponse
 
 router = APIRouter(tags=["context"])
@@ -131,6 +131,12 @@ def dashboard_summary(
         .join(target, target.id == AssetRelationship.target_asset_id)
         .where(source_scope, target_scope)
     )
+    gap_query = select(KnowledgeGap).where(
+        scope_condition(principal, "knowledge_gaps.view", KnowledgeGap.customer_id, KnowledgeGap.site_id)
+    )
+    completeness_query = select(KnowledgeCompletenessSummary).where(
+        scope_condition(principal, "knowledge_gaps.view", KnowledgeCompletenessSummary.customer_id, KnowledgeCompletenessSummary.site_id)
+    )
     if context.customer_id is not None:
         customer_query = customer_query.where(Customer.id == context.customer_id)
         site_query = site_query.where(Site.customer_id == context.customer_id)
@@ -147,6 +153,8 @@ def dashboard_summary(
             source.customer_id == context.customer_id,
             target.customer_id == context.customer_id,
         )
+        gap_query = gap_query.where(KnowledgeGap.customer_id == context.customer_id)
+        completeness_query = completeness_query.where(KnowledgeCompletenessSummary.customer_id == context.customer_id)
     if context.site_id is not None:
         site_query = site_query.where(Site.id == context.site_id)
         asset_query = asset_query.where(Asset.site_id == context.site_id)
@@ -162,6 +170,8 @@ def dashboard_summary(
             source.site_id == context.site_id,
             target.site_id == context.site_id,
         )
+        gap_query = gap_query.where(KnowledgeGap.site_id == context.site_id)
+        completeness_query = completeness_query.where(KnowledgeCompletenessSummary.site_id == context.site_id)
     open_items = list(db.scalars(open_items_query))
     category_counts = {
         category: sum(item.category == category for item in open_items)
@@ -173,10 +183,15 @@ def dashboard_summary(
             "possible_duplicate",
         )
     }
+    gaps = list(db.scalars(gap_query)) if principal.can_anywhere("knowledge_gaps.view") else []
+    completeness = list(db.scalars(completeness_query)) if principal.can_anywhere("knowledge_gaps.view") else []
+    active_gaps = [item for item in gaps if item.status in {"open", "deferred"}]
+    now = datetime.now(timezone.utc)
+    asset_count_value = int(db.scalar(asset_query) or 0)
     return {
         "customers": int(db.scalar(customer_query) or 0),
         "sites": int(db.scalar(site_query) or 0),
-        "assets": int(db.scalar(asset_query) or 0),
+        "assets": asset_count_value,
         "networks": int(db.scalar(network_query) or 0),
         "relationships": int(db.scalar(relationship_query) or 0),
         "reconciliation": int(
@@ -190,4 +205,11 @@ def dashboard_summary(
         "possible_duplicate_count": category_counts["possible_duplicate"],
         "oldest_open_item_at": min((item.created_at for item in open_items), default=None),
         "knowledge_changes_last_7_days": int(db.scalar(changes_query) or 0),
+        "open_knowledge_gap_count": sum(item.requirement_level in {"required", "conditional"} for item in active_gaps),
+        "critical_knowledge_gap_count": sum(item.severity == "critical" for item in active_gaps),
+        "high_knowledge_gap_count": sum(item.severity == "high" for item in active_gaps),
+        "assets_with_critical_gaps": len({item.entity_id for item in active_gaps if item.severity == "critical"}),
+        "assets_not_evaluated": max(0, asset_count_value - sum(item.completeness_status != "not_evaluated" for item in completeness)),
+        "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in completeness),
+        "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at and item.exception_expires_at <= now for item in gaps),
     }
