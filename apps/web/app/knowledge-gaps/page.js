@@ -7,6 +7,7 @@ import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
 import { FilterToolbar } from "../../components/filter-toolbar";
 import { PageHeader } from "../../components/page-header";
+import { StatusBadge } from "../../components/status-badge";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
 import {
@@ -45,6 +46,66 @@ function mergeOptions(...groups) {
 
 function taxonomyLabel(value) {
   return value.replaceAll("_", " ");
+}
+
+function formatDate(value) {
+  if (!value) return "Unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString();
+}
+
+function KnowledgeGapCard({ canDefer, canEdit, canExcept, deciding, item, onAction, onReopen }) {
+  const assetName = item.entity_name || "Unavailable asset";
+  const requirementName = item.requirement_name || "Knowledge requirement unavailable";
+  const hasAssetLink = Boolean(item.entity_id);
+
+  return <article className={`detail-card knowledge-gap-card knowledge-gap-severity-${item.severity || "unknown"}`} aria-labelledby={`knowledge-gap-${item.id}`}>
+    <header className="knowledge-gap-meta">
+      <div className="badge-stack">
+        <StatusBadge status={taxonomyLabel(item.severity || "unknown")} />
+        <StatusBadge status={taxonomyLabel(item.requirement_level || "unknown")} />
+        {item.asset_type_name && <span className="knowledge-gap-type-badge">{item.asset_type_name}</span>}
+      </div>
+      <StatusBadge status={taxonomyLabel(item.status || "unknown")} />
+    </header>
+    <div className="knowledge-gap-card-body">
+      <div className="knowledge-gap-main">
+        <section className="knowledge-gap-asset">
+          <span className="knowledge-gap-section-label">Asset name</span>
+          <h2>{assetName}</h2>
+        </section>
+        <section className="knowledge-gap-missing">
+          <span className="knowledge-gap-section-label">Missing information</span>
+          <h3 id={`knowledge-gap-${item.id}`}>{requirementName}</h3>
+          <div className="knowledge-gap-details">
+            <span className="knowledge-gap-section-label">Details</span>
+            <p>{item.summary || "No additional details are available for this knowledge gap."}</p>
+          </div>
+        </section>
+      </div>
+      <aside className="knowledge-gap-support" aria-label={`Supporting information for ${assetName}`}>
+        <section>
+          <h4 className="knowledge-gap-section-label">Dates</h4>
+          <dl className="knowledge-gap-dates">
+            <div><dt>First detected</dt><dd>{formatDate(item.first_detected_at)}</dd></div>
+            <div><dt>Last evaluated</dt><dd>{formatDate(item.last_evaluated_at)}</dd></div>
+          </dl>
+        </section>
+        {item.assigned_to_name && <section><h4 className="knowledge-gap-section-label">Assigned to</h4><p className="knowledge-gap-supporting-value">{item.assigned_to_name}</p></section>}
+        {item.remediation_hint && <section className="knowledge-gap-next-step"><h4 className="knowledge-gap-section-label">Next step</h4><p>{item.remediation_hint}</p></section>}
+      </aside>
+    </div>
+    <footer className="knowledge-gap-actions">
+      <span className="knowledge-gap-section-label">Actions</span>
+      <div className="knowledge-gap-action-row">
+        {hasAssetLink ? <Link className="button button-secondary" href={`/assets/${item.entity_id}`}>Open asset</Link> : <span className="secondary-text">Asset link unavailable</span>}
+        {hasAssetLink && canEdit && <Link className="button button-primary" href={`/assets/${item.entity_id}/edit`}>Provide information</Link>}
+        {canDefer && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onAction(item, "defer")} type="button">Defer</button>}
+        {canExcept && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onAction(item, "exception")} type="button">Record exception</button>}
+        {canExcept && item.status === "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onReopen(item)} type="button">Reopen</button>}
+      </div>
+    </footer>
+  </article>;
 }
 
 export default function KnowledgeGapsPage() {
@@ -204,14 +265,7 @@ export default function KnowledgeGapsPage() {
     {!ready || loading ? <div className="status-banner" role="status">Loading knowledge gaps…</div> : <>
       <div className="timeline-summary">{items.length} knowledge gap{items.length === 1 ? "" : "s"}{criticalCount ? ` · ${criticalCount} critical` : ""}</div>
       <section className="knowledge-list">
-      {visibleItems.length === 0 ? <div className="empty-state detail-card"><p>No knowledge gaps match the current filters.</p>{activeFilterCount > 0 && <button className="text-button" onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button>}</div> : visibleItems.map((item) => <article className="detail-card reconciliation-card" key={item.id}>
-        <div className="reconciliation-heading"><div><p className="eyebrow">{item.severity} · {item.requirement_level}{item.asset_type_name ? ` · ${item.asset_type_name}` : ""}</p><h2>{item.entity_name || "Asset"}</h2></div><span className="secondary-text">{item.status.replaceAll("_", " ")}</span></div>
-        <h3>{item.requirement_name || "Knowledge requirement"}</h3>
-        <p>{item.summary}</p>
-        <p className="secondary-text">First detected {new Date(item.first_detected_at).toLocaleString()} · evaluated {new Date(item.last_evaluated_at).toLocaleString()}{item.assigned_to_name ? ` · assigned to ${item.assigned_to_name}` : ""}</p>
-        {item.remediation_hint && <p className="secondary-text">Next step: {item.remediation_hint}</p>}
-        <div className="form-actions"><Link className="button button-secondary" href={`/assets/${item.entity_id}`}>Open asset</Link>{hasPermission("assets.edit") && <Link className="button button-secondary" href={`/assets/${item.entity_id}/edit`}>Provide information</Link>}{hasPermission("knowledge_gaps.defer") && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => gapAction(item, "defer")} type="button">Defer</button>}{hasPermission("knowledge_gaps.exception") && item.status !== "exception" && <button className="button button-primary" disabled={deciding === item.id} onClick={() => gapAction(item, "exception")} type="button">Record exception</button>}{hasPermission("knowledge_gaps.exception") && item.status === "exception" && <button className="button button-primary" disabled={deciding === item.id} onClick={() => reopen(item)} type="button">Reopen</button>}</div>
-      </article>)}
+      {visibleItems.length === 0 ? <div className="empty-state detail-card"><p>No knowledge gaps match the current filters.</p>{activeFilterCount > 0 && <button className="text-button" onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button>}</div> : visibleItems.map((item) => <KnowledgeGapCard canDefer={hasPermission("knowledge_gaps.defer")} canEdit={hasPermission("assets.edit")} canExcept={hasPermission("knowledge_gaps.exception")} deciding={deciding} item={item} key={item.id} onAction={gapAction} onReopen={reopen} />)}
       </section>
     </>}
     {ready && !loading && items.length > PAGE_SIZE && <div className="pagination"><button className="button button-secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, items.length)} of {items.length}</span><button className="button button-secondary" disabled={filters.offset + PAGE_SIZE >= items.length} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</button></div>}

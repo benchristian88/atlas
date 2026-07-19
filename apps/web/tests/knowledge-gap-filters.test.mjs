@@ -77,3 +77,28 @@ test("Knowledge Gaps reuses the shared Changes toolbar with URL-backed controls"
   assert.match(styles, /\.knowledge-gaps-filter-grid \{[^}]*grid-template-columns:/);
   assert.match(styles, /\.changes-filter-grid, \.knowledge-gaps-filter-grid \{[^}]*repeat\(2/);
 });
+
+test("Knowledge Gap cards emphasize missing information with compact responsive actions", async () => {
+  const [page, styles] = await Promise.all([
+    readFile(new URL("../app/knowledge-gaps/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  for (const label of ["Asset name", "Missing information", "Details", "Dates", "First detected", "Last evaluated", "Next step", "Actions"]) {
+    assert.ok(page.includes(label));
+  }
+  assert.match(page, /function KnowledgeGapCard/);
+  assert.match(page, /<StatusBadge status=\{taxonomyLabel\(item\.severity/);
+  assert.match(page, /<StatusBadge status=\{taxonomyLabel\(item\.status/);
+  assert.match(page, /className="button button-primary" href=\{`\/assets\/\$\{item\.entity_id\}\/edit`\}>Provide information/);
+  const actionStart = page.indexOf("<footer className=\"knowledge-gap-actions\">");
+  const actionMarkup = page.slice(actionStart, page.indexOf("</footer>", actionStart));
+  assert.ok(actionMarkup.indexOf("Open asset") < actionMarkup.indexOf("Provide information"));
+  assert.ok(actionMarkup.indexOf("Provide information") < actionMarkup.indexOf("Defer"));
+  assert.ok(actionMarkup.indexOf("Defer") < actionMarkup.indexOf("Record exception"));
+  assert.match(page, /Asset link unavailable/);
+  assert.match(styles, /\.knowledge-gap-action-row \{[^}]*flex-wrap: wrap;/);
+  assert.match(styles, /\.knowledge-gap-card-body \{[^}]*minmax\(0, 1\.5fr\)/);
+  assert.match(styles, /\.knowledge-gap-missing h3 \{[^}]*overflow-wrap: anywhere;/);
+  assert.match(styles, /@media \(max-width: 700px\)[\s\S]*\.knowledge-gap-card-body \{ grid-template-columns: 1fr; \}/);
+});
