@@ -1,5 +1,10 @@
+import json
 import uuid
 from types import SimpleNamespace
+
+from starlette.requests import Request
+
+from app.authorization import Principal, ScopeGrant
 
 from app.models import (
     Asset,
@@ -9,6 +14,7 @@ from app.models import (
     Customer,
     DataSource,
     DiscoveryRun,
+    EntitySourceLink,
     EvidenceRecord,
     KnowledgeAssertion,
     Network,
@@ -17,7 +23,15 @@ from app.models import (
     Site,
 )
 from app.schemas import SimulatedDiscoveryRequest
-from app.services.reconciliation import accept_item, defer_item, reject_item
+from app.routes.knowledge import accept_reconciliation_item
+from app.services.reconciliation import (
+    RelationshipResolutionError,
+    accept_item,
+    defer_item,
+    link_item_to_asset,
+    relationship_resolution,
+    reject_item,
+)
 from app.services.simulated_discovery import run_simulation
 
 
@@ -34,6 +48,9 @@ class KnowledgeSession:
         for record in self.records:
             if getattr(record, "id", None) is None:
                 record.id = uuid.uuid4()
+
+    def rollback(self):
+        pass
 
     def get(self, model, record_id):
         return next(
@@ -70,8 +87,13 @@ class KnowledgeSession:
             "subject_external_id": "subject_external_id",
             "predicate": "predicate",
             "data_source_id": "data_source_id",
+            "entity_type": "entity_type",
+            "entity_id": "entity_id",
+            "subject_id": "subject_id",
             "assertion_id": "assertion_id",
             "candidate_external_id": "candidate_external_id",
+            "object_id": "object_id",
+            "object_external_id": "object_external_id",
             "relationship_type": "relationship_type",
             "source_asset_id": "source_asset_id",
             "target_asset_id": "target_asset_id",
@@ -79,7 +101,14 @@ class KnowledgeSession:
         for prefix, attribute in field_map.items():
             expected = value(prefix)
             if expected is not None:
-                rows = [row for row in rows if getattr(row, attribute, None) == expected]
+                if entity is ReconciliationItem and attribute == "data_source_id":
+                    rows = [
+                        row for row in rows
+                        if getattr(self.get(KnowledgeAssertion, row.assertion_id), attribute, None)
+                        == expected
+                    ]
+                elif rows and hasattr(rows[0], attribute):
+                    rows = [row for row in rows if getattr(row, attribute, None) == expected]
         return rows
 
     def scalar(self, statement):
@@ -123,6 +152,48 @@ def simulation_payload(customer, site):
             }],
         }],
     })
+
+
+def matched_assets_payload(customer, site, target_external_id="manual:pve1"):
+    return SimulatedDiscoveryRequest.model_validate({
+        "customer_id": customer.id,
+        "site_id": site.id,
+        "observations": [
+            {
+                "external_id": "manual:pve1",
+                "entity_kind": "asset",
+                "asset_type": "hypervisor_node",
+                "name": "  PVE1  ",
+                "facts": {"hostname": "pve1", "status": "active"},
+            },
+            {
+                "external_id": "manual:docker01",
+                "entity_kind": "asset",
+                "asset_type": "virtual_machine",
+                "name": "Docker01",
+                "facts": {"hostname": "docker01", "status": "active"},
+                "relationships": [{
+                    "relationship_type": "runs_on",
+                    "target_external_id": target_external_id,
+                }],
+            },
+        ],
+    })
+
+
+def manual_asset(customer, site, name, asset_type):
+    return Asset(
+        id=uuid.uuid4(),
+        workspace_id=customer.workspace_id,
+        customer_id=customer.id,
+        site_id=site.id,
+        name=name,
+        asset_type=asset_type,
+        hostname=name.casefold(),
+        status="active",
+        source="manual",
+        metadata_={},
+    )
 
 
 def test_simulation_creates_run_evidence_assertions_and_new_asset_item():
@@ -238,3 +309,184 @@ def test_reject_and_defer_never_mutate_operational_asset():
     assert rejected.status == "rejected"
     assert deferred.status == "deferred"
     assert not [row for row in db.records if isinstance(row, AssetRelationship)]
+
+
+def test_manual_assets_are_strong_matched_and_relationship_accepts_without_duplicates():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    relationship_type = RelationshipType(
+        key="runs_on", name="Runs on", source_label="runs on", target_label="hosts",
+        directional=True, active=True,
+    )
+    db = KnowledgeSession(customer, site, pve, docker, relationship_type)
+
+    _, _, _, items = run_simulation(
+        db, payload=matched_assets_payload(customer, site), user_id=uuid.uuid4()
+    )
+
+    assert not [item for item in items if item.entity_type == "asset" and item.category == "newly_discovered"]
+    links = [row for row in db.records if isinstance(row, EntitySourceLink)]
+    assert {(link.external_id, link.entity_id) for link in links} == {
+        ("manual:pve1", pve.id),
+        ("manual:docker01", docker.id),
+    }
+    relationship_item = next(item for item in items if item.entity_type == "asset_relationship")
+    resolution = relationship_resolution(db, relationship_item)
+    assert resolution["resolved_source_asset_id"] == docker.id
+    assert resolution["resolved_target_asset_id"] == pve.id
+    assert resolution["blocked_reason"] is None
+    edge = accept_item(db, relationship_item, SimpleNamespace(id=uuid.uuid4()))
+    assert edge.source_asset_id == docker.id
+    assert edge.target_asset_id == pve.id
+    assert len([row for row in db.records if isinstance(row, Asset)]) == 2
+
+
+def test_existing_relationship_is_corroborated_without_open_relationship_item():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    edge = AssetRelationship(
+        id=uuid.uuid4(), source_asset_id=docker.id, target_asset_id=pve.id,
+        customer_id=customer.id, site_id=site.id, relationship_type="runs_on",
+        legacy_cross_context=False, metadata_={},
+    )
+    db = KnowledgeSession(customer, site, pve, docker, edge)
+
+    _, evidence_count, _, items = run_simulation(
+        db, payload=matched_assets_payload(customer, site), user_id=uuid.uuid4()
+    )
+
+    assert evidence_count == 2
+    assert not [item for item in items if item.entity_type == "asset_relationship"]
+    relationship_assertions = [
+        row for row in db.records
+        if isinstance(row, KnowledgeAssertion) and row.predicate == "runs_on"
+    ]
+    assert {row.truth_classification for row in relationship_assertions} == {
+        "observed",
+        "declared",
+    }
+    assert all(row.confirmation_status == "confirmed" for row in relationship_assertions)
+
+
+def test_competing_relationship_populates_current_value_and_can_be_reconciled():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    docker = manual_asset(customer, site, "docker01", "virtual_machine")
+    edge = AssetRelationship(
+        id=uuid.uuid4(), source_asset_id=docker.id, target_asset_id=pve.id,
+        customer_id=customer.id, site_id=site.id, relationship_type="depends_on",
+        legacy_cross_context=False, metadata_={},
+    )
+    relationship_type = RelationshipType(
+        key="runs_on", name="Runs on", source_label="runs on", target_label="hosts",
+        directional=True, active=True,
+    )
+    db = KnowledgeSession(customer, site, pve, docker, edge, relationship_type)
+
+    _, _, _, items = run_simulation(
+        db, payload=matched_assets_payload(customer, site), user_id=uuid.uuid4()
+    )
+    item = next(item for item in items if item.entity_type == "asset_relationship")
+
+    assert item.category == "contradiction"
+    assert item.current_value_json["relationship_id"] == edge.id
+    assert item.current_value_json["relationship_type"] == "depends_on"
+    accept_item(db, item, SimpleNamespace(id=uuid.uuid4()))
+    assert edge.relationship_type == "runs_on"
+    assert item.status == "accepted"
+
+
+def test_ambiguous_match_requires_explicit_link_and_does_not_duplicate_asset():
+    customer, site = context_records()
+    first = manual_asset(customer, site, "docker01", "virtual_machine")
+    second = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, first, second)
+    payload = SimulatedDiscoveryRequest.model_validate({
+        "customer_id": customer.id,
+        "site_id": site.id,
+        "observations": [{
+            "external_id": "manual:docker01",
+            "entity_kind": "asset",
+            "asset_type": "virtual_machine",
+            "name": "docker01",
+            "facts": {"hostname": "docker01", "status": "active"},
+        }],
+    })
+
+    _, _, _, items = run_simulation(db, payload=payload, user_id=uuid.uuid4())
+
+    duplicate = next(item for item in items if item.category == "possible_duplicate")
+    assert len(duplicate.current_value_json["possible_matches"]) == 2
+    assert not [row for row in db.records if isinstance(row, EntitySourceLink)]
+    assert len([row for row in db.records if isinstance(row, Asset)]) == 2
+
+
+def test_unresolved_relationship_has_detailed_block_and_remains_open():
+    customer, site = context_records()
+    db = KnowledgeSession(customer, site)
+    payload = simulation_payload(customer, site)
+    payload.observations[0].relationships[0].target_external_id = "manual:missing-host"
+    _, _, _, items = run_simulation(db, payload=payload, user_id=uuid.uuid4())
+    relationship_item = next(item for item in items if item.entity_type == "asset_relationship")
+
+    try:
+        accept_item(db, relationship_item, SimpleNamespace(id=uuid.uuid4()))
+        raise AssertionError("Expected relationship resolution to fail")
+    except RelationshipResolutionError as exc:
+        assert exc.payload["detail"] == "Relationship endpoints are unresolved"
+        assert exc.payload["source_status"] == "pending_asset_acceptance"
+        assert exc.payload["target_status"] == "unresolved"
+        assert exc.payload["target_external_id"] == "manual:missing-host"
+    assert relationship_item.status == "open"
+
+    principal = Principal(
+        user=SimpleNamespace(id=uuid.uuid4()),
+        grants=(ScopeGrant(
+            assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Test",
+            scope_type="global", customer_id=None, site_id=None,
+            permissions=frozenset({"assets.edit", "relationships.create"}),
+        ),),
+    )
+    request = Request({
+        "type": "http", "method": "POST", "path": "/test", "headers": [],
+        "scheme": "http", "server": ("testserver", 80),
+        "client": ("127.0.0.1", 1234),
+    })
+    response = accept_reconciliation_item(
+        relationship_item.id, request, None, principal, db
+    )
+    body = json.loads(response.body)
+    assert response.status_code == 409
+    assert body["detail"] == "Relationship endpoints are unresolved"
+    assert body["target_status"] == "unresolved"
+
+
+def test_linking_asset_identity_unblocks_same_run_relationship():
+    customer, site = context_records()
+    pve = manual_asset(customer, site, "pve1", "hypervisor_node")
+    relationship_type = RelationshipType(
+        key="runs_on", name="Runs on", source_label="runs on", target_label="hosts",
+        directional=True, active=True,
+    )
+    db = KnowledgeSession(customer, site, pve, relationship_type)
+    _, _, _, items = run_simulation(
+        db, payload=simulation_payload(customer, site), user_id=uuid.uuid4()
+    )
+    asset_item = next(item for item in items if item.entity_type == "asset")
+    relationship_item = next(item for item in items if item.entity_type == "asset_relationship")
+    existing_docker = manual_asset(customer, site, "existing-docker", "virtual_machine")
+    db.add(existing_docker)
+    user = SimpleNamespace(id=uuid.uuid4())
+
+    link_item_to_asset(
+        db, item=asset_item, asset=existing_docker, user=user, reason="Same device"
+    )
+    resolution = relationship_resolution(db, relationship_item)
+    assert resolution["resolved_source_asset_id"] == existing_docker.id
+    assert resolution["resolved_target_asset_id"] == pve.id
+    assert resolution["blocked_reason"] is None
+    accept_item(db, relationship_item, user)
+    assert relationship_item.status == "accepted"
+    assert len([row for row in db.records if isinstance(row, Asset)]) == 2

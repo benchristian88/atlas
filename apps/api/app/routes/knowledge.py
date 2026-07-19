@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.authorization import Principal, RequestContext, require_permission, req
 from app.database import get_db
 from app.models import (
     Customer,
+    Asset,
     DataSource,
     DiscoveryRun,
     Integration,
@@ -27,11 +29,19 @@ from app.schemas import (
     DiscoveryRunResponse,
     KnowledgeAssertionResponse,
     ReconciliationDecisionRequest,
+    ReconciliationLinkAssetRequest,
     ReconciliationItemResponse,
     SimulatedDiscoveryRequest,
     SimulatedDiscoveryResponse,
 )
-from app.services.reconciliation import accept_item, defer_item, reject_item
+from app.services.reconciliation import (
+    RelationshipResolutionError,
+    accept_item,
+    defer_item,
+    link_item_to_asset,
+    relationship_resolution,
+    reject_item,
+)
 from app.services.simulated_discovery import run_simulation
 
 router = APIRouter(tags=["knowledge"])
@@ -93,6 +103,23 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
     result = ReconciliationItemResponse.model_validate(item).model_dump()
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     result["source_name"] = _source_name(db, assertion.data_source_id) if assertion else None
+    if item.entity_type == "asset_relationship" and assertion is not None:
+        resolution = relationship_resolution(db, item, persist_links=False)
+        for field in (
+            "source_external_id",
+            "target_external_id",
+            "resolved_source_asset_id",
+            "resolved_target_asset_id",
+            "resolved_source_name",
+            "resolved_target_name",
+            "source_resolution_status",
+            "target_resolution_status",
+            "blocked_reason",
+            "current_relationship_id",
+        ):
+            result[field] = resolution.get(field)
+        result["current_value_json"] = item.current_value_json
+        result["observed_value_json"] = resolution
     return result
 
 
@@ -301,7 +328,11 @@ def _audit_decision(
         customer_id=item.customer_id,
         site_id=item.site_id,
         summary=f"Reconciliation item {action}",
-        metadata={"category": item.category, "entity_type": item.entity_type},
+        metadata={
+            "category": item.category,
+            "entity_type": item.entity_type,
+            "entity_id": item.entity_id,
+        },
         request=request,
     )
 
@@ -317,10 +348,49 @@ def accept_reconciliation_item(
     item = _decision_item(db, principal, item_id)
     if item.entity_type == "asset_relationship":
         require_scope(principal, "relationships.create", item.customer_id, item.site_id)
-    accept_item(db, item, principal.user)
+    try:
+        accept_item(db, item, principal.user)
+    except RelationshipResolutionError as exc:
+        db.rollback()
+        return JSONResponse(status_code=409, content=exc.payload)
     item.decision_reason = payload.reason if payload else None
     _audit_decision(db, request=request, principal=principal, item=item, action="accepted")
     commit(db, "Reconciliation decision")
+    db.refresh(item)
+    return reconciliation_response(db, item)
+
+
+@router.post(
+    "/reconciliation-items/{item_id}/link-asset",
+    response_model=ReconciliationItemResponse,
+)
+def link_reconciliation_asset(
+    item_id: uuid.UUID,
+    payload: ReconciliationLinkAssetRequest,
+    request: Request,
+    principal: Principal = Depends(require_permission("assets.edit")),
+    db: Session = Depends(get_db),
+):
+    item = _decision_item(db, principal, item_id)
+    asset = db.get(Asset, payload.asset_id)
+    if asset is None:
+        raise not_found("Asset")
+    require_scope(
+        principal,
+        "assets.edit",
+        asset.customer_id,
+        asset.site_id,
+        hide_existence=True,
+    )
+    link_item_to_asset(
+        db,
+        item=item,
+        asset=asset,
+        user=principal.user,
+        reason=payload.reason,
+    )
+    _audit_decision(db, request=request, principal=principal, item=item, action="linked")
+    commit(db, "Asset identity link")
     db.refresh(item)
     return reconciliation_response(db, item)
 

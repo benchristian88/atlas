@@ -16,6 +16,7 @@ EXPECTED_TABLES = {
     "integrations",
     "discovery_runs",
     "data_sources",
+    "entity_source_links",
     "evidence_records",
     "knowledge_assertions",
     "reconciliation_items",
@@ -116,6 +117,21 @@ def test_site_specific_network_ownership_requires_a_customer_site_pair() -> None
         for constraint in networks.foreign_key_constraints
     }
     assert ("sites.customer_id", "sites.id") in composite_targets
+
+
+def test_entity_source_links_are_unique_and_customer_site_safe() -> None:
+    links = Base.metadata.tables["entity_source_links"]
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in links.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    }
+    assert ("data_source_id", "entity_type", "external_id") in unique_columns
+    composite_targets = {
+        tuple(element.target_fullname for element in constraint.elements)
+        for constraint in links.foreign_key_constraints
+    }
+    assert ("assets.id", "assets.customer_id", "assets.site_id") in composite_targets
 
 
 def test_case_insensitive_identity_and_type_name_indexes_are_declared() -> None:

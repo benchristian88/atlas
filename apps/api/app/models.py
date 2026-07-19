@@ -349,6 +349,49 @@ class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
 
+class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "entity_source_links"
+    __table_args__ = (
+        CheckConstraint("entity_type IN ('asset')", name="valid_entity_type"),
+        UniqueConstraint(
+            "data_source_id",
+            "entity_type",
+            "external_id",
+            name="uq_entity_source_links_source_type_external",
+        ),
+        ForeignKeyConstraint(
+            ["entity_id", "customer_id", "site_id"],
+            ["assets.id", "assets.customer_id", "assets.site_id"],
+            name="fk_entity_source_links_asset_context",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_entity_source_links_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    external_type: Mapped[str | None] = mapped_column(String(100), index=True)
+    first_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+
 class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "discovery_runs"
     __table_args__ = (

@@ -336,6 +336,10 @@ stores their raw evidence, current sourced assertions, and reviewable
 reconciliation items alongside the existing Asset and AssetRelationship tables.
 Only accepting a supported reconciliation item creates or updates the
 operational model used by topology; reject and defer leave it unchanged.
+Durable entity-source links map each data source's external asset ID to exactly
+one same-customer/site Atlas asset. Exact normalized name/type matches can be
+linked automatically; ambiguous matches require the explicit **Link asset**
+action and are never silently merged.
 
 Use **Discovery → Simulate discovery** to exercise this pipeline before a live
 integration is configured. Paste a customer/site-scoped JSON observation, run

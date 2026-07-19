@@ -69,7 +69,7 @@ export async function apiRequest(path, options = {}) {
     if (Array.isArray(body?.detail)) {
       detail = body.detail.map((item) => item.msg).filter(Boolean).join(", ") || detail;
     }
-    throw new ApiError(detail, { status: response.status });
+    throw new ApiError(detail, { status: response.status, details: body });
   }
 
   if (response.status === 204) return null;

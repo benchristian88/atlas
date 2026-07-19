@@ -713,6 +713,14 @@ ReconciliationCategory = Literal[
     "stale_human_knowledge",
 ]
 ReconciliationStatus = Literal["open", "accepted", "rejected", "deferred", "exception"]
+ResolutionStatus = Literal[
+    "resolved_existing",
+    "resolved_link",
+    "resolved_same_run",
+    "pending_asset_acceptance",
+    "possible_duplicate",
+    "unresolved",
+]
 
 
 class DataSourceCreate(BaseModel):
@@ -853,11 +861,26 @@ class ReconciliationItemResponse(ORMResponse):
     decided_by_user_id: uuid.UUID | None
     decided_at: datetime | None
     source_name: str | None = None
+    source_external_id: str | None = None
+    target_external_id: str | None = None
+    resolved_source_asset_id: uuid.UUID | None = None
+    resolved_target_asset_id: uuid.UUID | None = None
+    resolved_source_name: str | None = None
+    resolved_target_name: str | None = None
+    source_resolution_status: ResolutionStatus | None = None
+    target_resolution_status: ResolutionStatus | None = None
+    blocked_reason: str | None = None
+    current_relationship_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 
 
 class ReconciliationDecisionRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=10000)
+
+
+class ReconciliationLinkAssetRequest(BaseModel):
+    asset_id: uuid.UUID
     reason: str | None = Field(default=None, max_length=10000)
 
 

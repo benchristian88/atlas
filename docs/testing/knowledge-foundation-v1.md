@@ -5,7 +5,7 @@ without bypassing Atlas's accepted operational asset and relationship model.
 
 ## Prerequisites
 
-- Apply migrations through `20260719_0006` and start the API and web services.
+- Apply migrations through `20260719_0007` and start the API and web services.
 - Sign in as a user with `integrations.manage`, `assets.view`, `assets.edit`,
   `relationships.create`, and access to the test customer/site.
 - Create customer **Home Lab**, site **Home**, and an asset named **pve1**.
@@ -36,6 +36,25 @@ without bypassing Atlas's accepted operational asset and relationship model.
    that an endpoint is missing, accept both asset items first and retry.
 6. Open **Knowledge Graph → Platform** and confirm docker01 appears beneath
    pve1 through the accepted relationship.
+
+## Existing asset and relationship matching
+
+1. Create **pve1** and **docker01** manually in the same customer/site.
+2. Optionally create `docker01 → runs_on → pve1` manually.
+3. Simulate asset observations with external IDs `manual:pve1` and
+   `manual:docker01`, plus the `runs_on` relationship.
+4. Confirm Atlas links both external identities to the existing assets instead
+   of offering duplicate assets.
+5. If the relationship already exists, confirm no open relationship item is
+   created and the observed and declared assertions appear as provenance.
+6. Delete the relationship and rerun simulation. Confirm the item displays
+   **Current: No current relationship**, **Observed: docker01 → runs on →
+   pve1**, and both endpoint statuses are resolved.
+7. Accept it and confirm topology updates immediately.
+8. To test ambiguity, create two same-site assets with the same normalized name
+   and type. Confirm Atlas creates a **possible duplicate** item and does not
+   link either automatically. Select the intended asset with **Link asset** and
+   confirm related relationship items become acceptable after the refresh.
 
 ## Asset provenance
 
