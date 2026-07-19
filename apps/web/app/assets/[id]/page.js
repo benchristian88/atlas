@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { AccessDenied } from "../../../components/access-denied";
 import { AssetIcon } from "../../../components/asset-icon";
+import { AssertionsPanel } from "../../../components/assertions-panel";
 import { useAuth } from "../../../components/auth-context";
 import { PageHeader } from "../../../components/page-header";
 import { StatusBadge } from "../../../components/status-badge";
@@ -49,6 +50,7 @@ export default function AssetDetailPage() {
   const [relationships, setRelationships] = useState([]);
   const [networks, setNetworks] = useState([]);
   const [interfaces, setInterfaces] = useState([]);
+  const [assertions, setAssertions] = useState([]);
   const [relationshipForm, setRelationshipForm] = useState({ target_asset_id: "", relationship_type: "", notes: "" });
   const [interfaceForm, setInterfaceForm] = useState({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: true, notes: "" });
   const [showRelationshipForm, setShowRelationshipForm] = useState(false);
@@ -74,7 +76,7 @@ export default function AssetDetailPage() {
         current.customer_id,
         current.site_id,
       );
-      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces] = await Promise.all([
+      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions] = await Promise.all([
         mayViewRelationships ? apiRequest("/assets") : Promise.resolve([]),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields") : Promise.resolve([]),
@@ -82,6 +84,7 @@ export default function AssetDetailPage() {
         hasPermission("relationship_types.view") ? apiRequest("/relationship-types") : Promise.resolve([]),
         mayViewNetworks ? apiRequest("/networks") : Promise.resolve([]),
         mayViewNetworks ? apiRequest(`/asset-interfaces?asset_id=${id}`) : Promise.resolve([]),
+        apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
       ]);
       setAsset(current);
       setAssets(allAssets);
@@ -91,6 +94,7 @@ export default function AssetDetailPage() {
       setRelationshipTypes(relationTypes);
       setNetworks(allNetworks);
       setInterfaces(assetInterfaces);
+      setAssertions(assetAssertions);
     } catch (requestError) {
       setError(requestError.message || "Atlas could not load this asset.");
     } finally {
@@ -147,6 +151,16 @@ export default function AssetDetailPage() {
     asset.customer_id,
     asset.site_id,
   );
+  const canDeleteAssertions = hasPermissionForObject(
+    "assertions.delete",
+    asset.customer_id,
+    asset.site_id,
+  );
+  const canRetractAssertions = hasPermissionForObject(
+    "assertions.retract",
+    asset.customer_id,
+    asset.site_id,
+  );
 
   async function createRelationship(event) {
     event.preventDefault();
@@ -186,6 +200,14 @@ export default function AssetDetailPage() {
     catch (requestError) { setError(requestError.message); }
   }
 
+  async function refreshAssertions() {
+    try {
+      setAssertions(await apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`));
+    } catch (requestError) {
+      setError(requestError.message || "Atlas could not refresh asset assertions.");
+    }
+  }
+
   return (
     <>
       <div className="page-heading-row"><div className="asset-detail-heading"><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} assetType={assetType} alt="" size={58} /><PageHeader eyebrow="Asset detail" title={asset.name} description={`${customer?.name || "Unknown customer"} / ${site?.name || "Unknown site"}`} /></div>{canEdit && <Link className="button button-secondary" href={`/assets/${id}/edit`}>Edit asset</Link>}</div>
@@ -208,6 +230,8 @@ export default function AssetDetailPage() {
       {canViewRelationships && <><section className="form-card"><div className="form-card-header"><h2>Relationships</h2>{canCreateRelationship && relationshipTypes.length > 0 && !showRelationshipForm && <button className="button button-primary" onClick={() => setShowRelationshipForm(true)} type="button">Add relationship</button>}</div>
         {showRelationshipForm && <form onSubmit={createRelationship}><div className="form-grid"><label className="field"><span>Source</span><input disabled value={asset.name} /></label><label className="field"><span>Target asset *</span><select required value={relationshipForm.target_asset_id} onChange={(event) => setRelationshipForm({ ...relationshipForm, target_asset_id: event.target.value, relationship_type: "" })}><option value="">Select same-site asset</option>{sameSiteAssets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="field"><span>Relationship type *</span><select required value={relationshipForm.relationship_type} onChange={(event) => setRelationshipForm({ ...relationshipForm, relationship_type: event.target.value })}><option value="">Select relationship</option>{allowedRelationshipTypes.map((type) => <option key={type.key} value={type.key}>{type.name}</option>)}</select></label><label className="field field-wide"><span>Notes</span><textarea value={relationshipForm.notes} onChange={(event) => setRelationshipForm({ ...relationshipForm, notes: event.target.value })} /></label></div><div className="form-actions"><button className="button button-secondary" onClick={() => setShowRelationshipForm(false)} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">Add relationship</button></div></form>}
       </section><section className="table-card"><div className="table-meta"><span>{relationships.length} relationships</span></div>{relationships.length === 0 ? <p className="empty-state">No relationships yet.</p> : <div className="relationship-list">{relationships.map((edge) => { const type = relationshipTypes.find((item) => item.key === edge.relationship_type); return <div className="relationship-row" key={edge.id}><span><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name || "Unknown"}</strong> → {type?.name || edge.relationship_type} → <strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name || "Unknown"}</strong>{edge.notes ? ` — ${edge.notes}` : ""}</span>{canDeleteRelationship && <button className="text-button text-danger" onClick={() => removeRelationship(edge)} type="button">Delete</button>}</div>; })}</div>}</section></>}
+
+      <AssertionsPanel assertions={assertions} assetsById={assetsById} canDelete={canDeleteAssertions} canRetract={canRetractAssertions} onChanged={refreshAssertions} />
     </>
   );
 }

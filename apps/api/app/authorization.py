@@ -23,6 +23,8 @@ _CONTEXTUAL_PERMISSION_PREFIXES = (
     "relationships.",
     "networks.",
     "integrations.",
+    "discovery_runs.",
+    "assertions.",
 )
 
 

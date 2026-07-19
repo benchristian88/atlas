@@ -28,8 +28,8 @@ export const NAVIGATION_GROUPS = [
     id: "operations",
     label: "Operations",
     items: [
-      { id: "discovery", href: "/discovery-runs", label: "Discovery", permission: "integrations.view" },
-      { id: "reconciliation", label: "Reconciliation", available: false },
+      { id: "discovery", href: "/discovery-runs", label: "Discovery", permission: "integrations.view", activeRoutes: ["/discovery-runs", "/discovery"] },
+      { id: "reconciliation", href: "/reconciliation", label: "Reconciliation", permission: "assets.view" },
       { id: "impact-analysis", label: "Impact Analysis", available: false },
       { id: "backup-recovery", label: "Backup & Recovery", available: false },
       { id: "documentation", label: "Documentation", available: false },

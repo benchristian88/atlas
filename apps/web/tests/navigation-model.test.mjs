@@ -51,7 +51,7 @@ test("viewer navigation uses implemented product domains without administration"
   assert.deepEqual(groupMap(groups), {
     Overview: ["Dashboard"],
     Knowledge: ["Knowledge Graph", "Assets", "Networks"],
-    Operations: ["Discovery"],
+    Operations: ["Discovery", "Reconciliation"],
     Connections: ["Integrations"],
   });
   assert.equal(resolvedItem(groups, "users-access"), undefined);
@@ -88,6 +88,8 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
     ["knowledge-graph", "/topology"],
     ["knowledge-graph", "/topology/focus/asset-1"],
     ["discovery", "/discovery-runs/run-1"],
+    ["discovery", "/discovery/simulate"],
+    ["reconciliation", "/reconciliation"],
     ["users-access", "/admin/roles/role-1"],
     ["reference-data", "/admin/custom-fields/field-1"],
     ["system-settings", "/admin/system-settings/security"],
@@ -115,7 +117,6 @@ test("roadmap entries remain representable but never render broken links", () =>
     "Services",
     "Business Functions",
     "People & Teams",
-    "Reconciliation",
     "Impact Analysis",
     "Backup & Recovery",
     "Documentation",

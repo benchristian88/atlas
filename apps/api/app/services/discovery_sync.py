@@ -24,6 +24,7 @@ from app.models import (
     Site,
 )
 from app.services.markdown_docs import generate_asset_document
+from app.utils.json_values import to_json_value
 
 
 class AtlasDiscoverySync:
@@ -43,7 +44,7 @@ class AtlasDiscoverySync:
         try:
             run = self._validate_context(context)
 
-            run.raw_payload = deepcopy(discovery.raw_payload)
+            run.raw_payload = to_json_value(deepcopy(discovery.raw_payload))
             run.started_at = run.started_at or discovery.observed_at
             result = self._sync(context, normalized, discovery.observed_at)
             documents_generated = self._upsert_documents(
@@ -51,8 +52,9 @@ class AtlasDiscoverySync:
             )
             run.status = "completed"
             run.completed_at = datetime.now(timezone.utc)
+            run.finished_at = run.completed_at
             run.error_message = None
-            run.summary = {
+            run.summary = to_json_value({
                 "raw_items": len(discovery.items),
                 "assets_seen": result.assets_seen,
                 "created": result.created,
@@ -62,7 +64,7 @@ class AtlasDiscoverySync:
                 "relationships_upserted": result.relationships_upserted,
                 "facts_upserted": result.facts_upserted,
                 "documents_generated": documents_generated,
-            }
+            })
             self.db.commit()
             return result
         except SyncError:
@@ -205,7 +207,7 @@ class AtlasDiscoverySync:
                 "vendor": normalized_asset.vendor,
                 "status": normalized_asset.status,
                 "description": normalized_asset.description,
-                "metadata_": dict(normalized_asset.metadata),
+                "metadata_": to_json_value(dict(normalized_asset.metadata)),
                 "last_seen_at": observed_at,
             }
             if asset is None:
@@ -255,12 +257,12 @@ class AtlasDiscoverySync:
                         asset_id=asset.id,
                         key=normalized_fact.key,
                         source=normalized_fact.source,
-                        value=normalized_fact.value,
+                        value=to_json_value(normalized_fact.value),
                     )
                     self.db.add(fact)
                     facts_by_identity[identity] = fact
                 else:
-                    fact.value = normalized_fact.value
+                    fact.value = to_json_value(normalized_fact.value)
                 facts_upserted += 1
 
         existing_relationships = list(
@@ -331,12 +333,14 @@ class AtlasDiscoverySync:
                     site_id=source.site_id,
                     relationship_type=normalized_relationship.relationship_type,
                     legacy_cross_context=False,
-                    metadata_=dict(normalized_relationship.metadata),
+                    metadata_=to_json_value(dict(normalized_relationship.metadata)),
                 )
                 self.db.add(relationship)
                 relationships_by_identity[identity] = relationship
             else:
-                relationship.metadata_ = dict(normalized_relationship.metadata)
+                relationship.metadata_ = to_json_value(
+                    dict(normalized_relationship.metadata)
+                )
             relationships_upserted += 1
 
         return SyncResult(
