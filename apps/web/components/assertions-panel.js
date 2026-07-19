@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { StatusBadge } from "./status-badge";
 
@@ -21,7 +21,35 @@ function dateTime(value) {
 }
 
 function displayStatus(assertion) {
-  return assertion.retracted_at ? "Retracted" : assertion.confirmation_status;
+  if (assertion.retracted_at) return "Retracted";
+  if (assertion.confirmation_status === "rejected") return "Rejected";
+  if (assertion.is_accepted) return "Accepted";
+  if (assertion.confirmation_status === "conflicted") return "Conflicting";
+  if (assertion.is_source_current) return "Current from source";
+  if (assertion.confirmation_status === "superseded") return "Superseded";
+  return "Historical";
+}
+
+const FILTERS = [
+  ["active", "Active"],
+  ["accepted", "Accepted"],
+  ["source-current", "Current from source"],
+  ["historical", "Historical"],
+  ["rejected", "Rejected"],
+  ["retracted", "Retracted"],
+  ["all", "All"],
+];
+
+function matchesFilter(assertion, filter) {
+  if (filter === "all") return true;
+  if (filter === "accepted") return assertion.is_accepted && !assertion.retracted_at;
+  if (filter === "source-current") return assertion.is_source_current && !assertion.retracted_at;
+  if (filter === "historical") return !assertion.is_source_current && !assertion.retracted_at;
+  if (filter === "rejected") return assertion.confirmation_status === "rejected";
+  if (filter === "retracted") return Boolean(assertion.retracted_at);
+  return !assertion.retracted_at
+    && assertion.confirmation_status !== "rejected"
+    && (assertion.is_accepted || assertion.is_source_current);
 }
 
 export function AssertionsPanel({
@@ -37,6 +65,14 @@ export function AssertionsPanel({
   const [error, setError] = useState("");
   const [requiresGapConfirmation, setRequiresGapConfirmation] = useState(false);
   const [gapAcknowledged, setGapAcknowledged] = useState(false);
+  const [filter, setFilter] = useState("active");
+  const grouped = useMemo(() => {
+    const result = {};
+    assertions.filter((item) => matchesFilter(item, filter)).forEach((item) => {
+      (result[item.predicate] ||= []).push(item);
+    });
+    return result;
+  }, [assertions, filter]);
 
   function openDialog(type, assertion) {
     setDialog({ type, assertion });
@@ -88,13 +124,13 @@ export function AssertionsPanel({
   }
 
   return <section className="table-card assertions-card">
-    <div className="table-meta"><span>{assertions.length} provenance assertions</span></div>
-    {assertions.length === 0 ? <p className="empty-state">No sourced assertions are linked to this asset yet.</p> : <div className="responsive-table assertions-scroll"><table className="assertions-table"><thead><tr><th>Predicate</th><th>Value</th><th>Truth classification</th><th className="assertion-source-column">Source</th><th>Confirmation status</th><th className="assertion-observed-column">Last observed</th><th>Actions</th></tr></thead><tbody>{assertions.map((assertion) => {
+    <div className="table-meta knowledge-raw-header"><span>{assertions.length} provenance assertions</span><label className="compact-filter"><span>Show</span><select value={filter} onChange={(event) => setFilter(event.target.value)}>{FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+    {assertions.length === 0 ? <p className="empty-state">No sourced assertions are linked to this asset yet.</p> : Object.keys(grouped).length === 0 ? <p className="empty-state">No assertions match this filter.</p> : <div className="assertion-groups">{Object.entries(grouped).sort(([left], [right]) => left.localeCompare(right)).map(([predicate, entries]) => { const allEntries = assertions.filter((item) => item.predicate === predicate); const sourceCurrent = allEntries.filter((item) => item.is_source_current && !item.retracted_at).length; const historical = allEntries.filter((item) => !item.is_source_current || item.retracted_at).length; const conflicts = allEntries.filter((item) => item.confirmation_status === "conflicted" && !item.retracted_at).length; return <details className="assertion-group" key={predicate}><summary><strong>{predicate.replaceAll("_", " ")}</strong><span>{allEntries.length} total · {sourceCurrent} source-current · {historical} historical · {conflicts} conflicts</span></summary><div className="responsive-table assertions-scroll"><table className="assertions-table"><thead><tr><th>Value</th><th>Truth</th><th className="assertion-source-column">Source</th><th>Knowledge status</th><th className="assertion-observed-column">Last observed</th><th>Actions</th></tr></thead><tbody>{entries.map((assertion) => {
       const value = assertionValue(assertion, assetsById);
       const mayDelete = canDelete && assertion.deletion_safety?.allowed;
       const mayRetract = canRetract && !assertion.retracted_at && assertion.confirmation_status === "confirmed";
-      return <tr key={assertion.id}><td><span className="assertion-truncate primary-cell" title={assertion.predicate}>{assertion.predicate}</span></td><td><code className="assertion-truncate" title={value}>{value}</code></td><td><StatusBadge status={assertion.truth_classification} /></td><td className="assertion-source-column"><span className="assertion-truncate" title={assertion.source_name || "Unavailable"}>{assertion.source_name || "Unavailable"}</span></td><td><StatusBadge status={displayStatus(assertion)} /></td><td className="assertion-observed-column"><span className="secondary-text">{dateTime(assertion.last_observed_at)}</span></td><td><div className="table-actions"><button className="text-button" onClick={() => openDialog("details", assertion)} type="button">View details</button>{mayDelete && <button className="text-button text-danger" onClick={() => openDialog("delete", assertion)} type="button">Delete</button>}{mayRetract && <button className="text-button text-danger" onClick={() => openDialog("retract", assertion)} type="button">Retract</button>}</div></td></tr>;
-    })}</tbody></table></div>}
+      return <tr key={assertion.id}><td><code className="assertion-truncate" title={value}>{value}</code></td><td><StatusBadge status={assertion.truth_classification} /></td><td className="assertion-source-column"><span className="assertion-truncate" title={assertion.source_name || "Unavailable"}>{assertion.source_name || "Unavailable"}</span></td><td><StatusBadge status={displayStatus(assertion)} /></td><td className="assertion-observed-column"><span className="secondary-text">{dateTime(assertion.last_observed_at)}</span></td><td><div className="table-actions"><button className="text-button" onClick={() => openDialog("details", assertion)} type="button">View details</button>{mayDelete && <button className="text-button text-danger" onClick={() => openDialog("delete", assertion)} type="button">Delete</button>}{mayRetract && <button className="text-button text-danger" onClick={() => openDialog("retract", assertion)} type="button">Retract</button>}</div></td></tr>;
+    })}</tbody></table></div></details>; })}</div>}
 
     {dialog && <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
       <section aria-labelledby="assertion-dialog-title" aria-modal="true" className="dialog-card dialog-card-wide" role="dialog">

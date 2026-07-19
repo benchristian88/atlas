@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Apply Alembic migrations through `20260719_0009`.
+- Apply Alembic migrations through `20260719_0011`.
 - Sign in with `discovery.simulate`, `reconciliation.view`,
   `reconciliation.decide`, and `changes.view` in the test customer/site.
 - Create **Home Lab / Home** with existing assets **pve1** and **docker01**.
@@ -41,11 +41,25 @@
 1. Open **Changes** and test change-type and text filters plus pagination.
 2. Confirm relationship creation/deletion and assertion retraction appear as
    meaningful events, while login and access changes remain in **Audit**.
-3. Open docker01 and expand **Fact history**. Confirm current, superseded, and
-   retracted values remain ordered and missing provenance displays
-   **Unavailable**.
-4. Confirm dashboard reconciliation counts match the queue page.
-5. Repeat as a user scoped to another customer/site and confirm these runs,
+3. Open docker01. Confirm **Knowledge → Summary** is the default and shows one
+   accepted value per single-valued predicate separately from latest source
+   observations.
+4. Open **History** and confirm current-from-source, accepted, superseded,
+   conflicting, rejected, and retracted labels are unambiguous and missing
+   provenance displays **Unavailable**.
+5. Open **Raw assertions**. Confirm predicate groups are collapsed initially,
+   filters work, and long JSON stays inside the responsive panel.
+6. Edit docker01's hostname. Confirm the new value is an accepted **Declared**
+   history entry and exactly one `fact_changed` event appears. Save the same
+   value again and confirm no duplicate assertion/change appears.
+7. Simulate a different hostname. Confirm the observation remains **Current
+   from source**, the declared hostname remains **Accepted**, Summary shows a
+   conflict, and Reconciliation contains one contradiction.
+8. Accept the observed hostname and confirm the operational field and accepted
+   assertion change together. Repeat with **Keep declared** and confirm the
+   source observation remains visible as conflicting instead.
+9. Confirm dashboard reconciliation counts match the queue page.
+10. Repeat as a user scoped to another customer/site and confirm these runs,
    items, counts, changes, and facts are not visible.
-6. Leave Dashboard, Changes, Reconciliation, and asset detail idle. Confirm the
+11. Leave Dashboard, Changes, Reconciliation, and asset detail idle. Confirm the
    browser Network panel shows no uncontrolled polling or render-loop requests.

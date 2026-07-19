@@ -28,8 +28,9 @@ from app.services.entity_resolution import (
     ensure_asset_link,
     resolve_asset_identity,
 )
-from app.services.knowledge_assertions import confirm, reject
+from app.services.knowledge_assertions import accept_assertion, confirm, reject
 from app.services.knowledge_changes import record_assertion_change
+from app.services.predicate_definitions import ASSET_FIELD_PREDICATES
 from app.utils.json_values import to_json_value
 
 
@@ -157,7 +158,7 @@ def _attach_external_identity(
             KnowledgeAssertion.data_source_id == assertion.data_source_id,
             KnowledgeAssertion.subject_type == "asset",
             KnowledgeAssertion.subject_external_id == item.candidate_external_id,
-            KnowledgeAssertion.is_current.is_(True),
+            KnowledgeAssertion.is_source_current.is_(True),
         )
     ):
         related_assertion.subject_id = asset.id
@@ -168,7 +169,7 @@ def _attach_external_identity(
             KnowledgeAssertion.data_source_id == assertion.data_source_id,
             KnowledgeAssertion.object_type == "asset",
             KnowledgeAssertion.object_external_id == item.candidate_external_id,
-            KnowledgeAssertion.is_current.is_(True),
+            KnowledgeAssertion.is_source_current.is_(True),
         )
     ):
         object_assertion.object_id = asset.id
@@ -256,6 +257,34 @@ def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
     setattr(asset, field, value.get("value"))
     asset.last_seen_at = datetime.now(timezone.utc)
     return asset
+
+
+def _accept_matching_asset_assertions(
+    db: Session,
+    *,
+    asset: Asset,
+    source_assertion: KnowledgeAssertion,
+    user_id: uuid.UUID,
+    accepted_at: datetime,
+) -> None:
+    """Accept all reconciled scalar observations represented by a new asset."""
+
+    for candidate in db.scalars(
+        select(KnowledgeAssertion).where(
+            KnowledgeAssertion.subject_type == "asset",
+            KnowledgeAssertion.subject_id == asset.id,
+            KnowledgeAssertion.data_source_id == source_assertion.data_source_id,
+            KnowledgeAssertion.is_source_current.is_(True),
+            KnowledgeAssertion.predicate.in_(ASSET_FIELD_PREDICATES),
+        )
+    ):
+        if getattr(asset, candidate.predicate, None) == candidate.value_json:
+            accept_assertion(
+                db,
+                candidate,
+                user_id=user_id,
+                accepted_at=accepted_at,
+            )
 
 
 def _accept_absence(
@@ -547,6 +576,20 @@ def accept_item(
     item.decided_at = datetime.now(timezone.utc)
     confirm(assertion)
     if item.category != "no_longer_observed":
+        accept_assertion(db, assertion, user_id=user.id, accepted_at=item.decided_at)
+    if (
+        item.entity_type == "asset"
+        and item.category in {"newly_discovered", "possible_duplicate"}
+        and isinstance(result, Asset)
+    ):
+        _accept_matching_asset_assertions(
+            db,
+            asset=result,
+            source_assertion=assertion,
+            user_id=user.id,
+            accepted_at=item.decided_at,
+        )
+    if item.category != "no_longer_observed":
         name = getattr(result, "name", None) or item.candidate_external_id or item.entity_type
         change_type = (
             "relationship_added"
@@ -594,6 +637,7 @@ def link_item_to_asset(
     item.decided_by_user_id = user.id
     item.decided_at = datetime.now(timezone.utc)
     confirm(assertion)
+    accept_assertion(db, assertion, user_id=user.id, accepted_at=item.decided_at)
     record_assertion_change(
         db,
         assertion=assertion,
@@ -623,7 +667,18 @@ def reject_item(db: Session, item: ReconciliationItem, user: User, reason: str |
         raise HTTPException(status_code=409, detail="This item has already been decided")
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     if assertion is not None:
-        reject(assertion)
+        if item.category in {"changed", "contradiction"}:
+            # The user rejected the proposed operational change, not the
+            # source observation itself. Preserve it as current-from-source so
+            # the disagreement remains visible in the knowledge roll-up.
+            assertion.confirmation_status = "conflicted"
+            if assertion.is_source_current is None:
+                assertion.is_source_current = bool(assertion.is_current)
+            assertion.is_accepted = False
+            assertion.accepted_at = None
+            assertion.accepted_by_user_id = None
+        else:
+            reject(assertion)
     item.status = "rejected"
     item.decision_reason = reason
     item.decided_by_user_id = user.id

@@ -30,9 +30,24 @@ test("reconciliation exposes stable queues and absence dispositions", async () =
   }
 });
 
-test("asset detail loads grouped fact history", async () => {
+test("asset detail defaults to knowledge summary with history and raw tabs", async () => {
   const asset = await readFile(new URL("../app/assets/[id]/page.js", import.meta.url), "utf8");
   assert.match(asset, /\/fact-history/);
-  assert.match(asset, /Fact history/);
+  assert.match(asset, /\/knowledge-summary/);
+  assert.match(asset, /\["summary", "Summary"\]/);
+  assert.match(asset, /\["history", "History"\]/);
+  assert.match(asset, /\["raw", "Raw assertions"\]/);
+  assert.match(asset, /Accepted Atlas value/);
+  assert.match(asset, /Latest source observations/);
   assert.match(asset, /Unavailable/);
+});
+
+test("raw assertions are grouped, collapsed, and filterable by knowledge status", async () => {
+  const panel = await readFile(new URL("../components/assertions-panel.js", import.meta.url), "utf8");
+  assert.match(panel, /<details className="assertion-group"/);
+  assert.match(panel, /\["accepted", "Accepted"\]/);
+  assert.match(panel, /\["source-current", "Current from source"\]/);
+  assert.match(panel, /\["historical", "Historical"\]/);
+  assert.match(panel, /return "Conflicting"/);
+  assert.doesNotMatch(panel, /<details[^>]*open/);
 });

@@ -29,11 +29,12 @@ from app.models import (
     RunObservedEntity,
     Site,
 )
-from app.schemas import SimulatedDiscoveryRequest
+from app.schemas import AssetKnowledgeSummaryResponse, SimulatedDiscoveryRequest
 from app.routes.knowledge import (
     accept_reconciliation_item,
     simulate_discovery,
 )
+from app.routes.changes import get_asset_knowledge_summary
 from app.services.reconciliation import (
     RelationshipResolutionError,
     accept_item,
@@ -43,7 +44,10 @@ from app.services.reconciliation import (
     relationship_resolution,
     reject_item,
 )
-from app.services.knowledge_assertions import record_assertion
+from app.services.knowledge_assertions import accept_assertion, record_assertion
+from app.services.knowledge_summary import asset_knowledge_summary
+from app.services.manual_knowledge import declare_asset_changes
+from app.services.predicate_definitions import predicate_cardinality
 from app.services.simulated_discovery import run_simulation
 from app.services.discovery_observations import reconcile_complete_snapshot
 from app.utils.json_values import to_json_value
@@ -145,10 +149,26 @@ class KnowledgeSession:
             "discovery_run_id": "discovery_run_id",
             "coverage_key": "coverage_key",
             "completeness_status": "completeness_status",
+            "source_type": "source_type",
         }
+        statement_sql = str(statement)
         for prefix, attribute in field_map.items():
             expected = value(prefix)
             if expected is not None:
+                if (
+                    entity is KnowledgeAssertion
+                    and attribute == "data_source_id"
+                    and (
+                        "knowledge_assertions.data_source_id !=" in statement_sql
+                        or "knowledge_assertions.data_source_id <>" in statement_sql
+                    )
+                ):
+                    rows = [
+                        row
+                        for row in rows
+                        if getattr(row, attribute, None) != expected
+                    ]
+                    continue
                 if entity is ReconciliationItem and attribute == "data_source_id":
                     rows = [
                         row for row in rows
@@ -157,6 +177,18 @@ class KnowledgeSession:
                     ]
                 elif rows and hasattr(rows[0], attribute):
                     rows = [row for row in rows if getattr(row, attribute, None) == expected]
+        sql = statement_sql
+        if entity is KnowledgeAssertion:
+            if "knowledge_assertions.is_source_current IS true" in sql:
+                rows = [row for row in rows if bool(row.is_source_current)]
+            if "knowledge_assertions.is_accepted IS true" in sql:
+                rows = [row for row in rows if bool(row.is_accepted)]
+            if "knowledge_assertions.retracted_at IS NULL" in sql:
+                rows = [row for row in rows if row.retracted_at is None]
+            if "knowledge_assertions.id !=" in sql or "knowledge_assertions.id <>" in sql:
+                excluded = value("id")
+                if excluded is not None:
+                    rows = [row for row in rows if row.id != excluded]
         return rows
 
     def scalar(self, statement):
@@ -568,6 +600,7 @@ def test_accepting_changed_fact_records_one_meaningful_change():
     accept_item(db, item, SimpleNamespace(id=uuid.uuid4()))
 
     assert asset.hostname == "docker-prod-01"
+    assert assertion.is_accepted is True
     changes = [row for row in db.records if isinstance(row, KnowledgeChange)]
     assert [row.change_type for row in changes] == ["fact_changed"]
     assert changes[0].previous_value_json["value"] == "docker01"
@@ -609,6 +642,8 @@ def test_reject_and_defer_never_mutate_operational_asset():
 
     assert asset.hostname == "old-name"
     assert rejected.status == "rejected"
+    assert assertion.confirmation_status == "conflicted"
+    assert assertion.is_source_current is True
     assert deferred.status == "deferred"
     assert not [row for row in db.records if isinstance(row, AssetRelationship)]
 
@@ -999,3 +1034,259 @@ def test_simulation_route_rolls_back_an_unexpected_failure(monkeypatch):
         )
     assert db.rollbacks == 1
     assert db.commits == 0
+
+
+def test_predicate_cardinality_distinguishes_scalar_and_multi_valued_knowledge():
+    assert predicate_cardinality("asset_type") == "single"
+    assert predicate_cardinality("interface") == "multi"
+    assert predicate_cardinality("runs_on", object_type="asset") == "multi"
+
+
+def test_new_discovery_value_is_source_current_but_not_automatically_accepted():
+    customer, site = context_records()
+    source = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Discovery", source_type="simulated_discovery", status="active",
+    )
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, source, asset)
+
+    first, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="hostname", value="docker01",
+        data_source_id=source.id,
+    )
+    second, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="hostname", value="docker-new",
+        data_source_id=source.id,
+    )
+
+    assert first.is_source_current is False
+    assert first.is_current is False
+    assert second.is_source_current is True
+    assert second.is_accepted is False
+
+
+def test_multi_valued_relationship_assertions_remain_current_from_one_source():
+    customer, site = context_records()
+    source = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Discovery", source_type="simulated_discovery", status="active",
+    )
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    db = KnowledgeSession(customer, site, source, asset)
+    first, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="depends_on", object_type="asset",
+        object_id=uuid.uuid4(), data_source_id=source.id,
+    )
+    second, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="depends_on", object_type="asset",
+        object_id=uuid.uuid4(), data_source_id=source.id,
+    )
+    assert first.is_source_current is True
+    assert second.is_source_current is True
+    accept_assertion(db, first, user_id=uuid.uuid4())
+    accept_assertion(db, second, user_id=uuid.uuid4())
+    assert first.is_accepted is True
+    assert second.is_accepted is True
+
+
+def test_manual_asset_edit_creates_one_accepted_declaration_and_conflict():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    observed_source = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Proxmox", source_type="proxmox", status="active",
+    )
+    observed = KnowledgeAssertion(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        subject_type="asset", subject_id=asset.id, predicate="hostname",
+        value_json="docker-discovered", truth_classification="observed",
+        confirmation_status="conflicted", data_source_id=observed_source.id,
+        confidence=1, first_observed_at=datetime.now(timezone.utc),
+        last_observed_at=datetime.now(timezone.utc), is_current=True,
+        is_source_current=True, is_accepted=False,
+    )
+    db = KnowledgeSession(customer, site, asset, observed_source, observed)
+    previous = asset.hostname
+    asset.hostname = "docker-manual"
+
+    created = declare_asset_changes(
+        db, asset=asset, previous_values={"hostname": previous},
+        actor_user_id=uuid.uuid4(),
+    )
+    repeated = declare_asset_changes(
+        db, asset=asset, previous_values={"hostname": asset.hostname},
+        actor_user_id=uuid.uuid4(),
+    )
+
+    assert len(created) == 1
+    assert repeated == []
+    assert created[0].truth_classification == "declared"
+    assert created[0].is_accepted is True
+    assert observed.is_source_current is True
+    assert any(
+        isinstance(row, ReconciliationItem)
+        and row.category == "contradiction"
+        for row in db.records
+    )
+    changes = [row for row in db.records if isinstance(row, KnowledgeChange)]
+    assert len(changes) == 1
+    assert changes[0].change_type == "fact_changed"
+
+
+def test_accepting_single_value_clears_previous_accepted_assertion():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    source_a = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Manual", source_type="manual", status="active",
+    )
+    source_b = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Discovery", source_type="proxmox", status="active",
+    )
+    db = KnowledgeSession(customer, site, asset, source_a, source_b)
+    declared, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="asset_type", value="virtual_machine",
+        truth_classification="declared", data_source_id=source_a.id,
+    )
+    accept_assertion(db, declared, user_id=uuid.uuid4())
+    observed, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="asset_type", value="container",
+        data_source_id=source_b.id,
+    )
+    accept_assertion(db, observed, user_id=uuid.uuid4())
+    assert declared.is_accepted is False
+    assert observed.is_accepted is True
+
+
+def test_knowledge_summary_rolls_up_accepted_value_and_conflicting_sources():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    manual = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Atlas Manual Inventory", source_type="manual", status="active",
+    )
+    proxmox = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Proxmox", source_type="proxmox", status="active",
+    )
+    db = KnowledgeSession(customer, site, asset, manual, proxmox)
+    declared, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="hostname", value="docker01",
+        truth_classification="declared", data_source_id=manual.id,
+    )
+    accept_assertion(db, declared, user_id=None)
+    record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="hostname", value="docker01-new",
+        data_source_id=proxmox.id,
+    )
+
+    result = asset_knowledge_summary(db, asset)
+    AssetKnowledgeSummaryResponse.model_validate(result)
+    hostname = next(item for item in result["groups"] if item["predicate"] == "hostname")
+    assert hostname["accepted"]["value"] == "docker01"
+    assert hostname["latest_observations"][0]["value"] == "docker01-new"
+    assert hostname["conflict"] is True
+    assert hostname["assertion_count"] == 2
+    assert hostname["source_count"] == 2
+    assert hostname["latest_observations"][0]["conflicts_with_accepted"] is True
+    assert result["conflict_count"] == 1
+
+
+def test_historical_rejected_and_retracted_values_do_not_create_active_conflict():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    manual = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Manual", source_type="manual", status="active",
+    )
+    discovery = DataSource(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        name="Discovery", source_type="proxmox", status="active",
+    )
+    db = KnowledgeSession(customer, site, asset, manual, discovery)
+    declared, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="status", value="active",
+        truth_classification="declared", data_source_id=manual.id,
+    )
+    accept_assertion(db, declared)
+    historical, _ = record_assertion(
+        db, customer_id=customer.id, site_id=site.id, subject_type="asset",
+        subject_id=asset.id, predicate="status", value="inactive",
+        data_source_id=discovery.id,
+    )
+    historical.is_source_current = False
+    historical.is_current = False
+    historical.confirmation_status = "superseded"
+
+    result = asset_knowledge_summary(db, asset)
+    status = next(item for item in result["groups"] if item["predicate"] == "status")
+    assert status["conflict"] is False
+    assert status["historical_count"] == 1
+
+
+def test_multiple_unaccepted_source_values_are_reported_as_unresolved():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    sources = [
+        DataSource(
+            id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+            name=f"Source {index}", source_type="proxmox", status="active",
+        )
+        for index in (1, 2)
+    ]
+    db = KnowledgeSession(customer, site, asset, *sources)
+    for source, value in zip(sources, ("virtual_machine", "lxc_container")):
+        record_assertion(
+            db, customer_id=customer.id, site_id=site.id,
+            subject_type="asset", subject_id=asset.id,
+            predicate="asset_type", value=value, data_source_id=source.id,
+        )
+    result = asset_knowledge_summary(db, asset)
+    asset_type = next(
+        item for item in result["groups"] if item["predicate"] == "asset_type"
+    )
+    assert asset_type["accepted"] is None
+    assert asset_type["accepted_values"] == []
+    assert asset_type["unresolved"] is True
+
+
+def test_asset_knowledge_summary_tolerates_missing_optional_provenance():
+    customer, site = context_records()
+    asset = manual_asset(customer, site, "docker01", "virtual_machine")
+    assertion = KnowledgeAssertion(
+        id=uuid.uuid4(), customer_id=customer.id, site_id=site.id,
+        subject_type="asset", subject_id=asset.id, predicate="asset_type",
+        value_json="virtual_machine", truth_classification="declared",
+        confirmation_status="confirmed", data_source_id=uuid.uuid4(),
+        confidence=1, first_observed_at=datetime.now(timezone.utc),
+        last_observed_at=datetime.now(timezone.utc), is_current=True,
+        is_source_current=True, is_accepted=True,
+        accepted_at=datetime.now(timezone.utc),
+        accepted_by_user_id=uuid.uuid4(),
+    )
+    db = KnowledgeSession(customer, site, asset, assertion)
+    principal = Principal(
+        user=SimpleNamespace(id=uuid.uuid4()),
+        grants=(ScopeGrant(
+            assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Test",
+            scope_type="global", customer_id=None, site_id=None,
+            permissions=frozenset({"assets.view"}),
+        ),),
+    )
+
+    response = get_asset_knowledge_summary(asset.id, principal, db)
+
+    group = response["groups"][0]
+    assert group["accepted"]["source_name"] is None
+    assert group["accepted"]["actor_name"] is None

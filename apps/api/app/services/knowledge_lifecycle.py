@@ -239,7 +239,12 @@ def restore_discovery_run(run: DiscoveryRun) -> None:
 
 
 def assertion_has_provenance_gap(db: Session, assertion: KnowledgeAssertion) -> bool:
-    if assertion.confirmation_status != "confirmed":
+    accepted = (
+        assertion.is_accepted
+        if assertion.is_accepted is not None
+        else assertion.confirmation_status == "confirmed"
+    )
+    if not accepted:
         return False
     if assertion.subject_id is None and assertion.object_id is None:
         return False
@@ -251,9 +256,8 @@ def assertion_has_provenance_gap(db: Session, assertion: KnowledgeAssertion) -> 
             KnowledgeAssertion.subject_type == assertion.subject_type,
             KnowledgeAssertion.subject_id == assertion.subject_id,
             KnowledgeAssertion.predicate == assertion.predicate,
-            KnowledgeAssertion.confirmation_status == "confirmed",
+            KnowledgeAssertion.is_accepted.is_(True),
             KnowledgeAssertion.retracted_at.is_(None),
-            KnowledgeAssertion.is_current.is_(True),
         )
     )
     for candidate in candidates:
@@ -301,6 +305,8 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
         "history_references": history_references,
     }
     reasons = []
+    if assertion.is_accepted:
+        reasons.append("The assertion is accepted Atlas knowledge")
     if assertion.confirmation_status not in DELETABLE_ASSERTION_STATUSES:
         reasons.append(
             "Only unreviewed, rejected, or superseded assertions can be deleted"
@@ -357,5 +363,9 @@ def retract_assertion(
     assertion.retracted_by_user_id = user.id
     assertion.retraction_reason = reason
     assertion.is_current = False
+    assertion.is_source_current = False
+    assertion.is_accepted = False
+    assertion.accepted_at = None
+    assertion.accepted_by_user_id = None
     assertion.valid_to = assertion.valid_to or now
     return provenance_gap

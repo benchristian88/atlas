@@ -37,6 +37,21 @@ function safeManagementUrl(value) {
   }
 }
 
+function compactKnowledgeValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function historyStatus(entry) {
+  if (entry.retracted_at) return "Retracted";
+  if (entry.confirmation_status === "rejected") return "Rejected";
+  if (entry.is_accepted) return "Accepted";
+  if (entry.confirmation_status === "conflicted") return "Conflicting";
+  if (entry.is_source_current) return "Current from source";
+  if (entry.confirmation_status === "superseded") return "Superseded";
+  return "Historical";
+}
+
 export default function AssetDetailPage() {
   const { id } = useParams();
   const searchParams = useSearchParams();
@@ -52,6 +67,8 @@ export default function AssetDetailPage() {
   const [interfaces, setInterfaces] = useState([]);
   const [assertions, setAssertions] = useState([]);
   const [factHistory, setFactHistory] = useState({});
+  const [knowledgeSummary, setKnowledgeSummary] = useState(null);
+  const [knowledgeTab, setKnowledgeTab] = useState("summary");
   const [relationshipForm, setRelationshipForm] = useState({ target_asset_id: "", relationship_type: "", notes: "" });
   const [interfaceForm, setInterfaceForm] = useState({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: true, notes: "" });
   const [showRelationshipForm, setShowRelationshipForm] = useState(false);
@@ -77,7 +94,7 @@ export default function AssetDetailPage() {
         current.customer_id,
         current.site_id,
       );
-      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions, history] = await Promise.all([
+      const [allAssets, types, fields, edges, relationTypes, allNetworks, assetInterfaces, assetAssertions, history, summary] = await Promise.all([
         mayViewRelationships ? apiRequest("/assets") : Promise.resolve([]),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields") : Promise.resolve([]),
@@ -87,6 +104,7 @@ export default function AssetDetailPage() {
         mayViewNetworks ? apiRequest(`/asset-interfaces?asset_id=${id}`) : Promise.resolve([]),
         apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
         apiRequest(`/assets/${id}/fact-history`),
+        apiRequest(`/assets/${id}/knowledge-summary`),
       ]);
       setAsset(current);
       setAssets(allAssets);
@@ -98,6 +116,7 @@ export default function AssetDetailPage() {
       setInterfaces(assetInterfaces);
       setAssertions(assetAssertions);
       setFactHistory(history.facts || {});
+      setKnowledgeSummary(summary);
     } catch (requestError) {
       setError(requestError.message || "Atlas could not load this asset.");
     } finally {
@@ -205,7 +224,14 @@ export default function AssetDetailPage() {
 
   async function refreshAssertions() {
     try {
-      setAssertions(await apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`));
+      const [nextAssertions, history, summary] = await Promise.all([
+        apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
+        apiRequest(`/assets/${id}/fact-history`),
+        apiRequest(`/assets/${id}/knowledge-summary`),
+      ]);
+      setAssertions(nextAssertions);
+      setFactHistory(history.facts || {});
+      setKnowledgeSummary(summary);
     } catch (requestError) {
       setError(requestError.message || "Atlas could not refresh asset assertions.");
     }
@@ -234,8 +260,11 @@ export default function AssetDetailPage() {
         {showRelationshipForm && <form onSubmit={createRelationship}><div className="form-grid"><label className="field"><span>Source</span><input disabled value={asset.name} /></label><label className="field"><span>Target asset *</span><select required value={relationshipForm.target_asset_id} onChange={(event) => setRelationshipForm({ ...relationshipForm, target_asset_id: event.target.value, relationship_type: "" })}><option value="">Select same-site asset</option>{sameSiteAssets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="field"><span>Relationship type *</span><select required value={relationshipForm.relationship_type} onChange={(event) => setRelationshipForm({ ...relationshipForm, relationship_type: event.target.value })}><option value="">Select relationship</option>{allowedRelationshipTypes.map((type) => <option key={type.key} value={type.key}>{type.name}</option>)}</select></label><label className="field field-wide"><span>Notes</span><textarea value={relationshipForm.notes} onChange={(event) => setRelationshipForm({ ...relationshipForm, notes: event.target.value })} /></label></div><div className="form-actions"><button className="button button-secondary" onClick={() => setShowRelationshipForm(false)} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">Add relationship</button></div></form>}
       </section><section className="table-card"><div className="table-meta"><span>{relationships.length} relationships</span></div>{relationships.length === 0 ? <p className="empty-state">No relationships yet.</p> : <div className="relationship-list">{relationships.map((edge) => { const type = relationshipTypes.find((item) => item.key === edge.relationship_type); return <div className="relationship-row" key={edge.id}><span><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name || "Unknown"}</strong> → {type?.name || edge.relationship_type} → <strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name || "Unknown"}</strong>{edge.notes ? ` — ${edge.notes}` : ""}</span>{canDeleteRelationship && <button className="text-button text-danger" onClick={() => removeRelationship(edge)} type="button">Delete</button>}</div>; })}</div>}</section></>}
 
-      <AssertionsPanel assertions={assertions} assetsById={assetsById} canDelete={canDeleteAssertions} canRetract={canRetractAssertions} onChanged={refreshAssertions} />
-      <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Knowledge history</p><h2>Fact history</h2></div></div>{Object.keys(factHistory).length === 0 ? <p className="secondary-text">No sourced fact history yet.</p> : <div className="fact-history-list">{Object.entries(factHistory).map(([predicate, entries]) => <details key={predicate}><summary><strong>{predicate.replaceAll("_", " ")}</strong><span>{entries.length} observation{entries.length === 1 ? "" : "s"}</span></summary><div className="responsive-table"><table><thead><tr><th>Value</th><th>Source</th><th>Truth</th><th>Status</th><th>Observed</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.assertion_id}><td><code>{typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value)}</code></td><td>{entry.source_name || "Unavailable"}</td><td>{entry.truth_classification || "—"}</td><td>{entry.is_current ? "Current" : entry.confirmation_status || "Historical"}</td><td>{entry.last_observed_at ? new Date(entry.last_observed_at).toLocaleString() : "—"}</td></tr>)}</tbody></table></div></details>)}</div>}</section>
+      <section className="knowledge-card"><div className="form-card-header"><div><p className="eyebrow">Knowledge</p><h2>Asset knowledge</h2></div>{knowledgeSummary && (knowledgeSummary.conflict_count > 0 || knowledgeSummary.unresolved_count > 0) && <StatusBadge status="Needs review" />}</div><div className="knowledge-tabs" role="tablist" aria-label="Asset knowledge views">{[["summary", "Summary"], ["history", "History"], ["raw", "Raw assertions"]].map(([value, label]) => <button aria-selected={knowledgeTab === value} className={knowledgeTab === value ? "active" : ""} key={value} onClick={() => setKnowledgeTab(value)} role="tab" type="button">{label}</button>)}</div>
+        {knowledgeTab === "summary" && (!knowledgeSummary || knowledgeSummary.groups.length === 0 ? <p className="empty-state">No sourced knowledge is linked to this asset yet.</p> : <div className="knowledge-summary-grid">{knowledgeSummary.groups.map((item) => <article className={`knowledge-summary-item${item.conflict || item.unresolved ? " knowledge-conflict" : ""}`} key={item.predicate}><div className="knowledge-summary-heading"><div><span className="secondary-text">{item.cardinality === "multi" ? "Multiple values" : "Single value"}</span><h3>{item.label}</h3></div>{item.conflict ? <StatusBadge status="Conflicting" /> : item.unresolved ? <StatusBadge status="Unresolved" /> : item.accepted ? <StatusBadge status="Accepted" /> : <StatusBadge status="Observed" />}</div><div className="knowledge-accepted"><span>Accepted Atlas value</span>{item.accepted_values.length ? item.accepted_values.map((entry) => <strong title={compactKnowledgeValue(entry.value)} key={entry.assertion_id}>{compactKnowledgeValue(entry.value)}</strong>) : <strong>Not selected</strong>}</div><div className="knowledge-observations"><span>Latest source observations</span>{item.latest_observations.length ? item.latest_observations.map((entry) => <div key={entry.assertion_id}><code title={compactKnowledgeValue(entry.value)}>{compactKnowledgeValue(entry.value)}</code><small>{entry.source_name || "Unavailable"}</small></div>) : <p className="secondary-text">No active observations</p>}</div><footer>{item.source_count} active source{item.source_count === 1 ? "" : "s"} · {item.assertion_count} assertion{item.assertion_count === 1 ? "" : "s"} · {item.historical_count} historical · {item.last_observed_at ? `Observed ${new Date(item.last_observed_at).toLocaleString()}` : "Never observed"}</footer></article>)}</div>)}
+        {knowledgeTab === "history" && (Object.keys(factHistory).length === 0 ? <p className="empty-state">No sourced fact history yet.</p> : <div className="knowledge-timeline">{Object.entries(factHistory).flatMap(([predicate, entries]) => entries.map((entry) => ({ ...entry, predicate }))).sort((left, right) => new Date(right.last_observed_at || 0) - new Date(left.last_observed_at || 0)).map((entry) => <article key={entry.assertion_id}><div className="knowledge-timeline-marker" /><div><div className="knowledge-timeline-heading"><strong>{entry.predicate.replaceAll("_", " ")}</strong><StatusBadge status={historyStatus(entry)} /></div><p><code>{compactKnowledgeValue(entry.value)}</code> from {entry.source_name || "Unavailable"}</p><small>{entry.last_observed_at ? new Date(entry.last_observed_at).toLocaleString() : "Time unavailable"} · {entry.truth_classification || "Unknown truth classification"}</small></div></article>)}</div>)}
+        {knowledgeTab === "raw" && <AssertionsPanel assertions={assertions} assetsById={assetsById} canDelete={canDeleteAssertions} canRetract={canRetractAssertions} onChanged={refreshAssertions} />}
+      </section>
     </>
   );
 }

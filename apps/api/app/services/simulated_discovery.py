@@ -23,7 +23,8 @@ from app.services.entity_resolution import (
     normalized_name,
     resolve_asset_identity,
 )
-from app.services.knowledge_assertions import confirm, record_assertion
+from app.services.data_sources import manual_inventory_source
+from app.services.knowledge_assertions import accept_assertion, confirm, record_assertion
 from app.services.discovery_observations import (
     SnapshotReconciliation,
     default_coverage_key,
@@ -68,32 +69,6 @@ def _source(db: Session, payload: SimulatedDiscoveryRequest) -> DataSource:
             status="active",
             trust_level="test",
             notes="Created automatically by the simulated discovery endpoint.",
-        )
-        db.add(source)
-        db.flush()
-    return source
-
-
-def _manual_source(
-    db: Session, customer_id: uuid.UUID, site_id: uuid.UUID | None
-) -> DataSource:
-    source = db.scalar(
-        select(DataSource).where(
-            DataSource.customer_id == customer_id,
-            DataSource.site_id == site_id,
-            DataSource.name == "Atlas Manual Inventory",
-            DataSource.source_type == "manual",
-        )
-    )
-    if source is None:
-        source = DataSource(
-            customer_id=customer_id,
-            site_id=site_id,
-            name="Atlas Manual Inventory",
-            source_type="manual",
-            status="active",
-            trust_level="declared",
-            notes="Represents accepted operational knowledge entered in Atlas.",
         )
         db.add(source)
         db.flush()
@@ -433,7 +408,9 @@ def run_simulation(
                     )
                     stale_item.decided_by_user_id = user_id
                     stale_item.decided_at = now
-                manual = _manual_source(db, payload.customer_id, payload.site_id)
+                manual = manual_inventory_source(
+                    db, payload.customer_id, payload.site_id
+                )
                 declared, declared_created = record_assertion(
                     db,
                     customer_id=payload.customer_id,
@@ -447,7 +424,7 @@ def run_simulation(
                     data_source_id=manual.id,
                     observed_at=existing_relationship.created_at or now,
                 )
-                confirm(declared)
+                accept_assertion(db, declared, user_id=user_id)
                 assertions_created += int(declared_created)
                 continue
             remember(

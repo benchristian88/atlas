@@ -318,6 +318,7 @@ The authenticated API surface is canonical beneath `/api` and includes:
 - `/api/data-sources`, `/api/discovery-runs`, and `/api/discovery/simulate`
 - `/api/assertions`, `/api/reconciliation-items`, and `/api/changes`
 - `/api/assets/<id>/fact-history`
+- `/api/assets/<id>/knowledge-summary`
 - `/api/custom-fields` and asset custom-field values
 - read-only `/api/audit-events`
 - protected `/api/system-settings`
@@ -333,7 +334,7 @@ policy.
 ## Knowledge provenance and reconciliation
 
 Discovery observations do not silently overwrite accepted inventory. Atlas
-stores their raw evidence, current sourced assertions, and reviewable
+stores their raw evidence, source-current assertions, accepted assertions, and reviewable
 reconciliation items alongside the existing Asset and AssetRelationship tables.
 Only accepting a supported reconciliation item creates or updates the
 operational model used by topology; reject and defer leave it unchanged.
@@ -342,10 +343,17 @@ one same-customer/site Atlas asset. Exact normalized name/type matches can be
 linked automatically; ambiguous matches require the explicit **Link asset**
 action and are never silently merged.
 
+`is_source_current` means “latest valid claim from this source”; `is_accepted`
+means “canonical Atlas knowledge.” Single-valued predicates can have only one
+accepted value, while interfaces, memberships, relationships, owners, and
+dependencies may have several. Manual asset edits create accepted **Declared**
+assertions and meaningful history without deleting conflicting observations.
+
 Use **Discovery → Simulate discovery** to exercise this pipeline before a live
 integration is configured. Paste a customer/site-scoped JSON observation, run
 it, then review the generated items under **Reconciliation**. Asset detail pages
-show assertions and grouped fact history linked to an accepted asset.
+show a rolled-up Knowledge Summary by default, a human history timeline, and
+collapsed raw assertion groups linked to an accepted asset.
 
 A simulation can be marked as a **complete snapshot** for a stable coverage
 key. Atlas compares only successful complete runs from the same data source,

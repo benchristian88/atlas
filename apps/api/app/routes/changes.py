@@ -22,11 +22,13 @@ from app.models import (
 )
 from app.routes.crud_helpers import not_found
 from app.schemas import (
+    AssetKnowledgeSummaryResponse,
     AssetFactHistoryResponse,
     KnowledgeChangeListResponse,
     KnowledgeChangeResponse,
     KnowledgeChangeSummaryResponse,
 )
+from app.services.knowledge_summary import asset_knowledge_summary
 from app.utils.json_values import to_json_value
 
 router = APIRouter(tags=["changes"])
@@ -241,6 +243,7 @@ def asset_fact_history(
             KnowledgeAssertion.predicate,
             KnowledgeAssertion.last_observed_at.desc(),
         )
+        .limit(500)
     )
     facts: dict[str, list[dict]] = {}
     for assertion in rows:
@@ -267,8 +270,32 @@ def asset_fact_history(
                     "first_observed_at": assertion.first_observed_at,
                     "last_observed_at": assertion.last_observed_at,
                     "is_current": assertion.is_current,
+                    "is_source_current": assertion.is_source_current,
+                    "is_accepted": assertion.is_accepted,
                     "retracted_at": assertion.retracted_at,
                 }
             )
         )
     return {"asset_id": asset.id, "facts": facts}
+
+
+@router.get(
+    "/assets/{asset_id}/knowledge-summary",
+    response_model=AssetKnowledgeSummaryResponse,
+)
+def get_asset_knowledge_summary(
+    asset_id: uuid.UUID,
+    principal: Principal = Depends(require_permission("assets.view")),
+    db: Session = Depends(get_db),
+):
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        raise not_found("Asset")
+    require_scope(
+        principal,
+        "assets.view",
+        asset.customer_id,
+        asset.site_id,
+        hide_existence=True,
+    )
+    return asset_knowledge_summary(db, asset)

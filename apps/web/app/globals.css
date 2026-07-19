@@ -621,6 +621,39 @@ tbody tr:hover { background: #fbfdfd; }
 .assertion-details-grid strong { overflow-wrap: anywhere; }
 .json-details { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; margin: 4px 0 0; max-height: 320px; overflow: auto; padding: 14px; white-space: pre-wrap; word-break: break-word; }
 .provenance-confirm { background: var(--warning-soft); border: 1px solid #ead8a1; border-radius: 8px; margin-top: 14px; padding: 12px; }
+.knowledge-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-top: 20px; overflow: hidden; }
+.knowledge-card > .form-card-header { padding: 20px 22px 12px; }
+.knowledge-tabs { border-bottom: 1px solid var(--border); display: flex; gap: 4px; overflow-x: auto; padding: 0 18px; }
+.knowledge-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; font-weight: 650; padding: 11px 12px; white-space: nowrap; }
+.knowledge-tabs button.active { border-bottom-color: var(--accent); color: var(--accent); }
+.knowledge-summary-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 18px; }
+.knowledge-summary-item { border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 16px; min-width: 0; padding: 16px; }
+.knowledge-summary-item.knowledge-conflict { border-color: #d9b858; }
+.knowledge-summary-heading { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.knowledge-summary-heading h3 { font-size: 16px; margin: 3px 0 0; }
+.knowledge-summary-heading .secondary-text { font-size: 10px; text-transform: uppercase; }
+.knowledge-accepted, .knowledge-observations { display: grid; gap: 6px; min-width: 0; }
+.knowledge-accepted > span, .knowledge-observations > span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.knowledge-accepted strong, .knowledge-observations code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-observations > div { align-items: center; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto; }
+.knowledge-observations small, .knowledge-summary-item footer { color: var(--muted); font-size: 11px; }
+.knowledge-summary-item footer { border-top: 1px solid var(--border); padding-top: 10px; }
+.knowledge-timeline { display: grid; padding: 18px 22px 24px; }
+.knowledge-timeline article { display: grid; gap: 14px; grid-template-columns: 12px minmax(0, 1fr); min-width: 0; padding-bottom: 18px; position: relative; }
+.knowledge-timeline article:not(:last-child)::before { background: var(--border); content: ""; height: 100%; left: 5px; position: absolute; top: 9px; width: 2px; }
+.knowledge-timeline-marker { background: var(--accent); border: 3px solid var(--surface); border-radius: 50%; height: 12px; position: relative; width: 12px; z-index: 1; }
+.knowledge-timeline-heading { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.knowledge-timeline p { margin: 5px 0; overflow-wrap: anywhere; }
+.knowledge-timeline small { color: var(--muted); }
+.knowledge-card > .empty-state { margin: 0; }
+.knowledge-card .assertions-card { border: 0; border-radius: 0; margin: 0; }
+.knowledge-raw-header { gap: 14px; }
+.compact-filter { align-items: center; display: flex; gap: 8px; }
+.compact-filter select { min-height: 34px; padding: 5px 28px 5px 8px; }
+.assertion-groups { display: grid; }
+.assertion-group { border-bottom: 1px solid var(--border); min-width: 0; }
+.assertion-group > summary { align-items: center; cursor: pointer; display: flex; gap: 16px; justify-content: space-between; padding: 14px 18px; }
+.assertion-group > summary span { color: var(--muted); font-size: 11px; }
 
 .detail-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; padding: 22px; }
 .detail-grid { display: grid; gap: 20px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -683,10 +716,10 @@ tbody tr:hover { background: #fbfdfd; }
 .network-member { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; display: grid; font-size: 12px; gap: 3px; padding: 12px; }
 .network-member:hover { border-color: #abc8c5; }
 .network-member span { color: var(--muted); font-size: 11px; }
-.status-active, .status-success, .status-completed, .status-connected, .status-running, .status-confirmed { background: var(--success-soft); color: var(--success); }
-.status-pending, .status-warning, .status-unreviewed, .status-conflicted, .status-inferred { background: var(--warning-soft); color: var(--warning); }
+.status-active, .status-success, .status-completed, .status-connected, .status-running, .status-confirmed, .status-accepted { background: var(--success-soft); color: var(--success); }
+.status-pending, .status-warning, .status-unreviewed, .status-conflicted, .status-conflicting, .status-unresolved, .status-needs-review, .status-inferred { background: var(--warning-soft); color: var(--warning); }
 .status-failed, .status-error, .status-stale, .status-rejected, .status-retracted { background: var(--danger-soft); color: var(--danger); }
-.status-draft, .status-unknown, .status-superseded, .status-archived, .status-observed, .status-declared, .status-intended { background: var(--info-soft); color: var(--info); }
+.status-draft, .status-unknown, .status-superseded, .status-archived, .status-observed, .status-declared, .status-intended, .status-current-from-source, .status-historical { background: var(--info-soft); color: var(--info); }
 
 @media (max-width: 900px) {
   .sidebar { padding: 14px; position: static; width: auto; }
@@ -705,6 +738,7 @@ tbody tr:hover { background: #fbfdfd; }
   .topology-filters, .relationship-graph { grid-template-columns: 1fr; }
   .lens-selector { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .network-members { grid-template-columns: 1fr; }
+  .knowledge-summary-grid { grid-template-columns: 1fr; }
   .account-identity span { display: none; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile-layout { grid-template-columns: 1fr; }
@@ -747,4 +781,6 @@ tbody tr:hover { background: #fbfdfd; }
   .asset-detail-heading .asset-icon { height: 46px; width: 46px; }
   .dialog-backdrop { padding: 12px; }
   .assertion-details-grid { grid-template-columns: 1fr; }
+  .knowledge-summary-grid { padding: 12px; }
+  .knowledge-observations > div { align-items: start; grid-template-columns: 1fr; }
 }

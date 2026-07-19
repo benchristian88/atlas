@@ -25,6 +25,10 @@ from app.presenters import asset_response_data
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
 from app.schemas import ManualAssetCreate, ManualAssetResponse, ManualAssetUpdate
 from app.services.custom_fields import applicable_definitions, custom_field_values, set_asset_custom_fields
+from app.services.manual_knowledge import (
+    MANUAL_ASSET_KNOWLEDGE_FIELDS,
+    declare_asset_changes,
+)
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -142,6 +146,12 @@ def create_asset(
     )
     db.add(asset)
     flush(db, "Asset")
+    declare_asset_changes(
+        db,
+        asset=asset,
+        previous_values={field: None for field in MANUAL_ASSET_KNOWLEDGE_FIELDS},
+        actor_user_id=principal.user.id,
+    )
     set_asset_custom_fields(
         db, asset, payload.custom_fields, replace_active=True
     )
@@ -242,8 +252,19 @@ def update_asset(
     if "metadata" in changes:
         changes["metadata_"] = changes.pop("metadata")
     changes["workspace_id"] = customer.workspace_id
+    previous_knowledge_values = {
+        field: getattr(asset, field)
+        for field in MANUAL_ASSET_KNOWLEDGE_FIELDS
+        if field in changes
+    }
     apply_changes(asset, changes)
     flush(db, "Asset")
+    declare_asset_changes(
+        db,
+        asset=asset,
+        previous_values=previous_knowledge_values,
+        actor_user_id=principal.user.id,
+    )
     if payload.custom_fields is not None:
         set_asset_custom_fields(
             db, asset, payload.custom_fields, replace_active=True

@@ -546,6 +546,20 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_knowledge_assertions_customer_site_sites",
             ondelete="RESTRICT",
         ),
+        Index(
+            "uq_knowledge_assertions_single_accepted",
+            "subject_type",
+            "subject_id",
+            "predicate",
+            unique=True,
+            postgresql_where=text(
+                "is_accepted = true AND retracted_at IS NULL "
+                "AND subject_id IS NOT NULL AND predicate IN "
+                "('name', 'hostname', 'asset_type', 'status', "
+                "'operational_state', 'observation_state', 'platform', "
+                "'lifecycle_state')"
+            ),
+        ),
     )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
@@ -591,6 +605,18 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
+    )
+    # ``is_current`` remains a compatibility mirror of ``is_source_current``.
+    # It never means that Atlas has accepted this assertion as canonical truth.
+    is_source_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    is_accepted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", index=True
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     retracted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True

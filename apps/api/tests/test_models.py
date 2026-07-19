@@ -96,7 +96,50 @@ CRITICAL_COLUMNS = {
         "discovery_run_id", "assertion_id", "reconciliation_item_id",
         "actor_user_id", "summary", "occurred_at", "metadata_json", "created_at",
     },
+    "knowledge_assertions": {
+        "id", "customer_id", "site_id", "subject_type", "subject_id",
+        "subject_external_id", "predicate", "value_json", "object_type",
+        "object_id", "object_external_id", "truth_classification",
+        "confirmation_status", "data_source_id", "discovery_run_id",
+        "evidence_record_id", "confidence", "first_observed_at",
+        "last_observed_at", "valid_from", "valid_to", "superseded_by_id",
+        "is_current", "is_source_current", "is_accepted", "accepted_at",
+        "accepted_by_user_id", "retracted_at", "retracted_by_user_id",
+        "retraction_reason", "created_at", "updated_at",
+    },
 }
+
+
+def test_assertion_acceptance_migration_is_additive_and_backfills_conservatively(
+    monkeypatch,
+) -> None:
+    migration = importlib.import_module(
+        "migrations.versions.20260719_0011_assertion_acceptance_rollup"
+    )
+    assert migration.down_revision == "20260719_0010"
+    operation = Mock()
+    monkeypatch.setattr(migration, "op", operation)
+
+    migration.upgrade()
+
+    added = [call.args[1].name for call in operation.add_column.call_args_list]
+    assert added == [
+        "is_source_current",
+        "is_accepted",
+        "accepted_at",
+        "accepted_by_user_id",
+    ]
+    executed = "\n".join(str(call.args[0]) for call in operation.execute.call_args_list)
+    assert "is_source_current = is_current" in executed
+    assert "HAVING count(*) = 1" in executed
+    assert "confirmation_status = 'confirmed'" in executed
+    assert "DELETE FROM evidence_records" not in executed
+    assert not operation.drop_table.called
+    assert any(
+        call.args[0] == "uq_knowledge_assertions_single_accepted"
+        and call.kwargs.get("unique") is True
+        for call in operation.create_index.call_args_list
+    )
 
 
 def test_models_include_access_administration_and_enrichment_tables() -> None:

@@ -126,6 +126,17 @@ def run_response(
 def assertion_response(
     db: Session, assertion: KnowledgeAssertion, *, include_deletion_safety: bool = True
 ) -> dict:
+    # Server defaults are populated in PostgreSQL. These fallbacks keep the
+    # presenter safe for detached/pre-migration objects used by imports and
+    # tests without conflating source freshness with acceptance.
+    if assertion.is_source_current is None:
+        assertion.is_source_current = bool(assertion.is_current)
+    if assertion.is_accepted is None:
+        assertion.is_accepted = bool(
+            assertion.is_current
+            and assertion.confirmation_status == "confirmed"
+            and assertion.retracted_at is None
+        )
     result = KnowledgeAssertionResponse.model_validate(assertion).model_dump()
     result["value_json"] = to_json_value(assertion.value_json)
     result["source_name"] = _source_name(db, assertion.data_source_id)
@@ -492,7 +503,7 @@ def list_assertions(
     if subject_id:
         query = query.where(KnowledgeAssertion.subject_id == subject_id)
     if current_only:
-        query = query.where(KnowledgeAssertion.is_current.is_(True))
+        query = query.where(KnowledgeAssertion.is_source_current.is_(True))
     assertions = db.scalars(query.order_by(KnowledgeAssertion.last_observed_at.desc()).limit(limit))
     return [assertion_response(db, assertion) for assertion in assertions]
 

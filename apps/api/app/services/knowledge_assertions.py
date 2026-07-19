@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import KnowledgeAssertion
+from app.services.predicate_definitions import predicate_cardinality
 from app.utils.json_values import to_json_value
 
 
@@ -27,7 +28,7 @@ def current_assertions(
 ) -> list[KnowledgeAssertion]:
     query = select(KnowledgeAssertion).where(
         KnowledgeAssertion.subject_type == subject_type,
-        KnowledgeAssertion.is_current.is_(True),
+        KnowledgeAssertion.is_source_current.is_(True),
     )
     if subject_id is not None:
         query = query.where(KnowledgeAssertion.subject_id == subject_id)
@@ -44,6 +45,7 @@ def mark_superseded(
     at: datetime,
 ) -> None:
     previous.is_current = False
+    previous.is_source_current = False
     previous.confirmation_status = "superseded"
     previous.valid_to = at
     previous.superseded_by_id = replacement.id
@@ -61,7 +63,7 @@ def detect_simple_conflicts(
             KnowledgeAssertion.subject_external_id == assertion.subject_external_id,
             KnowledgeAssertion.predicate == assertion.predicate,
             KnowledgeAssertion.id != assertion.id,
-            KnowledgeAssertion.is_current.is_(True),
+            KnowledgeAssertion.is_source_current.is_(True),
         )
     )
     return [
@@ -97,6 +99,7 @@ def record_assertion(
 
     observed_at = observed_at or datetime.now(timezone.utc)
     value = to_json_value(value)
+    cardinality = predicate_cardinality(predicate, object_type=object_type)
     current = list(
         db.scalars(
             select(KnowledgeAssertion).where(
@@ -107,7 +110,7 @@ def record_assertion(
                 KnowledgeAssertion.subject_external_id == subject_external_id,
                 KnowledgeAssertion.predicate == predicate,
                 KnowledgeAssertion.data_source_id == data_source_id,
-                KnowledgeAssertion.is_current.is_(True),
+                KnowledgeAssertion.is_source_current.is_(True),
             )
         )
     )
@@ -139,12 +142,15 @@ def record_assertion(
         first_observed_at=observed_at,
         last_observed_at=observed_at,
         is_current=True,
+        is_source_current=True,
+        is_accepted=False,
     )
     db.add(assertion)
     db.flush()
 
-    for previous in current:
-        mark_superseded(previous, assertion, observed_at)
+    if cardinality == "single":
+        for previous in current:
+            mark_superseded(previous, assertion, observed_at)
 
     conflicting = db.scalar(
         select(KnowledgeAssertion).where(
@@ -155,10 +161,14 @@ def record_assertion(
             KnowledgeAssertion.subject_external_id == subject_external_id,
             KnowledgeAssertion.predicate == predicate,
             KnowledgeAssertion.data_source_id != data_source_id,
-            KnowledgeAssertion.is_current.is_(True),
+            KnowledgeAssertion.is_source_current.is_(True),
         )
     )
-    if conflicting is not None and not _same_claim(conflicting, value, object_external_id):
+    if (
+        cardinality == "single"
+        and conflicting is not None
+        and not _same_claim(conflicting, value, object_external_id)
+    ):
         assertion.confirmation_status = "conflicted"
         if conflicting.confirmation_status == "unreviewed":
             conflicting.confirmation_status = "conflicted"
@@ -185,3 +195,60 @@ def confirm(assertion: KnowledgeAssertion) -> None:
 
 def reject(assertion: KnowledgeAssertion) -> None:
     assertion.confirmation_status = "rejected"
+    assertion.is_accepted = False
+    assertion.accepted_at = None
+    assertion.accepted_by_user_id = None
+
+
+def accept_assertion(
+    db: Session,
+    assertion: KnowledgeAssertion,
+    *,
+    user_id: uuid.UUID | None = None,
+    accepted_at: datetime | None = None,
+) -> list[KnowledgeAssertion]:
+    """Choose an assertion as canonical Atlas knowledge.
+
+    Source freshness and acceptance are intentionally independent. For a
+    single-valued predicate, prior accepted assertions are cleared before the
+    selected assertion is marked accepted. Multi-valued predicates can have
+    more than one accepted assertion.
+    """
+
+    if assertion.retracted_at is not None:
+        raise ValueError("A retracted assertion cannot be accepted")
+    replaced: list[KnowledgeAssertion] = []
+    if predicate_cardinality(
+        assertion.predicate, object_type=assertion.object_type
+    ) == "single":
+        query = select(KnowledgeAssertion).where(
+            KnowledgeAssertion.subject_type == assertion.subject_type,
+            KnowledgeAssertion.predicate == assertion.predicate,
+            KnowledgeAssertion.id != assertion.id,
+            KnowledgeAssertion.is_accepted.is_(True),
+        )
+        if assertion.subject_id is not None:
+            query = query.where(KnowledgeAssertion.subject_id == assertion.subject_id)
+        else:
+            query = query.where(
+                KnowledgeAssertion.subject_id.is_(None),
+                KnowledgeAssertion.subject_external_id
+                == assertion.subject_external_id,
+            )
+        replaced = list(db.scalars(query))
+        for previous in replaced:
+            previous.is_accepted = False
+            previous.accepted_at = None
+            previous.accepted_by_user_id = None
+            previous.superseded_by_id = assertion.id
+            if previous.truth_classification == "declared":
+                previous.confirmation_status = "superseded"
+        # Avoid a transient partial-unique-index violation when SQLAlchemy
+        # batches the old and new rows in an unexpected order.
+        if replaced:
+            db.flush()
+    assertion.is_accepted = True
+    assertion.accepted_at = accepted_at or datetime.now(timezone.utc)
+    assertion.accepted_by_user_id = user_id
+    assertion.confirmation_status = "confirmed"
+    return replaced

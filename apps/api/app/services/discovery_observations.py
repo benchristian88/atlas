@@ -95,7 +95,7 @@ def _current_observation_state(
             KnowledgeAssertion.subject_type == "asset",
             KnowledgeAssertion.subject_external_id == external_id,
             KnowledgeAssertion.predicate == "observation_state",
-            KnowledgeAssertion.is_current.is_(True),
+            KnowledgeAssertion.is_source_current.is_(True),
         )
     )
     return next(iter(candidates), None)

@@ -885,6 +885,10 @@ class KnowledgeAssertionResponse(ORMResponse):
     valid_to: datetime | None
     superseded_by_id: uuid.UUID | None
     is_current: bool
+    is_source_current: bool
+    is_accepted: bool
+    accepted_at: datetime | None
+    accepted_by_user_id: uuid.UUID | None
     retracted_at: datetime | None
     retracted_by_user_id: uuid.UUID | None
     retraction_reason: str | None
@@ -1028,12 +1032,58 @@ class AssetFactHistoryItem(BaseModel):
     first_observed_at: datetime | None
     last_observed_at: datetime | None
     is_current: bool
+    is_source_current: bool
+    is_accepted: bool
     retracted_at: datetime | None
 
 
 class AssetFactHistoryResponse(BaseModel):
     asset_id: uuid.UUID
     facts: dict[str, list[AssetFactHistoryItem]]
+
+
+class KnowledgeSummaryValue(BaseModel):
+    assertion_id: uuid.UUID
+    value: Any | None
+    truth_classification: str
+    confirmation_status: str
+    source_id: uuid.UUID | None
+    source_name: str | None
+    first_observed_at: datetime
+    last_observed_at: datetime
+    accepted_at: datetime | None = None
+    confirmed_at: datetime | None = None
+    accepted_by_user_id: uuid.UUID | None = None
+    accepted_by_name: str | None = None
+    actor_name: str | None = None
+    is_source_current: bool
+    is_accepted: bool
+    conflicts_with_accepted: bool = False
+
+
+class KnowledgePredicateSummary(BaseModel):
+    predicate: str
+    label: str
+    cardinality: Literal["single", "multi"]
+    accepted: KnowledgeSummaryValue | None = None
+    accepted_values: list[KnowledgeSummaryValue] = Field(default_factory=list)
+    latest_observations: list[KnowledgeSummaryValue] = Field(default_factory=list)
+    active_source_count: int
+    source_count: int
+    distinct_active_value_count: int
+    assertion_count: int
+    historical_count: int
+    conflict: bool
+    unresolved: bool
+    last_observed_at: datetime | None
+    freshness: Literal["current", "historical", "unknown"]
+
+
+class AssetKnowledgeSummaryResponse(BaseModel):
+    asset_id: uuid.UUID
+    groups: list[KnowledgePredicateSummary]
+    conflict_count: int
+    unresolved_count: int
 
 
 class TopologyResponse(BaseModel):
