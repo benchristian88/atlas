@@ -30,3 +30,18 @@ Keep raw discovery data separate from normalized Atlas assets.
 Repeated discovery runs must be idempotent.
 
 If an asset disappears from a discovery run, mark it as stale later. Do not delete it automatically in the MVP.
+
+## Product documentation rule
+
+After implementing or discussing a product feature, update
+`docs/product/feature-ledger.md`.
+
+For each feature, record:
+
+- Whether it is planned, partial, implemented, deferred, or abandoned.
+- The original product intent.
+- Evidence such as files, tests, commits, issues, or conversation transcripts.
+- Remaining work and unresolved decisions.
+
+Do not mark a feature as implemented without confirming it exists in the
+codebase and, where applicable, has tests.
