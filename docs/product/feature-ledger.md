@@ -1,261 +1,873 @@
-# Atlas product feature ledger
+# Atlas product feature ledger — repository-reconciled edition
 
-Last audited: 23 July 2026  
-Repository state: `dev` at `09d2271` (`services foundation`)
+**Repository audit date:** 23 July 2026
+**Review published:** 24 July 2026
+**Planning alignment update:** 4 August 2026
+**Repository source of truth:** `dev` at `09d2271` (`services foundation`)
+**Primary evidence:** audited repository models, migrations, routes, pages, tests, and build configuration
+**Comparison baseline:** the earlier transcript-derived **Atlas Product Feature Status Review**
 
-## How this ledger was produced
+> **Authority of this ledger**
+>
+> The earlier review inferred implementation from completed Codex prompts and user acceptance.
+> This revised edition treats the audited repository as authoritative.
+>
+> A completed prompt is evidence that work was requested and probably attempted. It is **not**
+> enough to classify a feature as implemented unless the repository contains the necessary
+> schema, reachable backend path, usable frontend path where applicable, and supporting tests.
 
-This is an implementation audit, not a transcription of feature requests. The
-audit reviewed:
 
-- the primary Codex session transcript and its pasted specifications;
-- all 39 commits from `531eb37` through `09d2271`;
-- every FastAPI router registered in
-  [`main.py`](../../apps/api/app/main.py), the SQLAlchemy model metadata in
-  [`models.py`](../../apps/api/app/models.py), and all 13 Alembic revisions;
-- every Next.js page, shared web component, and web test;
-- API, plugin SDK, and Proxmox tests;
-- repository documentation and repository-wide `TODO`, `FIXME`, `later`,
-  `future`, `phase 2`, `follow-up`, `out of scope`, and related searches.
+---
 
-A prompt, transcript, document, model field, or commit title is only evidence
-that a capability was considered. “Implemented” requires a working code path
-and, where the feature stores data, corresponding schema or migration evidence.
-Tests are cited where they exercise that path. There were no `TODO` or `FIXME`
-comments in application/plugin code at the audit point; unresolved work is
-instead documented as roadmap, non-goals, placeholders, compatibility code, or
-missing layers.
+# 0. Planning alignment update — 4 August 2026
 
-Statuses have the following meanings:
+This update aligns the repository audit with the approved forward roadmap and
+does **not** re-audit implementation after commit `09d2271`. All implementation
+statuses and historical validation counts remain tied to that named audit point.
 
-- **Implemented** — the current repository contains the usable capability
-  across the layers it needs. This does not mean production-hardening is
-  complete.
-- **Partially implemented** — meaningful layers exist, but the stated product
-  journey is not end-to-end or an important requested behavior is still absent.
-- **Planned but not implemented** — current roadmap/navigation/next-increment
-  documentation names the capability, but no usable implementation exists.
-- **Deferred** — an explicit MVP/C1 non-goal, “later” item, or intentionally
-  postponed extension.
-- **Abandoned** — a previous design or surface was deliberately superseded or
-  rejected.
-- **Unknown** — the repository mentions or structurally anticipates the
-  capability, but contains neither an implementation nor a clear current
-  commitment/deferral decision.
+The following planning decisions are now recorded:
 
-## Audit validation
+1. **C2.1 — Shared Operational Graph is the selected next development increment.**
+   This is a sequencing decision, not a change to repository status.
+2. **B2 — Operational Integrations and live discovery remains the largest
+   incomplete end-to-end operational journey.** It may progress in parallel, but
+   C2.1 must not absorb Integration CRUD, secret resolution, worker dispatch,
+   live Proxmox execution, scheduling, retries, or cancellation.
+3. **Release C2 is decomposed for delivery:**
+   - C2.1 — Shared Operational Graph;
+   - C2.2 — Dependency Semantics; and
+   - C2.3 — Analysis Primitives.
+4. **F1 — Documentation Experience may be delivered independently** because the
+   repository already contains deterministic Asset Markdown generation and
+   `Document` persistence. It is not a prerequisite for C2.1.
+5. **Foundation hardening remains visible outside the principal release chain,**
+   especially the Interface-first IP transition and replacement of the mock
+   Integrations page.
+6. The shared graph remains a derived, API-owned projection over accepted
+   relational knowledge. PostgreSQL remains the system of record, and C2.1 does
+   not introduce impact, recovery, availability, or change-safety conclusions.
 
-The audit finished with these repository checks:
+The canonical forward sequence is maintained in
+[`development-roadmap.md`](development-roadmap.md). The implementation prompt is
+maintained in
+[`../prompts/c2-1-shared-operational-graph-codex-prompt.md`](../prompts/c2-1-shared-operational-graph-codex-prompt.md).
 
-- API: `158 passed` from `pytest -q apps/api/tests`;
-- web unit/regression suite: `14 passed` from `npm test`;
-- plugin SDK and Proxmox: `27 passed`;
-- Next.js 16.2.10 production build: passed, generating 32 static pages and
-  successfully compiling the listed dynamic routes;
-- Alembic: one head, `20260720_0013`;
-- Markdown link targets and `git diff --check`: passed.
+---
 
-These checks validate the checked-in contracts and build. They do not substitute
-for a live Docker/PostgreSQL/Proxmox acceptance run, and no such live result is
-claimed by this ledger.
+# 1. Status definitions
 
-## Implemented
+| Status | Meaning used in this ledger |
+|--------|-----------------------------|
+| **Implemented** | The audited repository contains a usable capability across the layers it needs. Durable features have schema/migration evidence and reachable code paths; interactive features have a usable current UI. |
+| **Partially implemented** | Meaningful layers exist, but the requested product journey is not end-to-end or an important part is missing. |
+| **Planned but not implemented** | Roadmap, navigation, architecture or next-increment documentation commits to the capability, but no usable implementation exists. |
+| **Deferred** | Explicitly excluded from the MVP/C1 scope or intentionally postponed. |
+| **Abandoned** | A previous approach or product surface was deliberately superseded or rejected. |
+| **Unknown** | The repository anticipates or mentions the capability, but neither implementation nor a clear current product decision exists. |
 
-### Runtime, deployment, and platform foundation
 
-| Feature | Concrete evidence |
-| --- | --- |
-| Monorepo runtime scaffold | Compose defines `api`, `web`, `worker`, `postgres`, and `redis` in [`docker-compose.yml`](../../infra/docker/docker-compose.yml). FastAPI exposes `/api/health`, Next.js has a landing/root route, and the worker logs readiness in [`worker/main.py`](../../apps/worker/worker/main.py). The scaffold originated in `531eb37`; the current web image uses a production Next.js start command. |
-| PostgreSQL schema and additive upgrades | [`models.py`](../../apps/api/app/models.py) defines the current durable model and [`migrations/versions`](../../apps/api/migrations/versions) contains a linear 13-revision chain from `20260710_0001` to `20260720_0013`. Model/migration invariants are exercised by [`test_models.py`](../../apps/api/tests/test_models.py). |
-| Single-origin `/api` deployment | [`main.py`](../../apps/api/app/main.py) mounts all API routers under `/api`; [`api-url.mjs`](../../apps/web/lib/api-url.mjs) defaults the browser to `/api`; Compose defaults `NEXT_PUBLIC_API_URL` to `/api`. [`test_auth.py`](../../apps/api/tests/test_auth.py) checks the namespaced health/docs paths and [`api-url.test.mjs`](../../apps/web/tests/api-url.test.mjs) covers relative and split-origin URL construction. Operator contracts are in [`single-origin.md`](../deployment/single-origin.md) and [`reverse-proxy-examples.md`](../deployment/reverse-proxy-examples.md). |
-| Optional split-origin development | Configurable CORS, allowed headers, credentialed requests, and origin checks are in [`main.py`](../../apps/api/app/main.py). Absolute API overrides are tested in [`api-url.test.mjs`](../../apps/web/tests/api-url.test.mjs) and documented in the root [`README`](../../README.md). |
-| Upgrade/backfill compatibility | Migration `20260714_0004` backfills default sites, managed type keys, legacy user access, and legacy relationship context without resetting the database. Later revisions add knowledge and Service records additively. The rules and rollback limits are documented in [`deployment-and-upgrades.md`](../architecture/deployment-and-upgrades.md). |
+---
 
-### Authentication, access, and account experience
+# 2. Executive assessment
 
-| Feature | Concrete evidence |
-| --- | --- |
-| Local email/password authentication | [`auth.py`](../../apps/api/app/auth.py) hashes/verifies passwords and validates signed sessions; [`routes/auth.py`](../../apps/api/app/routes/auth.py) implements login, logout, `/auth/me`, profile, and password change. [`test_auth.py`](../../apps/api/tests/test_auth.py) verifies Argon2 hashing, generic failures, disabled/locked users, session invalidation, and origin checks. |
-| HttpOnly cookie sessions | Login writes `atlas_session` as `HttpOnly`/`SameSite=Lax`; the web client uses `credentials: "include"` in [`lib/api.js`](../../apps/web/lib/api.js). [`test_auth.py`](../../apps/api/tests/test_auth.py) checks cookie attributes and absence of an exposed token. |
-| Bearer-token API compatibility | [`app/auth.py`](../../apps/api/app/auth.py) accepts either `HTTPBearer` credentials or the session cookie. This remains useful for API clients, although it is no longer the browser session design. |
-| One-time administrator bootstrap | [`scripts/seed_admin.py`](../../apps/api/scripts/seed_admin.py) creates only the first forced-password-change global Master Administrator, hashes the password, optionally creates `Home / Homelab`, and treats existing users as a no-op. [`test_seed_admin.py`](../../apps/api/tests/test_seed_admin.py) covers idempotence, validation, hashing, safe errors, and the deprecated environment fallback. |
-| Forced password change, profile, and password reset | The authorization layer limits forced-change users, [`profile/page.js`](../../apps/web/app/profile/page.js) provides display-name/password/appearance controls, and [`admin/users/page.js`](../../apps/web/app/admin/users/page.js) supports write-only temporary-password resets. Backend coverage is in [`test_auth.py`](../../apps/api/tests/test_auth.py) and [`test_administration.py`](../../apps/api/tests/test_administration.py). |
-| Protected shell and stable session states | [`root-shell.js`](../../apps/web/components/root-shell.js), [`auth-context.js`](../../apps/web/components/auth-context.js), and [`session-state.mjs`](../../apps/web/lib/session-state.mjs) distinguish checking, authenticated, unauthenticated, error, and public states without showing protected content first. [`session-state.test.mjs`](../../apps/web/tests/session-state.test.mjs) covers 401, retry, network/server failures, cleanup, and public login behavior. |
-| Scoped RBAC | `Role`, `Permission`, `RolePermission`, and `AccessAssignment` are migrated in `20260714_0004`; central enforcement is in [`authorization.py`](../../apps/api/app/authorization.py) and permission definitions in [`permissions.py`](../../apps/api/app/permissions.py). [`test_crud.py`](../../apps/api/tests/test_crud.py) and [`test_administration.py`](../../apps/api/tests/test_administration.py) verify global/customer/site scope, viewer read-only behavior, ID substitution, privilege boundaries, and last-master protections. |
-| Customer/site context selection | [`routes/context.py`](../../apps/api/app/routes/context.py) returns only authorized contexts; [`workspace-context.js`](../../apps/web/components/workspace-context.js) and [`context-selector.js`](../../apps/web/components/context-selector.js) implement selection and revalidation. Scope-filter tests cover lists, totals, topology, and active-context overrides in [`test_crud.py`](../../apps/api/tests/test_crud.py). |
-| User, role, assignment, and permission administration | [`routes/users.py`](../../apps/api/app/routes/users.py) and [`routes/roles.py`](../../apps/api/app/routes/roles.py) expose guarded APIs; `/admin/users` and `/admin/roles` provide current UI. Custom-role CRUD and protected built-in behavior are covered by administration tests. |
-| User accent preference | Migration `20260717_0005`, `/auth/profile`, [`accent-theme.mjs`](../../apps/web/lib/accent-theme.mjs), and the Profile picker persist and apply a safe per-user color. Backend validation is in [`test_auth.py`](../../apps/api/tests/test_auth.py); preference and contrast behavior are covered by [`accent-preference.test.mjs`](../../apps/web/tests/accent-preference.test.mjs) and [`accent-theme.test.mjs`](../../apps/web/tests/accent-theme.test.mjs). |
-| Account menu and initials avatar | [`account-menu.js`](../../apps/web/components/account-menu.js) makes the top-right identity area the profile/logout menu and [`user-avatar.js`](../../apps/web/components/user-avatar.js) provides safe initials/image fallback. [`account-menu.test.mjs`](../../apps/web/tests/account-menu.test.mjs) covers keyboard, responsive, profile, logout, and fallback behavior. |
+## What the earlier review got broadly right
 
-### Inventory, reference data, and topology
+The earlier transcript-based review correctly identified that Atlas has implemented:
 
-| Feature | Concrete evidence |
-| --- | --- |
-| Customer and Site persistence/CRUD | Models and migrations establish ownership; [`routes/customers.py`](../../apps/api/app/routes/customers.py) and [`routes/sites.py`](../../apps/api/app/routes/sites.py) implement list/create/get/update/guarded delete. `/customers`, `/sites`, `/admin/customers`, and `/admin/sites` use the real API. Scope and CRUD behavior are covered in [`test_crud.py`](../../apps/api/tests/test_crud.py). |
-| Manual Asset CRUD and detail/edit UI | [`routes/assets.py`](../../apps/api/app/routes/assets.py) implements scoped list/summary/create/get/update/delete; `/assets`, `/assets/[id]`, and `/assets/[id]/edit` use PostgreSQL-backed APIs and typed custom values. Manual edits also emit accepted declarations and changes. CRUD and assertion behavior are covered in [`test_crud.py`](../../apps/api/tests/test_crud.py) and [`test_knowledge_foundation.py`](../../apps/api/tests/test_knowledge_foundation.py). |
-| Managed Asset Types | `AssetType` is a stable-key reference table created by `20260714_0004`; [`routes/reference_data.py`](../../apps/api/app/routes/reference_data.py) and `/admin/asset-types` implement lifecycle-safe management. Tests cover inactive types, safe deletion, icon resolution, and scoped usage counts in [`test_administration.py`](../../apps/api/tests/test_administration.py). |
-| Managed Relationship Types and endpoint applicability | `RelationshipType` plus C1 `RelationshipTypeApplicability` support labels, direction, Asset-type constraints, and typed `asset→asset`, `service→asset`, `service→service`, and `service→business_function` applicability. APIs/UI are in [`reference_data.py`](../../apps/api/app/routes/reference_data.py) and `/admin/relationship-types`; tests are in [`test_administration.py`](../../apps/api/tests/test_administration.py) and [`test_services.py`](../../apps/api/tests/test_services.py). |
-| Typed custom enrichment fields | The definition/applicability/option/value tables are migrated in `20260714_0004`; [`services/custom_fields.py`](../../apps/api/app/services/custom_fields.py) and [`routes/custom_fields.py`](../../apps/api/app/routes/custom_fields.py) validate supported data types, options, applicability, and the 10-field limit. `/admin/custom-fields` and the Asset form expose the feature. [`test_administration.py`](../../apps/api/tests/test_administration.py) covers type, precision, option, lifecycle, and limit rules. |
-| Asset/type icons and Atlas branding | Safe HTTPS non-SVG icon validation and fallback are implemented in backend presenters and [`asset-icon.js`](../../apps/web/components/asset-icon.js). Committed Atlas SVG/PNG assets and [`atlas-brand.mjs`](../../apps/web/components/atlas-brand.mjs) brand both shell and login. [`test_administration.py`](../../apps/api/tests/test_administration.py) and [`atlas-brand.test.mjs`](../../apps/web/tests/atlas-brand.test.mjs) cover these paths. |
-| Networks/VLAN CRUD | `Network` and migration `20260714_0003` store customer/site, type, VLAN, CIDR, gateway, purpose, zone, and notes. [`routes/networks.py`](../../apps/api/app/routes/networks.py) validates addresses and ownership; `/networks` lists, creates, edits, and deletes through the real API. |
-| Asset Interfaces | `AssetInterface` and migration `20260714_0003` persist interface name, network, IP, MAC, primary state, and notes. [`routes/asset_interfaces.py`](../../apps/api/app/routes/asset_interfaces.py) implements list/create/update/delete; Asset detail provides add/list/delete UI and topology consumes interfaces. |
-| Asset Relationships | [`routes/asset_relationships.py`](../../apps/api/app/routes/asset_relationships.py) implements scoped CRUD, same-context and non-self validation, readable endpoint names, managed-type validation, and legacy edge handling. Asset detail provides add/list/delete UI. Relationship and scope behavior is tested in [`test_crud.py`](../../apps/api/tests/test_crud.py). |
-| Topology API and v2 Knowledge Graph lenses | [`routes/topology.py`](../../apps/api/app/routes/topology.py) returns authorized customers, sites, assets, relationships, networks, and interfaces. [`topology/page.js`](../../apps/web/app/topology/page.js) implements Physical, Platform, Network/VLAN, Dependency, and All Relationships lenses, filters, one-hop focus, interface-based network grouping, and stable empty states. Backend scoping is tested in [`test_crud.py`](../../apps/api/tests/test_crud.py); frontend navigation/selector behavior is covered by web tests. |
-| Live Dashboard summaries | [`routes/context.py`](../../apps/api/app/routes/context.py) computes scoped inventory, relationship, network, Service, Business Function, and completeness totals. [`dashboard/page.js`](../../apps/web/app/dashboard/page.js) renders live counts, reconciliation state, changes, and feature links with permission-aware errors. |
+* the platform and deployment foundation;
+* local authentication, scoped RBAC and customer/site context;
+* inventory, networks, interfaces, relationships and managed reference data;
+* the Knowledge Foundation;
+* simulated discovery, reconciliation and no-longer-observed handling;
+* Knowledge Changes and Asset fact history;
+* configurable Asset and Service completeness;
+* a dedicated Knowledge Gaps workflow;
+* first-class Services, Business Functions and typed dependencies;
+* focused Service and Business Function graph projections;
+* the recent UI and navigation refinements.
 
-### Knowledge, discovery simulation, and reconciliation
+It also correctly identified that the following remain future work:
 
-| Feature | Concrete evidence |
-| --- | --- |
-| Data Sources and simulated discovery | `DataSource` and the expanded `DiscoveryRun` model were added in `20260719_0006`; [`routes/knowledge.py`](../../apps/api/app/routes/knowledge.py) implements Data Source list/create, run list/detail, and `/discovery/simulate`. `/discovery/simulate` and `/discovery-runs` provide usable UI. Core behavior is covered extensively by [`test_knowledge_foundation.py`](../../apps/api/tests/test_knowledge_foundation.py). |
-| Evidence, assertions, and reconciliation | `EvidenceRecord`, `KnowledgeAssertion`, and `ReconciliationItem` are durable tables. The knowledge router exposes assertion and reconciliation list/detail/decision APIs; `/reconciliation` provides stable queues and accept/reject/defer/lifecycle decisions. Tests cover asset/fact/relationship acceptance, rejection, deferral, contradictions, and unresolved endpoints. |
-| External identity matching and relationship endpoint resolution | `EntitySourceLink` was added in `20260719_0007`; [`entity_resolution.py`](../../apps/api/app/services/entity_resolution.py), [`simulated_discovery.py`](../../apps/api/app/services/simulated_discovery.py), and [`reconciliation.py`](../../apps/api/app/services/reconciliation.py) perform exact/manual matching and preserve resolution metadata. Regression cases for duplicate avoidance, ambiguity, linking, and relationships are in [`test_knowledge_foundation.py`](../../apps/api/tests/test_knowledge_foundation.py). |
-| JSON-safe persisted knowledge metadata | [`utils/json_values.py`](../../apps/api/app/utils/json_values.py) centralizes FastAPI `jsonable_encoder` normalization at assertion, evidence, reconciliation, audit, and change boundaries. Nested UUID/datetime/Enum/Pydantic and rollback regressions are tested in [`test_knowledge_foundation.py`](../../apps/api/tests/test_knowledge_foundation.py). |
-| Safe Discovery Run and Assertion lifecycle | Migration `20260719_0008`, [`knowledge_lifecycle.py`](../../apps/api/app/services/knowledge_lifecycle.py), run detail/list UI, and [`assertions-panel.js`](../../apps/web/components/assertions-panel.js) provide archive/restore, dependency-aware deletion, and reasoned retraction without removing accepted operational data. Backend and responsive UI tests are in [`test_knowledge_lifecycle.py`](../../apps/api/tests/test_knowledge_lifecycle.py) and [`knowledge-lifecycle-ui.test.mjs`](../../apps/web/tests/knowledge-lifecycle-ui.test.mjs). |
-| Historical assertion read resilience | [`routes/knowledge.py`](../../apps/api/app/routes/knowledge.py) and response schemas tolerate missing optional provenance and structured JSON values. The exact historical `docker01` regression and unaffected other-asset path are in [`test_assertion_list.py`](../../apps/api/tests/test_assertion_list.py). |
-| Complete-snapshot coverage and “no longer observed” | `RunObservedEntity`, coverage keys, complete-snapshot state, and `KnowledgeChange` were added in `20260719_0009` and UUID defaults repaired by `20260719_0010`. [`discovery_observations.py`](../../apps/api/app/services/discovery_observations.py) detects absence only against a valid baseline and resolves re-observation. Tests cover complete/partial/failed/different coverage, idempotence, lifecycle decisions, and retired assets. |
-| Meaningful Changes timeline and Asset fact history | [`knowledge_changes.py`](../../apps/api/app/services/knowledge_changes.py) records semantic changes; [`routes/changes.py`](../../apps/api/app/routes/changes.py) provides scoped list/summary/Asset fact history; `/changes` and Asset history render compact timelines. [`knowledge-v2-ui.test.mjs`](../../apps/web/tests/knowledge-v2-ui.test.mjs) and knowledge tests cover the path. |
-| Source-current versus accepted knowledge | Migration `20260719_0011`, [`predicate_definitions.py`](../../apps/api/app/services/predicate_definitions.py), and [`knowledge_summary.py`](../../apps/api/app/services/knowledge_summary.py) separate latest source observations from canonical accepted assertions and enforce single-valued cardinality. Asset detail defaults to a predicate roll-up while retaining history/raw assertions. Regression tests cover manual declarations, conflicts, unresolved values, supersession, and provenance gaps. |
-| Configurable Asset knowledge profiles and completeness | Migration `20260720_0012` adds requirement, gap, and summary tables. [`knowledge_completeness.py`](../../apps/api/app/services/knowledge_completeness.py) evaluates structured database-defined rules, triggers reevaluation, and records stable summaries. `/admin/asset-types/[id]/knowledge-profile`, Asset detail, Asset list, and Dashboard consume it. [`test_knowledge_completeness.py`](../../apps/api/tests/test_knowledge_completeness.py) covers rules, references, lifecycle, idempotence, and evaluator failure isolation. |
-| Dedicated Knowledge Gaps workflow | [`routes/knowledge_completeness.py`](../../apps/api/app/routes/knowledge_completeness.py) supports list/summary/defer/exception/reopen/assign/resolve. `/knowledge-gaps` has URL-backed filters, compact cards, permissions, and links; it is separate from reconciliation. [`knowledge-completeness-ui.test.mjs`](../../apps/web/tests/knowledge-completeness-ui.test.mjs), [`knowledge-gap-filters.test.mjs`](../../apps/web/tests/knowledge-gap-filters.test.mjs), and [`reconciliation-navigation.test.mjs`](../../apps/web/tests/reconciliation-navigation.test.mjs) verify the separation and UI. |
+* People and Teams;
+* structured Service ownership;
+* full Impact Analysis;
+* Backup and Recovery workflows;
+* formal Knowledge Objects;
+* SSO/MFA;
+* deeper plugin integrations;
+* automatic conversion of legacy Service Assets.
 
-### Services and capabilities
+## Where the earlier review overstated the implementation
 
-| Feature | Concrete evidence |
-| --- | --- |
-| First-class Service records | Migration `20260720_0013` creates `services`; [`routes/services.py`](../../apps/api/app/routes/services.py) implements scoped list/summary/create/get/update/archive/restore; `/services`, `/services/new`, `/services/[id]`, and `/services/[id]/edit` provide the full current UI. Service validation/routing contracts are tested in [`test_services.py`](../../apps/api/tests/test_services.py) and frontend flows in [`services-ui.test.mjs`](../../apps/web/tests/services-ui.test.mjs). |
-| Service Types and Criticality Levels | `service_types` and `criticality_levels` are seeded and managed through [`service_reference_data.py`](../../apps/api/app/routes/service_reference_data.py), `/admin/service-types`, and `/admin/criticality-levels`. Suggested RTO/RPO minutes and criticality-based rules are implemented without overwriting explicit targets. |
-| Service recovery and simple ownership fields | Service schema/UI persist purpose, owner/contact/support labels, exact-minute RTO/RPO, backup/recovery notes, runbook URL, documentation URL, lifecycle, and operational state. Validation is in [`schemas.py`](../../apps/api/app/schemas.py); form conversion is tested in [`services-ui.test.mjs`](../../apps/web/tests/services-ui.test.mjs). |
-| Temporal Service dependencies | `ServiceAssetDependency`, `ServiceDependency`, and `ServiceBusinessFunction` preserve `valid_from`/`valid_to`. The Services router implements list/create/update/end for all three and records assertions, changes, and completeness reevaluation. Detail UI supports typed Service→Asset, Service→Service, and Service→Business Function links. |
-| Lightweight Business Functions | Migration `20260720_0013`, [`routes/business_functions.py`](../../apps/api/app/routes/business_functions.py), `/business-functions`, and `/business-functions/[id]` implement scoped create/list/detail/edit, criticality/owner fields, supporting Services, and affected Assets. |
-| Service provenance and completeness | Manual Service fields/links create accepted assertions and meaningful changes. Service requirement APIs/evaluation and `/admin/service-types/[id]/knowledge-profile` extend the existing completeness engine; Service detail and `/knowledge-gaps` surface the results. |
-| Focused Service/Business Function graphs | `/services/{id}/graph` and `/business-functions/{id}/graph` return authorized, navigable Service/Asset/Business Function projections; their detail pages render the edges. The bounded graph behavior and intentional non-recursion are documented in [`service-dependencies.md`](../architecture/service-dependencies.md). |
+The repository audit materially changes several classifications:
 
-### Plugin and discovery components
 
-| Feature | Concrete evidence |
-| --- | --- |
-| Vendor-neutral plugin SDK | Protocols for `validate_connection`, `discover`, `normalize`, and `sync`, plus safe data contracts, are in [`plugins/sdk`](../../plugins/sdk). [`test_contracts.py`](../../plugins/sdk/tests/test_contracts.py) verifies structural conformance, credential-safe representation, raw/normalized separation, and trusted sync context. |
-| Proxmox API-token connection adapter | [`connection.py`](../../plugins/proxmox/atlas_proxmox/connection.py) and [`client.py`](../../plugins/proxmox/atlas_proxmox/client.py) validate HTTPS endpoints using Proxmox token headers with TLS verification and sanitized failures. [`test_connection.py`](../../plugins/proxmox/tests/test_connection.py) covers success, permissions, timeouts, unsafe URLs, and secret handling. |
-| Proxmox discovery and normalization adapter | [`discovery.py`](../../plugins/proxmox/atlas_proxmox/discovery.py) collects nodes, QEMU VMs, LXCs, storage pools, and bridges; [`normalization.py`](../../plugins/proxmox/atlas_proxmox/normalization.py) creates stable vendor-neutral Assets, facts, and relationships. [`test_discovery.py`](../../plugins/proxmox/tests/test_discovery.py) verifies the contract and sanitization. |
-| Idempotent core sync component | [`discovery_sync.py`](../../apps/api/app/services/discovery_sync.py) validates integration tenancy, stores raw payloads, upserts Asset/fact/relationship identities, updates `last_seen_at`, and marks missing Assets stale. [`test_discovery_sync.py`](../../apps/api/tests/test_discovery_sync.py) verifies repeat sync, raw retention, staleness, and scope. This component is implemented even though automatic worker dispatch is not. |
-| Generated Markdown component | [`markdown_docs.py`](../../apps/api/app/services/markdown_docs.py) renders sanitized deterministic Asset Markdown and core sync upserts `Document` rows. [`test_markdown_docs.py`](../../apps/api/tests/test_markdown_docs.py) covers content, relationship rendering, determinism, and injection resistance. A user-facing document surface is separately classified as partial below. |
+1. **End-to-end Proxmox discovery is only partially implemented.**
+   The plugin, normalizer and core sync exist, but there is no configured
+   Integration → secret resolution → plugin invocation → worker dispatch journey.
+   The usable discovery product path is still JSON simulation.
+2. **Worker orchestration is only partially implemented.**
+   Redis and a worker container exist, but the worker only logs readiness and sleeps.
+   There is no queue, scheduler, retry, cancellation or job-control implementation.
+3. **Generated Documentation is only partially implemented.**
+   Atlas can generate and store deterministic Asset Markdown, but users cannot browse
+   it because there is no documents router or documents UI.
+4. **Impact Analysis is partially implemented, not wholly absent and not implemented.**
+   Focused graphs and one-hop dependency views are real foundations, but recursive
+   traversal, outage simulation, evidence paths, scoring and a dedicated route do not exist.
+5. **Integration management is only partially implemented.**
+   The Integration model and navigation scaffolding exist, but the page still uses mock data
+   and there is no registered Integration API router.
+6. **Business Function lifecycle is only partially implemented.**
+   Business Functions exist, but they do not yet have their own assertions,
+   completeness profiles, gap summaries or change history.
+7. **The Interface-first IP transition is incomplete.**
+   Interfaces and topology use structured IP data, but Asset forms/lists still expose
+   the legacy direct `Asset.ip_address`.
 
-### Application shell and UX consolidation
+## Current release position
 
-| Feature | Concrete evidence |
-| --- | --- |
-| Permission-aware product navigation | [`navigation-model.mjs`](../../apps/web/lib/navigation-model.mjs) groups implemented routes under Overview, Knowledge, Operations, Connections, and System and never renders `available: false` roadmap entries. [`navigation-model.test.mjs`](../../apps/web/tests/navigation-model.test.mjs) verifies role visibility, active deep links, roadmap hiding, context, profile access, and logout. |
-| Root redirect and authenticated shell | `/` delegates to the session-aware shell and routes authenticated users to their permitted home while `/login` stays public. The global shell supplies context, account identity, and logout to protected pages. Session tests cover loop/error behavior. |
-| Changes/Assets/Knowledge Gaps UI polish | Shared filter/timeline components, URL-backed query helpers, Asset Type quick filters, responsive assertions, completeness spacing, and compact Knowledge Gap cards are present in the current pages/components. [`ui-polish.test.mjs`](../../apps/web/tests/ui-polish.test.mjs), [`knowledge-gap-filters.test.mjs`](../../apps/web/tests/knowledge-gap-filters.test.mjs), and lifecycle/account/brand tests cover the requested regressions. |
+| Release area | Repository-grounded status |
+|--------------|----------------------------|
+| Platform / inventory foundation | **Implemented**            |
+| Release A — Knowledge Foundation | **Implemented**            |
+| Release B — Discovery and Reconciliation | **Implemented for simulation and reconciliation; live plugin operation is partial** |
+| B.5 — Knowledge Completeness | **Implemented for Assets and Services** |
+| Release C1 — Homelab Service MVP | **Implemented**            |
+| Release C2 — deeper graph and impact foundations | **Partially implemented**  |
+| Release C3 — People, Teams and structured ownership | **Planned but not implemented** |
+| Release C4 — formal Knowledge Objects | **Planned but not implemented** |
+| Release D — Backup and Recovery | **Planned but not implemented** |
+| Release E — full Impact Analysis | **Partially implemented foundation; main product workflow not implemented** |
+| Release F — Documentation and intended state | **Partially implemented foundation; user-facing product not implemented** |
+| Production/community release packaging | **Not established by the repository ledger** |
 
-## Partially implemented
 
-| Feature | Implemented evidence | Missing evidence / reason for classification |
-| --- | --- | --- |
-| Integration management and Proxmox connection setup | `Integration` is a scoped SQLAlchemy/Alembic table with plugin URL, token ID, secret reference, TLS, and status fields; permissions and navigation exist. The standalone Proxmox validator works. | No Integration router is registered in [`main.py`](../../apps/api/app/main.py), and [`integrations/page.js`](../../apps/web/app/integrations/page.js) imports [`mock-data.js`](../../apps/web/lib/mock-data.js). There is no create/edit/test-connection web journey or credential-reference resolver. |
-| End-to-end Proxmox discovery | Plugin discovery/normalization, core persistence, raw payload retention, stale marking, and Markdown generation are independently implemented and tested. | No API/worker path loads an Integration, resolves its secret, invokes `ProxmoxPlugin`, and dispatches `AtlasDiscoverySync`. Current usable discovery is the JSON simulation path, not a configured Proxmox run. |
-| Redis-backed worker orchestration | Compose runs Redis and a worker container and passes both database/Redis URLs. | [`worker/main.py`](../../apps/worker/worker/main.py) only logs readiness and sleeps; repository search finds no Redis client, queue producer/consumer, scheduler, retry, cancellation, or job-status implementation. The limitation is explicit in the root README. |
-| Generated Documentation product surface | `Document` rows, safe Markdown generation, and discovery-run linkage exist and are tested. | There is no documents router, no document list/detail page, and navigation marks Documentation unavailable. Users cannot browse or edit generated pages through Atlas. |
-| Interface-first IP-address UX | Networks/interfaces are durable; Asset detail manages interfaces; topology prefers interface IPs and groups by explicit network. `Asset.ip_address` remains optional for compatibility. | The later polish request said to remove/de-emphasize direct Asset IP in forms/tables, but [`asset-form.js`](../../apps/web/components/asset-form.js) still renders “Primary IP address,” sends `ip_address`, and [`assets/page.js`](../../apps/web/app/assets/page.js) displays `asset.ip_address` before hostname. The migration is therefore incomplete outside topology/detail. |
-| Impact analysis | Focused Service and Business Function graphs show directly connected Services/Assets and Business Function affected Assets; the Asset topology Dependency lens offers one-hop focus. | There is no recursive traversal, path scoring, outage simulation, confidence-qualified impact engine, or dedicated `/impact-analysis` route. The navigation entry is unavailable and Service architecture explicitly limits C1 to focused projections. |
-| Business Function knowledge lifecycle | Business Functions have durable scope, criticality, Service links, graph projection, and open Service-gap counts. | There are no Business Function assertions, requirement profiles, completeness summaries/gaps, or Business Function change-history page. The generic completeness design anticipated additional entity types, but current evaluators/routes support Assets and Services only. |
-| Discovery-run lifecycle state machine | Runs support pending/running/completed/failed/cancelled schema values, archive/restore, safe deletion, complete snapshots, and result history. | There is no start/cancel/retry operational job API because worker dispatch is absent. `cancelled` is a stored allowed state rather than a usable cancellation workflow. |
+---
 
-## Planned but not implemented
+# 3. Expected-versus-actual correction matrix
 
-These are affirmative roadmap or “recommended next increment” items, not merely
-schema extension points.
+This section records the most important differences between the earlier
+transcript-derived report and the audited repository.
 
-| Feature | Concrete evidence that it is planned and absent |
-| --- | --- |
-| People & Teams and structured Service ownership | [`navigation-model.mjs`](../../apps/web/lib/navigation-model.mjs) reserves an unavailable `people-teams` entry; the root README names it as roadmap. [`service-model.md`](../architecture/service-model.md) says current labels should migrate later to Person/Team role assignments. There are no Person, Team, membership, or ownership-assignment models/routes/pages. |
-| Full Impact Analysis | Navigation reserves an unavailable `impact-analysis` item, the MVP brief recommends deeper traversal next, and [`service-dependencies.md`](../architecture/service-dependencies.md) calls focused graphs its foundation. There is no route/page/engine beyond the partial projections above. |
-| Backup & Recovery workflow | Navigation and README reserve `Backup & Recovery`; Service records already carry RTO/RPO and backup/recovery notes. There is no backup-policy, backup-run, recovery-test, restore, or dedicated workflow model/router/page. |
-| Formal Documentation / Knowledge Objects | Navigation reserves `Documentation`; [`service-model.md`](../architecture/service-model.md) explicitly anticipates a future Knowledge Object association for runbooks/documents. Only generated `Document` storage exists; no Knowledge Object model or usable documentation page exists. |
-| SSO/OIDC/SAML and MFA | The MVP brief’s recommended next increment names SSO/MFA after worker orchestration. `User.auth_provider`, `external_subject`, and `mfa_enabled` are extension fields, but the only authentication routes implement local passwords and no issuer/callback/enrollment/challenge flow exists. |
-| External append-only audit export | The MVP brief recommends external audit export before production hardening and the security architecture describes it as necessary for tamper evidence. Current code only stores read-only application audit rows in PostgreSQL; there is no exporter/sink. |
-| Plugin ingestion permissions and worker identity | The current Codex context recommends connecting plugin discovery/ingestion permissions to worker orchestration. Existing permissions cover interactive Integration/discovery operations, but no service identity, queued-job authorization envelope, or plugin-installed permission workflow exists. |
-| Deliberate legacy Asset-to-Service association workflow | [`service-model.md`](../architecture/service-model.md) says first-class Services and the managed Asset Type “Service” remain distinct and that automated association/migration comes later. No association/migration assistant exists. |
+| Feature area | Earlier expected classification | Actual repository classification | Concrete reason |
+|--------------|---------------------------------|----------------------------------|-----------------|
+| End-to-end Proxmox discovery | Implemented or uncertain        | **Partially implemented**        | Plugin discovery/normalization and `AtlasDiscoverySync` exist, but no API/worker path loads an Integration, resolves a secret and invokes the plugin. |
+| Redis worker orchestration | Implemented foundation / limited | **Partially implemented**        | Compose runs Redis and worker, but `worker/main.py` only logs readiness and sleeps. |
+| Integration management UI | Unknown/partially implemented   | **Partially implemented**        | Integration table and permissions exist; `/integrations` still imports mock data and no Integration router is registered. |
+| Generated Documentation | Planned/unknown                 | **Partially implemented**        | Deterministic Asset Markdown and `Document` persistence exist, but no documents router or usable UI exists. |
+| Impact Analysis | Planned but not implemented     | **Partially implemented**        | Focused Service/Business Function graphs and one-hop topology focus exist, but no recursive impact engine or `/impact-analysis`. |
+| Business Function completeness/history | Not separately classified       | **Partially implemented**        | Business Function CRUD and graph exist, but no assertions, profiles, gaps or history. |
+| Interface-first IP UX | Implemented                     | **Partially implemented**        | Interfaces are first-class, but Asset forms and list still use direct `ip_address`. |
+| Discovery cancellation | Assumed part of lifecycle       | **Unknown / absent workflow**    | `cancelled` is a valid status, but no cancel endpoint, UI or explicit product decision exists. |
+| Full Reconciliation action set | Broadly treated as implemented  | **Core decisions implemented; some advanced actions not evidenced** | Accept/reject/defer/lifecycle paths are tested; reclassify, bulk operations and broad merge journeys are not present. |
+| Full Documentation product | Planned but not implemented     | **Partially implemented**        | The renderer and storage are already real, but the product surface is absent. |
+| Service graph | Implemented                     | **Implemented as focused graph only** | `/services/{id}/graph` and `/business-functions/{id}/graph` exist; architecture deliberately limits recursion. |
+| Service C1   | Implemented                     | **Implemented**                  | Migration `20260720_0013`, Services routes/pages/tests and Business Functions confirm the full C1 slice. |
+| Knowledge Gaps | Implemented                     | **Implemented**                  | Dedicated APIs, assignment/defer/exception/reopen/resolve and URL-backed UI are all present. |
+| Profile/avatar | Implemented initials support; photo deferred | **Same**                         | Account menu and initials/image fallback exist; no avatar field/upload endpoint. |
+| Global graph database | Abandoned                       | **Same**                         | PostgreSQL remains the chosen architecture. |
+| Legacy Service Asset conversion | Deferred/abandoned for C1       | **Same**                         | Explicitly retained without automatic migration. |
 
-## Deferred
 
-| Feature | Concrete evidence for deferral and current absence |
-| --- | --- |
-| Billing or commercial tenancy above an Atlas instance/workspace | Listed under “Non-goals for this MVP” in [`mvp-brief.md`](mvp-brief.md). `Workspace` exists, but there is no billing, subscription, reseller, tenant-switching, or commercial account surface. |
-| Recovery codes, forgotten-password email, and per-device session management | Explicitly absent in the security limitations of [`authentication-and-access-control.md`](../architecture/authentication-and-access-control.md). Current auth has password change/admin reset and a per-user session generation only; no mailer, recovery token, recovery-code, or device-session table/routes exist. |
-| Break-glass account recovery command | [`deployment-and-upgrades.md`](../architecture/deployment-and-upgrades.md) explicitly says it does not yet exist and recommends backups/two Master Administrators. The bootstrap command refuses to reset an existing user. |
-| Arbitrary per-record policy and delegated role administration | Explicit MVP non-goals in [`mvp-brief.md`](mvp-brief.md). Authorization supports global/customer/site assignments; there is no record ACL/policy expression or delegated role-management scope. |
-| Customer-specific Asset/Relationship Types and Custom Field definitions | Explicitly “deliberately deferred” in [`authentication-and-access-control.md`](../architecture/authentication-and-access-control.md). Current reference definitions are global and have no `customer_id`. |
-| New cross-site or cross-customer relationships | Explicit MVP non-goal and enforced rejection. [`test_crud.py`](../../apps/api/tests/test_crud.py) proves new cross-context edges fail; only flagged migrated legacy rows remain readable when both endpoints are authorized. |
-| Uploaded icon/media library and server-side icon proxy | Explicit MVP non-goals. Current schema stores HTTPS metadata only, rejects remote SVG, and intentionally performs no server fetch; there is no blob/media table or upload/proxy route. |
-| Runtime/customer-specific branding | The branding specification explicitly excluded configurable customer branding/file uploads. Current assets are committed at build time and changing them requires a rebuild; there is no branding settings model/UI. |
-| User avatar/photo upload | The account-menu work explicitly prepared `UserAvatar` for a later backend field but excluded upload. `User`/response schemas have no avatar column and no media endpoint exists. |
-| Additional discovery plugins | The MVP brief defers plugins beyond Proxmox. `DataSource.source_type` reserves PBS, Docker, UniFi, NetBox, imported-file, and inference labels, but there are no corresponding plugin packages or operational adapters. |
-| Full production scheduler/queue control plane | Explicit MVP non-goal. The worker/Redis boundary is partial, with no schedule, queue administration, concurrency control, retry policy, or production job controls. |
-| Bulk reconciliation acceptance | The Knowledge Foundation v2 specification explicitly excluded bulk accept. Current reconciliation decisions are per item; no bulk endpoint/UI exists. |
-| Automatic rollback of accepted discovery changes | The discovery lifecycle specification defers this to a separate reconciliation/reversal workflow. Current run deletion intentionally never reverses operational Assets or relationships. |
-| Automatically deleting Assets absent from discovery | Explicitly rejected by [`codex-system-instructions.md`](../prompts/codex-system-instructions.md), the MVP brief, and discovery code. Current implementations either create a reviewable `not_observed` episode or mark plugin-synced Assets stale. |
-| Arbitrary executable completeness expressions | Explicitly excluded from Knowledge Completeness v1. Current requirement rules are a bounded structured vocabulary validated in [`knowledge_requirement_references.py`](../../apps/api/app/services/knowledge_requirement_references.py). |
-| Asset ownership editor/`owner_exists` completeness rule | [`knowledge-completeness.md`](../architecture/knowledge-completeness.md) states `owner_exists` is deliberately disabled until an ownership model exists. Assets have no Person/Team owner relation or ownership editor. |
-| Enterprise Business Function/process hierarchy | [`service-dependencies.md`](../architecture/service-dependencies.md) says Business Function is not a process hierarchy, portfolio, organization, or enterprise capability taxonomy. Current model is intentionally a flat lightweight capability. |
-| SLO/SLA, incident, catalog, on-call, escalation, and ITSM workflows | Explicitly outside C1 in [`service-model.md`](../architecture/service-model.md) and later-release work in [`mvp-brief.md`](mvp-brief.md). No corresponding models, migrations, routers, pages, or tests exist. |
-| AI-generated remediation | Explicit MVP non-goal in [`mvp-brief.md`](mvp-brief.md). Knowledge Gaps use administrator-authored remediation hints; there is no model call or AI service. |
-| Deep global graph traversal/path scoring/outage simulation | Explicitly excluded from C1 in [`service-dependencies.md`](../architecture/service-dependencies.md). Current graphs are bounded focused projections and Asset topology is a client-rendered lens. |
-| Automatic conversion of legacy “Service” Assets | C1 explicitly retains the managed Asset Type and forbids silent conversion/duplicate creation. No migration changes those Assets; operators create and link first-class Services deliberately. |
+---
 
-## Abandoned or superseded
+# 4. Repository validation evidence
 
-| Superseded feature/design | Concrete evidence |
-| --- | --- |
-| Browser `localStorage` bearer-token sessions | Commit `ed4858d` introduced the bearer flow, but `c9141ba` replaced the browser design with HttpOnly cookies. [`auth-token.js`](../../apps/web/lib/auth-token.js) only deletes legacy `atlas_access_token`; current docs/tests require that no live token is stored in browser storage. Bearer API compatibility remains, but the browser session feature is abandoned. |
-| Split-origin as the default production architecture | The early scaffold used independent browser/API origins. Commit `09a71a4` moved every route to `/api`; current Compose/web defaults and deployment docs define a single origin. Absolute split-origin remains an explicit development compatibility mode, not the product default. |
-| “Missing Knowledge” as a Reconciliation queue | Commit `078ba9d` moved it to the dedicated `/knowledge-gaps` route. [`reconciliation-queues.mjs`](../../apps/web/lib/reconciliation-queues.mjs) intentionally contains no Knowledge Gaps queue and its test asserts that separation. |
-| Old generic Hierarchy/Relationships topology tabs | Commit `8324d18` replaced the earlier generic view with Physical, Platform, Network/VLAN, Dependency, and All Relationships lenses. No independent hierarchy tab remains in [`topology/page.js`](../../apps/web/app/topology/page.js). |
-| Standalone Profile sidebar navigation | Commit `7f568cb` made the top-right account menu primary and removed Profile from [`navigation-model.mjs`](../../apps/web/lib/navigation-model.mjs). `/profile` remains a valid destination through “My profile”; only the standalone navigation placement was superseded. |
-| Visible “coming soon”/placeholder roadmap links | The future-facing navigation request explicitly rejected broken placeholders. `available: false` entries remain representable in the model but [`visibleNavigationGroups`](../../apps/web/lib/navigation-model.mjs) filters them out, verified by `navigation-model.test.mjs`. |
-| Role-name-only authorization and browser-only route protection | Current backend checks stable permission keys and database assignments in [`authorization.py`](../../apps/api/app/authorization.py); navigation is explicitly only a usability filter. Earlier simpler protection designs no longer define access. |
-| Recurring environment-backed admin seed/reset | Current bootstrap exits when any user exists and deprecated `ATLAS_ADMIN_*` names are only an empty-table compatibility fallback. Environment values are not a recurring user creation or password reset feature. |
-| Treating every knowledge gap as a reconciliation item | Knowledge Completeness deliberately introduced separate `KnowledgeGap` records and `/knowledge-gaps`. The architecture and tests assert that absence/insufficiency is not duplicated into `ReconciliationItem`. |
-| Hard-coded fixed Asset/Relationship enums as the authoritative taxonomy | Migration `20260714_0004` made both taxonomies database-managed stable-key records. Seed lists and UI helpers remain defaults/compatibility aids, but administrators can manage records and the database foreign keys are authoritative. |
+The Feature Ledger records the following audit checks:
 
-## Unknown
+* API tests: **158 passed**
+* Web unit/regression tests: **14 passed**
+* Plugin SDK and Proxmox tests: **27 passed**
+* Next.js 16.2.10 production build: **passed**
+* Generated static pages: **32**
+* Alembic heads: **one**
+* Current migration head: `20260720_0013`
+* Markdown links: **passed**
+* `git diff --check`: **passed**
 
-These items are mentioned or implied, but the repository does not record a
-clear product decision.
+These validate checked-in code and contracts.
 
-| Feature | Why status is unknown |
-| --- | --- |
-| Favicon/application icon refresh | The branding request made this conditional and allowed it as a follow-up. The repository has Atlas wordmark PNG/SVG assets and layout metadata, but no committed Next.js favicon/app icon, no favicon test, and no roadmap/non-goal entry deciding whether it should be added. |
-| Integration secret-store implementation | `Integration.secret_reference` implies an external or indirect secret source and the architecture requires secret hygiene, but there is no resolver/provider interface, supported secret-store documentation, API, or migration describing where references point. The intended storage backend is not decided in current repository evidence. |
-| Discovery-run cancellation UX | `DiscoveryRun.status` permits `cancelled`, but no cancel endpoint/page/action/test exists. Documentation does not say whether cancellation is a committed worker feature, deferred, or merely a reserved state. |
-| Safe CIDR-based network membership suggestions | The Networks/VLAN request allowed a non-destructive suggestion when an Asset IP matched exactly one same-context CIDR. Current topology uses explicit `AssetInterface.network_id` and does not infer membership; no document records whether suggestion UI is still desired. |
-| Second-hop topology focus | The topology request made second-hop display optional. Current focus mode shows the selected Asset plus direct neighbors. There is no documented decision whether configurable depth will be added with impact analysis or intentionally omitted. |
+They do **not** establish:
 
-## Evidence map and maintenance rules
+* a live configured PostgreSQL/Docker acceptance run at audit time;
+* a live Proxmox integration run through the Atlas UI;
+* production queue behavior;
+* secret-store resolution;
+* community installer behavior.
 
-The principal implementation commits are:
 
-- `531eb37` — scaffold, initial schema, SDK, Proxmox components, sync, Markdown;
-- `352058a`–`8324d18` — manual inventory, Networks/Interfaces, topology;
-- `c9141ba` — current authentication/RBAC/context/administration foundation;
-- `09a71a4`–`214a7e1` — single-origin API and stable session shell;
-- `25f302e`–`b052da4` — accent, branding, and future-facing navigation;
-- `6d3acb6`–`49a1f4f` — knowledge foundation, reconciliation, lifecycle,
-  coverage, changes, and assertion roll-up;
-- `3ffbf0b`–`6cc1a0b` — completeness, Knowledge Gaps, and UI refinement;
-- `09d2271` — first-class Services, Business Functions, typed dependencies,
-  Service completeness, and focused graphs.
+---
 
-When updating this ledger:
+# 5. Detailed feature inventory
 
-1. Do not move an item to **Implemented** based only on a prompt, type hint,
-   schema placeholder, mock page, or roadmap link.
-2. For a durable feature, require a migration/model plus a reachable service or
-   route; for an interactive feature, also require a usable current page.
-3. Keep separately implemented components and incomplete end-to-end journeys
-   separate, as with the Proxmox adapter versus operational worker discovery.
-4. Record superseded behavior under **Abandoned** instead of silently deleting
-   its history.
-5. Move an **Unknown** item only when code or an explicit product decision
-   resolves it.
+## 5.1 Runtime, deployment and platform foundation
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Monorepo runtime scaffold | **Implemented** | Foundation | Compose defines API, web, worker, PostgreSQL and Redis; FastAPI exposes `/api/health`; the worker logs readiness. |
+| PostgreSQL durable schema | **Implemented** | Foundation | `models.py` and a linear 13-revision Alembic chain provide the current schema. |
+| Additive database upgrades | **Implemented** | Foundation | Migration history includes safe backfills for Sites, managed types, user access, knowledge and Services. |
+| Single-origin `/api`deployment | **Implemented** | Production foundation | All routers mount below `/api`; browser API URL defaults to `/api`; tests cover namespaced routes. |
+| Optional split-origin development | **Implemented** | Development compatibility | Configurable CORS and absolute API URL overrides are tested. |
+| Production Next.js start | **Implemented** | Production foundation | Current web image uses the production Next.js start command. |
+| Redis service boundary | **Implemented as infrastructure** | Foundation | Redis is present in Compose and configured for the worker. |
+| Redis-backed job processing | **Partially implemented** | Future worker increment | No queue client, producer, consumer, retry, scheduling, cancellation or job status exists. |
+| Long-running worker container | **Partially implemented** | Foundation/future | Worker starts and stays alive but performs no operational work. |
+| Upgrade/backfill compatibility | **Implemented** | Production foundation | Migrations preserve legacy records and do not reset the database. |
+| Full production scheduler/control plane | **Deferred** | Later production hardening | Explicit MVP non-goal. |
+| Community Proxmox LXC installer | **Unknown** | Community release | Not covered by the audited repository ledger. |
+| Portainer-ready GitHub Compose path | **Unknown** | Community release | Not established by the ledger. |
+| Formal 0.1 packaging/licensing | **Unknown** | Community release | Not established by the ledger. |
+
+
+---
+
+## 5.2 Authentication, access and account experience
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Local email/password authentication | **Implemented** | Foundation | Password hashing, login, logout, `/auth/me`, profile and password-change routes exist and are tested. |
+| Argon2 password hashing | **Implemented** | Foundation | Auth tests verify hashing behavior. |
+| HttpOnly cookie sessions | **Implemented** | Foundation | `atlas_session` uses HttpOnly/SameSite and the browser sends credentials. |
+| Bearer-token API compatibility | **Implemented** | Foundation compatibility | API accepts bearer credentials as well as session cookies. |
+| Browser localStorage bearer sessions | **Abandoned** | Superseded design | Replaced by HttpOnly cookie sessions; legacy token code only removes old values. |
+| One-time administrator bootstrap | **Implemented** | Foundation | `seed_admin.py` creates only the first forced-change Master Administrator and is idempotent. |
+| Forced password change | **Implemented** | Foundation | Backend restrictions and Profile flow exist. |
+| Admin temporary-password reset | **Implemented** | Foundation | Admin user page supports write-only reset. |
+| Protected application shell | **Implemented** | Foundation | Session states prevent protected content flashing and handle failures cleanly. |
+| Scoped RBAC | **Implemented** | Foundation | Stable permission keys and global/customer/site Access Assignments are enforced server-side. |
+| Viewer read-only role behavior | **Implemented** | Foundation | Covered by CRUD/administration tests. |
+| Last-Master protection | **Implemented** | Foundation | Administration tests verify protections. |
+| Customer/site context selector | **Implemented** | Foundation | Context API, workspace context and revalidation are present. |
+| User/role/assignment administration | **Implemented** | Foundation | Guarded APIs and administration pages exist. |
+| Per-user accent preference | **Implemented** | UI/account | Persisted, validated and tested. |
+| Top-right account menu | **Implemented** | UI/account | Profile/logout dropdown exists and is tested. |
+| Initials/image fallback avatar | **Implemented** | UI/account | `user-avatar.js` provides safe fallback behavior. |
+| Avatar/photo upload | **Deferred** | Future account work | No avatar field, media storage or upload endpoint exists. |
+| SSO/OIDC/SAML | **Planned but not implemented** | Production security | Extension fields exist, but no issuer/callback flow exists. |
+| MFA     | **Planned but not implemented** | Production security | `mfa_enabled` is only an extension field; no enrollment/challenge workflow exists. |
+| Forgotten-password email | **Deferred** | Future account work | Explicitly absent in security limitations. |
+| Recovery codes | **Deferred** | Future account work | No recovery-code model or route. |
+| Per-device session management | **Deferred** | Future account work | Current model has user-level session generation only. |
+| Break-glass recovery command | **Deferred** | Production hardening | Explicitly documented as not existing. |
+| External append-only audit export | **Planned but not implemented** | Production hardening | Current audit remains PostgreSQL-backed only. |
+| Arbitrary per-record policy | **Deferred** | Enterprise authorization | Explicit MVP non-goal. |
+| Delegated role administration | **Deferred** | Enterprise authorization | Explicit MVP non-goal. |
+
+
+---
+
+## 5.3 Inventory, reference data and topology
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Customer CRUD | **Implemented** | Foundation | Models, routes and pages use real APIs. |
+| Site CRUD | **Implemented** | Foundation | Models, routes and pages use real APIs. |
+| Manual Asset CRUD | **Implemented** | Foundation | Scoped APIs and create/detail/edit UI exist. |
+| Managed Asset Types | **Implemented** | Foundation | Stable-key database records and administration UI exist. |
+| Asset Type safe lifecycle | **Implemented** | Foundation | Inactive and referenced deletion behavior is tested. |
+| Managed Relationship Types | **Implemented** | Foundation | Database-managed labels/direction/type constraints exist. |
+| Relationship endpoint applicability | **Implemented** | C1      | Supports Asset→Asset, Service→Asset, Service→Service and Service→Business Function. |
+| Typed Custom Fields | **Implemented** | Foundation | Definition, applicability, options and values are implemented. |
+| Ten-field active limit per type | **Implemented** | Foundation | Enforced and tested. |
+| Customer-specific taxonomies | **Deferred** | Enterprise/MSP | Asset/Relationship Types and Custom Field definitions remain global. |
+| Asset/type icons | **Implemented** | Foundation/UI | Safe HTTPS non-SVG icon handling and fallback exist. |
+| Uploaded icon/media library | **Deferred** | Future media system | No blob/media route or storage. |
+| Server-side icon proxy | **Deferred** | Future media system | No remote fetch/proxy. |
+| Atlas branding in shell/login | **Implemented** | UI      | Shared committed branding is tested. |
+| Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
+| Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
+| Asset Interfaces | **Implemented** | Foundation | Interface, network, IP, MAC, primary and notes are persisted and managed. |
+| Direct Asset IP field | **Partially superseded** | Foundation migration | Remains in forms/lists for compatibility even though interfaces are first-class. |
+| Interface-first IP UX | **Partially implemented** | Future polish | Topology/detail use interfaces; create/edit/list still prioritise direct `ip_address`. |
+| Safe CIDR membership suggestions | **Unknown** | Network UX | No implementation or explicit decision. |
+| Asset Relationships | **Implemented** | Foundation | Scoped CRUD, type validation and same-context rules exist. |
+| New cross-site/customer relationships | **Deferred/prohibited** | Security boundary | Explicitly rejected and tested. |
+| Legacy cross-context relationships | **Implemented as compatibility** | Migration support | Readable only when both endpoints are authorised. |
+| Knowledge Graph topology API | **Implemented** | Foundation | Returns authorised Assets, relationships, networks and interfaces. |
+| Physical lens | **Implemented** | Foundation/UI | Current topology lens. |
+| Platform lens | **Implemented** | Foundation/UI | Current topology lens. |
+| Network/VLAN lens | **Implemented** | Foundation/UI | Current topology lens. |
+| Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
+| All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
+| Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
+| Second-hop topology focus | **Unknown** | Future graph UX | Current focus is direct neighbours; no product decision recorded. |
+| Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
+
+
+---
+
+## 5.4 Knowledge Foundation, discovery simulation and reconciliation
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Data Source model | **Implemented** | A/B     | Durable DataSource records exist. |
+| Data Source list/create API | **Implemented** | A/B     | Knowledge router exposes list/create. |
+| Simulated discovery | **Implemented** | B       | `/discovery/simulate` and UI provide a usable JSON path. |
+| Discovery Run list/detail | **Implemented** | B       | Durable run records and pages exist. |
+| EvidenceRecord | **Implemented** | A       | Durable table and APIs exist. |
+| KnowledgeAssertion | **Implemented** | A       | Durable table, UI and tests exist. |
+| ReconciliationItem | **Implemented** | B       | Durable table, queues and decisions exist. |
+| Accept reconciliation | **Implemented** | B       | Tested for Asset/fact/relationship acceptance. |
+| Reject reconciliation | **Implemented** | B       | Tested.           |
+| Defer reconciliation | **Implemented** | B       | Tested.           |
+| Lifecycle decisions | **Implemented** | B       | No-longer-observed decisions are tested. |
+| Bulk reconciliation acceptance | **Deferred** | Future B enhancement | Explicitly excluded from Knowledge Foundation v2. |
+| EntitySourceLink | **Implemented** | A/B     | Exact/manual source identity mapping exists. |
+| External identity matching | **Implemented** | B       | Exact/manual matching and ambiguity metadata are tested. |
+| Relationship endpoint resolution | **Implemented** | B       | Reconciliation preserves unresolved/ambiguous endpoint metadata. |
+| JSON-safe knowledge metadata | **Implemented** | A/B     | UUID/datetime/Enum/Pydantic values are normalised before persistence. |
+| Discovery Run archive/restore/delete | **Implemented** | B       | Dependency-aware lifecycle behavior exists. |
+| Assertion retraction | **Implemented** | A       | Reasoned retraction exists without removing accepted operational data. |
+| Historical assertion read resilience | **Implemented** | A       | Missing optional provenance does not break reads. |
+| Complete snapshot coverage | **Implemented** | B       | Coverage keys and baseline comparison exist. |
+| No-longer-observed detection | **Implemented** | B       | Valid complete baselines create reviewable absence episodes. |
+| Partial-run protection | **Implemented** | B       | Partial/failed/different coverage is tested not to cause absence. |
+| Re-observation | **Implemented** | B       | Re-observed entities resolve prior absence. |
+| Automatic deletion of absent Assets | **Deferred/prohibited** | Product rule | Assets become stale/reviewable; they are not deleted automatically. |
+| Automatic rollback when deleting a run | **Deferred** | Future reconciliation reversal | Explicitly not performed. |
+| Meaningful Changes timeline | **Implemented** | A/B     | Semantic changes and compact UI exist. |
+| Asset fact history | **Implemented** | A       | API and UI exist. |
+| Source-current vs accepted knowledge | **Implemented** | A hardening | Predicate cardinality and accepted/current distinctions exist. |
+| Manual edits as declared accepted assertions | **Implemented** | A       | Assets and Services create accepted declarations. |
+| Predicate roll-up | **Implemented** | A       | Asset detail defaults to a concise summary while preserving history/raw views. |
+| Discovery cancellation state value | **Implemented as schema only** | B       | `cancelled` is allowed as a status. |
+| Discovery cancellation workflow | **Unknown / not implemented** | Future worker work | No cancel API/page/action/test and no explicit commitment. |
+| Start/retry operational run API | **Partially implemented/absent** | Future worker work | Simulation starts runs; configured operational jobs do not exist. |
+| Full worker-dispatched discovery lifecycle | **Partially implemented** | Future B hardening | Run schema exists but job dispatch does not. |
+
+
+---
+
+## 5.5 Knowledge Completeness and Knowledge Gaps
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Configurable Asset knowledge profiles | **Implemented** | B.5     | Requirement, Gap and Summary tables plus evaluator exist. |
+| Database-defined structured rules | **Implemented** | B.5     | Rules are validated against bounded supported vocabulary. |
+| Arbitrary executable expressions | **Deferred/prohibited** | B.5 design | Explicitly excluded. |
+| Automatic reevaluation triggers | **Implemented** | B.5     | Asset/relationship/service changes trigger evaluation. |
+| Evaluator failure isolation | **Implemented** | B.5     | Tests cover isolation. |
+| Stable/idempotent summaries | **Implemented** | B.5     | Tests cover idempotence. |
+| Dedicated Knowledge Gaps route | **Implemented** | B.5     | Separate APIs and `/knowledge-gaps` UI exist. |
+| Gap list and summary | **Implemented** | B.5     | Routes provide both. |
+| Gap defer | **Implemented** | B.5     | API/UI exists.    |
+| Gap exception | **Implemented** | B.5     | API/UI exists.    |
+| Gap reopen | **Implemented** | B.5     | API exists.       |
+| Gap assign | **Implemented** | B.5     | API supports assignment. |
+| Gap resolve | **Implemented** | B.5     | API supports resolution. |
+| URL-backed filters | **Implemented** | UI refinement | Filter tests cover state and separation. |
+| Compact Knowledge Gap cards | **Implemented** | UI refinement | Current page includes the requested compact card design. |
+| Knowledge Gaps separate from Reconciliation | **Implemented** | Architecture/UI | Tests assert no Missing Knowledge reconciliation queue. |
+| Asset completeness panel | **Implemented** | B.5     | Asset detail/list/dashboard consume results. |
+| Service completeness | **Implemented** | C1      | Service Types have knowledge profiles and Service gaps appear in the same workflow. |
+| Business Function completeness | **Partially implemented/absent** | Future extension | Business Functions lack assertions, profiles, summaries and gaps. |
+| Asset owner existence rule | **Deferred** | C3 dependency | Explicitly disabled until a structured ownership model exists. |
+| AI-generated remediation | **Deferred/prohibited** | Product principle | Remediation hints are administrator-authored. |
+
+
+---
+
+## 5.6 Services and Business Functions
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| First-class Service records | **Implemented** | C1      | Migration, routes and full list/create/detail/edit UI exist. |
+| Service archive/restore | **Implemented** | C1      | API supports both. |
+| Service Types | **Implemented** | C1      | Managed reference records and admin UI exist. |
+| Criticality Levels | **Implemented** | C1      | Managed reference records and admin UI exist. |
+| Suggested RTO/RPO | **Implemented** | C1      | Criticality defaults exist without overwriting explicit values. |
+| Purpose | **Implemented** | C1      | Persisted and displayed. |
+| Lifecycle/operational status | **Implemented** | C1      | Persisted and displayed. |
+| Simple owner label | **Implemented** | C1      | Persisted as a Service field. |
+| Technical contact label | **Implemented** | C1      | Persisted as a Service field. |
+| Support group label | **Implemented** | C1      | Persisted as a Service field. |
+| RTO in exact minutes | **Implemented** | C1      | Conversion and validation are tested. |
+| RPO in exact minutes | **Implemented** | C1      | Conversion and validation are tested. |
+| Backup/recovery notes | **Implemented** | C1      | Persisted and shown. |
+| Runbook URL | **Implemented** | C1      | Lightweight link exists. |
+| Documentation URL | **Implemented** | C1      | Lightweight link exists. |
+| Service→Asset dependencies | **Implemented** | C1      | Typed temporal dependency model/API/UI exists. |
+| Service→Service dependencies | **Implemented** | C1      | Typed temporal dependency model/API/UI exists. |
+| Service→Business Function links | **Implemented** | C1      | Typed temporal link model/API/UI exists. |
+| End dependency without deleting history | **Implemented** | C1      | `valid_from`/`valid_to` are preserved. |
+| Service provenance | **Implemented** | C1      | Fields/links create accepted assertions and changes. |
+| Service completeness | **Implemented** | C1      | Evaluator, profiles and gaps are integrated. |
+| Business Function CRUD | **Implemented** | C1      | Scoped create/list/detail/edit exists. |
+| Business Function owner/criticality fields | **Implemented** | C1      | Lightweight labels/criticality exist. |
+| Supporting Services | **Implemented** | C1      | Detail view shows linked Services. |
+| Affected Assets through Services | **Implemented** | C1      | Business Function detail exposes connected Assets. |
+| Business Function assertions/history | **Partially implemented/absent** | Future C extension | No first-class assertions, completeness or change-history page. |
+| Focused Service graph | **Implemented** | C1      | `/services/{id}/graph` exists. |
+| Focused Business Function graph | **Implemented** | C1      | `/business-functions/{id}/graph` exists. |
+| Recursive global Service graph | **Deferred** | C2/E    | Explicitly outside C1. |
+| Application Asset retained | **Implemented/design decision** | C1      | First-class Service is distinct from deployed Application Asset. |
+| Legacy Service Asset retained | **Implemented as compatibility** | C1      | It is not silently converted. |
+| Automatic legacy Service conversion | **Deferred/prohibited** | Future association work | No automatic migration or duplicate creation. |
+| Deliberate Asset-to-Service association assistant | **Planned but not implemented** | C2/C3   | Architecture says it should come later. |
+
+
+---
+
+## 5.7 Plugins, integrations and operational discovery
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Vendor-neutral plugin SDK | **Implemented** | Integration foundation | Contracts for validate/discover/normalize/sync exist and are tested. |
+| Credential-safe plugin representations | **Implemented** | Integration foundation | Tests verify secrets are not exposed. |
+| Proxmox API-token connection adapter | **Implemented** | Integration foundation | HTTPS/token/TLS validation and sanitised failures are tested. |
+| Proxmox node discovery | **Implemented as adapter** | Integration foundation | Plugin collects nodes. |
+| Proxmox QEMU VM discovery | **Implemented as adapter** | Integration foundation | Plugin collects QEMU VMs. |
+| Proxmox LXC discovery | **Implemented as adapter** | Integration foundation | Plugin collects LXCs. |
+| Proxmox storage discovery | **Implemented as adapter** | Integration foundation | Plugin collects storage pools. |
+| Proxmox bridge discovery | **Implemented as adapter** | Integration foundation | Plugin collects bridges. |
+| Proxmox vendor-neutral normalisation | **Implemented** | Integration foundation | Stable Assets/facts/relationships are produced. |
+| Idempotent core discovery sync | **Implemented as component** | Integration foundation | Raw payload retention, upsert, last-seen and stale marking are tested. |
+| Integration persistence model | **Implemented** | Integration foundation | Integration table stores plugin and connection metadata. |
+| Integration management API | **Partially implemented/absent** | Future integration increment | No Integration router is registered. |
+| Integration management page | **Partially implemented** | Future integration increment | Page exists but imports mock data. |
+| Test-connection journey | **Partially implemented/absent** | Future integration increment | Standalone validator exists; no current user journey invokes it. |
+| Integration secret resolver/store | **Unknown** | Production integration | `secret_reference` exists, but no provider/resolver contract is decided. |
+| End-to-end configured Proxmox run | **Partially implemented** | B hardening | No path joins Integration, secret resolution, plugin and worker dispatch. |
+| JSON simulated discovery | **Implemented** | B       | Current usable discovery input. |
+| Automatic worker dispatch | **Partially implemented/absent** | B hardening | Worker does not dispatch plugins. |
+| Scheduled discovery | **Deferred** | Future worker control plane | No scheduler or queue controls. |
+| PBS plugin | **Deferred** | Later integration/D | Source type is reserved; no plugin package exists. |
+| Docker plugin | **Deferred** | Later integration | Source type is reserved; no plugin package exists. |
+| UniFi plugin | **Deferred** | Later integration | Source type is reserved; no plugin package exists. |
+| NetBox plugin | **Deferred** | Later integration/F | Source type is reserved; no plugin package exists. |
+| Imported-file adapter | **Deferred/absent** | Later integration | Source type is reserved only. |
+| Additional vendor plugins | **Deferred** | Post-MVP | Explicitly deferred beyond Proxmox. |
+| Plugin ingestion worker identity | **Planned but not implemented** | Production integration | No service identity or queued authorisation envelope exists. |
+
+
+---
+
+## 5.8 Generated Documentation
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Deterministic Asset Markdown renderer | **Implemented as component** | F foundation | `markdown_docs.py` renders sanitised deterministic Asset Markdown. |
+| Relationship rendering in Markdown | **Implemented as component** | F foundation | Tests cover relationship rendering. |
+| Injection-resistant Markdown output | **Implemented as component** | F foundation | Tests cover sanitisation. |
+| Document persistence | **Implemented as storage** | F foundation | Core sync upserts `Document` rows. |
+| Discovery-run document linkage | **Implemented as storage** | F foundation | Generated documents are linked to runs. |
+| Documents API router | **Partially implemented/absent** | F       | No documents router is registered. |
+| Document list page | **Partially implemented/absent** | F       | Navigation remains unavailable. |
+| Document detail page | **Partially implemented/absent** | F       | No usable user surface. |
+| User editing of generated docs | **Planned but not implemented** | F       | No product surface or editing workflow. |
+| Service documentation generation | **Planned but not implemented** | F       | Current renderer is Asset-focused. |
+| Site architecture documents | **Planned but not implemented** | F       | No usable implementation. |
+| Recovery documents | **Planned but not implemented** | D/F     | Recovery domain does not exist. |
+| Impact reports | **Planned but not implemented** | E/F     | Full impact engine does not exist. |
+| Formal Knowledge Object model | **Planned but not implemented** | C4/F    | Architecture anticipates future associations. |
+| Runbook as first-class object | **Planned but not implemented** | C4/D    | Current Service stores only URL/notes. |
+| Decision object | **Planned but not implemented** | C4      | No model/router/page. |
+| Assumption object | **Planned but not implemented** | C4      | No model/router/page. |
+| Exception knowledge object | **Planned but not implemented** | C4      | Gap exceptions exist, but not formal reusable knowledge objects. |
+
+
+---
+
+## 5.9 Impact Analysis and Recovery
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| One-hop dependency focus | **Implemented** | C1/E foundation | Asset topology and Service graphs expose direct links. |
+| Service “Depends on” / “Required by” | **Implemented** | C1      | Typed Service dependencies exist. |
+| Business Function affected Assets | **Implemented** | C1/E foundation | Business Function detail and graph expose connected Assets. |
+| Focused Service projection | **Implemented** | C1/E foundation | Graph endpoint exists. |
+| Recursive traversal | **Partially implemented/absent** | E       | No recursive impact engine. |
+| Depth limits/cycle-aware traversal engine | **Planned but not implemented** | C2/E    | Current architecture deliberately avoids deep recursion. |
+| Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
+| Dedicated `/impact-analysis` route | **Planned but not implemented** | E       | Navigation entry is unavailable. |
+| Evidence-qualified impact path | **Planned but not implemented** | E       | No path/evidence engine. |
+| Confidence-qualified impact | **Planned but not implemented** | E       | No scoring/qualification layer. |
+| Blast radius | **Planned but not implemented** | E       | No workflow or route. |
+| Impact scoring | **Planned but not implemented** | E       | No scoring engine. |
+| Recovery readiness | **Planned but not implemented** | D/E     | Service completeness is a precursor only. |
+| Backup Policy | **Planned but not implemented** | D       | No model/router/page. |
+| Backup Job | **Planned but not implemented** | D       | No model/router/page. |
+| Backup Run/Copy | **Planned but not implemented** | D       | No model/router/page. |
+| Backup Repository | **Planned but not implemented** | D       | PBS may be an Asset, not a structured repository. |
+| Recovery Plan | **Planned but not implemented** | D       | No model/router/page. |
+| Recovery Step | **Planned but not implemented** | D       | No model/router/page. |
+| Recovery Test | **Planned but not implemented** | D       | No model/router/page. |
+| SLO/SLA | **Deferred** | Later MSP/ITSM | Explicitly outside C1. |
+| Incident workflow | **Deferred** | Later MSP/ITSM | Explicitly outside C1. |
+| On-call/escalation | **Deferred** | C3/later MSP | No model or workflow. |
+
+
+---
+
+## 5.10 Application shell and UX
+
+| Feature | Status | Release | Concrete evidence |
+|---------|--------|---------|-------------------|
+| Permission-aware navigation | **Implemented** | Foundation/UI | Implemented routes are grouped and inaccessible roadmap entries are filtered out. |
+| Hidden unavailable roadmap links | **Implemented** | UI design | Tests confirm `available: false` entries are not rendered. |
+| Visible “coming soon” links | **Abandoned** | UI supersession | Explicitly rejected. |
+| Root session-aware redirect | **Implemented** | Foundation/UI | Authenticated users route to their permitted home. |
+| Protected global shell | **Implemented** | Foundation/UI | Context, account identity and logout are global. |
+| Changes filter/timeline polish | **Implemented** | UI refinement | Shared components and tests exist. |
+| Asset Type quick filters | **Implemented** | UI refinement | Current Assets page uses scoped type selectors. |
+| Knowledge Gap filters | **Implemented** | UI refinement | URL-backed compact filters exist. |
+| Knowledge Gap compact cards | **Implemented** | UI refinement | Current component includes the requested structure. |
+| Assertions responsive layout | **Implemented** | UI refinement | UI regressions are covered. |
+| Completeness panel spacing | **Implemented** | UI refinement | Current UI contains the fix. |
+| Login branding | **Implemented** | UI refinement | Shared Atlas branding is used by shell and login. |
+| Standalone Profile sidebar item | **Abandoned** | UI supersession | Replaced by account menu; `/profile` remains reachable. |
+| Runtime customer branding | **Deferred** | Future enterprise UX | No branding model/UI. |
+| Favicon refresh | **Unknown** | Branding follow-up | No favicon implementation or explicit decision. |
+
+
+---
+
+# 6. Planned but not implemented
+
+These items are committed future work in current repository documentation.
+
+## C2 — Deeper Service Graph and Impact Foundations
+
+* recursive or configurable-depth traversal;
+* cycle-aware path handling;
+* evidence-qualified paths;
+* dedicated Impact Analysis route;
+* outage simulation;
+* affected Service and Business Function summaries;
+* deliberate legacy Asset-to-Service association workflow.
+
+## C3 — People, Teams and structured ownership
+
+* Person;
+* Team;
+* Team Membership;
+* Service Role Assignment;
+* Business Owner assignments;
+* Technical Custodian assignments;
+* Support Group assignments;
+* ownership history;
+* escalation and responsibility views;
+* Asset ownership support;
+* `owner_exists` completeness rule.
+
+## C4 — Formal Documentation and Knowledge Objects
+
+* KnowledgeObject;
+* Runbook;
+* Decision;
+* Assumption;
+* reusable Exception;
+* review and expiry;
+* links to Services, Assets and Business Functions;
+* usable documents navigation and pages.
+
+## Release D — Backup and Recovery
+
+* Backup Policy;
+* Backup Job;
+* Backup Run/Copy;
+* Backup Repository;
+* Recovery Plan;
+* Recovery Steps;
+* Recovery Tests;
+* recovery confidence;
+* coverage and recovery-gap reporting.
+
+## Release E — Full Impact Analysis
+
+* recursive blast-radius calculation;
+* outage simulation;
+* confidence/evidence paths;
+* scoring and prioritisation;
+* affected owners and recovery sequence;
+* dedicated `/impact-analysis`.
+
+## Production and security hardening
+
+* SSO/OIDC/SAML;
+* MFA;
+* external append-only audit export;
+* queue/worker identity;
+* scheduled plugin runs;
+* retries and job status;
+* production scheduler/control plane.
+
+
+---
+
+# 7. Deferred
+
+The following are explicitly postponed or excluded from the current MVP/C1:
+
+* billing and commercial tenancy above an Atlas workspace;
+* password recovery email;
+* recovery codes;
+* per-device sessions;
+* break-glass account recovery;
+* arbitrary per-record policy;
+* delegated role administration;
+* customer-specific reference taxonomies;
+* cross-customer/cross-site relationships;
+* uploaded icon/media library;
+* icon proxying;
+* runtime/customer-specific branding;
+* avatar upload;
+* plugins beyond Proxmox;
+* production scheduler/queue controls;
+* bulk reconciliation acceptance;
+* automatic rollback of accepted discovery;
+* automatic deletion of absent Assets;
+* arbitrary executable completeness expressions;
+* Asset ownership rules before C3;
+* enterprise Business Function/process hierarchy;
+* SLO/SLA, incident, catalog, on-call and ITSM workflows;
+* AI-generated remediation;
+* deep graph traversal and outage simulation in C1;
+* automatic conversion of legacy Service Assets.
+
+
+---
+
+# 8. Abandoned or superseded
+
+| Feature/design | Status rationale |
+|----------------|------------------|
+| Browser `localStorage` session tokens | Superseded by HttpOnly cookie sessions. |
+| Split-origin default production design | Superseded by same-origin `/api`; split-origin remains dev compatibility. |
+| Missing Knowledge as a Reconciliation queue | Superseded by dedicated Knowledge Gaps. |
+| Generic Hierarchy/Relationships topology tabs | Superseded by Physical, Platform, Network/VLAN, Dependency and All Relationships lenses. |
+| Standalone Profile sidebar navigation | Superseded by top-right account menu. |
+| Visible placeholder roadmap navigation | Superseded by hiding unavailable routes. |
+| Role-name-only/browser-only authorisation | Superseded by backend permission keys and scoped assignments. |
+| Recurring environment-backed admin reset | Superseded by one-time bootstrap. |
+| Treating gaps as Reconciliation Items | Superseded by dedicated KnowledgeGap records. |
+| Hard-coded Asset/Relationship enums | Superseded by managed database records. |
+| Automatic deletion of missing Assets | Explicitly rejected. |
+| Automatic conversion of legacy Service Assets | Explicitly rejected for C1. |
+| Generic graph database requirement | Rejected; PostgreSQL remains the system of record. |
+
+
+---
+
+# 9. Unknown items
+
+The repository does not provide a clear implementation or product decision for:
+
+* favicon/application icon refresh;
+* concrete Integration secret-store backend;
+* discovery-run cancellation UX;
+* safe CIDR-based network membership suggestions;
+* configurable second-hop topology focus;
+* community Proxmox LXC installer;
+* Portainer deployment artefacts;
+* formal open-source/commercial licence status;
+* 0.1 release packaging status.
+
+
+---
+
+# 10. Repository audit priority assessment
+
+The 23 July audit identified the following value gaps. They describe the
+largest incomplete product journeys at the audit point; they are not, by
+themselves, the approved chronological development sequence after 4 August 2026.
+
+## Largest operational gap: complete the integration journey
+
+Atlas already has the hardest individual parts:
+
+* Integration schema;
+* Proxmox connection adapter;
+* Proxmox discovery;
+* normalisation;
+* idempotent sync;
+* Data Sources;
+* Discovery Runs;
+* reconciliation;
+* Changes;
+* generated Markdown component.
+
+The missing value chain is:
+
+`Configured Integration → secret-reference resolution → Test Connection → Run Now → queue/worker dispatch → Proxmox plugin → raw evidence → assertions/reconciliation → status/progress/errors → scheduled repeat runs`
+
+Until this exists, Atlas’s main discovery experience remains simulation-driven.
+
+### B2 — Operational Integrations and live discovery
+
+Build:
+
+1. Integration CRUD API and replace the mock integrations page.
+2. Secret-reference provider interface.
+3. Safe initial provider, such as environment/file-backed references.
+4. Test Connection endpoint and UI.
+5. Run Now endpoint.
+6. Worker queue and job record.
+7. Proxmox plugin invocation.
+8. Run progress/status/error persistence.
+9. Retry and cancellation contract.
+10. Link operational runs to Data Source, Discovery Run, Evidence and Changes.
+11. Add schedule support only after Run Now is reliable.
+
+## Contained opportunity: expose generated Documentation
+
+The generation component already works. The next increment is relatively contained:
+
+1. Documents router.
+2. Document list page.
+3. Document detail/Markdown renderer.
+4. Links from Assets and Discovery Runs.
+5. Regenerate action.
+6. Download/export.
+7. Service Markdown generation after the Asset surface is stable.
+
+This converts hidden technical capability into visible user value.
+
+## Foundation hardening: complete Interface-first IP UX
+
+Remove or de-emphasise direct `Asset.ip_address` from:
+
+* Asset create/edit form;
+* Asset list display;
+* filtering and sorting.
+
+Use primary interface information consistently, retaining the legacy field only as a
+migration/read-compatibility mechanism.
+
+## Selected product foundation: C2 Impact Foundations
+
+Build on existing focused graphs:
+
+1. bounded recursive traversal;
+2. depth and cycle controls;
+3. path/evidence response format;
+4. Asset→Service reverse impact;
+5. affected Business Functions;
+6. direct versus downstream classification;
+7. dedicated Impact Analysis page;
+8. do not add opaque scoring yet.
+
+## Later domain release: C3 structured ownership
+
+Replace free-text labels with:
+
+* Person;
+* Team;
+* membership;
+* role assignments;
+* history;
+* ownership filters and escalation views.
+
+Preserve and migrate C1 text values safely.
+
+## Later domain release: Release D Backup and Recovery
+
+Once live discovery and ownership are stable, add:
+
+* Backup Policy;
+* Repository;
+* Job/Run/Copy;
+* Recovery Plan/Step/Test;
+* PBS adapter;
+* recovery coverage and readiness.
+
+
+---
+
+# 11. Revised release plan
+
+| Release | Scope | Actual status |
+|---------|-------|---------------|
+| **0.1 Platform Foundation** | Runtime, single-origin deployment, auth, RBAC, tenancy, inventory, networks, relationships, custom fields, topology | **Implemented** |
+| **A Knowledge Foundation** | Evidence, assertions, provenance, accepted/current truth, history and Changes | **Implemented** |
+| **B Discovery & Reconciliation — Simulation** | Data Sources, JSON simulation, runs, coverage, reconciliation and no-longer-observed | **Implemented** |
+| **B2 Operational Integrations and live discovery** | Integration management, secret resolution, worker dispatch, Run Now, scheduling and live Proxmox runs | **Partially implemented; parallel operational-hardening stream** |
+| **B.5 Knowledge Completeness** | Asset/Service requirements, gaps, defer/exception/assignment/resolve | **Implemented** |
+| **C1 Homelab Service MVP** | Services, Service Types, Criticality, Business Functions, dependencies, ownership labels, RTO/RPO and focused graphs | **Implemented** |
+| **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Selected next increment; not implemented at audit point** |
+| **C2.2 Dependency Semantics** | Redundancy, quorum, dependency groups, and failure effects | **Planned** |
+| **C2.3 Analysis Primitives** | Recursive analysis traversal, explanation paths, states, and confidence qualification | **Planned** |
+| **C3 MSP Ownership** | People, Teams, memberships and role assignments | **Planned**   |
+| **C4 Knowledge Objects** | Runbooks, Decisions, Assumptions, Exceptions and Documentation UI | **Planned; generated Markdown foundation exists** |
+| **D Backup & Recovery** | Protection, backup and recoverability model | **Planned**   |
+| **E Full Impact Analysis** | Outage simulation, blast radius and explainable recovery readiness | **Planned**   |
+| **F Intended State / broader knowledge outputs** | NetBox intended state, drift and mature documentation outputs | **Planned**   |
+
+
+---
+
+# 12. Approved forward sequence — 4 August 2026
+
+The selected next development increment is **C2.1 — Shared Operational Graph**.
+This choice enhances the existing roadmap and does not alter the audit finding
+that B2 is the largest incomplete operational journey.
+
+## Increment 1 — C2.1 Shared Operational Graph
+
+Create one secure, deterministic, API-owned structural graph projection over
+accepted Assets, Services, Business Functions, and current relationship records.
+Preserve the existing Service and Business Function graph contracts through
+compatibility adapters.
+
+## Parallel stream — B2 Operational Integrations and live discovery
+
+Complete Integration APIs, secret-reference resolution, Test Connection, Run
+Now, worker dispatch, job status, retries, cancellation, scheduling, and live
+Proxmox execution. This stream is necessary before Atlas makes trustworthy live
+availability or freshness claims, but it is outside C2.1.
+
+## Increment 2 — C2.2 Dependency Semantics
+
+Add explicit dependency groups, all/any/minimum behavior, quorum, redundancy,
+and failure-effect semantics.
+
+## Increment 3 — C2.3 Analysis Primitives
+
+Add recursive analytical traversal, path explanation, direct/downstream
+classification, impact states, uncertainty, and engine versioning.
+
+## Subsequent product increments
+
+- Begin C3 structured ownership and C4 formal Knowledge Objects once C2.1
+  contracts stabilize.
+- Deliver F1 Documentation independently when useful; it is not blocked by C2.
+- Complete the Interface-first IP transition as a foundation-hardening item.
+- Deliver E1 Explainable Failure Impact after C2.3.
+- Deliver D1 Recovery Knowledge Readiness, then evidence-backed D2 recovery.
+- Combine E3 and F2 for intended-state and planned-change simulation.
+- Close the lifecycle through F3 post-change discovery and reconciliation.
+
+The roadmap must continue to distinguish implemented status from selected
+sequence. C2.1 is planned until the code, tests, and a new repository audit prove
+otherwise.
+
+---
+
+# 13. Bottom-line assessment
+
+Atlas is further advanced than a simple inventory MVP:
+
+* the knowledge model is real;
+* reconciliation is real;
+* completeness is real;
+* Services and Business Functions are real;
+* graph projections are real;
+* the Proxmox adapter and core sync are real;
+* deterministic Markdown generation is real.
+
+The largest end-to-end operational gap remains **connecting the implemented
+integration components into a usable live discovery workflow**. That finding is
+unchanged.
+
+The selected next increment is nevertheless **C2.1 — Shared Operational Graph**
+because the planned Homepage, Service Operations, Impact Analysis, and Change
+Simulation views require one common secure graph foundation. B2 should remain a
+visible parallel workstream, and Atlas must not present structural graph data as
+live operational proof.
+
+C2.1 is successful when the repository has a reusable graph builder, a generic
+focused graph API, compatibility adapters for the existing graph routes,
+authorization and non-disclosure tests, and updated implementation evidence. It
+is not successful merely because a new graph screen renders.
