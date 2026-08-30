@@ -1,6 +1,6 @@
 # Atlas development roadmap
 
-Planning baseline: 4 August 2026
+Planning baseline: 30 August 2026
 
 ## Purpose
 
@@ -36,6 +36,13 @@ Service Operations, Impact Analysis, and Change Simulation. They should build a
 shared, API-owned operational graph and analysis foundation that each product
 view consumes.
 
+For the immediate development period, Atlas will deliberately rely on manually
+entered and curated accepted knowledge. This is a product-validation strategy:
+prove and refine the knowledge, Service, relationship, and graph models before
+investing heavily in additional discovery plugins and worker orchestration.
+Automatic discovery remains an important later capability, and observed
+evidence remains distinct from accepted operational knowledge.
+
 ## Roadmap principles
 
 1. **Preserve the current system of record.** PostgreSQL operational records
@@ -67,29 +74,28 @@ view consumes.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete Integration APIs, secrets, worker dispatch, scheduling, retries, and service identity as a parallel operational-evidence stream |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — deeper graph and impact foundations | Partial | Decompose into C2.1 shared graph, C2.2 dependency semantics, and C2.3 analysis primitives |
+| Release C2 — shared graph and later analysis foundations | Planned; C1 provides focused precursors | Decompose into C2.1 shared graph, C2.2 dependency semantics, and C2.3 analysis primitives |
 | Release C3 — People, Teams and structured ownership | Planned | Deliver structured accountability without discarding C1 text labels |
 | Release C4 — formal Knowledge Objects | Planned | Create the reusable content model for runbooks, recovery procedures, change plans, validation, and intended state |
 | Release D — Backup and Recovery | Planned | Split knowledge readiness from evidence-backed recoverability |
-| Release E — full Impact Analysis | Partial foundation | Deliver failure analysis, then recovery-aware analysis, then planned-change impact |
+| Release E — full Impact Analysis | Planned; structural prerequisites exist | Deliver failure analysis, then recovery-aware analysis, then planned-change impact |
 | Release F — Documentation and intended state | Partial foundation | Expose documents, model intended state, and reconcile actual state after change |
 | Production and community packaging | Not established | Treat security, migration, observability, packaging, and operator experience as an explicit release stream |
 
 ## Sequencing decision
 
-The repository feature ledger identified **B2 — Operational Integrations and
-live discovery** as the largest incomplete end-to-end product journey. That
-repository-grounded assessment remains valid.
+The repository audit identifies **B2 — Operational Integrations and live
+discovery** as an incomplete end-to-end product journey. It remains visible as
+a parallel workstream, but the immediate product strategy intentionally
+postpones heavy automatic-discovery and worker-orchestration investment.
 
-For the next development increment, Atlas is deliberately prioritising
-**C2.1 — Shared Operational Graph** so that the Homepage, Service Operations,
-Impact Analysis, and future Change Simulation views use one common graph
-foundation.
+The next development increment is **C2.1 — Shared Operational Graph** so that
+the knowledge and Service models can be validated using human-entered accepted
+data and future product views can share one graph foundation. B2 is not a
+dependency or gate for C2.1.
 
-This is a sequencing decision, not a change to implementation status. B2 remains
-partially implemented and should continue as a parallel operational-hardening
-workstream. Atlas must not make live availability, freshness, or recovery claims
-until the relevant B2 and later recovery-evidence capabilities exist.
+Atlas must not make live availability, freshness, or recovery claims until the
+relevant B2 and later recovery-evidence capabilities exist.
 
 ## Dependency view
 
@@ -156,8 +162,8 @@ C2.1 should:
 - introduce stable typed node and edge contracts;
 - derive graph data from existing relational operational records;
 - keep semantic edge direction and managed relationship labels;
-- apply current and optional `as_of` temporal filtering where the source model
-  supports it;
+- include only links valid at request time, using each temporal source's
+  `valid_from`/`valid_to` contract;
 - include useful operational metadata such as lifecycle, operational state,
   criticality, completeness status, source, and timestamps where available;
 - provide deterministic ordering, deduplication, cycle-safe projection, bounded
@@ -175,6 +181,10 @@ C2.1 must not:
 - assign a synthetic global confidence percentage;
 - treat raw source-current assertions as accepted operational state; or
 - implement hypothetical scenario mutations.
+
+Historical point-in-time graph projection is a later feature. C2.1 may use a
+single internally captured request time for deterministic membership, but it
+does not expose a caller-selected historical `as_of` query.
 
 Detailed scope is in [`release-c2-plan.md`](release-c2-plan.md), architecture is
 in [`../architecture/operational-graph.md`](../architecture/operational-graph.md),
@@ -455,7 +465,8 @@ plan and analysis for audit and learning.
 # B2 — Operational Integrations and live discovery
 
 The following capabilities remain necessary for trustworthy operational claims
-and can progress in parallel with C2–F:
+and remain tracked as a parallel incomplete workstream. They are deliberately
+outside the immediate manual-first C2.1 period:
 
 - Integration CRUD and test-connection APIs;
 - secret-reference resolution;
@@ -521,8 +532,9 @@ Examples:
 # Recommended delivery sequence
 
 1. **C2.1 — Shared Operational Graph.**
-2. In parallel, progress **B2 — Operational Integrations and live discovery**
-   without allowing it to expand the C2.1 branch scope.
+2. Keep **B2 — Operational Integrations and live discovery** visible as a
+   parallel incomplete workstream without treating it as a C2.1 prerequisite
+   or expanding the C2.1 branch scope.
 3. **C2.2 — Dependency Semantics.**
 4. **C2.3 — Analysis Primitives.**
 5. Begin **C3** and **C4** once C2.1 contracts are stable; they may proceed in

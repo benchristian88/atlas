@@ -40,6 +40,11 @@ plugin execution remain partial. The usable discovery product currently includes
 simulation, evidence, assertions, reconciliation, and independently tested plugin
 and sync components.
 
+For the immediate development period, Atlas is deliberately validating the
+knowledge, Service, relationship, and graph models with manually entered and
+curated accepted knowledge. B2 live discovery remains important but is not a
+prerequisite for C2.1.
+
 ## Ownership hierarchy
 
 ```text
@@ -262,6 +267,10 @@ The current focused graph schemas use UUID node IDs and a small set of edge
 families. They intentionally avoid global recursive traversal, dependency-group
 evaluation, path scoring, outage simulation, recovery selection, and planned
 change overlays.
+
+The focused Service graph authorizes its focus but does not yet apply every
+adjacent entity type's independent view permission consistently. Closing that
+mixed-permission expansion gap is an explicit C2.1 shared-builder requirement.
 
 Release C2.1 will replace duplicated route-owned assembly with a shared derived
 operational graph while preserving existing endpoint contracts initially. C2.1

@@ -92,7 +92,7 @@ export default function BusinessFunctionDetailPage({ params }) {
         <div><span>Criticality</span><strong>{item.criticality_name || "Not set"}</strong></div>
         <div><span>Status</span><StatusBadge status={item.active ? "active" : "inactive"} /></div>
         <div><span>Supporting Services</span><strong>{item.service_count}</strong></div>
-        <div><span>Affected Assets</span><strong>{affectedAssets.length}</strong></div>
+        <div><span>Connected Assets</span><strong>{affectedAssets.length}</strong></div>
         <div><span>Open Service knowledge gaps</span><strong>{item.open_gap_count}</strong></div>
       </div>
     </section>
@@ -101,7 +101,7 @@ export default function BusinessFunctionDetailPage({ params }) {
       {links.length === 0 ? <p className="empty-state">No Services support this Business Function yet.</p> : <div className="dependency-list">{links.map((link) => <article className="dependency-row" key={link.id}><Link href={`/services/${link.service_id}`}><strong>{link.service_name || "Unavailable Service"}</strong></Link><span>{link.relationship_label}{link.is_primary ? " · Primary" : ""}</span></article>)}</div>}
     </section>
     {affectedAssets.length > 0 && <section className="detail-card">
-      <div className="form-card-header"><div><p className="eyebrow">Infrastructure impact</p><h2>Affected Assets through Services</h2></div><span>{affectedAssets.length}</span></div>
+      <div className="form-card-header"><div><p className="eyebrow">Structural context</p><h2>Connected Assets through Services</h2></div><span>{affectedAssets.length}</span></div>
       <div className="dependency-list">{affectedAssets.map((asset) => <article className="dependency-row" key={asset.id}><Link href={asset.href}><strong>{asset.name}</strong></Link><span>{asset.subtitle || "Asset"}</span></article>)}</div>
     </section>}
     {graph.edges.length > 0 && <section className="detail-card">

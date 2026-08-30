@@ -121,7 +121,7 @@ configured Integration-to-worker journey is not yet complete.
 4. Manual fields and links retain assertions and meaningful change history;
    configuration-driven requirements surface missing Service knowledge.
 5. Focused graph projections answer which infrastructure supports a Service and
-   which Assets are affected through a Business Function.
+   which Assets are connected through a Business Function's Services.
 
 ## Built-in access model
 
@@ -211,8 +211,12 @@ The baseline is successful when:
 
 The next planned increment is **Release C2.1 — Shared Operational Graph**.
 
-This is a sequencing decision. B2 — Operational Integrations and live discovery
-remains a parallel incomplete workstream and is not included in C2.1.
+This is a sequencing decision. Atlas will deliberately use manually entered and
+curated accepted knowledge during the next development period so the knowledge,
+Service, relationship, and graph models can be proven before major further
+investment in automatic discovery. B2 — Operational Integrations and live
+discovery remains a parallel incomplete workstream, is not included in C2.1,
+and is not a prerequisite for it.
 
 C2.1 will:
 

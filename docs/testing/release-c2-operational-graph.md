@@ -6,7 +6,9 @@ This document defines the required validation for Release C2.1. It is a test
 plan, not a claim that the implementation or tests already exist.
 
 C2.1 is the selected next increment, while B2 — Operational Integrations and
-live discovery remains a separate parallel workstream. This plan does not test
+live discovery remains a separate incomplete workstream and is not a
+prerequisite. The reference fixture is deliberately created with current manual
+UI/API capabilities. This plan does not test
 Integration CRUD, secrets, worker dispatch, live Proxmox execution, Documents
 UI, Interface-first IP cleanup, or legacy Service Asset conversion.
 
@@ -64,6 +66,7 @@ assuming their future workflows exist.
 - Synology NAS;
 - PBS backup server;
 - Immich LXC;
+- Immich application Asset;
 - Grafana LXC;
 - Atlas LXC;
 - Authentik or another identity workload; and
@@ -93,8 +96,15 @@ Include all supported edge families:
 - Service-to-Business Function links; and
 - a legitimate two-Service cycle.
 
+Give at least one Service multiple upstream dependencies and at least one
+Service multiple downstream dependants. Include one isolated entity. Ensure the
+Application Asset is linked to its host and to the first-class Service that it
+supports without treating those two entity kinds as interchangeable.
+
 Create a second customer and a second site with similarly named records so
 scope and ID substitution cannot pass accidentally through name-based logic.
+Include a customer-wide Service and a Site-scoped Service to exercise the
+existing compatible-scope rules.
 
 ## Contract tests
 
@@ -102,7 +112,7 @@ scope and ID substitution cannot pass accidentally through name-based logic.
 | --- | --- |
 | Namespaced node identity | Node keys contain entity type and UUID; identical UUID values in different entity tables remain distinct |
 | Namespaced edge identity | Edge keys contain family and UUID; families cannot collide |
-| Focus metadata | Response identifies requested focus, effective `as_of`, depth, and truncation state |
+| Focus metadata | Response identifies requested focus, captured generation time, depth, and truncation state |
 | Node contract | Only documented bounded fields are returned; secrets, raw evidence, and unbounded notes are absent |
 | Edge contract | Source and target keys, family, relationship metadata, required flag, temporal values, and accepted knowledge state serialize correctly |
 | Deterministic ordering | Repeated requests against unchanged data return nodes and edges in the same order |
@@ -146,7 +156,8 @@ scope and ID substitution cannot pass accidentally through name-based logic.
 
 ## Temporal tests
 
-Use explicit UTC timestamps around each boundary.
+Freeze the captured request time and use explicit UTC timestamps around each
+boundary. C2.1 has no caller-selected historical query.
 
 | Case | Required assertion |
 | --- | --- |
@@ -156,8 +167,9 @@ Use explicit UTC timestamps around each boundary.
 | At `valid_to` | Behavior matches the documented exclusive/inclusive choice consistently |
 | After `valid_to` | Edge is absent |
 | No `valid_to` | Edge remains present after `valid_from` |
-| Current-only Asset relationship | Response does not claim complete historical reconstruction; safe warning behavior is tested if implemented |
-| Default analysis time | Response records the effective request time and current links are stable under a frozen clock |
+| Current-only Asset relationship | Response does not claim historical reconstruction |
+| Captured request time | Response records the effective request time and current links are stable under a frozen clock |
+| Historical query | No caller-selected `as_of` parameter is exposed in C2.1 |
 
 ## Projection-depth and cycle tests
 
@@ -165,6 +177,8 @@ Use explicit UTC timestamps around each boundary.
 - Depth `1` returns direct authorized neighbors and their edges.
 - Depth `2` returns the next structural frontier but no deeper nodes.
 - Direction `outgoing`, `incoming`, and `both` apply to semantic edge direction.
+- Reverse traversal never swaps serialized source/target or changes the
+  relationship's canonical meaning.
 - A Service cycle does not cause repeated expansion.
 - An Asset cycle or bidirectional pair does not duplicate nodes or edges.
 - An edge between two already visited nodes is retained once.

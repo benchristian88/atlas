@@ -35,6 +35,11 @@ shows outgoing edges as dependencies and incoming Service edges as "Required
 by". Relationship source labels are returned by the API so the UI does not
 guess meaning from a key.
 
+Incoming/reverse traversal does not reverse the stored relationship or create a
+new semantic edge. The canonical edge remains source to target; an inverse label
+is presentation metadata only. C2.1 preserves this distinction in its shared
+edge contract.
+
 Adding or changing a dependency creates a declared accepted relationship
 assertion. Removing it retracts that assertion without deleting provenance.
 Dependency actions also create Knowledge Changes and trigger Service
@@ -53,7 +58,7 @@ or enterprise capability taxonomy.
 `GET /api/services/{id}/graph` returns a focused node/edge projection containing
 the selected Service, connected Services, supporting Assets, and Business
 Functions. `GET /api/business-functions/{id}/graph` projects a Function through
-its supporting Services to their Assets, making affected infrastructure visible.
+its supporting Services to their Assets, making connected infrastructure visible.
 Nodes include entity type, display labels, and navigable UI paths; edges retain
 relationship labels and direction.
 
@@ -61,3 +66,9 @@ These endpoints reuse the existing graph concepts and authorization boundary.
 They intentionally avoid global recursive traversal, path scoring, outage
 simulation, and full impact analysis. Their typed output is the foundation a
 later impact-analysis release can traverse more deeply.
+
+At the pre-C2.1 baseline, the Service graph authorizes its focus but does not
+consistently check every adjacent entity type's own view permission before
+serialization. The Business Function graph performs more endpoint checks.
+C2.1 must route both through one builder with endpoint-by-endpoint authorization
+while retaining their public response shapes.

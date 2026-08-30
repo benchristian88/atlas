@@ -36,17 +36,20 @@ update the audited ledger.
 | Release B — Discovery and Reconciliation | Simulation and reconciliation implemented; live plugin operation and worker orchestration remain partial |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services; broader entity coverage remains future work |
 | Release C1 — Homelab Service MVP | Implemented |
-| Release C2 — deeper graph and impact foundations | Partially implemented through focused Service and Business Function projections |
+| Release C2 — shared graph and later analysis foundations | C1 provides focused projections; C2.1 itself is planned, not implemented |
 | Release C3 — People, Teams and structured ownership | Planned |
 | Release C4 — formal Knowledge Objects | Planned |
 | Release D — Backup and Recovery | Planned |
-| Release E — full Impact Analysis | Foundation partial; end-to-end product workflow not implemented |
+| Release E — full Impact Analysis | Planned; existing structural projections are prerequisites, not partial Impact Analysis |
 | Release F — Documentation and intended state | Generated-document foundation partial; user-facing product and intended-state workflow not implemented |
 | Production and community packaging | Not established |
 
 The selected next increment is **Release C2.1 — Shared Operational Graph**.
-This is a sequencing decision: B2 — Operational Integrations and live discovery
-remains the largest incomplete operational journey and may progress in parallel.
+Atlas will deliberately use manually entered and curated accepted knowledge
+while it proves the graph model. B2 — Operational Integrations and live
+discovery remains an incomplete parallel workstream, but it is not a C2.1
+prerequisite and automatic discovery investment is deliberately postponed for
+the immediate development period.
 See [`product/release-c2-plan.md`](product/release-c2-plan.md).
 
 ## Product documents
@@ -60,6 +63,8 @@ See [`product/release-c2-plan.md`](product/release-c2-plan.md).
   state, and packaging.
 - [`product/release-c2-plan.md`](product/release-c2-plan.md) — implementation-ready
   plan for C2.1, followed by C2.2 and C2.3.
+- [`product/c2-readiness-audit.md`](product/c2-readiness-audit.md) — current
+  baseline, review reconciliation, prerequisites, and go/no-go decision.
 - [`prompts/c2-1-shared-operational-graph-codex-prompt.md`](prompts/c2-1-shared-operational-graph-codex-prompt.md)
   — executable Codex prompt constrained to C2.1 and aligned with the ledger,
   roadmap, ADR, architecture, and test plan.
@@ -68,8 +73,8 @@ See [`product/release-c2-plan.md`](product/release-c2-plan.md).
 
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) — current
   baseline through C1.
-- [`architecture/data-model-v0.md`](architecture/data-model-v0.md) — detailed
-  relational model.
+- [`architecture/data-model-v0.md`](architecture/data-model-v0.md) — foundation
+  relational model plus the current C1 extension.
 - [`architecture/knowledge-changes-and-reconciliation.md`](architecture/knowledge-changes-and-reconciliation.md)
   — evidence, assertions, reconciliation, and meaningful changes.
 - [`architecture/knowledge-completeness.md`](architecture/knowledge-completeness.md)

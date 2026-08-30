@@ -1,5 +1,9 @@
 # Knowledge completeness architecture
 
+Current baseline: implemented for Assets and Services. The original v1 Asset
+foundation described below was extended by Release C1 using the same requirement,
+gap, summary, and evaluator concepts.
+
 Atlas separates three kinds of knowledge state:
 
 - Accepted operational records (`Asset`, `AssetInterface`, and `AssetRelationship`) describe the current working model.
@@ -39,4 +43,8 @@ Supported rules are `field_present`, `field_value_in`, `custom_field_present`, `
 
 Exceptions require a reason and may expire. Deferrals require a reason and may have a review time. Expiry reopens the gap. State transitions create meaningful `KnowledgeChange` rows; unchanged reevaluation creates no timeline noise. Configuration actions remain independently auditable.
 
-The generic entity type/ID boundary and `get_entity_completeness_context()` prepare this service for Services and Business Functions. Future impact analysis can use open topology gaps and exceptions to qualify confidence, but no Service Graph or impact engine is part of v1.
+The generic entity type/ID boundary and
+`get_entity_completeness_context()` now support Assets and Services. Business
+Function completeness remains unimplemented. Future analysis may use scoped
+gaps and exceptions as qualifiers, but completeness is not Impact Analysis and
+does not prove health, outage behavior, protection, or recoverability.

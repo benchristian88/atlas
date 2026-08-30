@@ -42,10 +42,10 @@ Before coding, check the current branch, commit, migration head, routes, models,
 tests, and ledger audit point. Do not assume a past test count or commit remains
 current.
 
-The current ledger audit baseline is `dev` at `09d2271`, audited on 23 July
-2026. Confirm whether the working branch is still at that baseline or contains
-later changes. Treat later repository code as authoritative and report material
-differences before implementation.
+The current readiness baseline is `dev` at
+`4b0bfac6c746c56df9e1bfe16bae33d8dff3721e`, audited on 30 August 2026. Read
+[`../product/c2-readiness-audit.md`](../product/c2-readiness-audit.md) and treat
+later repository code as authoritative.
 
 ## Implemented foundation through C1
 
@@ -153,6 +153,11 @@ links are ended, not deleted.
 Implement one shared API-owned operational graph projection over accepted
 operational records.
 
+The immediate product strategy is manual-first. Manually entered and curated
+Assets, Services, Business Functions, and relationships are valid graph input;
+B2 live discovery is incomplete but is not a prerequisite for C2.1. Preserve
+the observed-versus-accepted knowledge boundary for future automatic discovery.
+
 C2.1 should:
 
 - use namespaced node keys such as `asset:<uuid>` and `service:<uuid>`;
@@ -160,13 +165,13 @@ C2.1 should:
 - preserve semantic source/target direction;
 - return API-provided Relationship Type labels;
 - support authorized Asset, Service, and Business Function focus;
-- apply current and optional `as_of` temporal rules where the source model
-  supports them;
+- include temporal Service links valid at one captured request time; do not add
+  caller-selected historical projection in C2.1;
 - be cycle-safe, deterministic, bounded, and explicit about truncation;
 - batch-load metadata to avoid obvious N+1 queries;
 - preserve existing Service and Business Function graph contracts through
   adapters; and
-- add API, IDOR, temporal, compatibility, performance, and web tests.
+- add API, IDOR, current-validity, compatibility, performance, and web tests.
 
 C2.1 must not:
 

@@ -14,7 +14,7 @@ apps/
   worker/              Python background worker placeholder
 plugins/
   sdk/                 Vendor-neutral discovery plugin contracts
-  proxmox/             Proxmox discovery plugin placeholder
+  proxmox/             Tested Proxmox discovery adapter (not yet wired end-to-end)
 infra/
   docker/              Docker Compose configuration
 docs/                   Product and architecture documentation
@@ -355,6 +355,24 @@ See the [Service model](docs/architecture/service-model.md),
 [administrator guide](docs/admin/service-types-and-criticality.md), and
 [C1 test plan](docs/testing/homelab-service-mvp.md).
 
+## Current product sequence
+
+Atlas is deliberately using manually entered and curated operational knowledge
+for the next development period. This lets the project prove and refine the
+Asset, Service, Business Function, relationship, and graph models before making
+automatic discovery and worker orchestration the primary investment.
+
+The next implementation increment is **Release C2.1 — Shared Operational
+Graph**. Manual Assets, Services, Business Functions, and their accepted links
+are valid graph input. B2 live Integrations remains incomplete and important,
+but it is not a prerequisite for C2.1. Discovery evidence and accepted
+operational knowledge remain separate regardless of whether knowledge begins as
+a manual declaration, simulation, or future live plugin observation.
+
+See the [development roadmap](docs/product/development-roadmap.md),
+[C2 release plan](docs/product/release-c2-plan.md), and
+[C2 readiness audit](docs/product/c2-readiness-audit.md).
+
 ## Knowledge provenance and reconciliation
 
 Discovery observations do not silently overwrite accepted inventory. Atlas
@@ -511,7 +529,7 @@ To exercise the lenses with a representative homelab:
    declarations and dependency events.
 9. Open the Authentik Service graph and Identity and Access Business Function
    graph. Confirm Service, Asset, and Business Function nodes link to their
-   detail pages and the Function shows affected Assets through its Services.
+   detail pages and the Function shows connected Assets through its Services.
 10. Sign in as Viewer and confirm these records remain readable but create,
     edit, dependency, archive, and evaluate controls are unavailable and the API
     rejects direct mutation attempts.

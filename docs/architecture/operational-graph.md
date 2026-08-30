@@ -45,6 +45,12 @@ The completed foundation through C1 established these invariants:
 
 C2.1 must build on these decisions rather than bypassing them.
 
+It is intentionally valid to populate this graph entirely through current
+manual UI/API workflows. Atlas is using manually entered and curated knowledge
+for the immediate development period to validate the model before further heavy
+investment in automatic discovery. Future plugin evidence must still pass
+through the established observed-versus-accepted boundary.
+
 ## Decision summary
 
 The governing decision is
@@ -162,7 +168,8 @@ service_business_function:<uuid>
 ```
 
 The response should retain the underlying UUID separately for route links and
-API use. Web graph libraries should use the namespaced key.
+API use. Web graph libraries should use the namespaced key. Display labels,
+mutable names, frontend array positions, and traversal order are never identity.
 
 ## Node contract
 
@@ -228,6 +235,21 @@ For example:
 The web must render API-provided labels rather than maintain hard-coded semantic
 key lists for operational conclusions.
 
+There are four distinct direction concepts:
+
+- **stored direction** is the source and target persisted by the authoritative
+  relationship row;
+- **canonical semantic direction** is that source-to-target meaning together
+  with its managed Relationship Type metadata;
+- **traversal direction** selects incoming, outgoing, or both edges relative to
+  a focus/frontier node; and
+- **presentation direction** controls visual layout or optional inverse wording.
+
+Reverse traversal never swaps the canonical source and target, changes the
+Relationship Type, or turns an inverse display label into a different edge.
+This prevents later impact analysis from reinterpreting presentation choices as
+operational meaning.
+
 Release C2.2 adds explicit dependency groups and failure effects. Until then,
 `required_for_operation` is useful metadata but is not enough to model
 redundancy or quorum.
@@ -268,7 +290,7 @@ The default operational graph includes:
 
 - accepted `Asset` and `Service` fields;
 - current accepted Asset relationships;
-- active temporal Service links at the requested time; and
+- active temporal Service links at the captured request time; and
 - active Business Functions.
 
 It excludes unaccepted source observations as operational edges.
@@ -287,25 +309,22 @@ define a documented formula before such a number is shown.
 
 ## Temporal behavior
 
-The projection uses a request analysis time called `as_of`.
-
-For temporal Service links, an edge is active when:
+C2.1 is a current operational projection. The builder captures one request time
+and uses it consistently for the whole response. For temporal Service links, an
+edge is active when:
 
 ```text
-valid_from <= as_of
-and (valid_to is null or valid_to > as_of)
+valid_from <= request_time
+and (valid_to is null or valid_to > request_time)
 ```
 
 The exact inclusive/exclusive boundary should be implemented consistently with
 existing repository conventions and covered by tests.
 
-For current source models without temporal history, such as current
-`AssetRelationship`, C2.1 returns the current accepted record. It must not imply
-that an arbitrary historical `as_of` query reconstructs Asset topology that was
-never stored.
-
-The response should include the actual `as_of` used and may include a warning
-when part of the result is current-only.
+For source models without temporal history, such as `AssetRelationship`, C2.1
+returns the current accepted record. Caller-selected historical projection is a
+later feature and must not be exposed in C2.1. The response includes the
+captured generation/request time; it does not imply historical reconstruction.
 
 ## Projection boundaries
 
@@ -329,7 +348,7 @@ The builder should:
 2. create its namespaced node;
 3. load eligible edges for the current frontier in deterministic batches;
 4. resolve and authorize endpoints;
-5. apply active and `as_of` rules;
+5. apply current-valid rules at the captured request time;
 6. add each authorized edge once;
 7. add newly discovered nodes once;
 8. queue unvisited nodes until the requested structural depth;
@@ -343,8 +362,8 @@ an edge between nodes already present.
 
 ## Determinism
 
-The same principal, database state, query, and `as_of` time should produce the
-same ordered response.
+The same principal, database state, query, and captured request time should
+produce the same ordered response.
 
 Determinism requires:
 
@@ -395,6 +414,13 @@ breaking change.
 The current route-specific graph code should be removed only after the adapters
 cover current behavior and regression tests pass.
 
+At the audited pre-C2.1 baseline, the focused Service graph does not
+consistently check each adjacent entity type's own view permission before
+serialization. The Business Function graph performs more of those checks. The
+shared builder must make focus and every expansion endpoint authoritative while
+the adapters preserve response shape. This is required C2.1 authorization work,
+not an accepted compatibility behavior to retain.
+
 ## Query efficiency
 
 The builder should avoid a database query per node or edge.
@@ -418,8 +444,6 @@ Safe warnings may include:
 
 - node limit reached;
 - requested edge family not supported for the focus type;
-- historical reconstruction is partial because a current-only source model is
-  present; and
 - a viewable entity has incomplete knowledge.
 
 Warnings must not name or count inaccessible entities.
@@ -513,7 +537,7 @@ At minimum, tests must cover:
 - authorized and unauthorized focus;
 - hidden endpoint non-disclosure;
 - cross-customer/site substitution;
-- current and historical temporal boundaries;
+- current-valid temporal boundaries and absence of a C2.1 historical query;
 - cycles;
 - deterministic ordering;
 - node-limit truncation;

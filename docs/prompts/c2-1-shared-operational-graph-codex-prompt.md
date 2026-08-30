@@ -19,12 +19,11 @@ repository documentation defines the approved direction, but the current source
 code is authoritative where later commits differ from the documented audit
 baseline.
 
-The current feature-ledger audit baseline is:
+The current readiness audit baseline is:
 
 - branch: dev
-- commit: 09d2271
-- audit date: 23 July 2026
-- review date: 24 July 2026
+- commit: 4b0bfac6c746c56df9e1bfe16bae33d8dff3721e
+- audit date: 30 August 2026
 
 Confirm whether the current working branch is still at that baseline or contains
 later changes. Treat later repository code as authoritative and report any
@@ -35,9 +34,10 @@ the Homepage, Service Operations, Impact Analysis, and future Change Simulation
 views can share one graph foundation. This is a sequencing decision, not a
 change to repository status.
 
-B2 — Operational Integrations and live discovery remains the largest incomplete
-end-to-end operational journey and may progress as a separate parallel
-workstream. Do not include B2 work in the C2.1 change set.
+Atlas is deliberately using manually entered and curated accepted knowledge to
+prove the model during the immediate development period. B2 — Operational
+Integrations and live discovery remains incomplete but is not a prerequisite
+for C2.1. Do not include B2 work in the C2.1 change set.
 
 Create a feature branch named:
 
@@ -101,7 +101,7 @@ conventions.
 Before coding, provide a concise implementation assessment containing:
 
 1. The current branch, commit, and migration head.
-2. Whether the repository differs materially from the 09d2271 ledger baseline.
+2. Whether the repository differs materially from the readiness-audit baseline.
 3. The existing graph-related implementation you found.
 4. The files you expect to add or change.
 5. Any differences between the documents and current code.
@@ -210,7 +210,7 @@ The shared builder should be responsible for:
 - loading the focus node;
 - expanding eligible edge families;
 - authorizing every endpoint before inclusion;
-- applying active-state and as-of-time rules;
+- applying current-valid rules at one captured request time;
 - preserving stored semantic source and target direction;
 - deduplicating nodes and edges;
 - handling legitimate cycles;
@@ -292,7 +292,7 @@ At minimum, graph edges should expose:
 The graph response should expose:
 
 - focus key;
-- effective as_of timestamp;
+- captured generation timestamp;
 - requested depth;
 - truncation state;
 - safe warnings;
@@ -321,7 +321,6 @@ Support these initial parameters:
 - focus_id: UUID
 - max_depth: default 1, allowed range 0 through 2
 - direction: both | outgoing | incoming, default both
-- as_of: optional timestamp, default request time
 - node_limit: default 250, hard maximum 500
 - edge_family: optional filter using the repository's normal query conventions
 
@@ -375,7 +374,8 @@ Asset-to-Asset edge:
 Service-to-Asset edge:
 
 - Source: ServiceAssetDependency.
-- Apply the established temporal active-at-as_of rule.
+- Apply the established temporal current-valid rule at the captured request
+  time.
 - Carry required_for_operation without interpreting impact.
 
 Service-to-Service edge:
@@ -536,7 +536,8 @@ Temporal behavior:
 - valid_to boundary using the repository's documented convention;
 - after valid_to;
 - no valid_to;
-- default request-time behavior.
+- default request-time behavior;
+- absence of a caller-selected historical `as_of` query in C2.1.
 
 Cycles and deduplication:
 
@@ -671,7 +672,7 @@ After implementation and validation:
    decisions.
 4. Re-audit docs/product/feature-ledger.md against the completed working tree or
    named commit.
-5. Preserve the historical 09d2271 audit evidence; add a new audit point rather
+5. Preserve historical audit evidence; add a new audit point rather
    than silently rewriting historical results.
 6. Record:
    - implementation status;
@@ -742,7 +743,7 @@ At completion, provide:
 
 1. Summary of the implemented architecture.
 2. Current branch, commit state, and migration head.
-3. Material differences from the 09d2271 feature-ledger baseline.
+3. Material differences from the readiness-audit baseline.
 4. Files added and changed.
 5. Generic API contract and examples.
 6. How authorization and non-disclosure are enforced.

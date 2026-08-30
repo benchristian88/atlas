@@ -4,6 +4,19 @@
 - Date: 4 August 2026
 - Decision scope: Release C2.1 and the graph/analysis foundation for later releases
 
+## Clarification — 30 August 2026
+
+The immediate product sequence is manual-first: accepted manually curated
+Assets, Services, Business Functions, and relationships are sufficient C2.1
+input. B2 live discovery is not a prerequisite.
+
+C2.1 is a current operational projection. It captures one request time and
+filters temporal Service links against it, but does not expose caller-selected
+historical `as_of` reconstruction. References below to `as_of` describe an
+approved extension point for a later feature, not C2.1 scope. This clarification
+narrows delivery scope without changing the original system-of-record,
+identity, authorization, compatibility, or structural-versus-analysis decision.
+
 ## Context
 
 Atlas has completed the platform and inventory foundation, Release A Knowledge

@@ -41,6 +41,13 @@ C2 builds on the following completed capabilities:
 C2.1 must preserve existing route behavior and C1 data. It should refactor graph
 assembly internally before changing existing public response contracts.
 
+The current routes authorize their focus records and the Business Function
+projection checks adjacent Service and Asset view permissions. The Service graph
+route does not consistently apply independent per-entity-type permission checks
+to every directly serialized Service, Asset, and Business Function node. C2.1
+must preserve the public response shape while moving both routes to the shared
+builder's stricter endpoint-by-endpoint non-disclosure rules.
+
 ## Governing architecture
 
 Read these documents before implementation:
@@ -54,15 +61,17 @@ Read these documents before implementation:
 
 ## Relationship to the repository ledger and other priorities
 
-The repository audit baseline is `dev` at `09d2271`, audited on 23 July 2026.
-Before implementation, confirm whether the working branch contains later code
-and treat the current repository as authoritative.
+The current readiness baseline is `dev` at
+`4b0bfac6c746c56df9e1bfe16bae33d8dff3721e`, audited on 30 August 2026. The
+older `09d2271` review remains historical comparison evidence; current code is
+authoritative.
 
-The feature ledger identifies B2 — Operational Integrations and live discovery
-as the largest incomplete end-to-end operational journey. C2.1 is nevertheless
-the selected next increment because the planned product views require one common
-secure graph foundation. This is a sequencing decision, not an implementation
-status change.
+Atlas is deliberately using manually entered and curated accepted knowledge for
+the immediate development period. This lets C2.1 prove the knowledge, Service,
+relationship, and graph models before major further investment in automatic
+discovery and worker orchestration. B2 — Operational Integrations and live
+discovery remains an incomplete parallel workstream, but it is not a C2.1
+prerequisite.
 
 C2.1 must remain separate from:
 
@@ -85,6 +94,13 @@ The projection describes structure and accepted operational context. It does
 not claim outage propagation, recovery availability, or a global confidence
 score.
 
+It may answer structural questions such as what is connected, which Services
+use an Asset, what Assets support a Service, which Services depend on another
+Service, which Business Functions are linked, and what bounded path joins known
+entities. It must not label reachability as outage blast radius, failure
+probability, recovery order, business severity, protection adequacy, a single
+point of failure, or change safety.
+
 ## C2.1 scope
 
 ### In scope
@@ -93,7 +109,7 @@ score.
 - a stable graph identity format;
 - a reusable graph builder in the FastAPI application;
 - loaders for current Asset, Service, and Business Function edge families;
-- accepted-current and optional `as_of` filtering;
+- current-valid temporal filtering at one captured request time;
 - authorization filtering at every expansion boundary;
 - bounded focused projection;
 - cycle-safe traversal and deduplication;
@@ -120,6 +136,10 @@ score.
 - formal People/Team ownership;
 - Knowledge Objects; and
 - a redesigned Homepage, Impact Analysis page, or Change Simulation page.
+
+Caller-selected historical graph projection is also out of scope. It may be
+added later after every source model can state its historical limitations
+honestly.
 
 A small Service Operations graph improvement may consume C2.1, but the release
 should be judged by the shared foundation rather than a large UI redesign.
@@ -193,7 +213,7 @@ class OperationalGraphEdge(BaseModel):
 
 class OperationalGraphResponse(BaseModel):
     focus_key: str
-    as_of: datetime
+    generated_at: datetime
     requested_depth: int
     truncated: bool
     warnings: list[str]
@@ -221,7 +241,6 @@ Initial query parameters:
 | `focus_id` | Required UUID |
 | `max_depth` | Default `1`; allowed `0..2` for structural projection |
 | `direction` | `both`, `outgoing`, or `incoming`; default `both` |
-| `as_of` | Optional timestamp; defaults to request time |
 | `node_limit` | Default `250`; hard maximum `500` unless profiling justifies another limit |
 | `edge_family` | Optional repeated or comma-separated family filter |
 
@@ -252,17 +271,23 @@ finds a concrete need for a new permission.
 | Service node | `Service` | Exclude archived Services by default unless explicitly requested later |
 | Business Function node | `BusinessFunction` | Include active records by default |
 | Asset to Asset edge | `AssetRelationship` plus managed Relationship Type by stable key | Preserve stored source/target direction and current authorization rules |
-| Service to Asset edge | `ServiceAssetDependency` | Include when active at `as_of`; carry `required_for_operation` |
-| Service to Service edge | `ServiceDependency` | Include when active at `as_of`; preserve legitimate cycles |
-| Service to Business Function edge | `ServiceBusinessFunction` | Include when active at `as_of` |
+| Service to Asset edge | `ServiceAssetDependency` | Include when valid at the captured request time; carry `required_for_operation` |
+| Service to Service edge | `ServiceDependency` | Include when valid at the captured request time; preserve legitimate cycles |
+| Service to Business Function edge | `ServiceBusinessFunction` | Include when valid at the captured request time |
 | Completeness metadata | `KnowledgeCompletenessSummary` and active `KnowledgeGap` counts | Load in bounded batches rather than per-node queries |
 | Relationship labels | `RelationshipType` | API supplies semantic labels; web does not infer meaning from keys |
 
 Asset relationships do not currently have the same temporal `valid_from` and
-`valid_to` contract as C1 Service links. C2.1 should expose the source model
-honestly rather than inventing historical Asset edges. A later model change can
-add temporal Asset relationships through an additive migration and ADR if
-needed.
+`valid_to` contract as C1 Service links. C2.1 therefore projects current Asset
+relationships and current-valid Service links. It does not offer historical
+reconstruction. A later model change can add temporal Asset relationships
+through an additive migration and ADR if needed.
+
+Incoming and outgoing filters describe how traversal reaches an edge relative
+to its canonical stored source and target. Reverse traversal never swaps
+`source_key` and `target_key`, changes the Relationship Type, or substitutes an
+inverse label as the edge's semantic meaning. Presentation may additionally
+show an API-provided inverse label without changing canonical direction.
 
 ## Internal implementation shape
 
@@ -288,7 +313,7 @@ OperationalGraphBuilder
 ├── load initial node
 ├── load eligible edge families in batches
 ├── authorize endpoints before inclusion
-├── apply as-of and active-state rules
+├── apply current-valid and active-state rules
 ├── deduplicate by namespaced key
 ├── stop at depth and node limits
 ├── sort deterministically
@@ -338,7 +363,7 @@ queue (focus, depth 0)
 while queue is not empty:
     take next entity in deterministic order
     if depth == max_depth: continue
-    load permitted edge families touching entity at as_of
+    load permitted edge families valid at the captured request time
     for each edge in deterministic order:
         resolve source and target
         if either endpoint is not viewable: omit the complete edge silently
@@ -369,8 +394,8 @@ C2.1 should avoid obvious N+1 behavior:
 
 Do not introduce Redis caching in C2.1. Correctness, authorization, and contract
 stability come first. Consider caching only after profiling, with cache keys that
-include principal authorization, customer/site context, query shape, `as_of`,
-and a safe invalidation strategy.
+include principal authorization, customer/site context, query shape, current
+data version/freshness boundaries, and a safe invalidation strategy.
 
 ## Web implementation
 
@@ -398,6 +423,17 @@ The web layer should:
 
 A graph rendering library is optional. Adding a large dependency is not a C2.1
 requirement if the current components can render the focused result clearly.
+
+## Manual reference environment
+
+C2.1 development and demos should use the manually populated fixture in
+[`../testing/release-c2-operational-graph.md`](../testing/release-c2-operational-graph.md).
+Every required record can be created with the current Atlas UI/API: Assets,
+Services, Business Functions, Asset relationships, and all three C1 temporal
+link families. The fixture includes an Application Asset, multiple upstream and
+downstream branches, a legitimate Service cycle, and customer/site isolation
+cases. It is test/demo guidance, not a production taxonomy or a dependency on
+plugin discovery.
 
 ## C2.1 implementation backlog
 
@@ -428,7 +464,8 @@ C2.1 is complete when:
   Function focus;
 - nodes and edges use namespaced graph keys;
 - semantic source/target direction is preserved;
-- current temporal Service links are filtered correctly at the analysis time;
+- current temporal Service links are filtered correctly at the captured request
+  time;
 - cycles do not loop or remove valid edges;
 - duplicate rows do not create duplicate graph objects;
 - result ordering is deterministic;
@@ -560,9 +597,8 @@ When development resumes:
 
 1. Read the ADR, operational graph architecture, this plan, and the current
    graph route implementations.
-2. Confirm whether the current branch is still at the `09d2271` audit baseline
-   or contains later changes; report material differences and treat current code
-   as authoritative.
+2. Confirm the current branch, commit, migration head, and readiness audit;
+   report material differences and treat current code as authoritative.
 3. Create the graph identity helpers and response schemas with tests first.
 4. Implement a builder that reproduces the current Service graph result for the
    representative C1 fixture.

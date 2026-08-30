@@ -1,9 +1,9 @@
 # Atlas product feature ledger — repository-reconciled edition
 
-**Repository audit date:** 23 July 2026
-**Review published:** 24 July 2026
-**Planning alignment update:** 4 August 2026
-**Repository source of truth:** `dev` at `09d2271` (`services foundation`)
+**Repository audit date:** 30 August 2026
+**Review comparison dates:** 23–24 July 2026
+**Planning alignment update:** 30 August 2026
+**Repository source of truth:** `dev` at `4b0bfac6c746c56df9e1bfe16bae33d8dff3721e`
 **Primary evidence:** audited repository models, migrations, routes, pages, tests, and build configuration
 **Comparison baseline:** the earlier transcript-derived **Atlas Product Feature Status Review**
 
@@ -19,31 +19,35 @@
 
 ---
 
-# 0. Planning alignment update — 4 August 2026
+# 0. Repository and planning alignment update — 30 August 2026
 
-This update aligns the repository audit with the approved forward roadmap and
-does **not** re-audit implementation after commit `09d2271`. All implementation
-statuses and historical validation counts remain tied to that named audit point.
+This update re-audits the current `dev` tree. Commits after `09d2271` changed
+documentation and planning, not application code, but the implementation
+classifications and validation counts below were checked again at the current
+commit. The July reviews remain historical comparison evidence.
 
 The following planning decisions are now recorded:
 
 1. **C2.1 — Shared Operational Graph is the selected next development increment.**
    This is a sequencing decision, not a change to repository status.
-2. **B2 — Operational Integrations and live discovery remains the largest
-   incomplete end-to-end operational journey.** It may progress in parallel, but
-   C2.1 must not absorb Integration CRUD, secret resolution, worker dispatch,
-   live Proxmox execution, scheduling, retries, or cancellation.
-3. **Release C2 is decomposed for delivery:**
+2. **The immediate product strategy is manual-first.** Manually entered and
+   curated accepted knowledge will be used to prove the model before major
+   further automatic-discovery investment.
+3. **B2 — Operational Integrations and live discovery remains an incomplete
+   parallel workstream, not a C2.1 prerequisite.** C2.1 must not absorb
+   Integration CRUD, secret resolution, worker dispatch, live Proxmox
+   execution, scheduling, retries, or cancellation.
+4. **Release C2 is decomposed for delivery:**
    - C2.1 — Shared Operational Graph;
    - C2.2 — Dependency Semantics; and
    - C2.3 — Analysis Primitives.
-4. **F1 — Documentation Experience may be delivered independently** because the
+5. **F1 — Documentation Experience may be delivered independently** because the
    repository already contains deterministic Asset Markdown generation and
    `Document` persistence. It is not a prerequisite for C2.1.
-5. **Foundation hardening remains visible outside the principal release chain,**
+6. **Foundation hardening remains visible outside the principal release chain,**
    especially the Interface-first IP transition and replacement of the mock
    Integrations page.
-6. The shared graph remains a derived, API-owned projection over accepted
+7. The shared graph remains a derived, API-owned projection over accepted
    relational knowledge. PostgreSQL remains the system of record, and C2.1 does
    not introduce impact, recovery, availability, or change-safety conclusions.
 
@@ -112,9 +116,10 @@ The repository audit materially changes several classifications:
 3. **Generated Documentation is only partially implemented.**
    Atlas can generate and store deterministic Asset Markdown, but users cannot browse
    it because there is no documents router or documents UI.
-4. **Impact Analysis is partially implemented, not wholly absent and not implemented.**
-   Focused graphs and one-hop dependency views are real foundations, but recursive
-   traversal, outage simulation, evidence paths, scoring and a dedicated route do not exist.
+4. **Impact Analysis is not implemented.** Focused structural graphs and one-hop
+   dependency views are real prerequisites, but they do not calculate impact.
+   Recursive analysis, outage semantics, evidence paths, scoring and a dedicated
+   route do not exist.
 5. **Integration management is only partially implemented.**
    The Integration model and navigation scaffolding exist, but the page still uses mock data
    and there is no registered Integration API router.
@@ -134,11 +139,11 @@ The repository audit materially changes several classifications:
 | Release B — Discovery and Reconciliation | **Implemented for simulation and reconciliation; live plugin operation is partial** |
 | B.5 — Knowledge Completeness | **Implemented for Assets and Services** |
 | Release C1 — Homelab Service MVP | **Implemented**            |
-| Release C2 — deeper graph and impact foundations | **Partially implemented**  |
+| Release C2 — shared graph and later analysis foundations | **Planned; C1 focused projections are precursors**  |
 | Release C3 — People, Teams and structured ownership | **Planned but not implemented** |
 | Release C4 — formal Knowledge Objects | **Planned but not implemented** |
 | Release D — Backup and Recovery | **Planned but not implemented** |
-| Release E — full Impact Analysis | **Partially implemented foundation; main product workflow not implemented** |
+| Release E — full Impact Analysis | **Planned but not implemented; structural prerequisites exist** |
 | Release F — Documentation and intended state | **Partially implemented foundation; user-facing product not implemented** |
 | Production/community release packaging | **Not established by the repository ledger** |
 
@@ -156,10 +161,10 @@ transcript-derived report and the audited repository.
 | Redis worker orchestration | Implemented foundation / limited | **Partially implemented**        | Compose runs Redis and worker, but `worker/main.py` only logs readiness and sleeps. |
 | Integration management UI | Unknown/partially implemented   | **Partially implemented**        | Integration table and permissions exist; `/integrations` still imports mock data and no Integration router is registered. |
 | Generated Documentation | Planned/unknown                 | **Partially implemented**        | Deterministic Asset Markdown and `Document` persistence exist, but no documents router or usable UI exists. |
-| Impact Analysis | Planned but not implemented     | **Partially implemented**        | Focused Service/Business Function graphs and one-hop topology focus exist, but no recursive impact engine or `/impact-analysis`. |
+| Impact Analysis | Planned but not implemented     | **Planned but not implemented**  | Focused Service/Business Function graphs are structural prerequisites, not an impact engine; no outage semantics or `/impact-analysis` exists. |
 | Business Function completeness/history | Not separately classified       | **Partially implemented**        | Business Function CRUD and graph exist, but no assertions, profiles, gaps or history. |
 | Interface-first IP UX | Implemented                     | **Partially implemented**        | Interfaces are first-class, but Asset forms and list still use direct `ip_address`. |
-| Discovery cancellation | Assumed part of lifecycle       | **Unknown / absent workflow**    | `cancelled` is a valid status, but no cancel endpoint, UI or explicit product decision exists. |
+| Discovery cancellation | Assumed part of lifecycle       | **Planned but not implemented**  | `cancelled` is a valid status and B2 now commits to cancellation, but no cancel endpoint, UI, action, or test exists. |
 | Full Reconciliation action set | Broadly treated as implemented  | **Core decisions implemented; some advanced actions not evidenced** | Accept/reject/defer/lifecycle paths are tested; reclassify, bulk operations and broad merge journeys are not present. |
 | Full Documentation product | Planned but not implemented     | **Partially implemented**        | The renderer and storage are already real, but the product surface is absent. |
 | Service graph | Implemented                     | **Implemented as focused graph only** | `/services/{id}/graph` and `/business-functions/{id}/graph` exist; architecture deliberately limits recursion. |
@@ -177,7 +182,7 @@ transcript-derived report and the audited repository.
 The Feature Ledger records the following audit checks:
 
 * API tests: **158 passed**
-* Web unit/regression tests: **14 passed**
+* Web unit/regression tests: **70 passed**
 * Plugin SDK and Proxmox tests: **27 passed**
 * Next.js 16.2.10 production build: **passed**
 * Generated static pages: **32**
@@ -186,7 +191,8 @@ The Feature Ledger records the following audit checks:
 * Markdown links: **passed**
 * `git diff --check`: **passed**
 
-These validate checked-in code and contracts.
+These checks were rerun on 30 August 2026 at the current audit commit. The API
+suite emitted 464 Python 3.14/FastAPI deprecation warnings but no failures.
 
 They do **not** establish:
 
@@ -292,7 +298,7 @@ They do **not** establish:
 | Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
 | All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
 | Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
-| Second-hop topology focus | **Unknown** | Future graph UX | Current focus is direct neighbours; no product decision recorded. |
+| Second-hop topology focus | **Planned but not implemented** | C2.1 | The shared operational graph plan permits structural depth `0..2`; current topology focus remains direct neighbours. |
 | Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
 
 
@@ -333,7 +339,7 @@ They do **not** establish:
 | Manual edits as declared accepted assertions | **Implemented** | A       | Assets and Services create accepted declarations. |
 | Predicate roll-up | **Implemented** | A       | Asset detail defaults to a concise summary while preserving history/raw views. |
 | Discovery cancellation state value | **Implemented as schema only** | B       | `cancelled` is allowed as a status. |
-| Discovery cancellation workflow | **Unknown / not implemented** | Future worker work | No cancel API/page/action/test and no explicit commitment. |
+| Discovery cancellation workflow | **Planned but not implemented** | B2 worker work | B2 commits to cancellation, but no cancel API/page/action/test exists. |
 | Start/retry operational run API | **Partially implemented/absent** | Future worker work | Simulation starts runs; configured operational jobs do not exist. |
 | Full worker-dispatched discovery lifecycle | **Partially implemented** | Future B hardening | Run schema exists but job dispatch does not. |
 
@@ -397,10 +403,10 @@ They do **not** establish:
 | Business Function CRUD | **Implemented** | C1      | Scoped create/list/detail/edit exists. |
 | Business Function owner/criticality fields | **Implemented** | C1      | Lightweight labels/criticality exist. |
 | Supporting Services | **Implemented** | C1      | Detail view shows linked Services. |
-| Affected Assets through Services | **Implemented** | C1      | Business Function detail exposes connected Assets. |
+| Connected Assets through Services | **Implemented** | C1      | Business Function detail exposes structural connectivity without claiming impact. |
 | Business Function assertions/history | **Partially implemented/absent** | Future C extension | No first-class assertions, completeness or change-history page. |
-| Focused Service graph | **Implemented** | C1      | `/services/{id}/graph` exists. |
-| Focused Business Function graph | **Implemented** | C1      | `/business-functions/{id}/graph` exists. |
+| Focused Service graph | **Implemented with C2.1 authorization hardening required** | C1 | `/api/services/{id}/graph` is reachable, but current route assembly does not independently check every adjacent entity type's view permission. |
+| Focused Business Function graph | **Implemented** | C1      | `/api/business-functions/{id}/graph` exists and checks projected Service and Asset viewability. |
 | Recursive global Service graph | **Deferred** | C2/E    | Explicitly outside C1. |
 | Application Asset retained | **Implemented/design decision** | C1      | First-class Service is distinct from deployed Application Asset. |
 | Legacy Service Asset retained | **Implemented as compatibility** | C1      | It is not silently converted. |
@@ -474,11 +480,11 @@ They do **not** establish:
 
 | Feature | Status | Release | Concrete evidence |
 |---------|--------|---------|-------------------|
-| One-hop dependency focus | **Implemented** | C1/E foundation | Asset topology and Service graphs expose direct links. |
+| One-hop dependency focus | **Implemented as structural navigation** | C1 | Asset topology and Service graphs expose direct links without impact conclusions. |
 | Service “Depends on” / “Required by” | **Implemented** | C1      | Typed Service dependencies exist. |
-| Business Function affected Assets | **Implemented** | C1/E foundation | Business Function detail and graph expose connected Assets. |
-| Focused Service projection | **Implemented** | C1/E foundation | Graph endpoint exists. |
-| Recursive traversal | **Partially implemented/absent** | E       | No recursive impact engine. |
+| Business Function connected Assets | **Implemented** | C1 | Business Function detail and graph expose Assets connected through supporting Services; this is not impact analysis. |
+| Focused Service projection | **Implemented** | C1 | Structural graph endpoint exists. |
+| Recursive analysis traversal | **Planned but not implemented** | C2.3/E | No recursive impact engine. C2.1 bounded structural projection is not impact propagation. |
 | Depth limits/cycle-aware traversal engine | **Planned but not implemented** | C2/E    | Current architecture deliberately avoids deep recursion. |
 | Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
 | Dedicated `/impact-analysis` route | **Planned but not implemented** | E       | Navigation entry is unavailable. |
@@ -528,15 +534,17 @@ They do **not** establish:
 
 These items are committed future work in current repository documentation.
 
-## C2 — Deeper Service Graph and Impact Foundations
+## C2 — Shared graph and analysis foundations
 
-* recursive or configurable-depth traversal;
-* cycle-aware path handling;
-* evidence-qualified paths;
-* dedicated Impact Analysis route;
-* outage simulation;
-* affected Service and Business Function summaries;
-* deliberate legacy Asset-to-Service association workflow.
+* C2.1 typed nodes and edges with stable namespaced identity;
+* current-valid, bounded, deterministic, cycle-safe structural projection;
+* endpoint-by-endpoint authorization and non-disclosure;
+* compatibility adapters for focused C1 graph routes;
+* C2.2 dependency groups, redundancy, quorum, and failure effects; and
+* C2.3 recursive analysis traversal, evidence paths, and qualified states.
+
+The dedicated Impact Analysis route, outage simulation, blast radius, recovery
+ordering, and business severity remain Release E, not C2.1.
 
 ## C3 — People, Teams and structured ownership
 
@@ -657,9 +665,7 @@ The repository does not provide a clear implementation or product decision for:
 
 * favicon/application icon refresh;
 * concrete Integration secret-store backend;
-* discovery-run cancellation UX;
 * safe CIDR-based network membership suggestions;
-* configurable second-hop topology focus;
 * community Proxmox LXC installer;
 * Portainer deployment artefacts;
 * formal open-source/commercial licence status;
@@ -670,11 +676,11 @@ The repository does not provide a clear implementation or product decision for:
 
 # 10. Repository audit priority assessment
 
-The 23 July audit identified the following value gaps. They describe the
-largest incomplete product journeys at the audit point; they are not, by
-themselves, the approved chronological development sequence after 4 August 2026.
+The July review identified the following value gaps. The 30 August sequencing
+decision deliberately selects manual-first C2.1 next; this section records
+parallel and later opportunities rather than chronological priority.
 
-## Largest operational gap: complete the integration journey
+## Parallel incomplete workstream: operational integrations
 
 Atlas already has the hardest individual parts:
 
@@ -736,18 +742,18 @@ Remove or de-emphasise direct `Asset.ip_address` from:
 Use primary interface information consistently, retaining the legacy field only as a
 migration/read-compatibility mechanism.
 
-## Selected product foundation: C2 Impact Foundations
+## Selected next product foundation: C2.1 Shared Operational Graph
 
 Build on existing focused graphs:
 
-1. bounded recursive traversal;
-2. depth and cycle controls;
-3. path/evidence response format;
-4. Asset→Service reverse impact;
-5. affected Business Functions;
-6. direct versus downstream classification;
-7. dedicated Impact Analysis page;
-8. do not add opaque scoring yet.
+1. stable typed node and edge identity;
+2. current-valid bounded structural projection;
+3. depth, cycle, ordering, and truncation controls;
+4. semantic direction independent from traversal/presentation direction;
+5. endpoint-by-endpoint authorization and non-disclosure;
+6. Asset, Service, and Business Function focus from accepted manual knowledge;
+7. compatibility adapters for both focused C1 routes; and
+8. no impact, outage, recovery, scoring, or change-safety conclusions.
 
 ## Later domain release: C3 structured ownership
 
@@ -798,11 +804,11 @@ Once live discovery and ownership are stable, add:
 
 ---
 
-# 12. Approved forward sequence — 4 August 2026
+# 12. Approved forward sequence — 30 August 2026
 
 The selected next development increment is **C2.1 — Shared Operational Graph**.
-This choice enhances the existing roadmap and does not alter the audit finding
-that B2 is the largest incomplete operational journey.
+This choice implements the manual-first strategy. B2 remains incomplete but is
+not a prerequisite or immediate sequencing gate.
 
 ## Increment 1 — C2.1 Shared Operational Graph
 
@@ -813,10 +819,12 @@ compatibility adapters.
 
 ## Parallel stream — B2 Operational Integrations and live discovery
 
-Complete Integration APIs, secret-reference resolution, Test Connection, Run
-Now, worker dispatch, job status, retries, cancellation, scheduling, and live
-Proxmox execution. This stream is necessary before Atlas makes trustworthy live
-availability or freshness claims, but it is outside C2.1.
+Track Integration APIs, secret-reference resolution, Test Connection, Run Now,
+worker dispatch, job status, retries, cancellation, scheduling, and live
+Proxmox execution as a separate incomplete stream. Heavy investment is
+deliberately postponed during the immediate manual-first period. This stream is
+necessary before Atlas makes trustworthy live availability or freshness claims,
+but it is outside C2.1.
 
 ## Increment 2 — C2.2 Dependency Semantics
 
@@ -857,15 +865,14 @@ Atlas is further advanced than a simple inventory MVP:
 * the Proxmox adapter and core sync are real;
 * deterministic Markdown generation is real.
 
-The largest end-to-end operational gap remains **connecting the implemented
-integration components into a usable live discovery workflow**. That finding is
-unchanged.
+Connecting the implemented integration components into a usable live discovery
+workflow remains a substantial incomplete journey. It is not the next required
+release and is not a C2.1 blocker.
 
-The selected next increment is nevertheless **C2.1 — Shared Operational Graph**
-because the planned Homepage, Service Operations, Impact Analysis, and Change
-Simulation views require one common secure graph foundation. B2 should remain a
-visible parallel workstream, and Atlas must not present structural graph data as
-live operational proof.
+The selected next increment is **C2.1 — Shared Operational Graph** because Atlas
+will first prove its knowledge and relationship model with manually curated
+accepted data. B2 remains visible as a parallel incomplete workstream, and Atlas
+must not present structural graph data as live operational proof.
 
 C2.1 is successful when the repository has a reusable graph builder, a generic
 focused graph API, compatibility adapters for the existing graph routes,
