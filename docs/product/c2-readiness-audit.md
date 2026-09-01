@@ -11,21 +11,52 @@
 | Migration heads | One |
 | Migration head | `20260720_0013` (`homelab_service_mvp`) |
 | Validation date | 30 August 2026 (Pacific/Auckland) |
-| Repository-local `AGENTS.md` | None present |
+| Repository-local `AGENTS.md` | None present at the audited commit; added later in `534b489` |
 
 The repository contains 257 tracked files. Its runtime baseline is FastAPI
 0.116.1, SQLAlchemy 2.0.43, Alembic 1.16.4, PostgreSQL 17, Redis 7, Python 3.12
 container images, Next.js 16.2.10, React 19.1.1, and Atlas web/plugin package
 versions 0.1.0. The worker has no independent package version.
 
-The two supplied reviews were read from the Codex attachment copies because
-macOS did not expose the original Desktop paths to the workspace process:
+The two supplied reviews were originally read from Codex attachment copies
+because macOS did not expose the original Desktop paths to the workspace
+process:
 
 - `Atlas Product Feature Status Review` (transcript-derived, 24 July 2026);
 - `Atlas Product Feature Status Review — Repository-Reconciled Edition`
   (repository audit at `09d2271`).
 
-They remain historical evidence and are not copied into active repository docs.
+Repository copies were subsequently added at:
+
+- [`../history/product-reviews/atlas-product-feature-status-review.md`](../history/product-reviews/atlas-product-feature-status-review.md); and
+- [`../history/product-reviews/atlas-product-feature-status-review-reconciled.md`](../history/product-reviews/atlas-product-feature-status-review-reconciled.md).
+
+Their dated baselines and location under `docs/history/product-reviews/` identify
+them as historical, non-canonical evidence. They do not replace current code,
+accepted ADRs, architecture, the roadmap, or this readiness audit.
+
+## Delta reconciliation — 2 September 2026
+
+The previous audit work was committed as `cab11e4` (`docs:align roadmap`). At
+the start of this delta review, the committed tree differed from that commit
+only by `534b489`, which adds the root `AGENTS.md`; the two historical reviews
+were newly present in the working tree under the archive path above. No
+application code, schema, migration, API, or UI implementation changed after
+the previous audit.
+
+The root instructions and both repository copies of the historical reviews were
+read in full. The root instructions confirm the previous audit's source-of-truth
+order, manual-first sequencing, B2/C2.1 separation, domain boundaries,
+authorization requirements, PostgreSQL projection architecture, and strict
+C2.1/Impact Analysis boundary. The historical reviews confirm the component
+findings already reconciled below. Their July recommendation to complete the
+operational Proxmox journey before C2 and their classification of structural
+graph foundations as partial Impact Analysis remain superseded historical
+conclusions; they do not change current implementation status or release
+sequencing.
+
+No Feature Ledger classification, C2.1 prerequisite, or readiness conclusion
+changed in this delta review. The **GO** conclusion remains valid.
 
 ## Current implemented foundation
 
@@ -61,7 +92,10 @@ status column describes the document's role after reconciliation.
 | Document | Purpose and status | Action |
 | --- | --- | --- |
 | `README.md` | Current operator/developer overview | Updated manual-first sequence and Proxmox component wording |
+| `AGENTS.md` | Current repository-wide agent instructions | Added after the original audit; reviewed in the 2 September delta and consistent with the audit conclusions |
 | `docs/README.md` | Current documentation index and authority map | Updated C2/E status and linked this audit |
+| `docs/history/product-reviews/atlas-product-feature-status-review.md` | Historical transcript-derived review dated 24 July 2026 | Retained as non-canonical evidence |
+| `docs/history/product-reviews/atlas-product-feature-status-review-reconciled.md` | Historical repository-reconciled review at `09d2271` | Retained as non-canonical evidence |
 | `docs/admin/knowledge-profiles.md` | Current Asset completeness administration guide | Current; no change |
 | `docs/admin/service-types-and-criticality.md` | Current C1 reference-data guide | Current; no change |
 | `docs/architecture/architecture-v0.md` | Implemented architecture through C1 | Updated sequencing and focused-graph authorization limitation |
@@ -94,9 +128,10 @@ status column describes the document's role after reconciliation.
 | `docs/testing/release-c2-operational-graph.md` | Planned C2.1 validation contract | Updated fixture, temporal, and direction requirements |
 | `docs/testing/security-and-access-test-plan.md` | Current security regression matrix | Corrected the web validation commands to include the existing unit tests |
 
-No existing archive convention is present. Historical briefs, migration guides,
-test plans, and the original ADR remain in place with clear roles rather than
-being deleted or moved.
+The newly supplied product reviews are stored under the explicit
+`docs/history/product-reviews/` archive path. Historical briefs, migration
+guides, test plans, and the original ADR remain in their established locations
+with clear roles rather than being deleted or moved.
 
 ## Supplied review reconciliation
 
@@ -260,6 +295,12 @@ The Python suite was run in a disposable `/private/tmp` virtual environment.
 No application dependency files or C2 functionality were changed. The only
 application-code edit is a terminology correction on the existing Business
 Function page from impact language to structural connectivity language.
+
+Delta validation on 2 September 2026 was limited to the documentation changes:
+`git diff --check` passed, and every relative link added by the delta resolved.
+Application tests and the production frontend build were not rerun because the
+delta changed documentation only and the committed application tree is
+unchanged from the previously validated audit commit.
 
 ## Go / No-Go conclusion
 

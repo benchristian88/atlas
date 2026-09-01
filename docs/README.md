@@ -22,6 +22,9 @@ Use the documents for different purposes:
   (ADRs). An ADR explains why a cross-cutting architectural direction was chosen.
 - [`testing`](testing) contains release and security test plans. A test plan is
   not evidence that the tests have passed.
+- [`history/product-reviews`](history/product-reviews) contains dated historical
+  review evidence. Those reviews preserve the reconciliation trail but are not
+  current specifications or implementation-status authorities.
 
 The feature ledger and roadmap intentionally remain separate. Updating a roadmap
 status does not prove implementation, and adding code does not automatically
