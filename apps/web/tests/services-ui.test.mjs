@@ -34,3 +34,19 @@ test("C1 pages use selectors, typed dependency APIs, and Service completeness", 
   assert.match(form, /Suggested default|suggested default/);
   assert.match(businessFunctions, /Supporting Services|Business Functions/);
 });
+
+test("Dashboard spacing and knowledge-list descriptions use the requested stacked layout", async () => {
+  const [dashboard, services, businessFunctions, styles] = await Promise.all([
+    readFile(new URL("../app/dashboard/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/services/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/business-functions/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /className="summary-grid dashboard-summary-grid"/);
+  assert.match(services, /className="table-cell-identity"/);
+  assert.match(businessFunctions, /className="table-cell-identity"/);
+  assert.match(businessFunctions, /<small className="secondary-text">\{item\.description/);
+  assert.match(styles, /\.dashboard-summary-grid \{ margin-bottom: 20px; \}/);
+  assert.match(styles, /\.table-cell-identity \{ display: grid; gap: 4px; min-width: 0; \}/);
+});
