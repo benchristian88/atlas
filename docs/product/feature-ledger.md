@@ -281,7 +281,7 @@ They do **not** establish:
 | Asset/type icons | **Implemented** | Foundation/UI | Safe HTTPS non-SVG icon handling and fallback exist. |
 | Uploaded icon/media library | **Deferred** | Future media system | No blob/media route or storage. |
 | Server-side icon proxy | **Deferred** | Future media system | No remote fetch/proxy. |
-| Atlas branding in shell/login | **Implemented** | UI      | Shared committed branding is tested. |
+| Atlas Impact branding in shell/login | **Implemented** | UI      | Shared supplied lockups are theme-aware in the shell and used on login. |
 | Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
 | Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
 | Asset Interfaces | **Implemented** | Foundation | Interface, network, IP, MAC, primary and notes are persisted and managed. |
@@ -522,10 +522,10 @@ They do **not** establish:
 | Knowledge Gap compact cards | **Implemented** | UI refinement | Current component includes the requested structure. |
 | Assertions responsive layout | **Implemented** | UI refinement | UI regressions are covered. |
 | Completeness panel spacing | **Implemented** | UI refinement | Current UI contains the fix. |
-| Login branding | **Implemented** | UI refinement | Shared Atlas branding is used by shell and login. |
+| Login branding | **Implemented** | UI refinement | The supplied Atlas Impact lockup is shared by shell and login. |
 | Standalone Profile sidebar item | **Abandoned** | UI supersession | Replaced by account menu; `/profile` remains reachable. |
 | Runtime customer branding | **Deferred** | Future enterprise UX | No branding model/UI. |
-| Favicon refresh | **Unknown** | Branding follow-up | No favicon implementation or explicit decision. |
+| Browser and installed-app branding | **Implemented** | Branding follow-up | Supplied favicon, PWA icons, Apple touch icon, manifest, and metadata are wired through the web app. |
 
 
 ---
@@ -663,7 +663,6 @@ The following are explicitly postponed or excluded from the current MVP/C1:
 
 The repository does not provide a clear implementation or product decision for:
 
-* favicon/application icon refresh;
 * concrete Integration secret-store backend;
 * safe CIDR-based network membership suggestions;
 * community Proxmox LXC installer;
