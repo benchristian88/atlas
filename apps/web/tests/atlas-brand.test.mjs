@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -10,40 +10,49 @@ import {
   ATLAS_BRAND_ASSETS,
   brandAssetForFailureCount,
 } from "../components/atlas-brand.mjs";
-import { contrastRatio, deriveAccentTheme, mixColours } from "../lib/accent-theme.mjs";
 
-test("renders the local Atlas wordmark as an accessible authenticated-home link", () => {
+test("renders the Atlas Impact dark-background lockup as an accessible authenticated-home link", () => {
   const markup = renderToStaticMarkup(React.createElement(AtlasBrand, { href: "/dashboard" }));
 
   assert.match(markup, /href="\/dashboard"/);
-  assert.match(markup, /aria-label="Atlas home"/);
-  assert.match(markup, /src="\/branding\/atlas-logo\.svg"/);
-  assert.match(markup, /alt="Atlas"/);
+  assert.match(markup, /aria-label="Atlas Impact home"/);
+  assert.match(markup, /src="\/branding\/lockups\/atlas-impact-lockup-dark\.svg"/);
+  assert.match(markup, /alt="Atlas Impact"/);
   assert.doesNotMatch(markup, /brand-mark/);
 });
 
-test("falls back from SVG to accessible text", () => {
-  assert.deepEqual(ATLAS_BRAND_ASSETS, [
-    "/branding/atlas-logo.svg",
+test("maps the supplied light and dark lockups with PNG and text fallbacks", () => {
+  assert.deepEqual(ATLAS_BRAND_ASSETS.dark, [
+    "/branding/lockups/atlas-impact-lockup-dark.svg",
+    "/branding/lockups/atlas-impact-lockup-dark.png",
   ]);
-  assert.equal(brandAssetForFailureCount(0), "/branding/atlas-logo.svg");
-  assert.equal(brandAssetForFailureCount(1), null);
+  assert.deepEqual(ATLAS_BRAND_ASSETS.light, [
+    "/branding/lockups/atlas-impact-lockup-light.svg",
+    "/branding/lockups/atlas-impact-lockup-light.png",
+  ]);
+  assert.equal(brandAssetForFailureCount(0), ATLAS_BRAND_ASSETS.dark[0]);
+  assert.equal(brandAssetForFailureCount(1, "light"), ATLAS_BRAND_ASSETS.light[1]);
+  assert.equal(brandAssetForFailureCount(2), null);
 });
 
 test("the shared logo preserves the source asset and natural aspect ratio", () => {
   const markup = renderToStaticMarkup(React.createElement(AtlasLogo, { className: "login-logo-image" }));
+  const lightMarkup = renderToStaticMarkup(React.createElement(AtlasLogo, { variant: "light" }));
 
-  assert.match(markup, /src="\/branding\/atlas-logo\.svg"/);
-  assert.match(markup, /alt="Atlas"/);
-  assert.match(markup, /width="900"/);
-  assert.match(markup, /height="200"/);
+  assert.match(markup, /src="\/branding\/lockups\/atlas-impact-lockup-dark\.svg"/);
+  assert.match(lightMarkup, /src="\/branding\/lockups\/atlas-impact-lockup-light\.svg"/);
+  assert.match(markup, /alt="Atlas Impact"/);
+  assert.match(markup, /width="800"/);
+  assert.match(markup, /height="300"/);
   assert.match(markup, /class="login-logo-image"/);
 });
 
-test("the authenticated shell uses the shared brand without the old A tile", async () => {
+test("the authenticated shell selects a supplied lockup for the derived sidebar background", async () => {
   const shell = await readFile(new URL("../components/app-shell.js", import.meta.url), "utf8");
 
-  assert.match(shell, /<AtlasBrand href=\{authenticatedHome\(user\)\} \/>/);
+  assert.match(shell, /deriveAccentTheme\(user\.accent_colour\)/);
+  assert.match(shell, /<AtlasBrand href=\{authenticatedHome\(user\)\} variant=\{sidebarBrandVariant\} \/>/);
+  assert.match(shell, /Atlas Impact<br \/>Local development/);
   assert.doesNotMatch(shell, /className="brand-mark"/);
 });
 
@@ -54,19 +63,37 @@ test("the login page uses the shared logo without an opaque logo wrapper", async
   ]);
 
   assert.match(login, /<AtlasLogo className="login-logo-image"/);
+  assert.match(login, /Atlas Impact account/);
   assert.doesNotMatch(login, /className="login-brand"/);
   assert.doesNotMatch(login, /className="brand-mark"/);
   assert.match(styles, /\.login-logo \{[^}]*background: transparent;[^}]*border: 0;[^}]*box-shadow: none;/);
   assert.match(styles, /\.login-logo-image \{[^}]*height: auto;[^}]*object-fit: contain;/);
 });
 
-test("the fixed logo treatment remains readable across extreme sidebar accents", () => {
-  for (const accent of ["#FFFFFF", "#FFFF00", "#2563EB", "#7C3AED", "#000000"]) {
-    const sidebar = deriveAccentTheme(accent).sidebar;
-    const logoBackground = mixColours(sidebar, "#000000", 0.26);
+test("the canonical manifest and metadata use Atlas Impact install branding", async () => {
+  const [manifestSource, layout] = await Promise.all([
+    readFile(new URL("../app/manifest.webmanifest", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.js", import.meta.url), "utf8"),
+  ]);
+  const manifest = JSON.parse(manifestSource);
 
-    assert.ok(contrastRatio(logoBackground, "#FFFFFF") >= 4.5);
-    assert.ok(contrastRatio(logoBackground, "#22D3EE") >= 3);
-    assert.ok(contrastRatio(logoBackground, "#5BC7FF") >= 3);
+  assert.equal(manifest.name, "Atlas Impact");
+  assert.equal(manifest.short_name, "Atlas Impact");
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.background_color, "#111111");
+  assert.equal(manifest.theme_color, "#111111");
+  assert.deepEqual(manifest.icons.map(({ sizes, purpose }) => [sizes, purpose]), [
+    ["192x192", "any"],
+    ["512x512", "any"],
+  ]);
+  for (const icon of manifest.icons) {
+    await access(new URL(`../public${icon.src}`, import.meta.url));
   }
+
+  assert.match(layout, /title: "Atlas Impact"/);
+  assert.match(layout, /applicationName: "Atlas Impact"/);
+  assert.match(layout, /appleWebApp: \{/);
+  assert.match(layout, /\/branding\/favicon\.svg/);
+  assert.match(layout, /\/branding\/apple-touch-icon\.png/);
 });

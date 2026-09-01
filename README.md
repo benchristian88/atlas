@@ -170,19 +170,19 @@ split-origin development, restrict it to the exact web origins. Treat
 
 ## Branding assets
 
-The application-owned horizontal logo is committed at
-`apps/web/public/branding/atlas-logo.svg`. It uses a transparent background and
-an approximately 4.5:1 horizontal aspect ratio so the icon and Atlas wordmark
-remain clear in the dark sidebar. SVG is preferred for sharp rendering. An
-optional transparent PNG fallback may be stored at
-`apps/web/public/branding/atlas-logo.png`, and an optional icon-only mark may be
-stored at `apps/web/public/branding/atlas-mark.svg`. The current component falls
-back to accessible Atlas text if the SVG cannot be loaded; a private fork can
-add a suitable transparent PNG to its component asset list if needed.
+Atlas Impact artwork is organised under `apps/web/public/branding`: full-brand
+SVG and PNG artwork lives in `lockups`, while compact artwork lives in `marks`.
+The shared brand component uses the supplied light- or dark-background lockup
+according to the sidebar treatment and uses the dark-background lockup on the
+login screen. SVG is preferred for sharp rendering, with the corresponding PNG
+as a fallback and accessible Atlas Impact text as the final fallback.
 
-Branding assets are included at web-image build time. To customise a private
-fork, replace `atlas-logo.svg` with a transparent horizontal asset using the
-same filename, then rebuild the web service. Replacing the asset at runtime,
+The browser favicon set, 192px and 512px installed-app icons, and 180px Apple
+touch icon are also served from `apps/web/public/branding`. The canonical Web
+App Manifest is `apps/web/app/manifest.webmanifest`; application and Apple web
+app metadata are declared in `apps/web/app/layout.js`.
+
+Branding assets are included at web-image build time. Runtime replacement,
 customer-specific white labelling, uploads, and externally hosted logo URLs are
 not supported by the MVP.
 
