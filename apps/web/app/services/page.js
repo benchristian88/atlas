@@ -105,7 +105,7 @@ export default function ServicesPage() {
       <div className="table-scroll"><table><thead><tr><th>Service</th><th>Type</th><th>Criticality</th><th>Owner</th><th>Status</th><th>Dependencies</th><th>Recovery</th><th>Completeness</th></tr></thead><tbody>
         {!loading && services.length === 0 && <tr><td className="empty-state" colSpan="8">No Services match the current filters. {canCreate && <Link href="/services/new">Create the first Service.</Link>}</td></tr>}
         {services.map((service) => <tr key={service.id}>
-          <td><Link className="primary-cell" href={`/services/${service.id}`}>{service.name}</Link><small className="secondary-text">{service.purpose || "Purpose not documented"}</small></td>
+          <td><div className="table-cell-identity"><Link className="primary-cell" href={`/services/${service.id}`}>{service.name}</Link><small className="secondary-text">{service.purpose || "Purpose not documented"}</small></div></td>
           <td>{service.service_type_name || "Unavailable"}</td>
           <td><StatusBadge status={service.criticality_name || "Unavailable"} /></td>
           <td>{service.owner_name || "—"}</td>

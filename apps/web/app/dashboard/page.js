@@ -60,7 +60,7 @@ export default function DashboardPage() {
       />
       {error && <div className="error-banner" role="alert">Could not load summary counts. {error}</div>}
       {!counts && !error && <div className="status-banner" role="status">Loading summary…</div>}
-      <section className="summary-grid" aria-label="Atlas Impact summary">
+      <section className="summary-grid dashboard-summary-grid" aria-label="Atlas Impact summary">
         {cards.filter((card) => hasPermission(card.permission)).map((card) => (
           <Link className="summary-card" href={card.href} key={card.key}>
             <span>{card.label}</span>
