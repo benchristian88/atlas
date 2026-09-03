@@ -2,6 +2,7 @@
 
 **Repository audit date:** 30 August 2026
 **C2.1 merged-state audit date:** 3 September 2026
+**C2.1 subsequent live acceptance date:** 3 September 2026
 **Review comparison dates:** 23–24 July 2026
 **Planning alignment update:** 3 September 2026
 **Repository source of truth:** `dev` at `1842d161de87bcf826a15ae117703876fc30c192`
@@ -29,7 +30,7 @@ API-owned operational graph builder, the generic `/api/operational-graph`
 contract, compatibility adapters for both C1 graph routes, shared web graph
 normalization/presentation, and focused authorization/traversal tests.
 
-Repository evidence at this audit point:
+Automated and working-tree evidence available at the original audit point:
 
 - API tests: **174 passed**;
 - focused operational graph API tests: **16 passed**;
@@ -43,8 +44,16 @@ Repository evidence at this audit point:
 The local environment had no running PostgreSQL server and no Docker executable,
 so `alembic current` and Docker/PostgreSQL acceptance were not completed. The
 existing test suite uses repository-standard fake sessions and route dependency
-overrides; production PostgreSQL acceptance remains an outstanding manual
-release check.
+overrides. This limitation remains part of the historical audit evidence.
+
+Subsequent live pre-merge acceptance was completed in the deployed test LXC
+against its real PostgreSQL-backed Atlas environment. Manual validation covered
+generic Asset, Service, and Business Function graph behavior; depth `0`, `1`,
+and `2`; incoming and outgoing traversal; edge-family filtering; safe node-limit
+truncation without dangling edges; Service→Service traversal in both directions;
+semantic edge direction preservation; cross-tenant non-disclosure returning the
+normal “Record not found” response; and final migration/repository checks before
+merge.
 
 C2.1 is classified **Implemented**. This does not change the planned or partial
 status of C2.2, C2.3, C2.4, full Impact Analysis, Change Simulation, Backup and
@@ -237,6 +246,12 @@ They do **not** establish:
 * production queue behavior;
 * secret-store resolution;
 * community installer behavior.
+
+The first item above is deliberately scoped to what was available **at the
+30 August audit point**. C2.1 subsequently completed live manual acceptance in
+the deployed PostgreSQL-backed test LXC before merge, as recorded in the C2.1
+merged implementation audit and release test plan. The remaining exclusions are
+unchanged.
 
 
 ---

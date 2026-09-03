@@ -7,8 +7,25 @@ Delivered increment: **C2.1 — Shared Operational Graph**
 ## C2.1 implementation evidence — 3 September 2026
 
 C2.1 was implemented in `a9f41df` and merged into `dev` by `1842d16` on
-3 September 2026. The validation results below were recorded on the feature
-working tree before that merge; the merge has the same tree as `a9f41df`.
+3 September 2026. The automated validation results recorded in
+[`../testing/release-c2-operational-graph.md`](../testing/release-c2-operational-graph.md)
+were collected on the feature working tree; the merge has the same tree as
+`a9f41df`.
+
+The original working-tree audit environment could not run PostgreSQL/Docker
+acceptance. That audit limitation is preserved in the test plan and Feature
+Ledger. Subsequent live pre-merge acceptance was completed in the deployed,
+PostgreSQL-backed test LXC and covered:
+
+- generic Asset, Service, and Business Function graph behavior;
+- depth `0`, `1`, and `2`;
+- incoming and outgoing traversal;
+- edge-family filtering;
+- safe node-limit truncation without dangling edges;
+- Service→Service dependency traversal in both directions;
+- preservation of semantic edge direction;
+- cross-tenant non-disclosure using the normal “Record not found” response; and
+- final migration and repository checks before merge.
 
 The delivered implementation adds:
 

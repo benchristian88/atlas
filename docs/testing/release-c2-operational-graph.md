@@ -1,6 +1,6 @@
 # Release C2.1 Operational Graph test plan
 
-Status: C2.1 merged; automated coverage recorded; PostgreSQL/Docker acceptance pending
+Status: C2.1 merged; automated coverage and subsequent live acceptance complete
 
 This document preserves the Release C2.1 validation contract and records the
 checks executed against the feature working tree before its merge to `dev`.
@@ -28,8 +28,29 @@ Executed results:
 
 `alembic current` could not run because no PostgreSQL server was listening on
 localhost. Docker/PostgreSQL acceptance could not run because the environment
-does not provide the `docker` executable. These checks remain manual release
-verification; no migration was added by C2.1.
+did not provide the `docker` executable. This records the limitation at the
+original working-tree audit point; no migration was added by C2.1.
+
+## Subsequent live pre-merge acceptance — 3 September 2026
+
+After the working-tree audit, C2.1 completed live manual acceptance in the
+deployed test LXC against its real PostgreSQL-backed Atlas environment. The
+manual acceptance covered:
+
+- generic graph behavior with Asset, Service, and Business Function focus;
+- depth `0`, `1`, and `2` behavior;
+- incoming and outgoing traversal;
+- edge-family filtering;
+- safe node-limit truncation with no dangling edges;
+- Service→Service dependency traversal in both directions;
+- preservation of canonical semantic edge direction during reverse traversal;
+- cross-tenant focus non-disclosure returning the normal “Record not found”
+  response; and
+- final migration and repository checks completed before merge.
+
+This subsequent acceptance closes the live PostgreSQL/deployed-environment
+release check that was unavailable during the original audit. It does not alter
+or replace the automated counts and environment limitations recorded above.
 
 C2.1 is implemented and merged. The reference fixture is deliberately created
 with current manual UI/API capabilities. This plan does not test
@@ -390,7 +411,8 @@ work:
 
 ## Release evidence
 
-Before changing C2.1 status to implemented, record:
+The C2.1 release record distinguishes the original automated audit evidence
+from the subsequent live pre-merge acceptance. It records:
 
 - delivered commit hash;
 - migration head;
@@ -398,7 +420,7 @@ Before changing C2.1 status to implemented, record:
 - exact web test result;
 - web production build result;
 - plugin test results if run;
-- Docker/PostgreSQL acceptance result if run;
+- subsequent deployed PostgreSQL acceptance;
 - known limitations; and
 - any unexecuted check.
 
