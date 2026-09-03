@@ -74,7 +74,7 @@ evidence remains distinct from accepted operational knowledge.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete Integration APIs, secrets, worker dispatch, scheduling, retries, and service identity as a parallel operational-evidence stream |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and later analysis foundations | Planned; C1 provides focused precursors | Decompose into C2.1 shared graph, C2.2 dependency semantics, and C2.3 analysis primitives |
+| Release C2 — shared graph and later analysis foundations | C2.1 implemented; C2.2 and C2.3 planned | Reuse the shared graph for later dependency semantics and analysis primitives |
 | Release C3 — People, Teams and structured ownership | Planned | Deliver structured accountability without discarding C1 text labels |
 | Release C4 — formal Knowledge Objects | Planned | Create the reusable content model for runbooks, recovery procedures, change plans, validation, and intended state |
 | Release D — Backup and Recovery | Planned | Split knowledge readiness from evidence-backed recoverability |
@@ -89,10 +89,10 @@ discovery** as an incomplete end-to-end product journey. It remains visible as
 a parallel workstream, but the immediate product strategy intentionally
 postpones heavy automatic-discovery and worker-orchestration investment.
 
-The next development increment is **C2.1 — Shared Operational Graph** so that
-the knowledge and Service models can be validated using human-entered accepted
-data and future product views can share one graph foundation. B2 is not a
-dependency or gate for C2.1.
+**C2.1 — Shared Operational Graph** is implemented on its feature working tree,
+providing one graph foundation over human-entered accepted data. The next graph
+increment is **C2.2 — Dependency Semantics**. B2 was not a dependency or gate
+for C2.1 and remains a separate incomplete workstream.
 
 Atlas must not make live availability, freshness, or recovery claims until the
 relevant B2 and later recovery-evidence capabilities exist.
@@ -151,13 +151,13 @@ It does not itself deliver every Impact Analysis or Change Simulation workflow.
 
 ## C2.1 — Shared Operational Graph
 
-**Status:** next planned increment
+**Status:** implemented on the C2.1 feature working tree
 
 **Outcome:** Atlas has one server-side graph projection service that represents
 accepted Assets, Asset relationships, Services, Service dependencies, and
 Business Functions within the caller's authorized scope.
 
-C2.1 should:
+C2.1 delivers:
 
 - introduce stable typed node and edge contracts;
 - derive graph data from existing relational operational records;
@@ -531,7 +531,8 @@ Examples:
 
 # Recommended delivery sequence
 
-1. **C2.1 — Shared Operational Graph.**
+1. Stabilize and merge **C2.1 — Shared Operational Graph** after manual
+   PostgreSQL/Docker verification.
 2. Keep **B2 — Operational Integrations and live discovery** visible as a
    parallel incomplete workstream without treating it as a C2.1 prerequisite
    or expanding the C2.1 branch scope.

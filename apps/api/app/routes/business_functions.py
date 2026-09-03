@@ -11,13 +11,16 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
-from app.models import (
-    Asset, BusinessFunction, CriticalityLevel, KnowledgeGap, RelationshipType, Service,
-    ServiceAssetDependency, ServiceBusinessFunction, Site,
-)
+from app.models import BusinessFunction, CriticalityLevel, KnowledgeGap, ServiceBusinessFunction, Site
 from app.routes.crud_helpers import commit, flush, not_found
 from app.routes.services import _business_function_link_response, service_response
 from app.schemas import BusinessFunctionCreate, BusinessFunctionResponse, BusinessFunctionUpdate, ServiceBusinessFunctionResponse, ServiceGraphResponse, ServiceResponse
+from app.services.operational_graph import (
+    GraphFocusNotFound,
+    GraphProjectionRequest,
+    OperationalGraphBuilder,
+    operational_graph_to_service_graph,
+)
 
 router = APIRouter(prefix="/business-functions", tags=["business functions"])
 
@@ -107,21 +110,27 @@ def business_function_services(function_id: uuid.UUID, principal: Principal = De
 
 
 @router.get("/{function_id}/graph", response_model=ServiceGraphResponse)
-def business_function_graph(function_id: uuid.UUID, principal: Principal = Depends(require_permission("business_functions.view")), db: Session = Depends(get_db)):
-    function = _function(db, principal, function_id, "business_functions.view")
-    nodes = {function.id: {"id": function.id, "entity_type": "business_function", "name": function.name, "subtitle": "Business Function", "href": f"/business-functions/{function.id}"}}
-    edges = []
-    for link in db.scalars(select(ServiceBusinessFunction).where(ServiceBusinessFunction.business_function_id == function.id, ServiceBusinessFunction.valid_to.is_(None))):
-        service = db.get(Service, link.service_id)
-        if service and principal.can("services.view", service.customer_id, service.site_id):
-            relationship = db.get(RelationshipType, link.relationship_type_id) if link.relationship_type_id else None
-            nodes[service.id] = {"id": service.id, "entity_type": "service", "name": service.name, "subtitle": "Service", "href": f"/services/{service.id}"}
-            edges.append({"id": link.id, "source_id": service.id, "target_id": function.id, "label": relationship.source_label if relationship else "Supports", "edge_type": "service_business_function"})
-            for dependency in db.scalars(select(ServiceAssetDependency).where(ServiceAssetDependency.service_id == service.id, ServiceAssetDependency.valid_to.is_(None))):
-                asset = db.get(Asset, dependency.asset_id)
-                if asset is None or not principal.can("assets.view", asset.customer_id, asset.site_id):
-                    continue
-                dependency_type = db.get(RelationshipType, dependency.relationship_type_id)
-                nodes[asset.id] = {"id": asset.id, "entity_type": "asset", "name": asset.name, "subtitle": asset.asset_type, "href": f"/assets/{asset.id}"}
-                edges.append({"id": dependency.id, "source_id": service.id, "target_id": asset.id, "label": dependency_type.source_label if dependency_type else "Depends on", "edge_type": "service_asset"})
-    return {"nodes": list(nodes.values()), "edges": edges}
+def business_function_graph(
+    function_id: uuid.UUID,
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("business_functions.view")),
+    db: Session = Depends(get_db),
+):
+    try:
+        graph = OperationalGraphBuilder(db, principal).build(
+            GraphProjectionRequest(
+                focus_type="business_function",
+                focus_id=function_id,
+                max_depth=2,
+                node_limit=500,
+                context=context,
+                include_inactive_focus=True,
+                edge_families_by_depth=(
+                    frozenset({"service_business_function"}),
+                    frozenset({"service_asset"}),
+                ),
+            )
+        )
+    except GraphFocusNotFound:
+        raise not_found("Business function")
+    return operational_graph_to_service_graph(graph)

@@ -39,7 +39,7 @@ update the audited ledger.
 | Release B — Discovery and Reconciliation | Simulation and reconciliation implemented; live plugin operation and worker orchestration remain partial |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services; broader entity coverage remains future work |
 | Release C1 — Homelab Service MVP | Implemented |
-| Release C2 — shared graph and later analysis foundations | C1 provides focused projections; C2.1 itself is planned, not implemented |
+| Release C2 — shared graph and later analysis foundations | C2.1 shared structural graph implemented; C2.2 dependency semantics and C2.3 analysis primitives remain planned |
 | Release C3 — People, Teams and structured ownership | Planned |
 | Release C4 — formal Knowledge Objects | Planned |
 | Release D — Backup and Recovery | Planned |
@@ -47,12 +47,10 @@ update the audited ledger.
 | Release F — Documentation and intended state | Generated-document foundation partial; user-facing product and intended-state workflow not implemented |
 | Production and community packaging | Not established |
 
-The selected next increment is **Release C2.1 — Shared Operational Graph**.
-Atlas will deliberately use manually entered and curated accepted knowledge
-while it proves the graph model. B2 — Operational Integrations and live
-discovery remains an incomplete parallel workstream, but it is not a C2.1
-prerequisite and automatic discovery investment is deliberately postponed for
-the immediate development period.
+**Release C2.1 — Shared Operational Graph** is implemented on its feature
+working tree. Atlas can use manually entered and curated accepted knowledge to
+exercise the graph model. B2 — Operational Integrations and live discovery
+remains an incomplete parallel workstream and was not included in C2.1.
 See [`product/release-c2-plan.md`](product/release-c2-plan.md).
 
 ## Product documents
@@ -87,7 +85,7 @@ See [`product/release-c2-plan.md`](product/release-c2-plan.md).
 - [`architecture/service-dependencies.md`](architecture/service-dependencies.md)
   — current temporal dependency records and focused graphs.
 - [`architecture/operational-graph.md`](architecture/operational-graph.md) —
-  planned shared graph projection for C2.1 and extension points for later
+  implemented shared graph projection for C2.1 and extension points for later
   analysis.
 
 ## Decisions

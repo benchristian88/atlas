@@ -14,7 +14,7 @@ from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.models import (
-    Asset, AssetRelationship, BusinessFunction, CriticalityLevel, KnowledgeAssertion, KnowledgeChange,
+    Asset, BusinessFunction, CriticalityLevel, KnowledgeAssertion, KnowledgeChange,
     KnowledgeCompletenessSummary, KnowledgeGap, RelationshipType,
     RelationshipTypeApplicability, Service, ServiceAssetDependency,
     ServiceBusinessFunction, ServiceDependency, ServiceType, Site,
@@ -35,6 +35,12 @@ from app.services.knowledge_assertions import accept_assertion, record_assertion
 from app.services.knowledge_changes import record_assertion_change, record_change
 from app.services.knowledge_lifecycle import retract_assertion
 from app.services.manual_knowledge import MANUAL_SERVICE_KNOWLEDGE_FIELDS, declare_service_changes
+from app.services.operational_graph import (
+    GraphFocusNotFound,
+    GraphProjectionRequest,
+    OperationalGraphBuilder,
+    operational_graph_to_service_graph,
+)
 
 router = APIRouter(tags=["services"])
 
@@ -532,36 +538,33 @@ def service_assertions(service_id: uuid.UUID, principal: Principal = Depends(req
 
 
 @router.get("/services/{service_id}/graph", response_model=ServiceGraphResponse)
-def service_graph(service_id: uuid.UUID, principal: Principal = Depends(require_permission("service_dependencies.view")), db: Session = Depends(get_db)):
-    service = _service(db, principal, service_id, "service_dependencies.view")
-    nodes: dict[uuid.UUID, dict] = {service.id: {"id": service.id, "entity_type": "service", "name": service.name, "subtitle": "Service", "href": f"/services/{service.id}"}}
-    edges: list[dict] = []
-    supporting_asset_ids: set[uuid.UUID] = set()
-    for edge in db.scalars(select(ServiceAssetDependency).where(ServiceAssetDependency.service_id == service.id, ServiceAssetDependency.valid_to.is_(None))):
-        asset, rel = db.get(Asset, edge.asset_id), db.get(RelationshipType, edge.relationship_type_id)
-        if asset:
-            supporting_asset_ids.add(asset.id)
-            nodes[asset.id] = {"id": asset.id, "entity_type": "asset", "name": asset.name, "subtitle": asset.asset_type, "href": f"/assets/{asset.id}"}
-            edges.append({"id": edge.id, "source_id": service.id, "target_id": asset.id, "label": rel.source_label if rel else "Depends on", "edge_type": "service_asset"})
-    if supporting_asset_ids:
-        asset_edges = db.scalars(select(AssetRelationship).where(or_(AssetRelationship.source_asset_id.in_(supporting_asset_ids), AssetRelationship.target_asset_id.in_(supporting_asset_ids))).limit(100))
-        for edge in asset_edges:
-            source, target = db.get(Asset, edge.source_asset_id), db.get(Asset, edge.target_asset_id)
-            if source is None or target is None or not principal.can("assets.view", source.customer_id, source.site_id) or not principal.can("assets.view", target.customer_id, target.site_id):
-                continue
-            relationship = db.scalar(select(RelationshipType).where(RelationshipType.key == edge.relationship_type))
-            for asset in (source, target):
-                nodes[asset.id] = {"id": asset.id, "entity_type": "asset", "name": asset.name, "subtitle": asset.asset_type, "href": f"/assets/{asset.id}"}
-            edges.append({"id": edge.id, "source_id": source.id, "target_id": target.id, "label": relationship.source_label if relationship else edge.relationship_type.replace("_", " "), "edge_type": "asset_asset"})
-    for edge in db.scalars(select(ServiceDependency).where(or_(ServiceDependency.source_service_id == service.id, ServiceDependency.target_service_id == service.id), ServiceDependency.valid_to.is_(None))):
-        other_id = edge.target_service_id if edge.source_service_id == service.id else edge.source_service_id
-        other, rel = db.get(Service, other_id), db.get(RelationshipType, edge.relationship_type_id)
-        if other:
-            nodes[other.id] = {"id": other.id, "entity_type": "service", "name": other.name, "subtitle": "Service", "href": f"/services/{other.id}"}
-            edges.append({"id": edge.id, "source_id": edge.source_service_id, "target_id": edge.target_service_id, "label": rel.source_label if rel else "Depends on", "edge_type": "service_service"})
-    for edge in db.scalars(select(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == service.id, ServiceBusinessFunction.valid_to.is_(None))):
-        function, rel = db.get(BusinessFunction, edge.business_function_id), db.get(RelationshipType, edge.relationship_type_id) if edge.relationship_type_id else None
-        if function:
-            nodes[function.id] = {"id": function.id, "entity_type": "business_function", "name": function.name, "subtitle": "Business Function", "href": f"/business-functions/{function.id}"}
-            edges.append({"id": edge.id, "source_id": service.id, "target_id": function.id, "label": rel.source_label if rel else "Supports", "edge_type": "service_business_function"})
-    return {"nodes": list(nodes.values()), "edges": edges}
+def service_graph(
+    service_id: uuid.UUID,
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("service_dependencies.view")),
+    db: Session = Depends(get_db),
+):
+    try:
+        graph = OperationalGraphBuilder(db, principal).build(
+            GraphProjectionRequest(
+                focus_type="service",
+                focus_id=service_id,
+                max_depth=2,
+                node_limit=500,
+                context=context,
+                include_inactive_focus=True,
+                edge_families_by_depth=(
+                    frozenset(
+                        {
+                            "service_asset",
+                            "service_service",
+                            "service_business_function",
+                        }
+                    ),
+                    frozenset({"asset_relationship"}),
+                ),
+            )
+        )
+    except GraphFocusNotFound:
+        raise not_found("Service")
+    return operational_graph_to_service_graph(graph)
