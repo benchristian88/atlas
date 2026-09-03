@@ -1,6 +1,6 @@
 # Operational graph architecture
 
-Status: implemented for Release C2.1 on the feature working tree
+Status: implemented for Release C2.1 and merged to `dev` in `1842d16`
 
 This document describes the implemented C2.1 architecture and the approved
 extension boundaries for later graph and analysis releases.
@@ -14,9 +14,10 @@ Atlas currently has several graph-shaped product surfaces:
 - a focused Business Function graph; and
 - summary and completeness views that depend on related operational records.
 
-The next product surfaces — Homepage environment intelligence, Service
-Operations, Impact Analysis, and Change Simulation — need consistent graph
-identity, direction, scope, metadata, and traversal behavior.
+The next product surfaces — the C2.4 operational homepage, visual Knowledge
+Graph, enhanced Service Operations, C2.3 dependency analysis, and later Change
+Simulation — need consistent graph identity, direction, scope, metadata, and
+traversal behavior.
 
 Release C2.1 introduces a **shared operational graph projection** in the API. It
 turns accepted relational records into a typed, bounded graph response without
@@ -119,8 +120,9 @@ does not itself decide failure propagation or business impact.
 
 ### Analysis traversal
 
-A later C2.3 operation that applies dependency semantics, hypothetical states,
-reason codes, and confidence qualification to structural graph paths.
+A later C2.3 operation that applies lean dependency semantics and a hypothetical
+unavailable input to structural graph paths, returning deterministic reason
+codes, direct/downstream explanations, and unavailable/degraded/unknown results.
 
 ## Current source model
 
@@ -274,9 +276,10 @@ Relationship Type, or turns an inverse display label into a different edge.
 This prevents later impact analysis from reinterpreting presentation choices as
 operational meaning.
 
-Release C2.2 adds explicit dependency groups and failure effects. Until then,
-`required_for_operation` is useful metadata but is not enough to model
-redundancy or quorum.
+Release C2.2 adds required/optional meaning, `all`/`any` redundancy, and explicit
+unavailable/degraded/unknown failure effects. Until then,
+`required_for_operation` is useful compatibility metadata but is not enough to
+model redundancy or failure consequences.
 
 ## Authorization and non-disclosure
 
@@ -328,8 +331,10 @@ Where bounded and useful, the graph can expose qualifiers such as:
 - assertion or evidence summary references; and
 - a warning that an entity has unresolved knowledge.
 
-C2.1 does not calculate a universal numeric confidence score. Release C2.3 must
-define a documented formula before such a number is shown.
+C2.1 does not calculate a universal numeric confidence score. C2.3 also avoids
+an elaborate confidence engine: unknown knowledge produces `unknown`. Any later
+numeric confidence concept would require a separate documented evidence model
+and formula.
 
 ## Temporal behavior
 
@@ -438,12 +443,10 @@ breaking change.
 The current route-specific graph code should be removed only after the adapters
 cover current behavior and regression tests pass.
 
-At the audited pre-C2.1 baseline, the focused Service graph does not
-consistently check each adjacent entity type's own view permission before
-serialization. The Business Function graph performs more of those checks. The
-shared builder must make focus and every expansion endpoint authoritative while
-the adapters preserve response shape. This is required C2.1 authorization work,
-not an accepted compatibility behavior to retain.
+At the audited pre-C2.1 baseline, the focused routes differed in adjacent-node
+permission checks. The delivered shared builder now makes focus and every
+expansion endpoint authoritative while the adapters preserve response shape.
+The earlier mixed-permission gap was not retained as compatibility behavior.
 
 ## Query efficiency
 
@@ -481,14 +484,17 @@ silently reinterpreted.
 Release C2.2 may add:
 
 - dependency group IDs;
-- group strategy (`all`, `any`, `minimum`);
-- minimum available count;
-- failure effect;
-- optional/manual semantics; and
+- required/optional semantics compatible with `required_for_operation`;
+- group strategy (`all` or `any`);
+- failure effect (`unavailable`, `degraded`, or `unknown`); and
 - completeness gaps for unclassified critical dependencies.
 
 The C2.1 edge contract should be additive-friendly. Optional fields can be added
 without changing node identity or current edge family keys.
+
+`minimum`, quorum, `minimum_available`, weighted rules, conditional rules, and
+richer dependency-group or recovery-preference semantics remain valid additive
+enterprise extensions, but they are not C2.2 or Homelab Ready requirements.
 
 ## Extension to C2.3 and Release E
 
@@ -498,17 +504,29 @@ than requerying every table independently.
 It adds:
 
 - recursive analysis traversal;
-- dependency-group evaluation;
-- failure state propagation;
+- `all`/`any` dependency evaluation;
+- unavailable/degraded/unknown consequence evaluation;
 - explanation paths;
 - reason codes;
-- confidence qualification;
-- unknown and potentially affected states; and
+- direct/downstream classification;
+- `unaffected` only where defensible; and
 - analysis engine/schema versioning.
 
-Release E adds the user-facing failure scenario and result workflow. The
+C2.3 provides a contained explainable homelab analysis outcome; it is not live
+outage monitoring or full enterprise Impact Analysis. Release E later adds
+richer failure, recovery, business-impact, and scenario workflows. The
 operational graph remains the structural input; the analysis result is a
 separate output.
+
+## Consumption by C2.4
+
+C2.4's visual Knowledge Graph, homepage, and Service Operations experience
+should consume the stable API-owned graph and analysis contracts. The web layer
+may choose layout, focus, presentation filters, responsive behavior, and
+accessible fallbacks. It must not reconstruct authoritative graph membership,
+dependency effects, or authorization from raw database-shaped data. Later
+C3/C4/D/E/F metadata should enrich these contracts additively rather than force
+a replacement frontend architecture.
 
 ## Extension to Release F
 

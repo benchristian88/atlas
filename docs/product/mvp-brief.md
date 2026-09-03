@@ -8,9 +8,9 @@ Integration/worker path remains partial even though discovery simulation,
 reconciliation, plugin contracts, and core sync components exist.
 
 This document is retained as the historical product baseline. Future planning is
-maintained in [`development-roadmap.md`](development-roadmap.md), and the next
-implementation increment is described in
-[`release-c2-plan.md`](release-c2-plan.md).
+maintained in [`development-roadmap.md`](development-roadmap.md). C2.1 was
+subsequently delivered; [`release-c2-plan.md`](release-c2-plan.md) preserves its
+implementation history and defines the remaining C2 increments.
 
 ## Purpose
 
@@ -207,25 +207,22 @@ The baseline is successful when:
   where claimed, and limitations are documented without overstating live
   validation.
 
-## Next roadmap increment
+## Subsequent roadmap handoff
 
-The next planned increment is **Release C2.1 — Shared Operational Graph**.
+**Release C2.1 — Shared Operational Graph was subsequently implemented and
+merged.** It delivered:
 
-This is a sequencing decision. Atlas will deliberately use manually entered and
-curated accepted knowledge during the next development period so the knowledge,
-Service, relationship, and graph models can be proven before major further
-investment in automatic discovery. B2 — Operational Integrations and live
-discovery remains a parallel incomplete workstream, is not included in C2.1,
-and is not a prerequisite for it.
-
-C2.1 will:
-
-- derive a reusable typed graph from accepted relational records;
-- preserve API-owned authorization and semantic direction;
-- refactor current focused graph endpoints through compatibility adapters;
-- establish stable graph identity and bounded projection; and
-- avoid outage, recovery, or change-safety conclusions until later semantics and
+- a reusable typed graph derived from accepted relational records;
+- API-owned authorization and preserved semantic direction;
+- focused graph endpoints refactored through compatibility adapters;
+- stable graph identity and bounded projection; and
+- no outage, recovery, or change-safety conclusions until later semantics and
   evidence exist.
+
+This historical brief is not the active release plan. The current forward path
+is C2.2 Lean Dependency Semantics, C2.3 Explainable Dependency Analysis, C2.4
+Homelab Operations Experience, F1-lite, B2-lite, and Homelab Ready hardening.
+See the development roadmap for current scope and sequencing.
 
 See:
 

@@ -62,13 +62,19 @@ its supporting Services to their Assets, making connected infrastructure visible
 Nodes include entity type, display labels, and navigable UI paths; edges retain
 relationship labels and direction.
 
-These endpoints reuse the existing graph concepts and authorization boundary.
-They intentionally avoid global recursive traversal, path scoring, outage
-simulation, and full impact analysis. Their typed output is the foundation a
-later impact-analysis release can traverse more deeply.
+These endpoints now use the C2.1 shared operational graph builder while
+retaining their public response shapes. The builder applies endpoint-by-endpoint
+authorization and current-valid filtering. The focused routes remain structural
+projections: they do not perform outage simulation or full Impact Analysis.
 
-At the pre-C2.1 baseline, the Service graph authorizes its focus but does not
-consistently check every adjacent entity type's own view permission before
-serialization. The Business Function graph performs more endpoint checks.
-C2.1 must route both through one builder with endpoint-by-endpoint authorization
-while retaining their public response shapes.
+## Lean dependency semantics and later extension
+
+C2.2 will preserve `required_for_operation` compatibility while adding only the
+homelab semantics needed for useful analysis: required/optional meaning,
+`all`/`any` redundancy, and `unavailable`/`degraded`/`unknown` failure effects.
+C2.3 will apply those semantics through bounded, deterministic, cycle-safe,
+authorization-safe analysis and explain results with actual dependency paths.
+
+The model should remain additively extensible to `minimum`, quorum,
+`minimum_available`, weighted, conditional, and richer group rules, but those
+are later enterprise capabilities rather than Homelab Ready requirements.

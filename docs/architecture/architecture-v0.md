@@ -1,6 +1,6 @@
 # Atlas architecture v0
 
-Current baseline: implemented foundation through Release C1
+Current baseline: implemented foundation through Release C2.1
 
 ## Purpose
 
@@ -8,8 +8,8 @@ Atlas is a customer/site-scoped infrastructure knowledge, documentation, and
 topology platform. The same ownership and authorization model supports a
 single-site homelab and a multi-customer MSP installation.
 
-This document describes the implemented architecture baseline. Planned Release
-C2 graph architecture is documented separately in
+This document describes the implemented architecture baseline. Detailed Release
+C2 graph architecture and extension boundaries are documented separately in
 [`operational-graph.md`](operational-graph.md).
 
 ## Runtime architecture
@@ -40,10 +40,10 @@ plugin execution remain partial. The usable discovery product currently includes
 simulation, evidence, assertions, reconciliation, and independently tested plugin
 and sync components.
 
-For the immediate development period, Atlas is deliberately validating the
-knowledge, Service, relationship, and graph models with manually entered and
-curated accepted knowledge. B2 live discovery remains important but is not a
-prerequisite for C2.1.
+Atlas deliberately validates the knowledge, Service, relationship, and graph
+models with manually entered and curated accepted knowledge. C2.1 is complete;
+B2-lite live Proxmox discovery is a later Homelab Ready increment and must
+preserve the observed-versus-accepted boundary.
 
 ## Ownership hierarchy
 
@@ -254,28 +254,28 @@ Icon URLs are metadata, not downloaded server-side content. Atlas accepts HTTPS
 non-SVG URLs and resolves Asset override, type default, then a generic fallback
 in the browser.
 
-## Graph architecture at the C1 baseline
+## Graph architecture at the C2.1 baseline
 
-Atlas has two related graph surfaces:
+Atlas has three related graph surfaces:
 
 1. **Knowledge Graph topology lenses** over scoped Assets, interfaces, Networks,
    and Asset relationships.
-2. **Focused Service/Business Function projections** that assemble directly
-   connected Services, Assets, and Business Functions in route handlers.
+2. **Focused Service/Business Function projections** adapted from the shared
+   operational graph builder.
+3. **Generic operational graph projection** focused on an authorized Asset,
+   Service, or Business Function with typed identity, explicit direction,
+   bounded depth, deterministic ordering, cycle safety, current-valid temporal
+   filtering, edge-family filters, and safe truncation.
 
-The current focused graph schemas use UUID node IDs and a small set of edge
-families. They intentionally avoid global recursive traversal, dependency-group
-evaluation, path scoring, outage simulation, recovery selection, and planned
-change overlays.
+The public focused graph schemas retain their C1 UUID contracts, while the
+shared C2.1 contract uses namespaced node and edge identity. The API applies
+endpoint-by-endpoint authorization and non-disclosure. These graphs remain
+structural: they intentionally avoid dependency-effect evaluation, outage
+simulation, recovery selection, and planned-change overlays.
 
-The focused Service graph authorizes its focus but does not yet apply every
-adjacent entity type's independent view permission consistently. Closing that
-mixed-permission expansion gap is an explicit C2.1 shared-builder requirement.
-
-Release C2.1 will replace duplicated route-owned assembly with a shared derived
-operational graph while preserving existing endpoint contracts initially. C2.1
-is deliberately separate from B2 Integration/worker completion, the F1 Documents
-surface, Interface-first IP cleanup, and legacy Service Asset conversion. See
+C2.1 remains separate from B2-lite Integration/Proxmox completion, the F1-lite
+Documents surface, Interface-first IP cleanup, and legacy Service Asset
+conversion. See
 [`operational-graph.md`](operational-graph.md) and
 [`../decisions/0001-shared-operational-graph.md`](../decisions/0001-shared-operational-graph.md).
 
@@ -299,11 +299,14 @@ the detailed entity model.
 
 The roadmap preserves this baseline and adds capabilities in layers:
 
-- C2.1 shared operational graph;
-- C2.2 dependency semantics;
-- C2.3 analysis primitives;
-- C3 structured People/Team ownership;
-- C4 formal Knowledge Objects;
+- C2.1 shared operational graph (implemented);
+- C2.2 lean dependency semantics;
+- C2.3 explainable dependency analysis;
+- C2.4 Homelab Operations Experience;
+- F1-lite Homelab Documentation and B2-lite Live Proxmox Discovery;
+- Homelab Ready hardening and release;
+- C3 structured People/Team ownership and C4 formal Knowledge Objects after
+  Homelab Ready;
 - D recovery knowledge and evidence;
 - E failure and recovery-aware impact analysis; and
 - F intended state, change simulation, and post-change reconciliation.

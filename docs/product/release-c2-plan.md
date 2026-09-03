@@ -1,14 +1,14 @@
 # Release C2 implementation plan
 
-Status: C2.1 implemented on the feature working tree; C2.2 and C2.3 planned
+Status: C2.1 implemented and merged; C2.2, C2.3, and C2.4 planned
 
 Delivered increment: **C2.1 — Shared Operational Graph**
 
 ## C2.1 implementation evidence — 3 September 2026
 
-C2.1 is implemented on `feature/c2-1-shared-operational-graph`, based on
-`f693f492deb0d3b317134c407e0897c9e1b25d58`. No implementation commit had been
-created when this evidence was recorded.
+C2.1 was implemented in `a9f41df` and merged into `dev` by `1842d16` on
+3 September 2026. The validation results below were recorded on the feature
+working tree before that merge; the merge has the same tree as `a9f41df`.
 
 The delivered implementation adds:
 
@@ -44,16 +44,20 @@ Release C2 converts the focused graph work delivered in C1 into a reusable,
 secure, explainable foundation for the Homepage, Service Operations, Impact
 Analysis, and Change Simulation.
 
-The release is split into three increments:
+The release is split into four increments:
 
 - **C2.1 — Shared Operational Graph:** one API-owned structural graph projection
   over accepted operational records.
-- **C2.2 — Dependency Semantics:** redundancy, quorum, and failure effects.
-- **C2.3 — Analysis Primitives:** recursive traversal, path explanation, impact
-  state, and confidence qualification.
+- **C2.2 — Lean Dependency Semantics:** required/optional meaning, `all`/`any`
+  redundancy, and small explicit failure effects.
+- **C2.3 — Explainable Dependency Analysis:** bounded consequence analysis,
+  actual explanation paths, and small deterministic result states.
+- **C2.4 — Homelab Operations Experience:** a polished dashboard, visual graph,
+  enhanced Service Operations, exploration, and product refinement.
 
-C2.1 is deliberately useful without attempting full impact analysis. It should
-be the next development increment.
+C2.1 is deliberately useful without attempting full impact analysis. The
+near-term target is a Homelab Ready product, not completion of every later
+enterprise domain model.
 
 ## Existing implementation to preserve
 
@@ -75,12 +79,10 @@ C2 builds on the following completed capabilities:
 C2.1 must preserve existing route behavior and C1 data. It should refactor graph
 assembly internally before changing existing public response contracts.
 
-The current routes authorize their focus records and the Business Function
-projection checks adjacent Service and Asset view permissions. The Service graph
-route does not consistently apply independent per-entity-type permission checks
-to every directly serialized Service, Asset, and Business Function node. C2.1
-must preserve the public response shape while moving both routes to the shared
-builder's stricter endpoint-by-endpoint non-disclosure rules.
+At the pre-C2.1 baseline, the routes authorized focus records but differed in
+adjacent-node checks. The delivered builder now applies endpoint-by-endpoint
+non-disclosure while the compatibility adapters preserve public response
+shapes.
 
 ## Governing architecture
 
@@ -95,10 +97,10 @@ Read these documents before implementation:
 
 ## Relationship to the repository ledger and other priorities
 
-The current readiness baseline is `dev` at
+The pre-implementation readiness baseline was `dev` at
 `4b0bfac6c746c56df9e1bfe16bae33d8dff3721e`, audited on 30 August 2026. The
-older `09d2271` review remains historical comparison evidence; current code is
-authoritative.
+C2.1 merge is `1842d161de87bcf826a15ae117703876fc30c192`; older audit points
+remain historical comparison evidence and current code is authoritative.
 
 Atlas is deliberately using manually entered and curated accepted knowledge for
 the immediate development period. This lets C2.1 prove the knowledge, Service,
@@ -485,8 +487,8 @@ plugin discovery.
 | C2.1-10 | Regression and performance validation | Existing C1, topology, knowledge, and build checks remain green |
 | C2.1-11 | Update ledger and release notes | Implementation state is re-audited at a named commit |
 
-These items were delivered as one tightly scoped feature working tree. The
-change contains no UI redesign or data-model migration.
+These items were delivered in `a9f41df` and merged by `1842d16`. The change
+contains no UI redesign or data-model migration.
 
 ## C2.1 acceptance criteria
 
@@ -510,64 +512,61 @@ C2.1 is complete when:
   pass; and
 - the feature ledger is re-audited without claiming tests that were not run.
 
-# C2.2 — Dependency Semantics
+# C2.2 — Lean Dependency Semantics
 
 ## Purpose
 
-C1 records whether a Service dependency is required for operation. That is not
-sufficient to model redundancy, quorum, graceful degradation, or manual
-judgement.
+C1 records whether a Service dependency is required for operation. Homelab
+consequence analysis needs a small amount of additional meaning for optional
+dependencies, basic redundancy, degradation, and unknown cases.
 
 C2.2 should add explicit semantics before full impact propagation.
 
-## Proposed additive model
+## Homelab scope
 
-A possible model is:
+The model must support:
 
 ```text
-DependencyGroup
-- id
-- customer_id / site_id
-- subject_type: service initially
-- subject_id
-- name
-- strategy: all | any | minimum
-- minimum_available
-- failure_effect: unavailable | degraded | warning | manual
-- description
-- valid_from / valid_to
-
-Dependency membership
-- existing dependency row references an optional group
-- ungrouped dependency retains its current required_for_operation meaning
-- optional per-edge failure_effect may override only where clearly required
+dependency requirement: required | optional
+redundancy strategy: all | any
+failure effect: unavailable | degraded | unknown
 ```
 
-The exact schema requires a separate design review. Important constraints are:
+The exact additive schema requires a separate design review. Important
+constraints are:
 
 - current rows remain valid after migration;
+- current `required_for_operation` consumers remain compatible;
 - a default migration must not reinterpret optional dependencies as critical;
 - unknown semantics remain visible as knowledge gaps;
-- groups and memberships preserve history; and
+- any groups or memberships preserve history; and
 - relationship direction remains independent from propagation direction.
+
+## Explicit enterprise deferrals
+
+C2.2 does not require `minimum`, quorum, `minimum_available`, weighted rules,
+conditional rules, rich recovery preference, or a general dependency-group
+language. The design should leave additive extension points for those later
+capabilities without implementing them for Homelab Ready.
 
 ## C2.2 acceptance themes
 
-- all-of, any-of, and minimum-count fixtures;
-- two-of-three cluster quorum;
+- required and optional dependencies;
+- `all` and `any` fixtures;
 - optional monitoring dependency causing degradation rather than outage;
 - storage dependency required for one Service but optional for another;
-- valid exceptions and unresolved semantics;
+- unresolved semantics producing `unknown`;
 - safe additive migration; and
 - clear UI wording that does not imply a live health signal.
 
-# C2.3 — Analysis Primitives
+# C2.3 — Explainable Dependency Analysis
 
 ## Purpose
 
-C2.3 consumes the graph and dependency semantics to produce explainable path and
-state results. It is an engine release, not yet the complete Impact Analysis
-screen.
+C2.3 consumes the graph and lean dependency semantics to answer useful homelab
+questions: which known Services may be affected when an Asset or Service is
+unavailable, whether the consequence is direct or downstream, why Atlas reached
+that conclusion, and where semantics are too incomplete to decide.
 
 ## Proposed internal contract
 
@@ -583,7 +582,6 @@ AnalysisResult
 - direct and indirect paths
 - reason codes
 - unknowns and knowledge gaps
-- confidence qualification
 - truncation/limit state
 - immutable engine and schema version
 ```
@@ -592,12 +590,11 @@ AnalysisResult
 
 - deterministic recursive traversal;
 - cycles terminate safely;
-- dependency groups are evaluated once with stable rules;
-- unavailable and degraded states are distinct;
-- missing semantics yield `unknown` or `potentially_affected`, not a fabricated
-  outage;
+- `all` and `any` dependency sets are evaluated with stable rules;
+- results use `unavailable`, `degraded`, `unknown`, and `unaffected` only where
+  defensible;
+- missing semantics yield `unknown`, not a fabricated outage or probability;
 - each conclusion carries one or more explanation paths;
-- evidence freshness and completeness qualify confidence;
 - scope is enforced before and during traversal; and
 - the same engine can later accept failure scenarios and intended-state overlays.
 
@@ -608,6 +605,44 @@ AnalysisResult
 - change approval and execution;
 - AI-generated remediation; and
 - operational telemetry ingestion.
+
+C2.3 is not a general enterprise reasoning or confidence-scoring framework.
+
+# C2.4 — Homelab Operations Experience
+
+## Purpose
+
+C2.4 turns the C1/C2 technical foundation into a polished, highly visual
+product. It is a major product release rather than cosmetic cleanup.
+
+## Product outcomes
+
+- a beautiful operational homepage using defensible real Atlas data to explain
+  the environment, what matters, what Atlas knows, and what needs attention;
+- a polished interactive Knowledge Graph over the existing C2.1 API, with
+  distinct entity types, semantic direction, focus/navigation, bounded depth
+  and edge filters where useful, responsive behavior, accessibility, and clear
+  empty/truncated states;
+- enhanced Service Operations showing providers, dependencies, dependants,
+  supported Business Functions, criticality, completeness, unknown semantics,
+  and C2.3 consequence information where available;
+- natural Asset → Service → Business Function → infrastructure exploration; and
+- deliberate hierarchy, spacing, loading/empty states, terminology, theme
+  compatibility, and Atlas Impact branding.
+
+The API remains authoritative for graph membership, relationship semantics,
+authorization, and dependency conclusions. The browser may lay out and filter
+authorized results but must not become an impact engine. Dashboard summaries
+must not imply live health without live evidence.
+
+## Relationship to Homelab Ready
+
+After C2.4, the principal product path continues through F1-lite Homelab
+Documentation, B2-lite Live Proxmox Discovery, and Homelab Ready hardening. C3
+People/Teams, C4 formal Knowledge Objects, advanced recovery, richer dependency
+semantics, full enterprise Impact Analysis, and intended-state simulation are
+not C2 acceptance requirements. See
+[`development-roadmap.md`](development-roadmap.md) for the canonical sequence.
 
 # Risks and mitigations
 
@@ -621,7 +656,7 @@ AnalysisResult
 | N+1 queries make graphs slow | Batch frontier, type, and completeness loads; profile representative fixtures |
 | UUID collisions across entity types | Use namespaced graph keys |
 | Historical query implies unsupported Asset history | Document current Asset relationship limitation; do not invent temporal data |
-| Confidence is misleading | Defer numeric aggregation to C2.3 and expose raw qualifiers first |
+| Confidence is misleading | Use explicit paths and `unknown`; defer elaborate confidence/scoring to later enterprise work |
 | C2.2 migration changes current meaning | Additive nullable semantics with conservative defaults and migration tests |
 
 # Historical C2.1 implementation checklist

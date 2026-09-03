@@ -357,21 +357,23 @@ See the [Service model](docs/architecture/service-model.md),
 
 ## Current product sequence
 
-Atlas is deliberately using manually entered and curated operational knowledge
-for the next development period. This lets the project prove and refine the
-Asset, Service, Business Function, relationship, and graph models before making
-automatic discovery and worker orchestration the primary investment.
+**Release C2.1 — Shared Operational Graph is implemented and merged.** Atlas's
+near-term product target is a polished, secure, publicly usable **Homelab Ready
+Release**. The planned route is C2.2 Lean Dependency Semantics, C2.3 Explainable
+Dependency Analysis, C2.4 Homelab Operations Experience, F1-lite Homelab
+Documentation, B2-lite Live Proxmox Discovery, and contained release hardening.
 
-The next implementation increment is **Release C2.1 — Shared Operational
-Graph**. Manual Assets, Services, Business Functions, and their accepted links
-are valid graph input. B2 live Integrations remains incomplete and important,
-but it is not a prerequisite for C2.1. Discovery evidence and accepted
-operational knowledge remain separate regardless of whether knowledge begins as
-a manual declaration, simulation, or future live plugin observation.
+Manual and curated operational knowledge remains first-class. People/Teams,
+formal Knowledge Objects, advanced recovery evidence, richer dependency rules,
+full enterprise Impact Analysis, intended-state simulation, production-scale
+orchestration, and multiple plugins remain additive later evolution rather than
+Homelab Ready prerequisites. Discovery evidence and accepted operational
+knowledge remain separate regardless of whether knowledge begins as a manual
+declaration, simulation, or future live plugin observation.
 
 See the [development roadmap](docs/product/development-roadmap.md),
 [C2 release plan](docs/product/release-c2-plan.md), and
-[C2 readiness audit](docs/product/c2-readiness-audit.md).
+[feature ledger](docs/product/feature-ledger.md).
 
 ## Knowledge provenance and reconciliation
 

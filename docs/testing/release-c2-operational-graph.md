@@ -1,13 +1,16 @@
 # Release C2.1 Operational Graph test plan
 
-Status: automated C2.1 coverage implemented; PostgreSQL/Docker acceptance pending
+Status: C2.1 merged; automated coverage recorded; PostgreSQL/Docker acceptance pending
 
-This document defines the Release C2.1 validation contract and records the
-checks executed against the feature working tree.
+This document preserves the Release C2.1 validation contract and records the
+checks executed against the feature working tree before its merge to `dev`.
 
 ## Working-tree validation — 3 September 2026
 
 Base commit: `f693f492deb0d3b317134c407e0897c9e1b25d58`
+
+Delivery commit: `a9f41df`; merged to `dev` by `1842d16`. The merge has the
+same tree as the delivery commit.
 
 Executed results:
 
@@ -28,10 +31,8 @@ localhost. Docker/PostgreSQL acceptance could not run because the environment
 does not provide the `docker` executable. These checks remain manual release
 verification; no migration was added by C2.1.
 
-C2.1 is implemented on its feature working tree, while B2 — Operational
-Integrations and live discovery remains a separate incomplete workstream and
-was not a prerequisite. The reference fixture is deliberately created with
-current manual UI/API capabilities. This plan does not test
+C2.1 is implemented and merged. The reference fixture is deliberately created
+with current manual UI/API capabilities. This plan does not test
 Integration CRUD, secrets, worker dispatch, live Proxmox execution, Documents
 UI, Interface-first IP cleanup, or legacy Service Asset conversion.
 

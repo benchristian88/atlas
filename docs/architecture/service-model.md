@@ -60,9 +60,17 @@ for a homelab and does not pretend that Person, Team, roster, or escalation
 records exist. A later release can migrate these labels into Person/Team role
 assignments while retaining the original labels as migration evidence.
 
+These fields remain the accepted ownership model for Homelab Ready. C3
+People/Teams is an additive internal-IT/MSP/enterprise evolution, not a homelab
+release prerequisite.
+
 Likewise, `runbook_url` and `documentation_url` are links today. A future
 Knowledge Object model can associate formal runbooks and documents without
 changing the meaning of the Service.
+
+F1-lite may expose existing generated `Document` records before that future C4
+model exists, provided generated content remains visibly distinct from reviewed
+human-authored knowledge.
 
 ## Provenance and completeness
 

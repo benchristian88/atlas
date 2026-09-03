@@ -1,11 +1,11 @@
 # Atlas product feature ledger — repository-reconciled edition
 
 **Repository audit date:** 30 August 2026
-**C2.1 working-tree audit date:** 3 September 2026
+**C2.1 merged-state audit date:** 3 September 2026
 **Review comparison dates:** 23–24 July 2026
-**Planning alignment update:** 30 August 2026
-**Repository source of truth:** `dev` at `4b0bfac6c746c56df9e1bfe16bae33d8dff3721e`
-**C2.1 implementation base:** `feature/c2-1-shared-operational-graph` based on `f693f492deb0d3b317134c407e0897c9e1b25d58`; no implementation commit created at audit time
+**Planning alignment update:** 3 September 2026
+**Repository source of truth:** `dev` at `1842d161de87bcf826a15ae117703876fc30c192`
+**C2.1 delivery:** `a9f41df` merged into `dev` by `1842d16`
 **Primary evidence:** audited repository models, migrations, routes, pages, tests, and build configuration
 **Comparison baseline:** the earlier transcript-derived **Atlas Product Feature Status Review**
 
@@ -21,10 +21,10 @@
 
 ---
 
-# C2.1 working-tree implementation audit — 3 September 2026
+# C2.1 merged implementation audit — 3 September 2026
 
-This new audit point preserves the 30 August baseline below and evaluates the
-uncommitted C2.1 feature working tree. The working tree contains one reusable
+This audit point preserves the 30 August baseline below and verifies that the
+C2.1 implementation commit is merged into `dev`. The merged tree contains one reusable
 API-owned operational graph builder, the generic `/api/operational-graph`
 contract, compatibility adapters for both C1 graph routes, shared web graph
 normalization/presentation, and focused authorization/traversal tests.
@@ -43,51 +43,51 @@ Repository evidence at this audit point:
 The local environment had no running PostgreSQL server and no Docker executable,
 so `alembic current` and Docker/PostgreSQL acceptance were not completed. The
 existing test suite uses repository-standard fake sessions and route dependency
-overrides; production PostgreSQL acceptance remains a manual pre-merge check.
+overrides; production PostgreSQL acceptance remains an outstanding manual
+release check.
 
-C2.1 is classified **Implemented on the feature working tree**. This does not
-change the status of C2.2, C2.3, Impact Analysis, Change Simulation, Backup and
-Recovery, B2 live discovery, F1 Documents, Interface-first IP cleanup, or legacy
-Service Asset conversion.
+C2.1 is classified **Implemented**. This does not change the planned or partial
+status of C2.2, C2.3, C2.4, full Impact Analysis, Change Simulation, Backup and
+Recovery, B2-lite, F1-lite, Interface-first IP cleanup, or legacy Service Asset
+conversion.
 
 ---
 
-# 0. Repository and planning alignment update — 30 August 2026
+# 0. Repository and planning alignment update — 3 September 2026
 
-This update re-audits the current `dev` tree. Commits after `09d2271` changed
-documentation and planning, not application code, but the implementation
-classifications and validation counts below were checked again at the current
-commit. The July reviews remain historical comparison evidence.
+This update reconciles planning against `dev` after the C2.1 merge. C2.1 code is
+present at the named commit; the recorded test results are preserved from its
+pre-merge implementation audit and were not rerun for this documentation-only
+planning change. The July reviews remain historical comparison evidence.
 
-The following planning decisions are now recorded:
+The following current planning decisions are now recorded without changing
+historical implementation findings:
 
-1. **C2.1 — Shared Operational Graph is the selected next development increment.**
-   This is a sequencing decision, not a change to repository status.
+1. **C2.1 — Shared Operational Graph is implemented and merged.**
 2. **The immediate product strategy is manual-first.** Manually entered and
-   curated accepted knowledge will be used to prove the model before major
-   further automatic-discovery investment.
-3. **B2 — Operational Integrations and live discovery remains an incomplete
-   parallel workstream, not a C2.1 prerequisite.** C2.1 must not absorb
-   Integration CRUD, secret resolution, worker dispatch, live Proxmox
-   execution, scheduling, retries, or cancellation.
-4. **Release C2 is decomposed for delivery:**
+   curated accepted knowledge remains first-class while Atlas progresses toward
+   Homelab Ready.
+3. **Release C2 is decomposed for delivery:**
    - C2.1 — Shared Operational Graph;
-   - C2.2 — Dependency Semantics; and
-   - C2.3 — Analysis Primitives.
-5. **F1 — Documentation Experience may be delivered independently** because the
-   repository already contains deterministic Asset Markdown generation and
-   `Document` persistence. It is not a prerequisite for C2.1.
-6. **Foundation hardening remains visible outside the principal release chain,**
-   especially the Interface-first IP transition and replacement of the mock
-   Integrations page.
+   - C2.2 — Lean Dependency Semantics;
+   - C2.3 — Explainable Dependency Analysis; and
+   - C2.4 — Homelab Operations Experience.
+4. **F1-lite Homelab Documentation** is planned to expose existing generated
+   Markdown and `Document` persistence without waiting for C4.
+5. **B2-lite Live Proxmox Discovery** is planned to complete the smallest secure
+   configure, test, Run Now, results, and reconciliation journey. The broader B2
+   control plane remains later work.
+6. **Homelab Ready** is the near-term product milestone. C3, C4, D, full E,
+   intended-state simulation, enterprise orchestration, and multiple plugins
+   are not prerequisites.
 7. The shared graph remains a derived, API-owned projection over accepted
    relational knowledge. PostgreSQL remains the system of record, and C2.1 does
    not introduce impact, recovery, availability, or change-safety conclusions.
 
 The canonical forward sequence is maintained in
-[`development-roadmap.md`](development-roadmap.md). The implementation prompt is
-maintained in
-[`../prompts/c2-1-shared-operational-graph-codex-prompt.md`](../prompts/c2-1-shared-operational-graph-codex-prompt.md).
+[`development-roadmap.md`](development-roadmap.md). The completed C2.1
+implementation prompts are retained only as historical evidence under
+[`../history/implementation-prompts/`](../history/implementation-prompts/README.md).
 
 ---
 
@@ -172,9 +172,12 @@ The repository audit materially changes several classifications:
 | Release B — Discovery and Reconciliation | **Implemented for simulation and reconciliation; live plugin operation is partial** |
 | B.5 — Knowledge Completeness | **Implemented for Assets and Services** |
 | Release C1 — Homelab Service MVP | **Implemented**            |
-| Release C2 — shared graph and later analysis foundations | **C2.1 implemented on the feature working tree; C2.2/C2.3 planned**  |
-| Release C3 — People, Teams and structured ownership | **Planned but not implemented** |
-| Release C4 — formal Knowledge Objects | **Planned but not implemented** |
+| Release C2 — shared graph and dependency analysis foundations | **C2.1 implemented; C2.2/C2.3/C2.4 planned**  |
+| F1-lite — Homelab Documentation | **Planned but not implemented; renderer/storage foundation exists** |
+| B2-lite — Live Proxmox Discovery | **Partially implemented foundation; end-to-end journey absent** |
+| Homelab Ready Release | **Planned but not implemented** |
+| Release C3 — People, Teams and structured ownership | **Planned after Homelab Ready; not implemented** |
+| Release C4 — formal Knowledge Objects | **Planned after Homelab Ready; not implemented** |
 | Release D — Backup and Recovery | **Planned but not implemented** |
 | Release E — full Impact Analysis | **Planned but not implemented; structural prerequisites exist** |
 | Release F — Documentation and intended state | **Partially implemented foundation; user-facing product not implemented** |
@@ -331,7 +334,7 @@ They do **not** establish:
 | Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
 | All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
 | Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
-| Second-hop topology focus | **Planned but not implemented** | C2.1 | The shared operational graph plan permits structural depth `0..2`; current topology focus remains direct neighbours. |
+| Second-hop Knowledge Graph topology focus | **Planned but not implemented** | C2.4/future topology | The generic operational graph supports depth `0..2`, but the current topology lens remains direct-neighbour focused. |
 | Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
 
 
@@ -467,11 +470,11 @@ They do **not** establish:
 | Proxmox vendor-neutral normalisation | **Implemented** | Integration foundation | Stable Assets/facts/relationships are produced. |
 | Idempotent core discovery sync | **Implemented as component** | Integration foundation | Raw payload retention, upsert, last-seen and stale marking are tested. |
 | Integration persistence model | **Implemented** | Integration foundation | Integration table stores plugin and connection metadata. |
-| Integration management API | **Partially implemented/absent** | Future integration increment | No Integration router is registered. |
-| Integration management page | **Partially implemented** | Future integration increment | Page exists but imports mock data. |
-| Test-connection journey | **Partially implemented/absent** | Future integration increment | Standalone validator exists; no current user journey invokes it. |
+| Integration management API | **Partially implemented/absent** | B2-lite | No Integration router is registered. |
+| Integration management page | **Partially implemented** | B2-lite | Page exists but imports mock data. |
+| Test-connection journey | **Partially implemented/absent** | B2-lite | Standalone validator exists; no current user journey invokes it. |
 | Integration secret resolver/store | **Unknown** | Production integration | `secret_reference` exists, but no provider/resolver contract is decided. |
-| End-to-end configured Proxmox run | **Partially implemented** | B hardening | No path joins Integration, secret resolution, plugin and worker dispatch. |
+| End-to-end configured Proxmox run | **Partially implemented** | B2-lite | No path joins Integration, secret resolution, plugin invocation and safe execution. |
 | JSON simulated discovery | **Implemented** | B       | Current usable discovery input. |
 | Automatic worker dispatch | **Partially implemented/absent** | B hardening | Worker does not dispatch plugins. |
 | Scheduled discovery | **Deferred** | Future worker control plane | No scheduler or queue controls. |
@@ -495,9 +498,9 @@ They do **not** establish:
 | Injection-resistant Markdown output | **Implemented as component** | F foundation | Tests cover sanitisation. |
 | Document persistence | **Implemented as storage** | F foundation | Core sync upserts `Document` rows. |
 | Discovery-run document linkage | **Implemented as storage** | F foundation | Generated documents are linked to runs. |
-| Documents API router | **Partially implemented/absent** | F       | No documents router is registered. |
-| Document list page | **Partially implemented/absent** | F       | Navigation remains unavailable. |
-| Document detail page | **Partially implemented/absent** | F       | No usable user surface. |
+| Documents API router | **Partially implemented/absent** | F1-lite | No documents router is registered. |
+| Document list page | **Partially implemented/absent** | F1-lite | Navigation remains unavailable. |
+| Document detail page | **Partially implemented/absent** | F1-lite | No usable user surface. |
 | User editing of generated docs | **Planned but not implemented** | F       | No product surface or editing workflow. |
 | Service documentation generation | **Planned but not implemented** | F       | Current renderer is Asset-focused. |
 | Site architecture documents | **Planned but not implemented** | F       | No usable implementation. |
@@ -522,6 +525,9 @@ They do **not** establish:
 | Focused Service projection | **Implemented** | C1 | Structural graph endpoint exists. |
 | Recursive analysis traversal | **Planned but not implemented** | C2.3/E | No recursive impact engine. C2.1 bounded structural projection is not impact propagation. |
 | Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..2`, deduplication, cycles, and explicit limits without impact propagation. |
+| Lean dependency semantics (`all`/`any`, failure effect) | **Planned but not implemented** | C2.2 | Current `required_for_operation` is a compatibility foundation; no redundancy strategy or explicit failure-effect model exists. |
+| Explainable dependency consequence analysis | **Planned but not implemented** | C2.3 | No bounded consequence engine returns direct/downstream paths and `unavailable`/`degraded`/`unknown` results. |
+| Homelab Operations Experience | **Planned but not implemented** | C2.4 | Existing summaries and graph components are foundations, not the planned polished dashboard, visual graph, and enhanced Service Operations release. |
 | Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
 | Dedicated `/impact-analysis` route | **Planned but not implemented** | E       | Navigation entry is unavailable. |
 | Evidence-qualified impact path | **Planned but not implemented** | E       | No path/evidence engine. |
@@ -570,15 +576,49 @@ They do **not** establish:
 
 These items are committed future work in current repository documentation.
 
-## C2 — remaining analysis foundations
+## C2 — remaining Homelab Ready foundations
 
-* C2.2 dependency groups, redundancy, quorum, and failure effects; and
-* C2.3 recursive analysis traversal, evidence paths, and qualified states.
+* C2.2 required/optional dependencies, `all`/`any` redundancy, and
+  `unavailable`/`degraded`/`unknown` failure effects;
+* C2.3 bounded explainable consequence analysis with direct/downstream paths and
+  `unavailable`/`degraded`/`unknown`/defensible `unaffected` results; and
+* C2.4 polished operational homepage, visual Knowledge Graph, enhanced Service
+  Operations, environment exploration, responsiveness, accessibility, and
+  product polish.
 
 The dedicated Impact Analysis route, outage simulation, blast radius, recovery
 ordering, and business severity remain Release E, not C2.1.
 
+## F1-lite — Homelab Documentation
+
+* Documents API;
+* list and detail pages;
+* readable Markdown rendering;
+* Asset links; and
+* clear generated-versus-reviewed labeling.
+
+## B2-lite — Live Proxmox Discovery
+
+* real Integration CRUD and replacement of the mock page;
+* safe secret-reference handling;
+* Test Connection and Run Now;
+* actual Proxmox invocation;
+* Discovery Run status/results and clear failures; and
+* existing evidence/reconciliation flow.
+
+## Homelab Ready Release
+
+* Interface-first IP user journeys;
+* installation, upgrade, Docker, browser, and mobile validation;
+* backup/restore and operator guidance;
+* security and accessibility review;
+* first-run/onboarding refinement; and
+* repeatable release artefacts.
+
 ## C3 — People, Teams and structured ownership
+
+C3 is planned after Homelab Ready; the current free-text labels remain an
+acceptable homelab model.
 
 * Person;
 * Team;
@@ -593,6 +633,8 @@ ordering, and business severity remain Release E, not C2.1.
 * `owner_exists` completeness rule.
 
 ## C4 — Formal Documentation and Knowledge Objects
+
+C4 is planned after Homelab Ready. F1-lite does not depend on this formal model.
 
 * KnowledgeObject;
 * Runbook;
@@ -707,11 +749,11 @@ The repository does not provide a clear implementation or product decision for:
 
 # 10. Repository audit priority assessment
 
-The July review identified the following value gaps. The 30 August sequencing
-decision deliberately selects manual-first C2.1 next; this section records
-parallel and later opportunities rather than chronological priority.
+The July review identified the following value gaps. C2.1 has since been
+delivered. The current roadmap prioritizes a polished Homelab Ready product
+while retaining the same implementation evidence below.
 
-## Parallel incomplete workstream: operational integrations
+## Homelab Ready stream: B2-lite live Proxmox discovery
 
 Atlas already has the hardest individual parts:
 
@@ -726,13 +768,13 @@ Atlas already has the hardest individual parts:
 * Changes;
 * generated Markdown component.
 
-The missing value chain is:
+The missing Homelab Ready value chain is:
 
-`Configured Integration → secret-reference resolution → Test Connection → Run Now → queue/worker dispatch → Proxmox plugin → raw evidence → assertions/reconciliation → status/progress/errors → scheduled repeat runs`
+`Configured Integration → safe secret-reference resolution → Test Connection → Run Now → Proxmox plugin → raw evidence → assertions/reconciliation → status/results/errors`
 
 Until this exists, Atlas’s main discovery experience remains simulation-driven.
 
-### B2 — Operational Integrations and live discovery
+### B2-lite scope
 
 Build:
 
@@ -741,14 +783,16 @@ Build:
 3. Safe initial provider, such as environment/file-backed references.
 4. Test Connection endpoint and UI.
 5. Run Now endpoint.
-6. Worker queue and job record.
+6. Use a minimal safe execution/worker boundary if request-lifecycle correctness
+   requires it.
 7. Proxmox plugin invocation.
-8. Run progress/status/error persistence.
-9. Retry and cancellation contract.
-10. Link operational runs to Data Source, Discovery Run, Evidence and Changes.
-11. Add schedule support only after Run Now is reliable.
+8. Run status/result/error persistence.
+9. Link operational runs to Data Source, Discovery Run, Evidence and Changes.
 
-## Contained opportunity: expose generated Documentation
+Scheduling, broad retry/cancellation policy, distributed worker control, and
+additional plugins remain later B2 evolution after Run Now is reliable.
+
+## Homelab Ready stream: F1-lite documentation
 
 The generation component already works. The next increment is relatively contained:
 
@@ -756,9 +800,8 @@ The generation component already works. The next increment is relatively contain
 2. Document list page.
 3. Document detail/Markdown renderer.
 4. Links from Assets and Discovery Runs.
-5. Regenerate action.
-6. Download/export.
-7. Service Markdown generation after the Asset surface is stable.
+5. Clear generated-versus-reviewed labeling.
+6. Download/export where straightforward.
 
 This converts hidden technical capability into visible user value.
 
@@ -786,7 +829,18 @@ C2.1 now provides:
 7. compatibility adapters for both focused C1 routes; and
 8. no impact, outage, recovery, scoring, or change-safety conclusions.
 
-## Later domain release: C3 structured ownership
+## Homelab Ready stream: C2.2 through C2.4
+
+Build the smallest useful semantic and product layer over C2.1:
+
+1. C2.2 required/optional, `all`/`any`, and
+   `unavailable`/`degraded`/`unknown` dependency meaning;
+2. C2.3 bounded, cycle-safe, authorized consequence analysis explained by
+   actual paths; and
+3. C2.4 polished dashboard, visual graph, enhanced Service Operations,
+   environment exploration, and deliberate UX refinement.
+
+## Later enterprise release: C3 structured ownership
 
 Replace free-text labels with:
 
@@ -799,7 +853,7 @@ Replace free-text labels with:
 
 Preserve and migrate C1 text values safely.
 
-## Later domain release: Release D Backup and Recovery
+## Later enterprise release: Release D Backup and Recovery
 
 Once live discovery and ownership are stable, add:
 
@@ -820,14 +874,18 @@ Once live discovery and ownership are stable, add:
 | **0.1 Platform Foundation** | Runtime, single-origin deployment, auth, RBAC, tenancy, inventory, networks, relationships, custom fields, topology | **Implemented** |
 | **A Knowledge Foundation** | Evidence, assertions, provenance, accepted/current truth, history and Changes | **Implemented** |
 | **B Discovery & Reconciliation — Simulation** | Data Sources, JSON simulation, runs, coverage, reconciliation and no-longer-observed | **Implemented** |
-| **B2 Operational Integrations and live discovery** | Integration management, secret resolution, worker dispatch, Run Now, scheduling and live Proxmox runs | **Partially implemented; parallel operational-hardening stream** |
+| **B2-lite Live Proxmox Discovery** | Integration CRUD, safe secret references, Test Connection, Run Now, Proxmox invocation, results and reconciliation | **Partially implemented foundation; journey planned** |
+| **Later B2 automation** | Scheduling, broad retries/cancellation, distributed orchestration and additional plugins | **Planned after Homelab Ready** |
 | **B.5 Knowledge Completeness** | Asset/Service requirements, gaps, defer/exception/assignment/resolve | **Implemented** |
 | **C1 Homelab Service MVP** | Services, Service Types, Criticality, Business Functions, dependencies, ownership labels, RTO/RPO and focused graphs | **Implemented** |
-| **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Implemented on the feature working tree** |
-| **C2.2 Dependency Semantics** | Redundancy, quorum, dependency groups, and failure effects | **Planned** |
-| **C2.3 Analysis Primitives** | Recursive analysis traversal, explanation paths, states, and confidence qualification | **Planned** |
-| **C3 MSP Ownership** | People, Teams, memberships and role assignments | **Planned**   |
-| **C4 Knowledge Objects** | Runbooks, Decisions, Assumptions, Exceptions and Documentation UI | **Planned; generated Markdown foundation exists** |
+| **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Implemented** |
+| **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Planned** |
+| **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Planned** |
+| **C2.4 Homelab Operations Experience** | Polished dashboard, visual graph, enhanced Service Operations and exploration | **Planned** |
+| **F1-lite Homelab Documentation** | Documents API/list/detail, Markdown rendering, Asset links and honest content status | **Planned; renderer/storage foundation exists** |
+| **Homelab Ready Release** | Onboarding, deployment/upgrade, backup/restore, security, accessibility, device validation and release artefacts | **Planned** |
+| **C3 MSP Ownership** | People, Teams, memberships and role assignments | **Planned after Homelab Ready**   |
+| **C4 Knowledge Objects** | Runbooks, Decisions, Assumptions, Exceptions and mature Documentation UI | **Planned after Homelab Ready; generated Markdown foundation exists** |
 | **D Backup & Recovery** | Protection, backup and recoverability model | **Planned**   |
 | **E Full Impact Analysis** | Outage simulation, blast radius and explainable recovery readiness | **Planned**   |
 | **F Intended State / broader knowledge outputs** | NetBox intended state, drift and mature documentation outputs | **Planned**   |
@@ -835,11 +893,10 @@ Once live discovery and ownership are stable, add:
 
 ---
 
-# 12. Approved forward sequence — 30 August 2026
+# 12. Approved forward sequence — 3 September 2026
 
-**C2.1 — Shared Operational Graph** is implemented on the feature working tree.
-This delivery follows the manual-first strategy. B2 remains incomplete and was
-not a prerequisite or sequencing gate.
+**C2.1 — Shared Operational Graph** is implemented and merged. The near-term
+product target is the **Homelab Ready Release**.
 
 ## Increment 1 — C2.1 Shared Operational Graph
 
@@ -847,38 +904,41 @@ Delivered one secure, deterministic, API-owned structural graph projection over
 accepted Assets, Services, Business Functions, and current relationship records,
 with compatibility adapters for the existing focused routes.
 
-## Parallel stream — B2 Operational Integrations and live discovery
+## Increment 2 — C2.2 Lean Dependency Semantics
 
-Track Integration APIs, secret-reference resolution, Test Connection, Run Now,
-worker dispatch, job status, retries, cancellation, scheduling, and live
-Proxmox execution as a separate incomplete stream. Heavy investment is
-deliberately postponed during the immediate manual-first period. This stream is
-necessary before Atlas makes trustworthy live availability or freshness claims,
-but it is outside C2.1.
+Add only required/optional meaning, `all`/`any` redundancy, and
+`unavailable`/`degraded`/`unknown` failure effects while preserving
+`required_for_operation` compatibility.
 
-## Increment 2 — C2.2 Dependency Semantics
+## Increment 3 — C2.3 Explainable Dependency Analysis
 
-Add explicit dependency groups, all/any/minimum behavior, quorum, redundancy,
-and failure-effect semantics.
+Add bounded path-based Asset/Service consequence analysis with direct/downstream
+classification and small deterministic states. Unknown semantics produce
+`unknown`, not an invented probability or score.
 
-## Increment 3 — C2.3 Analysis Primitives
+## Increment 4 — C2.4 Homelab Operations Experience
 
-Add recursive analytical traversal, path explanation, direct/downstream
-classification, impact states, uncertainty, and engine versioning.
+Deliver the polished operational homepage, interactive visual Knowledge Graph,
+enhanced Service Operations, intuitive environment exploration, and deliberate
+responsive/accessibility/branding refinement.
 
-## Subsequent product increments
+## Product completion increments
 
-- Begin C3 structured ownership and C4 formal Knowledge Objects once C2.1
-  contracts stabilize.
-- Deliver F1 Documentation independently when useful; it is not blocked by C2.
-- Complete the Interface-first IP transition as a foundation-hardening item.
-- Deliver E1 Explainable Failure Impact after C2.3.
-- Deliver D1 Recovery Knowledge Readiness, then evidence-backed D2 recovery.
-- Combine E3 and F2 for intended-state and planned-change simulation.
-- Close the lifecycle through F3 post-change discovery and reconciliation.
+- Deliver F1-lite Documents using the existing renderer/storage foundation.
+- Deliver B2-lite configure/test/Run Now/result/reconcile Proxmox discovery.
+- Complete Interface-first IP, onboarding, deployment/upgrade, backup/restore,
+  operator docs, security, accessibility, device validation, and release
+  artefacts.
+- Ship the Homelab Ready Release.
 
-The roadmap must continue to distinguish the implemented C2.1 structural graph
-from planned C2.2/C2.3 semantics and analysis.
+## Later enterprise evolution
+
+Retain richer dependency semantics, C3, C4, D, broader B2 automation, full E,
+intended-state F work, and ITSM/MSP capabilities after Homelab Ready.
+
+The roadmap must continue to distinguish implemented C2.1 structure from
+planned C2.2 semantics, C2.3 analysis, C2.4 product experience, and later full
+Impact Analysis.
 
 ---
 
@@ -895,13 +955,14 @@ Atlas is further advanced than a simple inventory MVP:
 * deterministic Markdown generation is real.
 
 Connecting the implemented integration components into a usable live discovery
-workflow remains a substantial incomplete journey. It is not the next required
-release and is not a C2.1 blocker.
+workflow remains a substantial incomplete journey. B2-lite places the smallest
+secure Proxmox journey before Homelab Ready without requiring the full worker
+control plane.
 
 The delivered **C2.1 — Shared Operational Graph** lets Atlas prove its knowledge
-and relationship model with manually curated accepted data. B2 remains visible
-as a parallel incomplete workstream, and Atlas must not present structural graph
-data as live operational proof.
+and relationship model with manually curated accepted data. The next priority is
+to make that foundation useful and visible through lean semantics, explainable
+analysis, C2.4 product experience, F1-lite, B2-lite, and release hardening.
 
 C2.1 now has a reusable graph builder, a generic focused graph API,
 compatibility adapters for the existing graph routes, authorization and

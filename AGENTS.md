@@ -115,25 +115,19 @@ Automatic discovery remains an important later capability.
 
 # 5. Current Release Direction
 
-The next active graph-development increment is:
+**Release C2.1 — Shared Operational Graph is implemented.** Do not reopen its
+design or describe structural reachability as Impact Analysis.
 
-**Release C2.1 — Shared Operational Graph**
+The near-term product target is the **Homelab Ready Release**. The principal
+sequence is C2.2 Lean Dependency Semantics, C2.3 Explainable Dependency
+Analysis, C2.4 Homelab Operations Experience, F1-lite Homelab Documentation,
+B2-lite Live Proxmox Discovery, and contained release hardening.
 
-B2 Operational Integrations remains an incomplete parallel workstream.
-
-B2 does **not** block C2.1.
-
-Unless explicitly requested by the task, C2.1 work must not expand into:
-
-* Integration management;
-* secret resolution;
-* queue infrastructure;
-* worker orchestration;
-* Run Now operational discovery;
-* scheduled discovery;
-* retries;
-* cancellation;
-* additional discovery plugins.
+Homelab Ready does not require C3 People/Teams, C4 formal Knowledge Objects,
+advanced recovery evidence, full enterprise Impact Analysis, intended-state
+simulation, ITSM, production-scale orchestration, or multiple discovery
+plugins. Preserve those capabilities as additive later evolution rather than
+pulling them into the homelab release.
 
 Existing integration and discovery code must remain intact and compatible.
 
@@ -940,9 +934,9 @@ When in doubt, preserve these rules:
 
 **Manual knowledge is first-class and is deliberately being used to mature Atlas before further plugin investment.**
 
-**B2 Operational Integrations does not block C2.1.**
+**C2.1 is complete; B2-lite is a separate Homelab Ready increment.**
 
-**C2.1 builds the Shared Operational Graph; it does not implement full Impact Analysis.**
+**C2.1 built the Shared Operational Graph; it did not implement full Impact Analysis.**
 
 **Structural reachability does not automatically mean operational failure impact.**
 

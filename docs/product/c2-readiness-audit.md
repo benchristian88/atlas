@@ -1,5 +1,10 @@
 # Release C2.1 readiness audit
 
+> **Historical readiness record.** This audit supported the decision to begin
+> C2.1. C2.1 was later implemented in `a9f41df` and merged to `dev` by
+> `1842d16`. It is not a current implementation prompt or forward roadmap; use
+> [`development-roadmap.md`](development-roadmap.md) for current planning.
+
 ## Baseline
 
 | Item | Audited value |
@@ -117,8 +122,8 @@ status column describes the document's role after reconciliation.
 | `docs/product/mvp-brief.md` | Historical foundation/C1 brief with current handoff | Retained and updated only at the next-sequence handoff |
 | `docs/product/release-c2-plan.md` | Active implementation-ready C2.1–C2.3 plan | Updated baseline, scope, semantics, authorization, and fixture guidance |
 | `docs/product/c2-readiness-audit.md` | Current reconciliation and go/no-go record | Added |
-| `docs/prompts/atlas-codex-context.md` | Active implementation context | Updated baseline, manual-first strategy, and current-only temporal scope |
-| `docs/prompts/c2-1-shared-operational-graph-codex-prompt.md` | Active future C2.1 implementation prompt | Updated to match this audit and remove historical-query scope |
+| `docs/history/implementation-prompts/atlas-codex-context.md` | Historical C2.1 implementation context | Archived after C2.1 merged; no longer current authority |
+| `docs/history/implementation-prompts/c2-1-shared-operational-graph-codex-prompt.md` | Historical C2.1 implementation prompt | Archived after C2.1 merged; lasting decisions remain in canonical architecture/release documentation |
 | `docs/prompts/codex-system-instructions.md` | Historical repository workflow guidance, not runtime code | Retain; no behavioral claim changed |
 | `docs/testing/auth-shell-test-plan.md` | Manual authentication/shell plan | Current plan; unchecked items are not pass evidence |
 | `docs/testing/homelab-service-mvp.md` | Manual C1 acceptance plan | Current; no change |

@@ -14,10 +14,10 @@ Use the documents for different purposes:
 - [`product/mvp-brief.md`](product/mvp-brief.md) is the historical product brief
   for the foundation through Release C1.
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) describes
-  the implemented architecture baseline through Release C1.
+  the implemented architecture baseline through Release C2.1.
 - [`architecture/operational-graph.md`](architecture/operational-graph.md)
-  describes the planned Release C2 graph architecture. It must not be read as an
-  implementation claim until the feature ledger is updated after delivery.
+  describes the implemented C2.1 graph architecture and additive extension
+  boundaries.
 - [`decisions`](decisions) contains accepted Architecture Decision Records
   (ADRs). An ADR explains why a cross-cutting architectural direction was chosen.
 - [`testing`](testing) contains release and security test plans. A test plan is
@@ -25,6 +25,8 @@ Use the documents for different purposes:
 - [`history/product-reviews`](history/product-reviews) contains dated historical
   review evidence. Those reviews preserve the reconciliation trail but are not
   current specifications or implementation-status authorities.
+- [`history/implementation-prompts`](history/implementation-prompts) contains
+  completed prompts retained as historical delivery evidence, not active work.
 
 The feature ledger and roadmap intentionally remain separate. Updating a roadmap
 status does not prove implementation, and adding code does not automatically
@@ -39,19 +41,21 @@ update the audited ledger.
 | Release B — Discovery and Reconciliation | Simulation and reconciliation implemented; live plugin operation and worker orchestration remain partial |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services; broader entity coverage remains future work |
 | Release C1 — Homelab Service MVP | Implemented |
-| Release C2 — shared graph and later analysis foundations | C2.1 shared structural graph implemented; C2.2 dependency semantics and C2.3 analysis primitives remain planned |
-| Release C3 — People, Teams and structured ownership | Planned |
-| Release C4 — formal Knowledge Objects | Planned |
+| Release C2 — shared graph and Homelab Ready product foundations | C2.1 implemented; C2.2 lean semantics, C2.3 explainable analysis and C2.4 operations experience planned |
+| F1-lite — Homelab Documentation | Planned; generated Markdown renderer and Document storage exist |
+| B2-lite — Live Proxmox Discovery | Partially implemented foundation; configure/test/Run Now/reconcile journey planned |
+| Homelab Ready Release | Planned near-term product target |
+| Release C3 — People, Teams and structured ownership | Planned after Homelab Ready |
+| Release C4 — formal Knowledge Objects | Planned after Homelab Ready |
 | Release D — Backup and Recovery | Planned |
 | Release E — full Impact Analysis | Planned; existing structural projections are prerequisites, not partial Impact Analysis |
 | Release F — Documentation and intended state | Generated-document foundation partial; user-facing product and intended-state workflow not implemented |
 | Production and community packaging | Not established |
 
-**Release C2.1 — Shared Operational Graph** is implemented on its feature
-working tree. Atlas can use manually entered and curated accepted knowledge to
-exercise the graph model. B2 — Operational Integrations and live discovery
-remains an incomplete parallel workstream and was not included in C2.1.
-See [`product/release-c2-plan.md`](product/release-c2-plan.md).
+**Release C2.1 — Shared Operational Graph** is implemented and merged to `dev`.
+The near-term target is a polished, secure, self-hosted **Homelab Ready
+Release** through C2.2, C2.3, C2.4, F1-lite, B2-lite, and release hardening.
+See [`product/development-roadmap.md`](product/development-roadmap.md).
 
 ## Product documents
 
@@ -62,13 +66,12 @@ See [`product/release-c2-plan.md`](product/release-c2-plan.md).
 - [`product/development-roadmap.md`](product/development-roadmap.md) — canonical
   roadmap from the completed foundation through impact, recovery, intended
   state, and packaging.
-- [`product/release-c2-plan.md`](product/release-c2-plan.md) — implementation-ready
-  plan for C2.1, followed by C2.2 and C2.3.
-- [`product/c2-readiness-audit.md`](product/c2-readiness-audit.md) — current
-  baseline, review reconciliation, prerequisites, and go/no-go decision.
-- [`prompts/c2-1-shared-operational-graph-codex-prompt.md`](prompts/c2-1-shared-operational-graph-codex-prompt.md)
-  — executable Codex prompt constrained to C2.1 and aligned with the ledger,
-  roadmap, ADR, architecture, and test plan.
+- [`product/release-c2-plan.md`](product/release-c2-plan.md) — C2.1 implementation
+  history and current C2.2, C2.3, and C2.4 release scope.
+- [`product/c2-readiness-audit.md`](product/c2-readiness-audit.md) — historical
+  pre-C2.1 readiness, reconciliation, prerequisites, and go/no-go record.
+- [`history/implementation-prompts`](history/implementation-prompts) — archived
+  C2.1 Codex prompts; not current specifications.
 
 ## Architecture documents
 
@@ -117,6 +120,5 @@ See [`product/release-c2-plan.md`](product/release-c2-plan.md).
    results but must not become the authority for operational conclusions.
 5. Preserve additive Alembic migrations and existing data. Do not use a roadmap
    release as a reason to reset the database or silently convert legacy records.
-6. Keep B2 operational integration, F1 Documents, Interface-first IP cleanup, and
-   legacy Service Asset association outside C2.1 unless the release plan and ADR
-   are deliberately changed first.
+6. Keep C2.2/C2.3/C2.4, B2-lite, F1-lite, Interface-first IP cleanup, and legacy
+   Service Asset association distinct from the completed C2.1 scope.

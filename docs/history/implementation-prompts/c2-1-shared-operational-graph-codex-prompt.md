@@ -1,6 +1,11 @@
-# Codex prompt — Release C2.1 Shared Operational Graph
+# Historical Codex prompt — Release C2.1 Shared Operational Graph
 
-Copy the complete prompt below into Codex from the Atlas repository root.
+> Archived after C2.1 was implemented and merged to `dev` by `1842d16`.
+> This completed implementation prompt is historical evidence, not current
+> planning authority.
+
+The complete prompt used for the delivered work is preserved below. Do not use
+it to start a new implementation session.
 
 ```text
 You are working in the Atlas repository.

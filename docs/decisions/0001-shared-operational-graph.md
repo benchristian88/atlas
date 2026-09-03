@@ -17,6 +17,17 @@ approved extension point for a later feature, not C2.1 scope. This clarification
 narrows delivery scope without changing the original system-of-record,
 identity, authorization, compatibility, or structural-versus-analysis decision.
 
+## Delivery and sequencing note — 3 September 2026
+
+C2.1 is implemented and merged. The current roadmap narrows C2.2 to lean
+homelab dependency semantics (`all`/`any` plus small explicit failure effects)
+and reframes C2.3 as explainable dependency analysis. References below to
+minimum counts, quorum, rich confidence qualification, or complete Impact
+Analysis describe additive later enterprise extensions, not Homelab Ready
+acceptance criteria. This product-sequencing refinement does not change this
+ADR's accepted system-of-record, graph identity, authorization, compatibility,
+or structural-versus-analysis decisions.
+
 ## Context
 
 Atlas has completed the platform and inventory foundation, Release A Knowledge
@@ -111,10 +122,12 @@ Existing callers will be migrated separately before any deprecation.
 C2.1 will not decide outage propagation, recovery availability, restoration
 duration, business impact, or planned-change safety.
 
-Release C2.2 will add dependency semantics such as redundancy, quorum, and
-failure effects. Release C2.3 will add analysis traversal, path explanation, and
-confidence qualification. Releases D, E, and F will add recovery evidence,
-product workflows, scenarios, and intended state.
+Release C2.2 will add lean dependency semantics: required/optional meaning,
+`all`/`any` redundancy, and explicit unavailable/degraded/unknown failure
+effects. Release C2.3 will add bounded analysis traversal and path explanation.
+Later enterprise releases may add quorum, richer dependency rules, confidence
+qualification, recovery evidence, broader Impact Analysis, scenarios, and
+intended state.
 
 ### 7. Hypothetical state remains separate from accepted state
 
