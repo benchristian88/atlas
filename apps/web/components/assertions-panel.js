@@ -5,6 +5,7 @@ import { apiRequest } from "../lib/api";
 import { StatusBadge } from "./status-badge";
 
 function assertionValue(assertion, assetsById) {
+  assetsById ||= {};
   if (assertion.value_json !== null && assertion.value_json !== undefined) {
     return typeof assertion.value_json === "string"
       ? assertion.value_json
@@ -57,6 +58,7 @@ export function AssertionsPanel({
   assetsById,
   canDelete,
   canRetract,
+  entityLabel = "asset",
   onChanged,
 }) {
   const [dialog, setDialog] = useState(null);
@@ -125,7 +127,7 @@ export function AssertionsPanel({
 
   return <section className="table-card assertions-card">
     <div className="table-meta knowledge-raw-header"><span>{assertions.length} provenance assertions</span><label className="compact-filter"><span>Show</span><select value={filter} onChange={(event) => setFilter(event.target.value)}>{FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
-    {assertions.length === 0 ? <p className="empty-state">No sourced assertions are linked to this asset yet.</p> : Object.keys(grouped).length === 0 ? <p className="empty-state">No assertions match this filter.</p> : <div className="assertion-groups">{Object.entries(grouped).sort(([left], [right]) => left.localeCompare(right)).map(([predicate, entries]) => { const allEntries = assertions.filter((item) => item.predicate === predicate); const sourceCurrent = allEntries.filter((item) => item.is_source_current && !item.retracted_at).length; const historical = allEntries.filter((item) => !item.is_source_current || item.retracted_at).length; const conflicts = allEntries.filter((item) => item.confirmation_status === "conflicted" && !item.retracted_at).length; return <details className="assertion-group" key={predicate}><summary><strong>{predicate.replaceAll("_", " ")}</strong><span>{allEntries.length} total · {sourceCurrent} source-current · {historical} historical · {conflicts} conflicts</span></summary><div className="responsive-table assertions-scroll"><table className="assertions-table"><thead><tr><th>Value</th><th>Truth</th><th className="assertion-source-column">Source</th><th>Knowledge status</th><th className="assertion-observed-column">Last observed</th><th>Actions</th></tr></thead><tbody>{entries.map((assertion) => {
+    {assertions.length === 0 ? <p className="empty-state">No sourced assertions are linked to this {entityLabel} yet.</p> : Object.keys(grouped).length === 0 ? <p className="empty-state">No assertions match this filter.</p> : <div className="assertion-groups">{Object.entries(grouped).sort(([left], [right]) => left.localeCompare(right)).map(([predicate, entries]) => { const allEntries = assertions.filter((item) => item.predicate === predicate); const sourceCurrent = allEntries.filter((item) => item.is_source_current && !item.retracted_at).length; const historical = allEntries.filter((item) => !item.is_source_current || item.retracted_at).length; const conflicts = allEntries.filter((item) => item.confirmation_status === "conflicted" && !item.retracted_at).length; return <details className="assertion-group" key={predicate}><summary><strong>{predicate.replaceAll("_", " ")}</strong><span>{allEntries.length} total · {sourceCurrent} source-current · {historical} historical · {conflicts} conflicts</span></summary><div className="responsive-table assertions-scroll"><table className="assertions-table"><thead><tr><th>Value</th><th>Truth</th><th className="assertion-source-column">Source</th><th>Knowledge status</th><th className="assertion-observed-column">Last observed</th><th>Actions</th></tr></thead><tbody>{entries.map((assertion) => {
       const value = assertionValue(assertion, assetsById);
       const mayDelete = canDelete && assertion.deletion_safety?.allowed;
       const mayRetract = canRetract && !assertion.retracted_at && assertion.confirmation_status === "confirmed";

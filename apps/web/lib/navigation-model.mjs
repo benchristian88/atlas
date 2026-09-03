@@ -7,7 +7,7 @@ export const NAVIGATION_GROUPS = [
         id: "dashboard",
         href: "/dashboard",
         label: "Dashboard",
-        anyPermission: ["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view"],
+        anyPermission: ["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view", "services.view", "business_functions.view"],
       },
       { id: "changes", href: "/changes", label: "Changes", permission: "changes.view" },
     ],
@@ -18,8 +18,8 @@ export const NAVIGATION_GROUPS = [
     items: [
       { id: "knowledge-graph", href: "/topology", label: "Knowledge Graph", permission: "assets.view" },
       { id: "assets", href: "/assets", label: "Assets", permission: "assets.view" },
-      { id: "services", label: "Services", available: false },
-      { id: "business-functions", label: "Business Functions", available: false },
+      { id: "services", href: "/services", label: "Services", permission: "services.view" },
+      { id: "business-functions", href: "/business-functions", label: "Business Functions", permission: "business_functions.view" },
       { id: "people-teams", label: "People & Teams", available: false },
       { id: "networks", href: "/networks", label: "Networks", permission: "networks.view" },
     ],
@@ -63,6 +63,8 @@ export const NAVIGATION_GROUPS = [
         destinations: [
           { href: "/admin/asset-types", globalPermission: "asset_types.manage" },
           { href: "/admin/relationship-types", globalPermission: "relationship_types.manage" },
+          { href: "/admin/service-types", globalPermission: "service_types.manage" },
+          { href: "/admin/criticality-levels", globalPermission: "criticality_levels.manage" },
           { href: "/admin/custom-fields", globalPermission: "custom_fields.manage" },
           { href: "/admin/customers", permission: "customers.manage" },
           { href: "/admin/sites", permission: "sites.manage" },
@@ -70,6 +72,8 @@ export const NAVIGATION_GROUPS = [
         activeRoutes: [
           "/admin/asset-types",
           "/admin/relationship-types",
+          "/admin/service-types",
+          "/admin/criticality-levels",
           "/admin/custom-fields",
           "/admin/customers",
           "/admin/sites",

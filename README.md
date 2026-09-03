@@ -2,8 +2,8 @@
 
 Atlas is an infrastructure knowledge, documentation, and topology platform for
 homelabs, internal IT teams, and MSPs. It combines a customer/site-scoped asset
-inventory with managed relationships, reference data, enrichment fields, and
-an auditable administration foundation.
+and Service inventory with managed dependencies, reference data, enrichment
+fields, knowledge completeness, and an auditable administration foundation.
 
 ## Repository layout
 
@@ -14,7 +14,7 @@ apps/
   worker/              Python background worker placeholder
 plugins/
   sdk/                 Vendor-neutral discovery plugin contracts
-  proxmox/             Proxmox discovery plugin placeholder
+  proxmox/             Tested Proxmox discovery adapter (not yet wired end-to-end)
 infra/
   docker/              Docker Compose configuration
 docs/                   Product and architecture documentation
@@ -170,19 +170,19 @@ split-origin development, restrict it to the exact web origins. Treat
 
 ## Branding assets
 
-The application-owned horizontal logo is committed at
-`apps/web/public/branding/atlas-logo.svg`. It uses a transparent background and
-an approximately 4.5:1 horizontal aspect ratio so the icon and Atlas wordmark
-remain clear in the dark sidebar. SVG is preferred for sharp rendering. An
-optional transparent PNG fallback may be stored at
-`apps/web/public/branding/atlas-logo.png`, and an optional icon-only mark may be
-stored at `apps/web/public/branding/atlas-mark.svg`. The current component falls
-back to accessible Atlas text if the SVG cannot be loaded; a private fork can
-add a suitable transparent PNG to its component asset list if needed.
+Atlas Impact artwork is organised under `apps/web/public/branding`: full-brand
+SVG and PNG artwork lives in `lockups`, while compact artwork lives in `marks`.
+The shared brand component uses the supplied light- or dark-background lockup
+according to the sidebar treatment and uses the dark-background lockup on the
+login screen. SVG is preferred for sharp rendering, with the corresponding PNG
+as a fallback and accessible Atlas Impact text as the final fallback.
 
-Branding assets are included at web-image build time. To customise a private
-fork, replace `atlas-logo.svg` with a transparent horizontal asset using the
-same filename, then rebuild the web service. Replacing the asset at runtime,
+The browser favicon set, 192px and 512px installed-app icons, and 180px Apple
+touch icon are also served from `apps/web/public/branding`. The canonical Web
+App Manifest is `apps/web/app/manifest.webmanifest`; application and Apple web
+app metadata are declared in `apps/web/app/layout.js`.
+
+Branding assets are included at web-image build time. Runtime replacement,
 customer-specific white labelling, uploads, and externally hosted logo URLs are
 not supported by the MVP.
 
@@ -213,9 +213,10 @@ The authenticated sidebar is organised around stable product domains rather
 than one link per technical page:
 
 - **Overview:** Dashboard and the meaningful Changes timeline.
-- **Knowledge:** Knowledge Graph, Assets, and Networks. Knowledge Graph is the
-  user-facing name for the existing `/topology` capability; topology remains a
-  technical lens within that graph.
+- **Knowledge:** Assets, Networks, first-class Services, lightweight Business
+  Functions, and Knowledge Graph. Knowledge Graph is the user-facing name for
+  the existing `/topology` capability; topology remains a technical lens within
+  that graph.
 - **Operations:** Discovery run activity and simulation, plus Reconciliation
   for reviewing sourced changes before they enter the operational model.
 - **Connections:** Integrations.
@@ -229,8 +230,8 @@ links or placeholder pages:
 
 ```text
 OVERVIEW       Dashboard; Changes
-KNOWLEDGE      Knowledge Graph; Assets; Services (roadmap);
-               Business Functions (roadmap); People & Teams (roadmap); Networks
+KNOWLEDGE      Knowledge Graph; Assets; Services; Business Functions;
+               People & Teams (roadmap); Networks
 OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
                Backup & Recovery (roadmap); Documentation (roadmap)
 CONNECTIONS    Integrations
@@ -311,6 +312,9 @@ The authenticated API surface is canonical beneath `/api` and includes:
 - `/api/sites`
 - `/api/assets`
 - `/api/asset-relationships`
+- `/api/services`, `/api/service-types`, and `/api/criticality-levels`
+- `/api/service-asset-dependencies` and `/api/service-dependencies`
+- `/api/business-functions` and `/api/service-business-functions`
 - `/api/topology`
 - `/api/networks`
 - `/api/asset-interfaces`
@@ -330,6 +334,46 @@ mutation route. The corresponding web screens include
 with profile and permitted administration pages. `/api/manual-assets` remains a
 compatibility route for earlier clients and is subject to the same authorization
 policy.
+
+## Homelab Services
+
+Release C1 makes an operational **Service** distinct from the technical Assets
+that implement it. For example, Authentik can be a Service that provides
+identity and access, while `authentik-lxc`, its database, reverse proxy, DNS,
+and backup system remain supporting Assets or Services. Typed dependency links,
+Business Functions, recovery targets, assertions, Knowledge Changes, and
+configuration-driven completeness all use the existing Atlas scope and
+provenance foundations.
+
+The managed Asset Type named **Service** is retained for compatibility. It is
+not the first-class Service model, and Atlas does not automatically convert or
+duplicate existing Application/Service Assets. Create and link operational
+Services deliberately.
+
+See the [Service model](docs/architecture/service-model.md),
+[dependency model](docs/architecture/service-dependencies.md),
+[administrator guide](docs/admin/service-types-and-criticality.md), and
+[C1 test plan](docs/testing/homelab-service-mvp.md).
+
+## Current product sequence
+
+**Release C2.1 — Shared Operational Graph is implemented and merged.** Atlas's
+near-term product target is a polished, secure, publicly usable **Homelab Ready
+Release**. The planned route is C2.2 Lean Dependency Semantics, C2.3 Explainable
+Dependency Analysis, C2.4 Homelab Operations Experience, F1-lite Homelab
+Documentation, B2-lite Live Proxmox Discovery, and contained release hardening.
+
+Manual and curated operational knowledge remains first-class. People/Teams,
+formal Knowledge Objects, advanced recovery evidence, richer dependency rules,
+full enterprise Impact Analysis, intended-state simulation, production-scale
+orchestration, and multiple plugins remain additive later evolution rather than
+Homelab Ready prerequisites. Discovery evidence and accepted operational
+knowledge remain separate regardless of whether knowledge begins as a manual
+declaration, simulation, or future live plugin observation.
+
+See the [development roadmap](docs/product/development-roadmap.md),
+[C2 release plan](docs/product/release-c2-plan.md), and
+[feature ledger](docs/product/feature-ledger.md).
 
 ## Knowledge provenance and reconciliation
 
@@ -467,6 +511,30 @@ To exercise the lenses with a representative homelab:
 8. Confirm **Platform** shows cluster → hosts → VMs/LXCs → containers/applications.
 9. Confirm **Network / VLAN** uses interface membership and **Dependency** shows the application/database edge.
 10. Select pve1 as the focus asset and confirm only pve1 and its directly connected neighbors remain. Clear focus and verify the full filtered lens returns without another API fetch.
+
+### Model a homelab Service
+
+1. Create Business Function **Identity and Access**.
+2. Create Service **Authentik** as an **Application Service** with **High**
+   criticality, purpose, owner/contact labels, RTO **4 hours**, RPO **24 hours**,
+   and recovery notes.
+3. Link Authentik to **Identity and Access**.
+4. Add `Authentik runs on authentik-lxc` and suitable dependencies on AdGuard,
+   Nginx Proxy Manager, and PBS Assets.
+5. Create Infrastructure Service **DNS**, link its AdGuard LXC, then add
+   `Authentik depends on DNS`.
+6. Refresh both Service pages and confirm the records and typed links persist.
+7. Evaluate Authentik completeness, fill one required gap, and confirm it
+   resolves. Remove a disposable dependency and confirm the applicable gap can
+   reopen while dependency history remains available.
+8. Confirm the Service assertion list and Changes timeline contain the manual
+   declarations and dependency events.
+9. Open the Authentik Service graph and Identity and Access Business Function
+   graph. Confirm Service, Asset, and Business Function nodes link to their
+   detail pages and the Function shows connected Assets through its Services.
+10. Sign in as Viewer and confirm these records remain readable but create,
+    edit, dependency, archive, and evaluate controls are unavailable and the API
+    rejects direct mutation attempts.
 
 Stop the stack with `Ctrl+C`. To remove containers while retaining Atlas data,
 run:

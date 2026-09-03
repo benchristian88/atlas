@@ -1,5 +1,9 @@
 # Atlas data model v0
 
+Current baseline: foundation relational model plus the Release C1 extension
+summarized below. This document does not imply that planned C2 graph contracts
+are persisted; the operational graph remains a derived read model.
+
 ## Entity relationships
 
 ```mermaid
@@ -348,3 +352,39 @@ The foundation migration preserves existing data and seeds stable definitions:
   endpoints and read access to both endpoints.
 - Seed/backfill operations are idempotent and never depend on dropping the
   database.
+
+## Release C1 Service extension
+
+Migration `20260720_0013` adds the current Service/capability model:
+
+```mermaid
+erDiagram
+    CUSTOMER ||--o{ SERVICE : owns
+    SITE o|--o{ SERVICE : scopes
+    SERVICE_TYPE ||--o{ SERVICE : classifies
+    CRITICALITY_LEVEL ||--o{ SERVICE : prioritises
+    SERVICE ||--o{ SERVICE_ASSET_DEPENDENCY : source
+    ASSET ||--o{ SERVICE_ASSET_DEPENDENCY : target
+    SERVICE ||--o{ SERVICE_DEPENDENCY : source
+    SERVICE ||--o{ SERVICE_DEPENDENCY : target
+    CUSTOMER ||--o{ BUSINESS_FUNCTION : owns
+    SITE o|--o{ BUSINESS_FUNCTION : scopes
+    SERVICE ||--o{ SERVICE_BUSINESS_FUNCTION : supports
+    BUSINESS_FUNCTION ||--o{ SERVICE_BUSINESS_FUNCTION : receives
+    RELATIONSHIP_TYPE ||--o{ RELATIONSHIP_TYPE_APPLICABILITY : constrains
+    RELATIONSHIP_TYPE ||--o{ SERVICE_ASSET_DEPENDENCY : classifies
+    RELATIONSHIP_TYPE ||--o{ SERVICE_DEPENDENCY : classifies
+    RELATIONSHIP_TYPE o|--o{ SERVICE_BUSINESS_FUNCTION : classifies
+```
+
+Services and Business Functions belong to one Customer and may be customer-wide
+or Site-scoped. Service-to-Asset, Service-to-Service, and
+Service-to-Business-Function links carry `valid_from` and optional `valid_to`;
+ending a link preserves history. Service self-dependency is prohibited, while
+cycles among different Services are allowed. Relationship Type applicability
+declares valid endpoint-kind pairs.
+
+The same migration extends completeness to Services and retains C1 text owner,
+contact, runbook, recovery, RTO, and RPO fields. Structured People/Teams,
+Knowledge Objects, Backup/Recovery records, dependency-group semantics, and
+Impact Analysis results are not part of the current schema.

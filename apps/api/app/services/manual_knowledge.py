@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Asset, KnowledgeAssertion
+from app.models import Asset, KnowledgeAssertion, Service
 from app.services.data_sources import manual_inventory_source
 from app.services.knowledge_assertions import accept_assertion, record_assertion
 from app.services.knowledge_changes import record_assertion_change
@@ -26,6 +26,23 @@ MANUAL_ASSET_KNOWLEDGE_FIELDS = (
     "ip_address",
     "description",
 )
+
+MANUAL_SERVICE_KNOWLEDGE_FIELDS = {
+    "name": "name",
+    "service_type_id": "service_type",
+    "purpose": "purpose",
+    "lifecycle_status": "lifecycle_status",
+    "operational_status": "operational_status",
+    "criticality_level_id": "criticality",
+    "rto_minutes": "rto",
+    "rpo_minutes": "rpo",
+    "owner_name": "service_owner",
+    "technical_contact": "technical_contact",
+    "support_group": "support_group",
+    "recovery_notes": "recovery_notes",
+    "runbook_url": "runbook_url",
+    "documentation_url": "documentation_url",
+}
 
 
 def _active_observations(
@@ -124,6 +141,65 @@ def declare_asset_changes(
                 },
                 recommended_action="Review discovered value",
                 candidate_external_id=observed.subject_external_id,
+            )
+        declared.append(assertion)
+    return declared
+
+
+def declare_service_changes(
+    db: Session,
+    *,
+    service: Service,
+    previous_values: dict[str, Any],
+    actor_user_id: uuid.UUID | None,
+    occurred_at: datetime | None = None,
+    record_changes: bool = True,
+) -> list[KnowledgeAssertion]:
+    """Persist changed Service fields as accepted manual declarations."""
+
+    occurred_at = occurred_at or datetime.now(timezone.utc)
+    source = manual_inventory_source(db, service.customer_id, service.site_id)
+    declared: list[KnowledgeAssertion] = []
+    for field, predicate in MANUAL_SERVICE_KNOWLEDGE_FIELDS.items():
+        if field not in previous_values:
+            continue
+        previous = to_json_value(previous_values[field])
+        value = to_json_value(getattr(service, field))
+        if previous == value:
+            continue
+        assertion, _ = record_assertion(
+            db,
+            customer_id=service.customer_id,
+            site_id=service.site_id,
+            subject_type="service",
+            subject_id=service.id,
+            predicate=predicate,
+            value=value,
+            truth_classification="declared",
+            data_source_id=source.id,
+            observed_at=occurred_at,
+        )
+        accept_assertion(db, assertion, user_id=actor_user_id, accepted_at=occurred_at)
+        if record_changes:
+            if field == "criticality_level_id":
+                change_type = "service_criticality_changed"
+            elif field in {"rto_minutes", "rpo_minutes", "recovery_notes", "runbook_url"}:
+                change_type = "service_recovery_target_changed"
+            elif field in {"owner_name", "technical_contact", "support_group"}:
+                change_type = "service_owner_changed"
+            else:
+                change_type = "service_updated"
+            record_assertion_change(
+                db,
+                assertion=assertion,
+                change_type=change_type,
+                entity_name=service.name,
+                summary=f"Updated {predicate.replace('_', ' ')} for {service.name}",
+                actor_user_id=actor_user_id,
+                previous_value=previous,
+                new_value=value,
+                occurred_at=occurred_at,
+                metadata={"origin": "manual_service_edit", "accepted": True},
             )
         declared.append(assertion)
     return declared

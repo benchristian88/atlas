@@ -30,6 +30,10 @@ _CONTEXTUAL_PERMISSION_PREFIXES = (
     "discovery.",
     "knowledge_gaps.",
     "knowledge_completeness.",
+    "services.",
+    "service_dependencies.",
+    "business_functions.",
+    "service_completeness.",
 )
 
 

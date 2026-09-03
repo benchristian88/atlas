@@ -9,7 +9,7 @@ import { ContextSelector } from "./context-selector";
 import { Navigation } from "./navigation";
 import { useWorkspaceContext } from "./workspace-context";
 import { logout } from "../lib/auth";
-import { accentThemeStyle } from "../lib/accent-theme.mjs";
+import { accentThemeStyle, deriveAccentTheme } from "../lib/accent-theme.mjs";
 
 export function AppShell({ children }) {
   const router = useRouter();
@@ -17,6 +17,9 @@ export function AppShell({ children }) {
   const workspace = useWorkspaceContext();
   const [logoutError, setLogoutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
+  const sidebarBrandVariant = deriveAccentTheme(user.accent_colour)?.sidebarForeground === "#000000"
+    ? "light"
+    : "dark";
 
   async function signOut() {
     setLogoutError("");
@@ -35,10 +38,10 @@ export function AppShell({ children }) {
   return (
     <div className="app-shell" style={accentThemeStyle(user.accent_colour)}>
       <aside className="sidebar">
-        <AtlasBrand href={authenticatedHome(user)} />
+        <AtlasBrand href={authenticatedHome(user)} variant={sidebarBrandVariant} />
         <Navigation />
         <div className="sidebar-footer">
-          Atlas MVP<br />Local development
+          Atlas Impact<br />Local development
         </div>
       </aside>
       <div className="content">

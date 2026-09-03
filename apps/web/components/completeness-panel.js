@@ -8,7 +8,7 @@ function label(value) {
   return (value || "not_evaluated").replaceAll("_", " ");
 }
 
-export function CompletenessPanel({ assetId, completeness, canEvaluate, canDefer, canExcept, onChanged }) {
+export function CompletenessPanel({ assetId, serviceId, entityType = "asset", completeness, canEvaluate, canDefer, canExcept, onChanged }) {
   const [working, setWorking] = useState("");
   const [error, setError] = useState("");
   const [action, setAction] = useState(null);
@@ -24,8 +24,9 @@ export function CompletenessPanel({ assetId, completeness, canEvaluate, canDefer
 
   async function evaluate() {
     setWorking("evaluate"); setError("");
-    try { await apiRequest(`/assets/${assetId}/evaluate-completeness`, { method: "POST" }); await onChanged(); }
-    catch (requestError) { setError(requestError.message || "Atlas could not evaluate this asset."); }
+    const entityId = entityType === "service" ? serviceId : assetId;
+    try { await apiRequest(`/${entityType === "service" ? "services" : "assets"}/${entityId}/evaluate-completeness`, { method: "POST" }); await onChanged(); }
+    catch (requestError) { setError(requestError.message || `Atlas could not evaluate this ${entityType}.`); }
     finally { setWorking(""); }
   }
 

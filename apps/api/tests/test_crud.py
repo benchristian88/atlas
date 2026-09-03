@@ -261,6 +261,13 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         "assets_not_evaluated": 0,
         "assets_operationally_complete": 0,
         "expired_exception_count": 0,
+        "services": 0,
+        "business_functions": 0,
+        "services_with_critical_gaps": 0,
+        "critical_services": 0,
+        "services_with_required_gaps": 0,
+        "services_missing_recovery_targets": 0,
+        "services_missing_dependencies": 0,
     }
     assert all("WHERE" in statement for statement in db.statements)
 

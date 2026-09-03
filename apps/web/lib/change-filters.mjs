@@ -11,9 +11,20 @@ export const CHANGE_TYPES = [
   "assertion_retracted",
   "knowledge_gap_opened",
   "knowledge_gap_resolved",
+  "service_created",
+  "service_updated",
+  "service_archived",
+  "service_dependency_added",
+  "service_dependency_removed",
+  "service_business_function_added",
+  "service_business_function_removed",
+  "service_criticality_changed",
+  "service_recovery_target_changed",
+  "service_owner_changed",
+  "service_completeness_changed",
 ];
 
-export const CHANGE_ENTITY_TYPES = ["asset", "asset_relationship"];
+export const CHANGE_ENTITY_TYPES = ["asset", "asset_relationship", "service", "business_function"];
 export const CHANGE_PERIODS = ["7", "30", "90", ""];
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

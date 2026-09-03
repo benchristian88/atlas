@@ -14,7 +14,7 @@ from app.authorization import (
     scope_condition,
 )
 from app.database import get_db
-from app.models import Asset, AssetRelationship, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Site
+from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, Site
 from app.schemas import ContextResponse, DashboardSummaryResponse
 
 router = APIRouter(tags=["context"])
@@ -71,6 +71,8 @@ def dashboard_summary(
             "assets.view",
             "relationships.view",
             "networks.view",
+            "services.view",
+            "business_functions.view",
         )
     ),
     db: Session = Depends(get_db),
@@ -89,6 +91,18 @@ def dashboard_summary(
         principal, "networks.view", Network.customer_id, Network.site_id
     )
     network_query = select(func.count()).select_from(Network).where(network_predicate)
+    service_query = select(func.count()).select_from(Service).where(
+        scope_condition(principal, "services.view", Service.customer_id, Service.site_id),
+        Service.archived_at.is_(None),
+    )
+    service_records_query = select(Service).where(
+        scope_condition(principal, "services.view", Service.customer_id, Service.site_id),
+        Service.archived_at.is_(None),
+    )
+    business_function_query = select(func.count()).select_from(BusinessFunction).where(
+        scope_condition(principal, "business_functions.view", BusinessFunction.customer_id, BusinessFunction.site_id),
+        BusinessFunction.active.is_(True),
+    )
     reconciliation_base = select(func.count()).select_from(ReconciliationItem).where(
         scope_condition(
             principal,
@@ -142,6 +156,9 @@ def dashboard_summary(
         site_query = site_query.where(Site.customer_id == context.customer_id)
         asset_query = asset_query.where(Asset.customer_id == context.customer_id)
         network_query = network_query.where(Network.customer_id == context.customer_id)
+        service_query = service_query.where(Service.customer_id == context.customer_id)
+        service_records_query = service_records_query.where(Service.customer_id == context.customer_id)
+        business_function_query = business_function_query.where(BusinessFunction.customer_id == context.customer_id)
         reconciliation_base = reconciliation_base.where(
             ReconciliationItem.customer_id == context.customer_id
         )
@@ -161,6 +178,9 @@ def dashboard_summary(
         network_query = network_query.where(
             or_(Network.site_id == context.site_id, Network.site_id.is_(None))
         )
+        service_query = service_query.where(or_(Service.site_id == context.site_id, Service.site_id.is_(None)))
+        service_records_query = service_records_query.where(or_(Service.site_id == context.site_id, Service.site_id.is_(None)))
+        business_function_query = business_function_query.where(or_(BusinessFunction.site_id == context.site_id, BusinessFunction.site_id.is_(None)))
         reconciliation_base = reconciliation_base.where(
             ReconciliationItem.site_id == context.site_id
         )
@@ -186,8 +206,15 @@ def dashboard_summary(
     gaps = list(db.scalars(gap_query)) if principal.can_anywhere("knowledge_gaps.view") else []
     completeness = list(db.scalars(completeness_query)) if principal.can_anywhere("knowledge_gaps.view") else []
     active_gaps = [item for item in gaps if item.status in {"open", "deferred"}]
+    active_asset_gaps = [item for item in active_gaps if item.entity_type == "asset"]
+    asset_completeness = [item for item in completeness if item.entity_type == "asset"]
     now = datetime.now(timezone.utc)
     asset_count_value = int(db.scalar(asset_query) or 0)
+    service_rows = list(db.scalars(service_records_query)) if principal.can_anywhere("services.view") else []
+    service_ids = [item.id for item in service_rows]
+    service_asset_dependency_ids = set(db.scalars(select(ServiceAssetDependency.service_id).where(ServiceAssetDependency.service_id.in_(service_ids), ServiceAssetDependency.valid_to.is_(None)))) if service_ids else set()
+    criticality_by_id = {item.id: item for item in db.scalars(select(CriticalityLevel))} if service_rows else {}
+    required_gap_service_ids = {item.entity_id for item in active_gaps if item.entity_type == "service" and item.requirement_level in {"required", "conditional"}}
     return {
         "customers": int(db.scalar(customer_query) or 0),
         "sites": int(db.scalar(site_query) or 0),
@@ -208,8 +235,15 @@ def dashboard_summary(
         "open_knowledge_gap_count": sum(item.requirement_level in {"required", "conditional"} for item in active_gaps),
         "critical_knowledge_gap_count": sum(item.severity == "critical" for item in active_gaps),
         "high_knowledge_gap_count": sum(item.severity == "high" for item in active_gaps),
-        "assets_with_critical_gaps": len({item.entity_id for item in active_gaps if item.severity == "critical"}),
-        "assets_not_evaluated": max(0, asset_count_value - sum(item.completeness_status != "not_evaluated" for item in completeness)),
-        "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in completeness),
+        "assets_with_critical_gaps": len({item.entity_id for item in active_asset_gaps if item.severity == "critical"}),
+        "assets_not_evaluated": max(0, asset_count_value - sum(item.completeness_status != "not_evaluated" for item in asset_completeness)),
+        "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in asset_completeness),
         "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at and item.exception_expires_at <= now for item in gaps),
+        "services": int(db.scalar(service_query) or 0),
+        "business_functions": int(db.scalar(business_function_query) or 0),
+        "services_with_critical_gaps": len({item.entity_id for item in active_gaps if item.entity_type == "service" and item.severity == "critical"}),
+        "critical_services": sum(criticality_by_id.get(item.criticality_level_id) and criticality_by_id[item.criticality_level_id].key == "critical" for item in service_rows),
+        "services_with_required_gaps": len(required_gap_service_ids),
+        "services_missing_recovery_targets": sum(item.rto_minutes is None or item.rpo_minutes is None for item in service_rows),
+        "services_missing_dependencies": sum(item.id not in service_asset_dependency_ids for item in service_rows),
     }

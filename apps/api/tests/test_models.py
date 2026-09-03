@@ -27,6 +27,14 @@ EXPECTED_TABLES = {
     "knowledge_completeness_summaries",
     "asset_types",
     "relationship_types",
+    "relationship_type_applicabilities",
+    "service_types",
+    "criticality_levels",
+    "services",
+    "service_asset_dependencies",
+    "service_dependencies",
+    "business_functions",
+    "service_business_functions",
     "assets",
     "asset_relationships",
     "networks",
@@ -111,7 +119,7 @@ CRITICAL_COLUMNS = {
         "retraction_reason", "created_at", "updated_at",
     },
     "knowledge_requirement_definitions": {
-        "id", "key", "name", "description", "entity_type", "asset_type_id",
+        "id", "key", "name", "description", "entity_type", "asset_type_id", "service_type_id",
         "requirement_level", "severity", "rule_type", "rule_config_json",
         "active", "system_defined", "sort_order", "remediation_hint",
         "configuration_valid", "configuration_error", "created_by_user_id",
@@ -134,6 +142,15 @@ CRITICAL_COLUMNS = {
         "recommended_satisfied", "critical_gap_count", "high_gap_count",
         "open_gap_count", "exception_count", "completeness_status",
         "last_evaluated_at", "created_at", "updated_at",
+    },
+    "services": {
+        "id", "customer_id", "site_id", "name", "slug", "description", "purpose",
+        "service_type_id", "criticality_level_id", "lifecycle_status",
+        "operational_status", "owner_name", "technical_contact", "support_group",
+        "documentation_url", "runbook_url", "rto_minutes", "rpo_minutes",
+        "backup_notes", "recovery_notes", "notes", "source", "created_by_user_id",
+        "updated_by_user_id", "archived_at", "archived_by_user_id", "archive_reason",
+        "created_at", "updated_at",
     },
 }
 
@@ -189,6 +206,26 @@ def test_knowledge_completeness_ids_and_active_gap_uniqueness_follow_postgres_co
     active_index = next(index for index in gaps.indexes if index.name == "uq_knowledge_gaps_active_requirement_entity")
     assert active_index.unique
     assert "open" in str(active_index.dialect_options["postgresql"]["where"])
+
+
+def test_c1_service_models_use_postgres_uuid_defaults_and_guard_active_edges() -> None:
+    for table_name in (
+        "service_types", "criticality_levels", "services",
+        "service_asset_dependencies", "service_dependencies",
+        "business_functions", "service_business_functions",
+        "relationship_type_applicabilities",
+    ):
+        column = Base.metadata.tables[table_name].c.id
+        assert column.primary_key
+        assert "gen_random_uuid" in str(column.server_default.arg)
+    for table_name, index_name in (
+        ("service_asset_dependencies", "uq_service_asset_dependencies_active_edge"),
+        ("service_dependencies", "uq_service_dependencies_active_edge"),
+        ("service_business_functions", "uq_service_business_functions_active_link"),
+    ):
+        index = next(item for item in Base.metadata.tables[table_name].indexes if item.name == index_name)
+        assert index.unique
+        assert "valid_to IS NULL" in str(index.dialect_options["postgresql"]["where"])
 
 
 def test_asset_ownership_and_type_constraints_are_declared() -> None:

@@ -22,10 +22,19 @@ SUPPORTED_RULE_TYPES = frozenset({
     "relationship_exists", "relationship_target_type",
     "minimum_relationship_count", "minimum_interface_count", "one_of",
     "explicit_state_or_exception", "freshness_within_days", "owner_exists",
+    "service_field_present", "service_asset_dependency_exists",
+    "service_dependency_exists", "service_business_function_exists",
+    "criticality_rank",
 })
 SUPPORTED_ASSET_FIELDS = frozenset({
     "name", "asset_type", "hostname", "ip_address", "status", "vendor",
     "model", "description", "source",
+})
+SUPPORTED_SERVICE_FIELDS = frozenset({
+    "name", "service_type_id", "purpose", "description", "lifecycle_status",
+    "operational_status", "criticality_level_id", "rto_minutes", "rpo_minutes",
+    "owner_name", "technical_contact", "support_group", "recovery_notes",
+    "runbook_url", "documentation_url", "backup_notes", "notes",
 })
 
 
@@ -65,12 +74,27 @@ def validate_rule_config(
     if rule_type == "owner_exists":
         return False, ["owner_exists is reserved until the ownership model is available"], "Requires an owner"
 
+    if "applicable_criticality_rank_min" in config and (
+        not isinstance(config["applicable_criticality_rank_min"], int)
+        or config["applicable_criticality_rank_min"] < 0
+    ):
+        errors.append("applicable_criticality_rank_min must be a non-negative integer")
+
     if rule_type in {"field_present", "field_value_in", "explicit_state_or_exception"}:
         field = config.get("field")
         if field not in SUPPORTED_ASSET_FIELDS:
             errors.append("field must reference a supported Asset field")
         if rule_type != "field_present" and not isinstance(config.get("values"), list):
             errors.append("values must be a list")
+    elif rule_type == "service_field_present":
+        if config.get("field") not in SUPPORTED_SERVICE_FIELDS:
+            errors.append("field must reference a supported Service field")
+    elif rule_type in {"service_asset_dependency_exists", "service_dependency_exists", "service_business_function_exists"}:
+        if not isinstance(config.get("minimum", 1), int) or config.get("minimum", 1) < 1:
+            errors.append("minimum must be an integer of at least 1")
+    elif rule_type == "criticality_rank":
+        if not isinstance(config.get("minimum_rank"), int) or config.get("minimum_rank", -1) < 0:
+            errors.append("minimum_rank must be a non-negative integer")
     elif rule_type in {"custom_field_present", "custom_field_value_in"}:
         field_id = _uuid(config.get("custom_field_definition_id"), "custom_field_definition_id", errors)
         if field_id:
@@ -162,6 +186,16 @@ def interpret_rule(db: Session, rule_type: str, config: dict) -> str:
     minimum = config.get("minimum", 1)
     if rule_type == "field_present":
         return f"Requires Asset field {config.get('field', 'unknown')}"
+    if rule_type == "service_field_present":
+        return f"Requires Service field {config.get('field', 'unknown')}"
+    if rule_type == "service_asset_dependency_exists":
+        return f"Requires at least {minimum} active Asset dependency/dependencies"
+    if rule_type == "service_dependency_exists":
+        return f"Requires at least {minimum} active Service dependency/dependencies"
+    if rule_type == "service_business_function_exists":
+        return f"Requires at least {minimum} linked Business Function(s)"
+    if rule_type == "criticality_rank":
+        return f"Applies at criticality rank {config.get('minimum_rank', '?')} or higher"
     if rule_type == "field_value_in":
         return f"Requires {config.get('field', 'field')} to be one of {', '.join(map(str, config.get('values', [])))}"
     if rule_type.startswith("custom_field"):
@@ -201,7 +235,7 @@ def requirement_references_id(requirement: KnowledgeRequirementDefinition, refer
         if isinstance(value, list):
             return any(contains(item) for item in value)
         return _safe_uuid(value) == reference_id
-    return requirement.asset_type_id == reference_id or contains(requirement.rule_config_json)
+    return requirement.asset_type_id == reference_id or requirement.service_type_id == reference_id or contains(requirement.rule_config_json)
 
 
 def requirements_referencing(db: Session, reference_id: uuid.UUID) -> list[KnowledgeRequirementDefinition]:

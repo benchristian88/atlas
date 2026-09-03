@@ -62,7 +62,7 @@ export default function LoginPage() {
         <section className="login-card" aria-labelledby="login-title">
           <p className="eyebrow">Welcome back</p>
           <h1 id="login-title">Sign in</h1>
-          <p className="page-description">Use your database-backed Atlas account.</p>
+          <p className="page-description">Use your database-backed Atlas Impact account.</p>
           {error && <div className="error-banner" role="alert">{error}</div>}
           <form className="login-form" onSubmit={submit}>
             <label className="field">

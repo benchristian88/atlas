@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -22,6 +22,13 @@ from app.models import (
     KnowledgeGap,
     KnowledgeRequirementDefinition,
     RelationshipType,
+    BusinessFunction,
+    CriticalityLevel,
+    Service,
+    ServiceAssetDependency,
+    ServiceBusinessFunction,
+    ServiceDependency,
+    ServiceType,
 )
 from app.services.custom_fields import custom_field_values
 from app.services.knowledge_changes import record_change
@@ -430,3 +437,192 @@ def get_entity_completeness_context(db: Session, entity_type: str, entity_id: uu
         "active_exception_count": sum(item.status == "exception" for item in gaps),
         "last_evaluated_at": summary.last_evaluated_at if summary else None,
     })
+
+
+def evaluate_service_rule(
+    db: Session,
+    service: Service,
+    rule_type: str,
+    config: dict[str, Any],
+    *,
+    depth: int = 0,
+) -> RuleResult:
+    """Evaluate one declarative Service requirement without executable rules."""
+
+    valid, errors, _ = validate_rule_config(db, rule_type, config, depth=depth)
+    if not valid:
+        return RuleResult(False, details={"configuration_errors": errors}, invalid=True)
+    criticality = db.get(CriticalityLevel, service.criticality_level_id)
+    applicable_rank = config.get("applicable_criticality_rank_min")
+    if applicable_rank is not None and (criticality is None or criticality.rank < applicable_rank):
+        return RuleResult(True, applicable=False, details={"reason": "Criticality condition did not match", "criticality_rank": criticality.rank if criticality else None, "minimum_rank": applicable_rank})
+    if rule_type == "service_field_present":
+        value = getattr(service, config["field"], None)
+        return RuleResult(not _blank(value), details={"field": config["field"], "value": value})
+    if rule_type == "service_asset_dependency_exists":
+        service_type = db.get(ServiceType, service.service_type_id)
+        if service_type and not service_type.requires_asset_dependency:
+            return RuleResult(True, details={"reason": "Service Type explicitly permits an external Service without an Asset dependency", "service_type": service_type.key, "external_service_exception": True})
+        count = int(db.scalar(select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.service_id == service.id, ServiceAssetDependency.valid_to.is_(None))) or 0)
+        return RuleResult(count >= config.get("minimum", 1), details={"matching_count": count, "minimum": config.get("minimum", 1)})
+    if rule_type == "service_dependency_exists":
+        direction = config.get("direction", "outgoing")
+        conditions = [ServiceDependency.valid_to.is_(None)]
+        if direction == "incoming": conditions.append(ServiceDependency.target_service_id == service.id)
+        elif direction == "either": conditions.append(or_(ServiceDependency.source_service_id == service.id, ServiceDependency.target_service_id == service.id))
+        else: conditions.append(ServiceDependency.source_service_id == service.id)
+        count = int(db.scalar(select(func.count()).select_from(ServiceDependency).where(*conditions)) or 0)
+        return RuleResult(count >= config.get("minimum", 1), details={"matching_count": count, "minimum": config.get("minimum", 1), "direction": direction})
+    if rule_type == "service_business_function_exists":
+        count = int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == service.id, ServiceBusinessFunction.valid_to.is_(None))) or 0)
+        return RuleResult(count >= config.get("minimum", 1), details={"matching_count": count, "minimum": config.get("minimum", 1)})
+    if rule_type == "criticality_rank":
+        return RuleResult(bool(criticality and criticality.rank >= config["minimum_rank"]), details={"criticality_rank": criticality.rank if criticality else None, "minimum_rank": config["minimum_rank"]})
+    if rule_type == "one_of":
+        results = [evaluate_service_rule(db, service, item["rule_type"], item.get("rule_config", {}), depth=depth + 1) for item in config["rules"]]
+        return RuleResult(any(item.satisfied and item.applicable for item in results), details={"alternatives": [to_json_value(item.details) for item in results]})
+    return RuleResult(False, details={"configuration_errors": ["Rule is not available for Services"]}, invalid=True)
+
+
+def _service_gap(db: Session, requirement_id: uuid.UUID, service_id: uuid.UUID) -> KnowledgeGap | None:
+    return db.scalar(select(KnowledgeGap).where(
+        KnowledgeGap.requirement_definition_id == requirement_id,
+        KnowledgeGap.entity_type == "service",
+        KnowledgeGap.entity_id == service_id,
+        KnowledgeGap.status.in_(ACTIVE_GAP_STATUSES),
+    ))
+
+
+def _service_completeness_change(db: Session, service: Service, change_type: str, summary: str, *, gap: KnowledgeGap | None = None, actor_user_id: uuid.UUID | None = None, previous: Any = None, new: Any = None) -> None:
+    record_change(
+        db,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        change_type=change_type,
+        entity_type="service",
+        entity_id=service.id,
+        entity_name=service.name,
+        predicate="knowledge_completeness",
+        previous_value=previous,
+        new_value=new,
+        actor_user_id=actor_user_id,
+        summary=summary,
+        metadata={"knowledge_gap_id": gap.id if gap else None, "requirement_definition_id": gap.requirement_definition_id if gap else None},
+    )
+
+
+def evaluate_service(
+    db: Session,
+    service_or_id: Service | uuid.UUID,
+    *,
+    trigger_context: str | None = None,
+    actor_user_id: uuid.UUID | None = None,
+) -> KnowledgeCompletenessSummary:
+    service = service_or_id if isinstance(service_or_id, Service) else db.get(Service, service_or_id)
+    if service is None:
+        raise ValueError("Service not found")
+    now = datetime.now(timezone.utc)
+    requirements = list(db.scalars(select(KnowledgeRequirementDefinition).where(
+        KnowledgeRequirementDefinition.entity_type == "service",
+        KnowledgeRequirementDefinition.active.is_(True),
+        or_(KnowledgeRequirementDefinition.service_type_id.is_(None), KnowledgeRequirementDefinition.service_type_id == service.service_type_id),
+    ).order_by(KnowledgeRequirementDefinition.sort_order, KnowledgeRequirementDefinition.name)))
+    applicable_ids: set[uuid.UUID] = set()
+    counts = {"required_total": 0, "required_satisfied": 0, "recommended_total": 0, "recommended_satisfied": 0}
+
+    for requirement in requirements:
+        try:
+            result = evaluate_service_rule(db, service, requirement.rule_type, requirement.rule_config_json or {})
+        except Exception as exc:
+            result = RuleResult(False, details={"configuration_errors": [str(exc)]}, invalid=True)
+        requirement.configuration_valid = not result.invalid
+        requirement.configuration_error = "; ".join((result.details or {}).get("configuration_errors", [])) or None
+        gap = _service_gap(db, requirement.id, service.id)
+        if not result.applicable:
+            if gap:
+                previous = gap.status; gap.status = "superseded"; gap.resolution_reason = "Requirement is no longer applicable"; gap.resolved_at = now; gap.last_state_changed_at = now; gap.last_evaluated_at = now
+                _service_completeness_change(db, service, "knowledge_requirement_changed", f"{requirement.name} no longer applies to {service.name}.", gap=gap, actor_user_id=actor_user_id, previous=previous, new="superseded")
+            continue
+        applicable_ids.add(requirement.id)
+        category = "recommended" if requirement.requirement_level == "recommended" else "required"
+        counts[f"{category}_total"] += 1
+        if gap and gap.status == "exception" and gap.exception_expires_at and gap.exception_expires_at <= now:
+            gap.status = "open"; gap.last_state_changed_at = now
+            _service_completeness_change(db, service, "knowledge_gap_exception_expired", f"Exception expired: {gap.summary}", gap=gap, previous="exception", new="open")
+        if gap and gap.status == "deferred" and gap.deferred_until and gap.deferred_until <= now:
+            gap.status = "open"; gap.last_state_changed_at = now
+        active_exception = bool(gap and gap.status == "exception" and (gap.exception_expires_at is None or gap.exception_expires_at > now))
+        if result.satisfied:
+            if not active_exception: counts[f"{category}_satisfied"] += 1
+            if gap and not active_exception:
+                previous = gap.status; gap.status = "resolved"; gap.resolved_at = now; gap.resolution_reason = "Automatically satisfied by current operational knowledge"; gap.last_state_changed_at = now; gap.last_evaluated_at = now
+                _service_completeness_change(db, service, "knowledge_gap_resolved", f"{service.name} now satisfies {requirement.name.lower()}.", gap=gap, previous=previous, new="resolved")
+            elif gap: gap.last_evaluated_at = now
+            continue
+        details = to_json_value({**(result.details or {}), "why_it_applies": requirement.description, "trigger_context": trigger_context, "configuration_invalid": result.invalid})
+        if gap is None:
+            gap = KnowledgeGap(
+                customer_id=service.customer_id, site_id=service.site_id,
+                requirement_definition_id=requirement.id, entity_type="service", entity_id=service.id,
+                asset_type_id_snapshot=None, status="open", severity=requirement.severity,
+                requirement_level=requirement.requirement_level,
+                summary=f"{service.name} is missing {requirement.name.lower()}.", details_json=details,
+                first_detected_at=now, last_evaluated_at=now, last_state_changed_at=now,
+            )
+            db.add(gap); db.flush()
+            _service_completeness_change(db, service, "knowledge_gap_opened", gap.summary, gap=gap, actor_user_id=actor_user_id, new="open")
+        else:
+            gap.last_evaluated_at = now; gap.details_json = details; gap.severity = requirement.severity; gap.requirement_level = requirement.requirement_level
+
+    for obsolete in db.scalars(select(KnowledgeGap).where(
+        KnowledgeGap.entity_type == "service", KnowledgeGap.entity_id == service.id,
+        KnowledgeGap.status.in_(ACTIVE_GAP_STATUSES),
+        KnowledgeGap.requirement_definition_id.not_in(applicable_ids or {uuid.UUID(int=0)}),
+    )):
+        previous = obsolete.status; obsolete.status = "superseded"; obsolete.resolution_reason = "Service profile or requirement applicability changed"; obsolete.resolved_at = now; obsolete.last_evaluated_at = now; obsolete.last_state_changed_at = now
+        _service_completeness_change(db, service, "knowledge_requirement_changed", f"{service.name} no longer has an applicable requirement for {obsolete.summary}", gap=obsolete, actor_user_id=actor_user_id, previous=previous, new="superseded")
+
+    active_gaps = list(db.scalars(select(KnowledgeGap).where(KnowledgeGap.entity_type == "service", KnowledgeGap.entity_id == service.id, KnowledgeGap.status.in_(ACTIVE_GAP_STATUSES))))
+    open_gaps = [item for item in active_gaps if item.status in {"open", "deferred"}]
+    required_open = [item for item in open_gaps if item.requirement_level in {"required", "conditional"}]
+    recommended_open = [item for item in open_gaps if item.requirement_level == "recommended"]
+    exceptions = [item for item in active_gaps if item.status == "exception"]
+    status = "critical_gaps" if any(item.severity == "critical" for item in required_open) else "incomplete" if required_open else "exception_accepted" if exceptions else "operationally_complete" if recommended_open else "complete"
+    summary = db.scalar(select(KnowledgeCompletenessSummary).where(KnowledgeCompletenessSummary.entity_type == "service", KnowledgeCompletenessSummary.entity_id == service.id))
+    if summary is None:
+        summary = KnowledgeCompletenessSummary(entity_type="service", entity_id=service.id, customer_id=service.customer_id, site_id=service.site_id, completeness_status="not_evaluated")
+        db.add(summary); db.flush()
+    previous_status = summary.completeness_status
+    summary.required_total = counts["required_total"]; summary.required_satisfied = counts["required_satisfied"]
+    summary.recommended_total = counts["recommended_total"]; summary.recommended_satisfied = counts["recommended_satisfied"]
+    summary.critical_gap_count = sum(item.severity == "critical" for item in open_gaps); summary.high_gap_count = sum(item.severity == "high" for item in open_gaps)
+    summary.open_gap_count = len(open_gaps); summary.exception_count = len(exceptions); summary.completeness_status = status
+    summary.customer_id = service.customer_id; summary.site_id = service.site_id; summary.last_evaluated_at = now
+    if previous_status != status:
+        _service_completeness_change(db, service, "service_completeness_changed", f"{service.name} completeness changed from {previous_status.replace('_', ' ')} to {status.replace('_', ' ')}.", actor_user_id=actor_user_id, previous=previous_status, new=status)
+    return summary
+
+
+def evaluate_service_safely(db: Session, service_or_id: Service | uuid.UUID, *, trigger_context: str | None = None, actor_user_id: uuid.UUID | None = None) -> KnowledgeCompletenessSummary | None:
+    service_id = service_or_id.id if isinstance(service_or_id, Service) else service_or_id
+    try:
+        with db.begin_nested():
+            return evaluate_service(db, service_or_id, trigger_context=trigger_context, actor_user_id=actor_user_id)
+    except Exception:
+        logger.exception("Completeness evaluation failed for service %s", service_id)
+        service = db.get(Service, service_id)
+        if service is None: return None
+        summary = db.scalar(select(KnowledgeCompletenessSummary).where(KnowledgeCompletenessSummary.entity_type == "service", KnowledgeCompletenessSummary.entity_id == service.id))
+        if summary is None:
+            summary = KnowledgeCompletenessSummary(entity_type="service", entity_id=service.id, customer_id=service.customer_id, site_id=service.site_id)
+            db.add(summary)
+        summary.completeness_status = "not_evaluated"; summary.last_evaluated_at = None
+        return summary
+
+
+def evaluate_services_for_service_type(db: Session, service_type_id: uuid.UUID | None, *, limit: int = 100, actor_user_id: uuid.UUID | None = None) -> int:
+    query = select(Service).order_by(Service.updated_at.desc()).limit(limit)
+    if service_type_id is not None: query = query.where(Service.service_type_id == service_type_id)
+    rows = list(db.scalars(query))
+    for service in rows: evaluate_service(db, service, trigger_context="requirement_profile_changed", actor_user_id=actor_user_id)
+    return len(rows)

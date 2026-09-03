@@ -21,6 +21,10 @@ from app.models import (
     AssetType,
     CustomFieldAssetType,
     RelationshipType,
+    RelationshipTypeApplicability,
+    ServiceAssetDependency,
+    ServiceBusinessFunction,
+    ServiceDependency,
 )
 from app.schemas import (
     AssetTypeCreate,
@@ -100,7 +104,7 @@ def _relationship_type_response(
 ) -> RelationshipTypeResponse:
     source = aliased(Asset)
     target = aliased(Asset)
-    count = int(
+    asset_count = int(
         db.scalar(
             select(func.count())
             .select_from(AssetRelationship)
@@ -124,6 +128,30 @@ def _relationship_type_response(
         )
         or 0
     )
+    typed_count = int(db.scalar(
+        select(func.count()).select_from(ServiceAssetDependency).where(
+            ServiceAssetDependency.relationship_type_id == item.id,
+            ServiceAssetDependency.valid_to.is_(None),
+        )
+    ) or 0) + int(db.scalar(
+        select(func.count()).select_from(ServiceDependency).where(
+            ServiceDependency.relationship_type_id == item.id,
+            ServiceDependency.valid_to.is_(None),
+        )
+    ) or 0) + int(db.scalar(
+        select(func.count()).select_from(ServiceBusinessFunction).where(
+            ServiceBusinessFunction.relationship_type_id == item.id,
+            ServiceBusinessFunction.valid_to.is_(None),
+        )
+    ) or 0)
+    applicability = list(db.scalars(
+        select(RelationshipTypeApplicability).where(
+            RelationshipTypeApplicability.relationship_type_id == item.id
+        ).order_by(
+            RelationshipTypeApplicability.source_entity_type,
+            RelationshipTypeApplicability.target_entity_type,
+        )
+    ))
     return RelationshipTypeResponse.model_validate(
         {
             "id": item.id,
@@ -139,7 +167,8 @@ def _relationship_type_response(
             "sort_order": item.sort_order,
             "allowed_source_asset_type_keys": item.allowed_source_asset_type_keys or [],
             "allowed_target_asset_type_keys": item.allowed_target_asset_type_keys or [],
-            "in_use_count": count,
+            "applicability": applicability,
+            "in_use_count": asset_count + typed_count,
             "created_at": item.created_at,
             "updated_at": item.updated_at,
         }
@@ -296,6 +325,8 @@ def delete_asset_type(
 def list_relationship_types(
     principal: Principal = Depends(require_permission("relationship_types.view")),
     active_only: bool = Query(default=False),
+    source_entity_type: str | None = Query(default=None),
+    target_entity_type: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     query = select(RelationshipType).order_by(
@@ -303,6 +334,15 @@ def list_relationship_types(
     )
     if active_only:
         query = query.where(RelationshipType.active.is_(True))
+    if source_entity_type or target_entity_type:
+        applicability_query = select(RelationshipTypeApplicability.relationship_type_id).where(
+            RelationshipTypeApplicability.active.is_(True)
+        )
+        if source_entity_type:
+            applicability_query = applicability_query.where(RelationshipTypeApplicability.source_entity_type == source_entity_type)
+        if target_entity_type:
+            applicability_query = applicability_query.where(RelationshipTypeApplicability.target_entity_type == target_entity_type)
+        query = query.where(RelationshipType.id.in_(applicability_query))
     return [
         _relationship_type_response(db, item, principal)
         for item in db.scalars(query)
@@ -319,7 +359,7 @@ def create_relationship_type(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "relationship_types.manage")
-    values = payload.model_dump()
+    values = payload.model_dump(exclude={"applicability"})
     values["allowed_source_asset_type_keys"] = _validated_asset_type_keys(
         db, payload.allowed_source_asset_type_keys
     )
@@ -329,6 +369,11 @@ def create_relationship_type(
     item = RelationshipType(**values, system_defined=False)
     db.add(item)
     flush(db, "Relationship type")
+    for endpoint in payload.applicability:
+        db.add(RelationshipTypeApplicability(
+            relationship_type_id=item.id,
+            **endpoint.model_dump(),
+        ))
     add_audit_event(
         db,
         action="relationship_type.created",
@@ -365,6 +410,7 @@ def update_relationship_type(
     if item is None:
         raise HTTPException(status_code=404, detail="Relationship type not found")
     changes = payload.model_dump(exclude_unset=True)
+    applicability = changes.pop("applicability", None)
     referenced_requirements = requirements_referencing(db, item.id) if changes.get("active") is False else []
     if "allowed_source_asset_type_keys" in changes:
         changes["allowed_source_asset_type_keys"] = _validated_asset_type_keys(
@@ -376,6 +422,25 @@ def update_relationship_type(
         )
     for key, value in changes.items():
         setattr(item, key, value)
+    if applicability is not None:
+        existing = {
+            (row.source_entity_type, row.target_entity_type): row
+            for row in db.scalars(select(RelationshipTypeApplicability).where(
+                RelationshipTypeApplicability.relationship_type_id == item.id
+            ))
+        }
+        requested = {
+            (row["source_entity_type"], row["target_entity_type"]): row
+            for row in applicability
+        }
+        for pair, row in existing.items():
+            if pair not in requested:
+                db.delete(row)
+        for pair, values in requested.items():
+            if pair in existing:
+                existing[pair].active = values.get("active", True)
+            else:
+                db.add(RelationshipTypeApplicability(relationship_type_id=item.id, **values))
     if changes.get("active") is False:
         invalidate_referencing_requirements(db, item.id, "Relationship Type")
         from app.services.knowledge_completeness import evaluate_assets_for_asset_type
@@ -388,7 +453,7 @@ def update_relationship_type(
         target_id=item.id,
         actor=principal.user,
         summary="Relationship type updated",
-        metadata={"key": item.key, "changed_fields": sorted(changes)},
+        metadata={"key": item.key, "changed_fields": sorted(changes) + (["applicability"] if applicability is not None else [])},
         request=request,
     )
     try:
@@ -429,6 +494,13 @@ def delete_relationship_type(
             status_code=409,
             detail="Relationship type is in use. Deactivate it instead of deleting it.",
         )
+    typed_count = sum(int(db.scalar(query) or 0) for query in (
+        select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.relationship_type_id == item.id),
+        select(func.count()).select_from(ServiceDependency).where(ServiceDependency.relationship_type_id == item.id),
+        select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.relationship_type_id == item.id),
+    ))
+    if typed_count:
+        raise HTTPException(status_code=409, detail="Relationship type is used by Service history. Deactivate it instead of deleting it.")
     add_audit_event(
         db,
         action="relationship_type.deleted",

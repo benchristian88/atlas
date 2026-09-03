@@ -249,6 +249,43 @@ class RelationshipType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class RelationshipTypeApplicability(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Allowed endpoint-kind pair for a relationship type.
+
+    Asset-only relationship types created before C1 remain valid for the legacy
+    asset-to-asset path. New service dependency paths require an explicit row.
+    """
+
+    __tablename__ = "relationship_type_applicabilities"
+    __table_args__ = (
+        UniqueConstraint(
+            "relationship_type_id",
+            "source_entity_type",
+            "target_entity_type",
+            name="uq_relationship_type_applicability_endpoints",
+        ),
+        CheckConstraint(
+            "source_entity_type IN ('asset', 'service', 'business_function')",
+            name="valid_source_entity_type",
+        ),
+        CheckConstraint(
+            "target_entity_type IN ('asset', 'service', 'business_function')",
+            name="valid_target_entity_type",
+        ),
+    )
+
+    relationship_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relationship_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    target_entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+
+
 class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "workspaces"
 
@@ -287,6 +324,329 @@ class Site(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="active", index=True
+    )
+
+
+class ServiceType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "service_types"
+    __table_args__ = (
+        Index("uq_service_types_name_lower", text("lower(name)"), unique=True),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    icon_key: Mapped[str | None] = mapped_column(String(100))
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="100", index=True
+    )
+    requires_asset_dependency: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class CriticalityLevel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "criticality_levels"
+    __table_args__ = (
+        Index("uq_criticality_levels_name_lower", text("lower(name)"), unique=True),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    default_rto_minutes: Mapped[int | None] = mapped_column(Integer)
+    default_rpo_minutes: Mapped[int | None] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    system_defined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="100", index=True
+    )
+
+
+class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "services"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_services_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_services_customer_name_without_site",
+            "customer_id",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text("site_id IS NULL AND archived_at IS NULL"),
+        ),
+        Index(
+            "uq_services_customer_site_name",
+            "customer_id",
+            "site_id",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL"),
+        ),
+        Index(
+            "uq_services_customer_slug_without_site",
+            "customer_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("site_id IS NULL AND archived_at IS NULL"),
+        ),
+        Index(
+            "uq_services_customer_site_slug",
+            "customer_id",
+            "site_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL"),
+        ),
+        CheckConstraint("rto_minutes IS NULL OR rto_minutes >= 0", name="valid_rto_minutes"),
+        CheckConstraint("rpo_minutes IS NULL OR rpo_minutes >= 0", name="valid_rpo_minutes"),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    purpose: Mapped[str | None] = mapped_column(Text)
+    service_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("service_types.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    criticality_level_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("criticality_levels.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="active", index=True
+    )
+    operational_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="unknown", index=True
+    )
+    owner_name: Mapped[str | None] = mapped_column(String(255))
+    technical_contact: Mapped[str | None] = mapped_column(String(255))
+    support_group: Mapped[str | None] = mapped_column(String(255))
+    documentation_url: Mapped[str | None] = mapped_column(String(2048))
+    runbook_url: Mapped[str | None] = mapped_column(String(2048))
+    rto_minutes: Mapped[int | None] = mapped_column(Integer)
+    rpo_minutes: Mapped[int | None] = mapped_column(Integer)
+    backup_notes: Mapped[str | None] = mapped_column(Text)
+    recovery_notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="manual", index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    archived_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    archive_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class ServiceAssetDependency(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "service_asset_dependencies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_service_asset_dependencies_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_service_asset_dependencies_active_edge",
+            "service_id", "asset_id", "relationship_type_id",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    relationship_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relationship_types.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    required_for_operation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, server_default="manual")
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class ServiceDependency(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "service_dependencies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_service_dependencies_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("source_service_id <> target_service_id", name="not_self_referential"),
+        Index(
+            "uq_service_dependencies_active_edge",
+            "source_service_id", "target_service_id", "relationship_type_id",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    source_service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    target_service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    relationship_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relationship_types.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    required_for_operation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    description: Mapped[str | None] = mapped_column(Text)
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class BusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "business_functions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_business_functions_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index("uq_business_functions_customer_name_without_site", "customer_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NULL")),
+        Index("uq_business_functions_customer_site_name", "customer_id", "site_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NOT NULL")),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    owner_name: Mapped[str | None] = mapped_column(String(255))
+    criticality_level_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("criticality_levels.id", ondelete="RESTRICT"), index=True
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class ServiceBusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "service_business_functions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_service_business_functions_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_service_business_functions_active_link",
+            "service_id", "business_function_id",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    business_function_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("business_functions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    relationship_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("relationship_types.id", ondelete="RESTRICT"), index=True
+    )
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    importance: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text)
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
 
 
@@ -745,7 +1105,7 @@ class KnowledgeChange(UUIDPrimaryKeyMixin, Base):
 class KnowledgeRequirementDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "knowledge_requirement_definitions"
     __table_args__ = (
-        CheckConstraint("entity_type IN ('asset')", name="supported_entity_type"),
+        CheckConstraint("entity_type IN ('asset', 'service')", name="supported_entity_type"),
         CheckConstraint(
             "requirement_level IN ('required', 'conditional', 'recommended')",
             name="valid_requirement_level",
@@ -764,6 +1124,9 @@ class KnowledgeRequirementDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     asset_type_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("asset_types.id", ondelete="RESTRICT"), index=True
+    )
+    service_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_types.id", ondelete="RESTRICT"), index=True
     )
     requirement_level: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)

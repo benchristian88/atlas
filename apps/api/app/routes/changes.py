@@ -19,6 +19,8 @@ from app.models import (
     KnowledgeChange,
     ReconciliationItem,
     User,
+    Service,
+    BusinessFunction,
 )
 from app.routes.crud_helpers import not_found
 from app.schemas import (
@@ -41,6 +43,8 @@ def _change_response(db: Session, change: KnowledgeChange) -> dict:
     item = db.get(ReconciliationItem, change.reconciliation_item_id) if change.reconciliation_item_id else None
     actor = db.get(User, change.actor_user_id) if change.actor_user_id else None
     linked_asset = db.get(Asset, change.entity_id) if change.entity_type == "asset" and change.entity_id else None
+    linked_service = db.get(Service, change.entity_id) if change.entity_type == "service" and change.entity_id else None
+    linked_business_function = db.get(BusinessFunction, change.entity_id) if change.entity_type == "business_function" and change.entity_id else None
     result["source_name"] = source.name if source else None
     result.update(
         {
@@ -53,6 +57,8 @@ def _change_response(db: Session, change: KnowledgeChange) -> dict:
             "attention_required": bool(item and item.status in {"open", "deferred"}),
             "links": {
                 **({"asset": f"/assets/{change.entity_id}"} if linked_asset else {}),
+                **({"service": f"/services/{change.entity_id}"} if linked_service else {}),
+                **({"business_function": f"/business-functions/{change.entity_id}"} if linked_business_function else {}),
                 **({"reconciliation": "/reconciliation"} if item else {}),
                 **({"discovery_run": f"/discovery-runs/{run.id}"} if run else {}),
             },

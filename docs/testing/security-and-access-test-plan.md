@@ -17,12 +17,13 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Under Node.js 22+, the web project currently exposes a production build check
-but no dedicated unit-test/lint/type-check scripts:
+Under Node.js 22+, run the web unit tests and production build. The project does
+not currently expose dedicated lint or type-check scripts:
 
 ```bash
 cd apps/web
 npm install
+npm test
 npm run build
 ```
 
