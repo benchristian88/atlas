@@ -20,6 +20,7 @@ from app.routes import (
     knowledge,
     knowledge_completeness,
     networks,
+    operational_graph,
     protected,
     reference_data,
     roles,
@@ -108,6 +109,7 @@ api_router.include_router(service_reference_data.service_types_router)
 api_router.include_router(service_reference_data.criticality_router)
 api_router.include_router(services.router)
 api_router.include_router(business_functions.router)
+api_router.include_router(operational_graph.router)
 api_router.include_router(reference_data.asset_types_router)
 api_router.include_router(reference_data.relationship_types_router)
 api_router.include_router(custom_fields.router)

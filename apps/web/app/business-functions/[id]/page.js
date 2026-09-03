@@ -5,6 +5,7 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
 import { PageHeader } from "../../../components/page-header";
+import { OperationalGraphView } from "../../../components/operational-graph-view";
 import { StatusBadge } from "../../../components/status-badge";
 import { apiRequest } from "../../../lib/api";
 
@@ -45,7 +46,6 @@ export default function BusinessFunctionDetailPage({ params }) {
   }, [canView, id]);
 
   useEffect(() => { load(); }, [load]);
-  const nodesById = useMemo(() => Object.fromEntries(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
   const affectedAssets = useMemo(() => graph.nodes.filter((node) => node.entity_type === "asset"), [graph.nodes]);
 
   if (!canView) return <AccessDenied />;
@@ -106,11 +106,7 @@ export default function BusinessFunctionDetailPage({ params }) {
     </section>}
     {graph.edges.length > 0 && <section className="detail-card">
       <div className="form-card-header"><h2>Capability graph</h2></div>
-      <div className="service-graph-list">{graph.edges.map((edge) => {
-        const source = nodesById[edge.source_id];
-        const target = nodesById[edge.target_id];
-        return <div key={edge.id}><Link href={source?.href || "#"}>{source?.name || "Unavailable"}</Link><span>{edge.label} →</span><Link href={target?.href || "#"}>{target?.name || "Unavailable"}</Link></div>;
-      })}</div>
+      <OperationalGraphView graph={graph} />
     </section>}
   </>;
 }

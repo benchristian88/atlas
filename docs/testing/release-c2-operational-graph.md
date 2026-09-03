@@ -1,14 +1,37 @@
 # Release C2.1 Operational Graph test plan
 
-Status: planned test coverage
+Status: automated C2.1 coverage implemented; PostgreSQL/Docker acceptance pending
 
-This document defines the required validation for Release C2.1. It is a test
-plan, not a claim that the implementation or tests already exist.
+This document defines the Release C2.1 validation contract and records the
+checks executed against the feature working tree.
 
-C2.1 is the selected next increment, while B2 — Operational Integrations and
-live discovery remains a separate incomplete workstream and is not a
-prerequisite. The reference fixture is deliberately created with current manual
-UI/API capabilities. This plan does not test
+## Working-tree validation — 3 September 2026
+
+Base commit: `f693f492deb0d3b317134c407e0897c9e1b25d58`
+
+Executed results:
+
+- `cd apps/api && .venv/bin/pytest -q` — **174 passed**, 468 deprecation
+  warnings;
+- `cd apps/api && .venv/bin/pytest -q tests/test_operational_graph.py` —
+  **16 passed**, 468 deprecation warnings;
+- `cd apps/web && npm test` — **74 passed**;
+- `cd apps/web && npm run build` — **passed**, 33 pages generated;
+- `apps/api/.venv/bin/python -m pytest -q plugins/sdk` — **5 passed**;
+- `apps/api/.venv/bin/python -m pytest -q plugins/proxmox/tests` — **22 passed**;
+- `cd apps/api && .venv/bin/alembic heads` — one head,
+  `20260720_0013`; and
+- `git diff --check` — passed at the implementation checkpoint.
+
+`alembic current` could not run because no PostgreSQL server was listening on
+localhost. Docker/PostgreSQL acceptance could not run because the environment
+does not provide the `docker` executable. These checks remain manual release
+verification; no migration was added by C2.1.
+
+C2.1 is implemented on its feature working tree, while B2 — Operational
+Integrations and live discovery remains a separate incomplete workstream and
+was not a prerequisite. The reference fixture is deliberately created with
+current manual UI/API capabilities. This plan does not test
 Integration CRUD, secrets, worker dispatch, live Proxmox execution, Documents
 UI, Interface-first IP cleanup, or legacy Service Asset conversion.
 

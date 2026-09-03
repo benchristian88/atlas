@@ -1631,6 +1631,56 @@ class ServiceGraphResponse(BaseModel):
     edges: list[ServiceGraphEdge]
 
 
+class OperationalGraphNode(BaseModel):
+    key: str
+    entity_type: Literal["asset", "service", "business_function"]
+    entity_id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    name: str
+    subtitle: str | None = None
+    href: str
+    lifecycle_state: str | None = None
+    operational_state: str | None = None
+    criticality_key: str | None = None
+    criticality_name: str | None = None
+    completeness_status: str | None = None
+    open_gap_count: int | None = None
+    source: str | None = None
+    updated_at: datetime | None = None
+
+
+class OperationalGraphEdge(BaseModel):
+    key: str
+    edge_family: Literal[
+        "asset_relationship",
+        "service_asset",
+        "service_service",
+        "service_business_function",
+    ]
+    edge_id: uuid.UUID
+    source_key: str
+    target_key: str
+    relationship_type_key: str | None = None
+    relationship_type_name: str | None = None
+    label: str
+    required_for_operation: bool | None = None
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    source: str | None = None
+    knowledge_state: Literal["accepted"] = "accepted"
+
+
+class OperationalGraphResponse(BaseModel):
+    focus_key: str
+    generated_at: datetime
+    requested_depth: int
+    truncated: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    nodes: list[OperationalGraphNode] = Field(default_factory=list)
+    edges: list[OperationalGraphEdge] = Field(default_factory=list)
+
+
 class AssetCompletenessResponse(BaseModel):
     asset_id: uuid.UUID
     summary: KnowledgeCompletenessSummaryResponse

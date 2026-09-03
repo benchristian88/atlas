@@ -1,9 +1,9 @@
 # Operational graph architecture
 
-Status: planned for Release C2.1
+Status: implemented for Release C2.1 on the feature working tree
 
-This document describes a future architecture. It is not an implementation
-claim until the feature ledger is re-audited after delivery.
+This document describes the implemented C2.1 architecture and the approved
+extension boundaries for later graph and analysis releases.
 
 ## Purpose
 
@@ -21,6 +21,30 @@ identity, direction, scope, metadata, and traversal behavior.
 Release C2.1 introduces a **shared operational graph projection** in the API. It
 turns accepted relational records into a typed, bounded graph response without
 creating a second source of truth.
+
+## Implemented shape — 3 September 2026
+
+The implementation follows the planned architecture in:
+
+- `apps/api/app/services/operational_graph.py` for graph identity, source
+  loading, authorization, traversal, metadata batching, and compatibility
+  adaptation;
+- `apps/api/app/routes/operational_graph.py` for the generic validated API;
+- `apps/api/app/schemas.py` for typed graph contracts; and
+- `apps/web/lib/operational-graph.mjs` plus
+  `apps/web/components/operational-graph-view.js` for presentation-only
+  normalization and rendering.
+
+The builder accepts an authenticated `Principal`, validated `ActiveContext`,
+and explicit projection request rather than a FastAPI `Request`. Compatibility
+profiles constrain edge families by depth so the existing Service and Business
+Function routes keep their C1 response shapes and expansion behavior while
+sharing the C2.1 security and temporal rules.
+
+Business Function completeness fields are `null`, not fabricated. Archived
+Services and inactive Business Functions are excluded by the generic current
+projection; the legacy focused routes allow only an inactive focus so existing
+detail pages remain compatible.
 
 ## Architectural context
 
@@ -379,7 +403,7 @@ fingerprints.
 
 ## API shape
 
-The planned generic route is:
+The implemented generic route is:
 
 ```text
 GET /api/operational-graph
@@ -516,9 +540,8 @@ live Proxmox execution remain outside the operational graph release.
 
 ## Data migration
 
-C2.1 should require no graph persistence migration. It may add permission or
-schema code only if necessary for the API contract, but the default plan is to
-reuse existing permissions and tables.
+C2.1 required no graph persistence migration and reused the existing permissions
+and operational tables.
 
 C2.2 will likely need an additive migration for dependency semantics. That design
 requires its own review and may require a new ADR if it changes operational

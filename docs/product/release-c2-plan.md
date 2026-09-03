@@ -1,8 +1,42 @@
 # Release C2 implementation plan
 
-Status: planned
+Status: C2.1 implemented on the feature working tree; C2.2 and C2.3 planned
 
-Next increment: **C2.1 — Shared Operational Graph**
+Delivered increment: **C2.1 — Shared Operational Graph**
+
+## C2.1 implementation evidence — 3 September 2026
+
+C2.1 is implemented on `feature/c2-1-shared-operational-graph`, based on
+`f693f492deb0d3b317134c407e0897c9e1b25d58`. No implementation commit had been
+created when this evidence was recorded.
+
+The delivered implementation adds:
+
+- `OperationalGraphBuilder`, a synchronous API/domain service with no FastAPI
+  request dependency;
+- typed namespaced node, edge, and response schemas;
+- `GET /api/operational-graph` with Asset, Service, and Business Function focus,
+  depth `0..2`, semantic direction, a hard node limit, and edge-family filters;
+- per-node and per-edge permission/scope checks, including both-endpoint checks
+  for grandfathered Asset relationships;
+- request-time `valid_from <= generated_at < valid_to` filtering for temporal
+  Service links;
+- deterministic breadth-first expansion, cycle safety, deduplication, stable
+  ordering, non-dangling truncation, and safe warnings;
+- bounded batch loading for endpoints, Relationship Types, managed type labels,
+  criticality, completeness summaries, and active gap counts;
+- compatibility adapters used by both existing focused graph routes; and
+- shared web normalization and an accessible graph-list presentation component
+  used by the existing Service and Business Function pages.
+
+The generic route excludes archived Services and inactive Business Functions by
+default. The compatibility routes retain their existing ability to render an
+archived/inactive focus record while excluding inactive adjacent records. The
+generic contract uses `null` completeness and gap counts for Business Functions
+because no Business Function completeness evaluator exists.
+
+No migration, graph table, external graph service, cache, new permission, or
+graph-rendering dependency was introduced.
 
 ## Purpose
 
@@ -435,7 +469,7 @@ downstream branches, a legitimate Service cycle, and customer/site isolation
 cases. It is test/demo guidance, not a production taxonomy or a dependency on
 plugin discovery.
 
-## C2.1 implementation backlog
+## C2.1 delivered implementation sequence
 
 | ID | Work item | Main outcome |
 | --- | --- | --- |
@@ -451,9 +485,8 @@ plugin discovery.
 | C2.1-10 | Regression and performance validation | Existing C1, topology, knowledge, and build checks remain green |
 | C2.1-11 | Update ledger and release notes | Implementation state is re-audited at a named commit |
 
-Each item should be a reviewable commit or pull request where practical. Avoid a
-single change that combines new contracts, route rewrites, UI redesign, and data
-model changes.
+These items were delivered as one tightly scoped feature working tree. The
+change contains no UI redesign or data-model migration.
 
 ## C2.1 acceptance criteria
 
@@ -591,9 +624,9 @@ AnalysisResult
 | Confidence is misleading | Defer numeric aggregation to C2.3 and expose raw qualifiers first |
 | C2.2 migration changes current meaning | Additive nullable semantics with conservative defaults and migration tests |
 
-# Suggested first development session for C2.1
+# Historical C2.1 implementation checklist
 
-When development resumes:
+This checklist guided the delivered implementation:
 
 1. Read the ADR, operational graph architecture, this plan, and the current
    graph route implementations.
