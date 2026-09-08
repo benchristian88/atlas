@@ -888,6 +888,9 @@ tbody tr:hover { background: #fbfdfd; }
 .dependency-row > div { display: flex; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
 .dependency-row strong { overflow-wrap: anywhere; }
 .dependency-row small, .dependency-row span { color: var(--muted); }
+.dependency-analysis-panel .form-card-header { flex-wrap: wrap; gap: 12px; }
+.dependency-analysis-panel .dependency-row > div { display: grid; gap: 8px; width: 100%; }
+.dependency-analysis-panel p, .dependency-analysis-panel li { overflow-wrap: anywhere; }
 .inline-dependency-form { align-items: end; border-top: 1px solid var(--border); display: grid; gap: 10px; grid-template-columns: minmax(150px, 1fr) minmax(140px, .75fr) minmax(150px, 1fr) auto auto; padding-top: 16px; }
 .inline-dependency-form input, .inline-dependency-form select { min-width: 0; width: 100%; }
 .dependency-semantics { align-items: center; display: flex; flex-basis: 100%; flex-wrap: wrap; gap: 6px 10px; }

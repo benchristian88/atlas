@@ -98,9 +98,12 @@ The normal Service detail workflow exposes these semantics using “Required”,
 `service_dependencies.view`/`service_dependencies.manage` permissions and
 customer/site checks apply to group reads and mutations.
 
-C2.3 will apply these stored semantics through bounded, deterministic,
-cycle-safe, authorization-safe analysis and explain results with actual
-dependency paths.
+C2.3 applies these stored semantics through bounded, deterministic,
+cycle-safe, authorization-safe analysis and explains results with actual
+dependency paths. See [dependency analysis](dependency-analysis.md) for `all`/`any`
+evaluation, degraded/unknown propagation, conservative aggregation, and the
+read-only scenario API. Structural Asset relationships and Business Function
+support links do not acquire failure semantics.
 
 The model remains additively extensible to `minimum`, quorum,
 `minimum_available`, weighted, conditional, and richer group rules, but those

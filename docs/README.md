@@ -41,7 +41,7 @@ update the audited ledger.
 | Release B — Discovery and Reconciliation | Simulation and reconciliation implemented; live plugin operation and worker orchestration remain partial |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services; broader entity coverage remains future work |
 | Release C1 — Homelab Service MVP | Implemented |
-| Release C2 — shared graph and Homelab Ready product foundations | C2.1 complete; C2.2 implemented with live acceptance complete; C2.3 next; C2.4 planned |
+| Release C2 — shared graph and Homelab Ready product foundations | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 next/planned |
 | F1-lite — Homelab Documentation | Planned; generated Markdown renderer and Document storage exist |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation; configure/test/Run Now/reconcile journey planned |
 | Homelab Ready Release | Planned near-term product target |
@@ -53,9 +53,11 @@ update the audited ledger.
 | Production and community packaging | Not established |
 
 **Release C2.1 — Shared Operational Graph** is complete and merged to `dev`.
-**C2.2 — Lean Dependency Semantics** is implemented with live LXC acceptance
-complete. C2.3 is next, while C2.4, F1-lite, B2-lite, and release hardening
-remain on the path to a polished, secure, self-hosted **Homelab Ready Release**.
+**C2.2 — Lean Dependency Semantics** and **C2.3 — Explainable Dependency
+Analysis** are implemented with live LXC acceptance complete for their respective
+scopes. C2.4 is next/planned; F1-lite, B2-lite, and release hardening remain on
+the path to a polished, secure, self-hosted **Homelab Ready Release**. See the
+[C2.3 acceptance record](testing/release-c2-explainable-dependency-analysis.md).
 See [`product/development-roadmap.md`](product/development-roadmap.md).
 
 ## Product documents

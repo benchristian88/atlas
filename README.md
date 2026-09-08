@@ -357,10 +357,11 @@ See the [Service model](docs/architecture/service-model.md),
 
 ## Current product sequence
 
-**Release C2.1 — Shared Operational Graph is implemented and merged.** Atlas's
-near-term product target is a polished, secure, publicly usable **Homelab Ready
-Release**. The planned route is C2.2 Lean Dependency Semantics, C2.3 Explainable
-Dependency Analysis, C2.4 Homelab Operations Experience, F1-lite Homelab
+**C2.1 — Shared Operational Graph is implemented and merged. C2.2 — Lean
+Dependency Semantics and C2.3 — Explainable Dependency Analysis are implemented
+with live LXC acceptance complete for their respective scopes.** Atlas's near-term
+product target is a polished, secure, publicly usable **Homelab Ready Release**.
+C2.4 Homelab Operations Experience is next/planned, followed by F1-lite Homelab
 Documentation, B2-lite Live Proxmox Discovery, and contained release hardening.
 
 Manual and curated operational knowledge remains first-class. People/Teams,

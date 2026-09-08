@@ -5,6 +5,7 @@
 **C2.1 subsequent live acceptance date:** 3 September 2026
 **C2.2 working-tree audit date:** 8 September 2026
 **C2.2 subsequent live acceptance:** complete in the deployed test LXC
+**C2.3 subsequent live acceptance:** complete in the deployed PostgreSQL-backed test LXC for its lean scope
 **Review comparison dates:** 23–24 July 2026
 **Planning alignment update:** 3 September 2026
 **Repository source of truth:** `dev` at `1842d161de87bcf826a15ae117703876fc30c192`
@@ -23,6 +24,50 @@
 > enough to classify a feature as implemented unless the repository contains the necessary
 > schema, reachable backend path, usable frontend path where applicable, and supporting tests.
 
+
+---
+
+# C2.3 current completion record
+
+C2.3 is **Implemented with live acceptance complete for its lean scope** on
+`feature/c2-3-explainable-dependency-analysis`. The implementation-time automated
+evidence remains unchanged in the
+[C2.3 validation record](../testing/release-c2-explainable-dependency-analysis.md#commands-and-execution-evidence):
+**72 focused API tests** (43 C2.3, 13 C2.2, 16 C2.1), **231 full API tests**
+including the real PostgreSQL integration test, **81 web tests**, a passing
+33-page build, **5 SDK tests**, **22 Proxmox tests**, compilation, one Alembic
+head at `20260908_0014`, a fresh PostgreSQL 17 migration, and `git diff --check`.
+These are historical implementation results, not checks rerun for this
+documentation finalization. The original environment limitations and statements
+about manual work still pending at implementation time are preserved there.
+
+[Subsequent live LXC acceptance](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance)
+confirmed Asset/Service unavailable inputs, direct and downstream consequences,
+`unavailable` and `unknown`, conservative and multi-hop propagation, consumption
+of persisted C2.2 `Core Operation` and `DNS Provider` semantics, actual canonical
+explanation relationships, structural Asset non-propagation, and cross-tenant
+non-disclosure. The PVE1 scenario derived no Service consequence from current
+accepted C2.3 dependency semantics; this does not establish that a real PVE1
+failure has no consequence.
+
+Implemented scope includes `all`/`any` evaluation,
+`unavailable`/`degraded`/`unknown`/`unaffected` result semantics, structured
+explanation paths, bounded deterministic traversal, cycle-safe analysis, and
+authorization/non-disclosure. `degraded`, `any`, cycles, truncation, site
+isolation and the other cases identified in the acceptance record remain
+automated-only C2.3 evidence. Live `unaffected` observations concerned Nginx Proxy
+Manager as a member unaffected by the scenario, not proof of live health.
+
+Current release status is **C2.1 complete; C2.2 complete; C2.3 complete; C2.4
+next/planned**. C2.4 visual redesign, Business Function impact semantics,
+automatic Asset→Asset failure propagation, minimum/quorum, weighted/conditional
+rules, confidence scoring, probability, full Impact Analysis, recovery analysis,
+change simulation and scenario persistence remain deferred beyond C2.3.
+F1-lite, B2-lite and Homelab Ready remain undelivered.
+
+The dated C2.2, C2.1 and earlier audit sections below retain their historical
+evidence and release-scope statements; they do not override this current C2.3
+completion record.
 
 ---
 
@@ -231,7 +276,7 @@ The repository audit materially changes several classifications:
 | Release B — Discovery and Reconciliation | **Implemented for simulation and reconciliation; live plugin operation is partial** |
 | B.5 — Knowledge Completeness | **Implemented for Assets and Services** |
 | Release C1 — Homelab Service MVP | **Implemented**            |
-| Release C2 — shared graph and dependency analysis foundations | **C2.1 and C2.2 implemented; C2.3/C2.4 planned**  |
+| Release C2 — shared graph and dependency analysis foundations | **C2.1/C2.2/C2.3 complete; C2.4 next/planned**  |
 | F1-lite — Homelab Documentation | **Planned but not implemented; renderer/storage foundation exists** |
 | B2-lite — Live Proxmox Discovery | **Partially implemented foundation; end-to-end journey absent** |
 | Homelab Ready Release | **Planned but not implemented** |
@@ -588,10 +633,10 @@ unchanged.
 | Service “Depends on” / “Required by” | **Implemented** | C1      | Typed Service dependencies exist. |
 | Business Function connected Assets | **Implemented** | C1 | Business Function detail and graph expose Assets connected through supporting Services; this is not impact analysis. |
 | Focused Service projection | **Implemented** | C1 | Structural graph endpoint exists. |
-| Recursive analysis traversal | **Planned but not implemented** | C2.3/E | No recursive impact engine. C2.1 bounded structural projection is not impact propagation. |
+| Recursive analysis traversal | **Implemented** | C2.3 | Bounded two-stage consequence closure over the authorized C2 graph; cycles terminate and retain explanation edges. Full enterprise impact remains deferred. |
 | Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..2`, deduplication, cycles, and explicit limits without impact propagation. |
 | Lean dependency semantics (`all`/`any`, failure effect) | **Implemented; live acceptance complete on feature working tree** | C2.2 | Temporal groups/memberships persist required/optional, all/any, and unavailable/degraded/unknown meaning; APIs, Service UI, and generic graph expose it while retaining `required_for_operation`. Live acceptance covered mixed membership, graph projection, fallback, direction, and non-disclosure; `any` remains automated-only because the live topology had no genuine redundant pair. |
-| Explainable dependency consequence analysis | **Planned but not implemented** | C2.3 | No bounded consequence engine returns direct/downstream paths and `unavailable`/`degraded`/`unknown` results. |
+| Explainable dependency consequence analysis | **Implemented; live acceptance complete for lean scope** | C2.3 | Asset/Service `unavailable` input via `POST /api/dependency-analysis` and preview panels; direct/downstream consequences; `all`/`any` evaluation; `unavailable`/`degraded`/`unknown`/`unaffected` result semantics; structured canonical-edge explanation paths; bounded deterministic, cycle-safe analysis; authorization/non-disclosure. Live acceptance covers unavailable/unknown propagation and the structural/security boundaries; `degraded`, `any`, cycles, truncation and site isolation remain automated-only C2.3 coverage. See [C2.3 evidence](../testing/release-c2-explainable-dependency-analysis.md). |
 | Homelab Operations Experience | **Planned but not implemented** | C2.4 | Existing summaries and graph components are foundations, not the planned polished dashboard, visual graph, and enhanced Service Operations release. |
 | Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
 | Dedicated `/impact-analysis` route | **Planned but not implemented** | E       | Navigation entry is unavailable. |
@@ -643,14 +688,13 @@ These items are committed future work in current repository documentation.
 
 ## C2 — remaining Homelab Ready foundations
 
-* C2.3 bounded explainable consequence analysis with direct/downstream paths and
-  `unavailable`/`degraded`/`unknown`/defensible `unaffected` results; and
 * C2.4 polished operational homepage, visual Knowledge Graph, enhanced Service
   Operations, environment exploration, responsiveness, accessibility, and
   product polish.
 
-The dedicated Impact Analysis route, outage simulation, blast radius, recovery
-ordering, and business severity remain Release E, not C2.1.
+The dedicated full Impact Analysis product, blast radius, recovery ordering,
+and business severity remain Release E. C2.3 adds only the contained hypothetical
+unavailable scenario over explicit lean Service dependency semantics.
 
 ## F1-lite — Homelab Documentation
 
@@ -892,14 +936,12 @@ C2.1 now provides:
 7. compatibility adapters for both focused C1 routes; and
 8. no impact, outage, recovery, scoring, or change-safety conclusions.
 
-## Homelab Ready stream: C2.3 through C2.4
+## Homelab Ready stream: C2.3 complete, C2.4 next
 
-Build the smallest useful semantic and product layer over C2.1:
-
-1. C2.3 bounded, cycle-safe, authorized consequence analysis explained by
-   actual paths; and
-2. C2.4 polished dashboard, visual graph, enhanced Service Operations,
-   environment exploration, and deliberate UX refinement.
+C2.3 bounded, cycle-safe, authorized consequence analysis explained by actual
+paths is implemented with live acceptance complete for its lean scope. Next is
+C2.4: polished dashboard, visual graph, enhanced Service Operations, environment
+exploration, and deliberate UX refinement.
 
 ## Later enterprise release: C3 structured ownership
 
@@ -941,7 +983,7 @@ Once live discovery and ownership are stable, add:
 | **C1 Homelab Service MVP** | Services, Service Types, Criticality, Business Functions, dependencies, ownership labels, RTO/RPO and focused graphs | **Implemented** |
 | **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Implemented** |
 | **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Implemented; live acceptance complete on feature working tree** |
-| **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Planned** |
+| **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Implemented; live acceptance complete for lean scope** |
 | **C2.4 Homelab Operations Experience** | Polished dashboard, visual graph, enhanced Service Operations and exploration | **Planned** |
 | **F1-lite Homelab Documentation** | Documents API/list/detail, Markdown rendering, Asset links and honest content status | **Planned; renderer/storage foundation exists** |
 | **Homelab Ready Release** | Onboarding, deployment/upgrade, backup/restore, security, accessibility, device validation and release artefacts | **Planned** |
@@ -973,8 +1015,9 @@ Delivered required/optional meaning, `all`/`any` redundancy, and
 
 ## Increment 3 — C2.3 Explainable Dependency Analysis
 
-Add bounded path-based Asset/Service consequence analysis with direct/downstream
-classification and small deterministic states. Unknown semantics produce
+Implemented bounded path-based Asset/Service consequence analysis with
+direct/downstream classification and small deterministic states; subsequent
+live LXC acceptance is complete for its lean scope. Unknown semantics produce
 `unknown`, not an invented probability or score.
 
 ## Increment 4 — C2.4 Homelab Operations Experience
@@ -998,7 +1041,7 @@ Retain richer dependency semantics, C3, C4, D, broader B2 automation, full E,
 intended-state F work, and ITSM/MSP capabilities after Homelab Ready.
 
 The roadmap must continue to distinguish implemented C2.1 structure and C2.2
-semantics from planned C2.3 analysis, C2.4 product experience, and later full
+semantics and C2.3 analysis from planned C2.4 product experience and later full
 Impact Analysis.
 
 ---
@@ -1024,8 +1067,9 @@ control plane.
 
 The delivered **C2.1 — Shared Operational Graph** and live-accepted **C2.2 —
 Lean Dependency Semantics** let Atlas prove its knowledge, relationship, and
-lean dependency model with manually curated accepted data. The next priority is
-C2.3 explainable analysis, followed by C2.4 product experience, F1-lite,
+lean dependency model with manually curated accepted data. C2.3 explainable
+analysis is implemented with live acceptance complete for its lean scope. Next
+are C2.4 product experience, F1-lite,
 B2-lite, and release hardening.
 
 C2.1 now has a reusable graph builder, a generic focused graph API,

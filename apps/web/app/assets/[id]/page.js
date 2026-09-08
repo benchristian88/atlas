@@ -7,6 +7,7 @@ import { AccessDenied } from "../../../components/access-denied";
 import { AssetIcon } from "../../../components/asset-icon";
 import { AssertionsPanel } from "../../../components/assertions-panel";
 import { CompletenessPanel } from "../../../components/completeness-panel";
+import { DependencyAnalysisPanel } from "../../../components/dependency-analysis-panel";
 import { useAuth } from "../../../components/auth-context";
 import { PageHeader } from "../../../components/page-header";
 import { StatusBadge } from "../../../components/status-badge";
@@ -261,6 +262,7 @@ export default function AssetDetailPage() {
 
       {Object.keys(asset.custom_fields || {}).length > 0 && <section className="detail-card"><div className="form-card-header"><h2>Custom enrichment</h2></div><div className="detail-grid">{Object.entries(asset.custom_fields).map(([key, value]) => { const definition = customDefinitions.find((item) => item.key === key); return <div key={key}><span>{definition?.name || key}</span><strong>{displayCustomValue(definition, value)}</strong></div>; })}</div></section>}
 
+      {hasPermissionForObject("service_dependencies.view", asset.customer_id, asset.site_id) && <DependencyAnalysisPanel focusType="asset" focusId={asset.id} />}
       {completeness && <CompletenessPanel assetId={asset.id} canDefer={hasPermissionForObject("knowledge_gaps.defer", asset.customer_id, asset.site_id)} canEvaluate={hasPermissionForObject("knowledge_completeness.evaluate", asset.customer_id, asset.site_id)} canExcept={hasPermissionForObject("knowledge_gaps.exception", asset.customer_id, asset.site_id)} completeness={completeness} onChanged={refreshCompleteness} />}
 
       {canViewNetworks && <section className="form-card"><div className="form-card-header"><h2>Interfaces and networks</h2>{canCreateInterface && !showInterfaceForm && <button className="button button-primary" onClick={() => setShowInterfaceForm(true)} type="button">Add interface</button>}</div>
