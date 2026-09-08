@@ -1,15 +1,15 @@
 # Release C2 implementation plan
 
-Status: C2.1 complete; C2.2 complete; C2.3 implemented / acceptance pending;
-C2.4 planned
+Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 next/planned
 
 Latest implemented increment: **C2.3 — Explainable Dependency Analysis**
 
 C2.3 adds `POST /api/dependency-analysis` and a small Preview unavailable panel
 on Asset and Service details. It uses current authorized graph dependencies,
 explicit effects, conservative aggregation, and structured paths without writes
-or migrations. Live test-LXC acceptance remains pending. See
-[the C2.3 test plan](../testing/release-c2-explainable-dependency-analysis.md) and
+or migrations. Subsequent live acceptance on the deployed PostgreSQL-backed
+test LXC is complete for this lean scope. See
+[the C2.3 validation and acceptance record](../testing/release-c2-explainable-dependency-analysis.md) and
 [analysis architecture](../architecture/dependency-analysis.md).
 
 ## C2.1 implementation evidence — 3 September 2026
@@ -96,6 +96,34 @@ The live topology had no genuine redundant AdGuard pair, so `any` was not
 manually exercised and no fake topology was created. Automated C2.2 coverage
 already exercises `any`. The implementation-time evidence and environment
 limitations remain unchanged in the linked test record.
+
+## C2.3 subsequent live LXC acceptance
+
+C2.3 completed manual acceptance on the deployed PostgreSQL-backed test LXC:
+
+- DNS unavailable made Reverse Proxy unavailable directly at 1 hop through
+  `Core Operation`.
+- AdGuard unavailable with ungrouped DNS semantics made DNS unknown at 1 hop
+  and Reverse Proxy unknown downstream at 2 hops.
+- After explicit `DNS Provider` semantics were configured, AdGuard unavailable
+  made DNS unavailable at 1 hop and Reverse Proxy unavailable at 2 hops.
+- PVE1 unavailable derived no Service consequence from current accepted C2.3
+  dependency semantics. The structural AdGuard `Runs on` PVE1 relationship is
+  not a failure rule; this result does not establish no real-world consequence.
+- A principal in another tenant received **Record not found** on direct AdGuard
+  Asset access; the analysis surface was unreachable and disclosed no analysis
+  information. This is a security regression pass.
+
+Explanations consumed persisted C2.2 semantics and retained actual C2.1
+relationships and canonical direction. Nginx Proxy Manager remained unaffected
+by the DNS/AdGuard scenarios, which is not a live-health claim.
+
+`degraded`, `any`, cycles, truncation, site isolation and other cases identified
+in the [C2.3 record](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance)
+remain automated-only C2.3 coverage. That document separates these live results
+from the unchanged implementation-time automated counts, commands, environment
+limitations and original manual checklist. C2.4 is next/planned; this acceptance
+does not complete F1-lite, B2-lite or Homelab Ready.
 
 ## Purpose
 

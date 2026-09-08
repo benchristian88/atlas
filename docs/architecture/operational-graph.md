@@ -1,7 +1,8 @@
 # Operational graph architecture
 
 Status: C2.1 projection implemented; C2.2 lean dependency metadata implemented;
-C2.3 analysis implemented / acceptance pending
+C2.3 analysis implemented with subsequent live LXC acceptance complete for its lean scope.
+See the [C2.3 acceptance record](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance).
 
 This document describes the implemented C2.1 architecture and the approved
 extension boundaries for later graph and analysis releases.

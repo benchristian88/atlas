@@ -1,6 +1,8 @@
 # Explainable dependency analysis
 
-Status: C2.3 implemented; live test-LXC acceptance pending.
+Status: C2.3 implemented; subsequent live LXC acceptance complete for its lean scope.
+See the [validation and acceptance record](../testing/release-c2-explainable-dependency-analysis.md)
+for separate implementation-time automated evidence and later live results.
 
 `POST /api/dependency-analysis` derives hypothetical Service consequences from
 accepted current knowledge. It does not report live health or write scenario,

@@ -1,7 +1,20 @@
 # C2.3 Explainable Dependency Analysis validation and acceptance
 
-Status: implemented on the feature working tree; **test-LXC acceptance pending**.
-C2.1 and C2.2 remain complete. C2.4 and Homelab Ready remain planned.
+Status: implemented on the feature working tree; **subsequent live LXC acceptance complete**.
+C2.1, C2.2 and C2.3 are complete. C2.4 is next/planned; F1-lite, B2-lite and
+Homelab Ready remain undelivered.
+
+## Implementation-time context
+
+The following context, automated evidence and original manual checklist are
+preserved from the implementation report. Statements about pending manual work
+describe that report's historical validation boundary. Actual later results are
+recorded separately under [Subsequent live LXC acceptance](#subsequent-live-lxc-acceptance).
+
+Implementation-report status (historical):
+
+> Status: implemented on the feature working tree; **test-LXC acceptance pending**.
+> C2.1 and C2.2 remain complete. C2.4 and Homelab Ready remain planned.
 
 Branch: `feature/c2-3-explainable-dependency-analysis`.
 Base: `1b7077a80b6a2898c9cc6cc64228242439cf80b1`, the C2.2 merge on `dev`.
@@ -135,8 +148,114 @@ claims that the deployed environment was inspected or these steps were executed.
 `any` remains covered automatically if there is no genuine redundant provider
 pair in the LXC.
 
+## Subsequent live LXC acceptance
+
+C2.3 completed live manual acceptance on the deployed PostgreSQL-backed test
+LXC. The operator-reported results below are subsequent evidence, separate from
+the implementation-time automated commands and the original checklist above.
+Scenario labels A–E below identify the completed acceptance scenarios; they do
+not mark every item in the original checklist as executed.
+
+### Scenario A — direct Service consequence
+
+With **DNS Resolution and Filtering = unavailable**, **Reverse Proxy and
+Application Publishing** returned **unavailable**, **direct consequence**,
+**1 hop**. Its persisted `Core Operation` behaviour was **Required**, **All
+required**, **If unavailable → Service unavailable**.
+
+The explanation showed Nginx Proxy Manager unaffected by this scenario and DNS
+Resolution and Filtering unavailable. The dependency set was therefore
+unsatisfied and applied the recorded `unavailable` failure effect. The path
+preserved the actual Service dependency relationship and canonical direction;
+it did not create a synthetic impact edge.
+
+### Scenario B — explicit unknown
+
+With **DNS Resolution and Filtering → AdGuard Home** still ungrouped and lacking
+explicit failure-effect semantics, **AdGuard Home = unavailable** returned
+**DNS Resolution and Filtering = unknown**, **direct consequence**, **1 hop**.
+Atlas explained that the dependency exists but its operational consequence is
+not known. It did not infer `unavailable` from `required_for_operation`.
+
+### Scenario C — downstream unknown propagation
+
+In the same AdGuard unavailable scenario, **Reverse Proxy and Application
+Publishing** returned **unknown**, **downstream consequence**, **2 hops**.
+DNS Resolution and Filtering was `unknown`, so Atlas could not determine whether
+Reverse Proxy's **All required** `Core Operation` set was satisfied. This
+confirmed conservative downstream propagation of unknown state.
+
+### Scenario D — explicit multi-hop unavailable propagation
+
+After configuring the existing DNS→AdGuard dependency with `DNS Provider`,
+**Required**, **All required**, **If unavailable → Service unavailable**,
+**AdGuard Home = unavailable** returned:
+
+| Service | State | Classification | Distance |
+| --- | --- | --- | --- |
+| DNS Resolution and Filtering | `unavailable` | Direct consequence | 1 hop |
+| Reverse Proxy and Application Publishing | `unavailable` | Downstream consequence | 2 hops |
+
+Atlas consumed the persisted C2.2 semantics across both hops. The downstream
+Reverse Proxy explanation retained `Core Operation`, **Required**, **All
+required**, **If unavailable → Service unavailable**, with DNS the unavailable
+member and Nginx Proxy Manager unaffected by this scenario. Configuring
+`DNS Provider` was an explicit accepted-knowledge edit, separate from analysis.
+
+### Scenario E — structural Asset relationship does not propagate failure
+
+With **PVE1 = unavailable**, the result was **No Service consequences were
+found**, despite the accepted structural **AdGuard Home → Runs on → PVE1**
+Asset relationship.
+
+No Service consequence was derived from current accepted C2.3 dependency
+semantics. C2.3 has no authorized dependency semantics that justify a Service
+consequence from this scenario; arbitrary Asset→Asset structural relationships
+are not operational failure rules. This is not evidence that a real PVE1
+failure has no real-world consequence.
+
+### Cross-tenant non-disclosure — security regression pass
+
+A principal in another tenant attempted direct access to the AdGuard Asset and
+received the normal non-disclosing **Record not found** response. The C2.3
+analysis surface was therefore not reachable and no analysis information was
+exposed. This records the observed access boundary; it does not claim a separate
+manual call to the analysis API or a site-isolation exercise.
+
+### Coverage and regression boundary
+
+Live coverage exercised Asset-unavailable and Service-unavailable inputs,
+direct and downstream consequences, `unavailable`, explicit `unknown`,
+conservative and multi-hop propagation, consumption of C2.2 dependency semantics,
+structural Asset non-propagation, and cross-tenant non-disclosure. `unaffected`
+was observed as a member state for Nginx Proxy Manager, not as a separate
+Service result from a redundant set.
+
+`degraded` analysis, `any`, cycles, truncation and other limits, site isolation,
+mixed permissions, hidden intermediates, temporal eligibility, and Business
+Function non-propagation remain implementation-time automated coverage; they
+were not manually exercised in this C2.3 acceptance record. The earlier C2.2
+live persistence of a degraded effect is not a live C2.3 degraded analysis test.
+The original checklist's separate Nginx Proxy Manager unavailable scenario,
+Viewer-specific checks, state/history reload checks, and browser/device
+accessibility checks are not claimed as completed here.
+
+These scenarios also provide contained regression confirmation: C2.3 consumed
+persisted C2.2 `Core Operation` and `DNS Provider` semantics, and explanations
+remained compatible with actual C2.1 graph relationships and canonical dependency
+direction. Earlier C2.1/C2.2 acceptance records remain unchanged.
+
+Hypothetical analysis is not live health. `unaffected` means unaffected by the
+specific scenario, not verified healthy; `unknown` is a valid result. Business
+Function support relationships still have no Business Function outage semantics.
+This lean acceptance completes C2.3 without claiming full Impact Analysis or
+completion of every optional manual checklist item. All original automated
+counts, command results and implementation-time environment limitations above
+remain unchanged.
+
 ## Deferred
 
 C2.4 visual redesign; full Impact Analysis; Business Function impact;
-Asset→Asset failure semantics; minimum/quorum; confidence scoring; recovery
-analysis; change simulation; scenario persistence; discovery/plugin expansion.
+Asset→Asset failure semantics; minimum/quorum; weighted/conditional dependency
+rules; confidence scoring; probability; recovery analysis; change simulation;
+scenario persistence; discovery/plugin expansion.
