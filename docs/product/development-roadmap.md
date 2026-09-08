@@ -95,7 +95,7 @@ enterprise Impact Analysis.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete B2-lite for Homelab Ready, then add scheduling, broad retries and richer orchestration later |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and explainable dependency foundation | C2.1 and C2.2 implemented; C2.3 and C2.4 planned | Apply the stored lean semantics in explainable consequences, then deliver the polished visual operations experience |
+| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 next; C2.4 planned | Apply the stored lean semantics in explainable consequences, then deliver the polished visual operations experience |
 | F1-lite — Homelab Documentation | Planned; renderer and persistence exist | Expose existing generated Markdown through usable Documents API and UI without waiting for C4 |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation | Complete a secure configure, test, Run Now, result, and reconciliation journey for Proxmox |
 | Homelab Ready Release | Planned | Harden and package the combined product as a high-quality self-hosted homelab release |
@@ -109,9 +109,9 @@ enterprise Impact Analysis.
 ## Sequencing decision
 
 **C2.1 — Shared Operational Graph** and **C2.2 — Lean Dependency Semantics** are
-implemented. The immediate sequence now optimizes for a visible product
-outcome: C2.3 Explainable Dependency Analysis and C2.4 Homelab Operations
-Experience, followed by F1-lite, B2-lite, and Homelab Ready hardening.
+complete. C2.3 Explainable Dependency Analysis is next; C2.4 Homelab Operations
+Experience remains planned, followed by F1-lite, B2-lite, and Homelab Ready
+hardening.
 
 F1-lite and B2-lite may proceed in parallel where dependencies permit, but they
 must not broaden into C4 or a production-scale worker control plane. Atlas must
@@ -196,7 +196,7 @@ and the governing decision is
 
 ## C2.2 — Lean Dependency Semantics
 
-**Status:** implemented on the C2.2 feature branch
+**Status:** implemented on the C2.2 feature branch; live LXC acceptance complete
 
 **Outcome:** Atlas can represent the dependency meaning required for truthful,
 useful homelab consequence analysis while preserving the current

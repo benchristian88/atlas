@@ -1,6 +1,7 @@
 # Release C2 implementation plan
 
-Status: C2.1 and C2.2 implemented; C2.3 and C2.4 planned
+Status: C2.1 complete; C2.2 implemented with live acceptance complete; C2.3
+next; C2.4 planned
 
 Latest delivered increment: **C2.2 — Lean Dependency Semantics**
 
@@ -66,6 +67,28 @@ upgrade/downgrade validation are recorded in
 The implementation adds no permission, graph store, rule engine, worker, cache,
 or consequence evaluator. `required_for_operation` and the existing dependency
 routes remain available; their responses gain additive semantic fields.
+
+### Subsequent live LXC acceptance
+
+After that implementation-time validation, C2.2 completed manual acceptance in
+the deployed PostgreSQL-backed test LXC. The upgrade preserved the existing
+Reverse Proxy → DNS Service and DNS Service → Adguard Home Asset
+dependencies without duplicates or fabricated groups. Required/Optional
+compatibility and persistence, explicit failure-effect persistence, behaviour
+removal with ungrouped fallback, and the mixed `Core Operation` Service→Asset
+plus Service→Service group all passed.
+
+The generic Operational Graph projected the mixed edges with one group identity,
+`all`, `required`, `unavailable`, and compatible
+`required_for_operation = true` metadata. Incoming traversal preserved the
+canonical Reverse Proxy → DNS direction and semantics. A principal in another
+tenant received the normal non-disclosing `{"detail":"Record not found"}`
+response from the Service dependency-groups route.
+
+The live topology had no genuine redundant AdGuard pair, so `any` was not
+manually exercised and no fake topology was created. Automated C2.2 coverage
+already exercises `any`. The implementation-time evidence and environment
+limitations remain unchanged in the linked test record.
 
 ## Purpose
 

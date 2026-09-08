@@ -4,11 +4,13 @@
 **C2.1 merged-state audit date:** 3 September 2026
 **C2.1 subsequent live acceptance date:** 3 September 2026
 **C2.2 working-tree audit date:** 8 September 2026
+**C2.2 subsequent live acceptance:** complete in the deployed test LXC
 **Review comparison dates:** 23–24 July 2026
 **Planning alignment update:** 3 September 2026
 **Repository source of truth:** `dev` at `1842d161de87bcf826a15ae117703876fc30c192`
 **C2.1 delivery:** `a9f41df` merged into `dev` by `1842d16`
-**C2.2 delivery state:** feature working tree based on `bd2ab6cacf7b6f11acad188827744f6105e50310`
+**C2.2 delivery state:** implemented on the feature working tree based on
+`bd2ab6cacf7b6f11acad188827744f6105e50310`; live LXC acceptance complete
 **Primary evidence:** audited repository models, migrations, routes, pages, tests, and build configuration
 **Comparison baseline:** the earlier transcript-derived **Atlas Product Feature Status Review**
 
@@ -46,9 +48,27 @@ compile checks, offline Alembic SQL generation, and one migration head at
 `20260908_0014`. Detailed commands and the PostgreSQL fixture procedure are in
 [`../testing/release-c2-lean-dependency-semantics.md`](../testing/release-c2-lean-dependency-semantics.md).
 
-C2.2 is classified **Implemented on the feature working tree**. C2.3 analysis,
-C2.4 product redesign, failure propagation, full Impact Analysis, quorum,
-weights, conditional rules, and confidence scoring remain unimplemented.
+Subsequent manual acceptance in the deployed PostgreSQL-backed test LXC
+confirmed upgrade safety without duplicate relationships or fabricated groups;
+Required/Optional compatibility; persisted failure effects; non-destructive
+group removal and explicit Unknown fallback; and the mixed `Core Operation`
+Service→Asset plus Service→Service group. The generic Operational Graph
+projected both members with the same group identity and lean semantics while
+preserving canonical direction and incoming traversal. Cross-tenant access
+returned the normal non-disclosing not-found response.
+
+The live topology had no genuine redundant AdGuard pair, so `any` was not
+manually exercised and no fake topology was created. Automated C2.2 coverage
+already exercises `any`. This subsequent acceptance does not replace the exact
+implementation-time automated evidence above.
+
+C2.2 is classified **Implemented on the feature working tree with live
+acceptance complete**. Implemented scope is required/optional, `all`/`any`,
+unavailable/degraded/unknown, temporal dependency groups, mixed Service→Asset
+and Service→Service membership, and Operational Graph semantic projection.
+`minimum`, N-of-M, quorum, weighted and conditional rules, confidence scoring,
+failure propagation, blast radius, C2.3 analysis, and the C2.4 visual redesign
+remain deferred or planned and unimplemented.
 
 ---
 
@@ -570,7 +590,7 @@ unchanged.
 | Focused Service projection | **Implemented** | C1 | Structural graph endpoint exists. |
 | Recursive analysis traversal | **Planned but not implemented** | C2.3/E | No recursive impact engine. C2.1 bounded structural projection is not impact propagation. |
 | Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..2`, deduplication, cycles, and explicit limits without impact propagation. |
-| Lean dependency semantics (`all`/`any`, failure effect) | **Implemented on feature working tree** | C2.2 | Temporal groups/memberships persist required/optional, all/any, and unavailable/degraded/unknown meaning; APIs, Service UI, and generic graph expose it while retaining `required_for_operation`. |
+| Lean dependency semantics (`all`/`any`, failure effect) | **Implemented; live acceptance complete on feature working tree** | C2.2 | Temporal groups/memberships persist required/optional, all/any, and unavailable/degraded/unknown meaning; APIs, Service UI, and generic graph expose it while retaining `required_for_operation`. Live acceptance covered mixed membership, graph projection, fallback, direction, and non-disclosure; `any` remains automated-only because the live topology had no genuine redundant pair. |
 | Explainable dependency consequence analysis | **Planned but not implemented** | C2.3 | No bounded consequence engine returns direct/downstream paths and `unavailable`/`degraded`/`unknown` results. |
 | Homelab Operations Experience | **Planned but not implemented** | C2.4 | Existing summaries and graph components are foundations, not the planned polished dashboard, visual graph, and enhanced Service Operations release. |
 | Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
@@ -920,7 +940,7 @@ Once live discovery and ownership are stable, add:
 | **B.5 Knowledge Completeness** | Asset/Service requirements, gaps, defer/exception/assignment/resolve | **Implemented** |
 | **C1 Homelab Service MVP** | Services, Service Types, Criticality, Business Functions, dependencies, ownership labels, RTO/RPO and focused graphs | **Implemented** |
 | **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Implemented** |
-| **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Implemented on feature working tree** |
+| **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Implemented; live acceptance complete on feature working tree** |
 | **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Planned** |
 | **C2.4 Homelab Operations Experience** | Polished dashboard, visual graph, enhanced Service Operations and exploration | **Planned** |
 | **F1-lite Homelab Documentation** | Documents API/list/detail, Markdown rendering, Asset links and honest content status | **Planned; renderer/storage foundation exists** |
@@ -992,7 +1012,8 @@ Atlas is further advanced than a simple inventory MVP:
 * completeness is real;
 * Services and Business Functions are real;
 * graph projections are real;
-* lean dependency semantics are real on the C2.2 feature working tree;
+* lean dependency semantics are real and live-accepted on the C2.2 feature
+  working tree;
 * the Proxmox adapter and core sync are real;
 * deterministic Markdown generation is real.
 
@@ -1001,10 +1022,11 @@ workflow remains a substantial incomplete journey. B2-lite places the smallest
 secure Proxmox journey before Homelab Ready without requiring the full worker
 control plane.
 
-The delivered **C2.1 — Shared Operational Graph** lets Atlas prove its knowledge
-and relationship model with manually curated accepted data. The next priority is
-to make that foundation useful and visible through lean semantics, explainable
-analysis, C2.4 product experience, F1-lite, B2-lite, and release hardening.
+The delivered **C2.1 — Shared Operational Graph** and live-accepted **C2.2 —
+Lean Dependency Semantics** let Atlas prove its knowledge, relationship, and
+lean dependency model with manually curated accepted data. The next priority is
+C2.3 explainable analysis, followed by C2.4 product experience, F1-lite,
+B2-lite, and release hardening.
 
 C2.1 now has a reusable graph builder, a generic focused graph API,
 compatibility adapters for the existing graph routes, authorization and

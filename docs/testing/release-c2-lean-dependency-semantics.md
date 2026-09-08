@@ -1,6 +1,7 @@
 # Release C2.2 Lean Dependency Semantics test plan
 
-Status: implemented on the C2.2 feature working tree
+Status: implemented on the C2.2 feature working tree; subsequent live LXC
+acceptance complete
 
 Base commit: `bd2ab6cacf7b6f11acad188827744f6105e50310`
 
@@ -28,6 +29,51 @@ Executed results:
 Docker was unavailable. This did not block migration validation because the
 installed PostgreSQL server was run against a disposable data directory, then
 stopped and removed.
+
+## Subsequent live LXC acceptance
+
+After the implementation-time validation above, C2.2 completed live manual
+acceptance in the deployed test LXC against its PostgreSQL-backed Atlas
+environment. This acceptance verified:
+
+- upgrading the real C2.1-backed environment preserved the existing Reverse
+  Proxy → DNS Service and DNS Service → Adguard Home Asset dependencies,
+  without duplicate dependency rows or fabricated dependency groups;
+- an existing ungrouped Service→Service dependency could be changed between
+  Required and Optional, with the selected value surviving save and reload and
+  remaining consistent with `required_for_operation`;
+- an Optional, All required, Service degraded dependency behaviour containing
+  DNS Resolution and Filtering persisted after save and reload;
+- removing that behaviour retained the underlying Reverse Proxy → DNS
+  dependency as Optional, removed the group metadata, and restored the explicit
+  Unknown failure effect for the ungrouped dependency;
+- a real mixed dependency behaviour named `Core Operation` persisted with
+  Required, All required, and Service unavailable semantics across the Nginx
+  Proxy Manager Service→Asset dependency and the DNS Resolution and Filtering
+  Service→Service dependency, with both members showing the same behaviour in
+  the Service UI;
+- the generic Operational Graph projected both mixed dependency edges with the
+  same group identity and `dependency_strategy = all`,
+  `dependency_requirement = required`, `failure_effect = unavailable`, and
+  `required_for_operation = true`, without changing canonical edge direction;
+- incoming Service→Service traversal from DNS Resolution and Filtering still
+  returned Reverse Proxy and Application Publishing → Depends on → DNS
+  Resolution and Filtering, preserving canonical source/target direction and
+  the `Core Operation` semantics; and
+- for a principal in another tenant,
+  `GET /api/services/{service_id}/dependency-groups` returned the normal
+  non-disclosing `{"detail":"Record not found"}` response without exposing
+  dependency-semantic information.
+
+The `any` / “Any one is sufficient” strategy was not manually exercised in the
+live LXC because the real topology had only one AdGuard provider and no genuine
+redundant pair. Automated C2.2 coverage exercises `any`; no fake topology was
+created solely for manual acceptance. This bounded manual coverage does not
+block C2.2 completion.
+
+These live results are subsequent acceptance evidence. They do not replace or
+alter the implementation-time automated counts, PostgreSQL 17 fixture results,
+or Docker limitation recorded above.
 
 ## Scope
 
@@ -113,7 +159,7 @@ Verify that:
 - An inaccessible focus or endpoint remains subject to C2.1 endpoint filtering;
   group names and IDs must not create a side channel.
 
-## Manual test-LXC acceptance
+## Manual test-LXC acceptance checklist
 
 Use existing real topology where possible:
 

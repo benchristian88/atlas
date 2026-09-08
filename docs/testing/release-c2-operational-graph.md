@@ -57,6 +57,17 @@ This subsequent acceptance closes the live PostgreSQL/deployed-environment
 release check that was unavailable during the original audit. It does not alter
 or replace the automated counts and environment limitations recorded above.
 
+## C2.2 live regression acceptance
+
+Subsequent C2.2 acceptance in the same deployed PostgreSQL-backed test LXC
+reconfirmed canonical Service→Service edge direction, incoming traversal, and
+generic graph compatibility while projecting the additive `Core Operation`
+dependency semantics. A principal in another tenant also received the normal
+non-disclosing not-found response from the dependency-groups route. This is a
+small C2.1 regression record, not a rewrite of the historical C2.1 acceptance
+above; full C2.2 evidence is recorded in
+[`release-c2-lean-dependency-semantics.md`](release-c2-lean-dependency-semantics.md).
+
 C2.1 is implemented and merged. The reference fixture is deliberately created
 with current manual UI/API capabilities. This plan does not test
 Integration CRUD, secrets, worker dispatch, live Proxmox execution, Documents
