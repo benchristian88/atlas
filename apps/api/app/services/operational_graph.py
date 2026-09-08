@@ -18,6 +18,8 @@ from app.models import (
     AssetType,
     BusinessFunction,
     CriticalityLevel,
+    DependencyGroup,
+    DependencyGroupMembership,
     KnowledgeCompletenessSummary,
     KnowledgeGap,
     RelationshipType,
@@ -148,6 +150,7 @@ class OperationalGraphBuilder:
             candidates = self._load_edge_candidates(
                 frontier, families, request.direction, generated_at
             )
+            dependency_groups = self._load_dependency_groups(candidates, generated_at)
             endpoint_refs = {
                 endpoint
                 for _, row in candidates
@@ -212,6 +215,7 @@ class OperationalGraphBuilder:
                     row,
                     relationship_types_by_id,
                     relationship_types_by_key,
+                    dependency_groups.get((family, row.id)),
                 )
 
             if truncated:
@@ -490,6 +494,7 @@ class OperationalGraphBuilder:
         row,
         relationship_types_by_id: dict[uuid.UUID, RelationshipType],
         relationship_types_by_key: dict[str, RelationshipType],
+        dependency_group: DependencyGroup | None,
     ) -> OperationalGraphEdge:
         source_ref, target_ref = self._edge_endpoints(row)
         if family == "asset_relationship":
@@ -505,6 +510,8 @@ class OperationalGraphBuilder:
                 if family == "service_business_function"
                 else "Depends on"
             )
+        is_dependency = family in {"service_asset", "service_service"}
+        required_for_operation = getattr(row, "required_for_operation", None)
         return OperationalGraphEdge(
             key=graph_edge_key(family, row.id),
             edge_family=family,
@@ -514,11 +521,96 @@ class OperationalGraphBuilder:
             relationship_type_key=relationship_key,
             relationship_type_name=relationship.name if relationship else None,
             label=relationship.source_label if relationship else fallback_label,
-            required_for_operation=getattr(row, "required_for_operation", None),
+            required_for_operation=required_for_operation,
+            dependency_group_id=dependency_group.id if dependency_group else None,
+            dependency_group_name=dependency_group.name if dependency_group else None,
+            dependency_strategy=dependency_group.strategy if dependency_group else None,
+            dependency_requirement=(
+                dependency_group.requirement
+                if dependency_group
+                else ("required" if required_for_operation else "optional")
+                if is_dependency
+                else None
+            ),
+            failure_effect=(
+                dependency_group.failure_effect
+                if dependency_group
+                else "unknown" if is_dependency else None
+            ),
             valid_from=getattr(row, "valid_from", None),
             valid_to=getattr(row, "valid_to", None),
             source=getattr(row, "source", None),
         )
+
+    def _load_dependency_groups(
+        self,
+        candidates: list[tuple[EdgeFamily, object]],
+        generated_at: datetime,
+    ) -> dict[tuple[EdgeFamily, uuid.UUID], DependencyGroup]:
+        asset_ids = [row.id for family, row in candidates if family == "service_asset"]
+        service_ids = [row.id for family, row in candidates if family == "service_service"]
+        predicates = []
+        if asset_ids:
+            predicates.append(DependencyGroupMembership.service_asset_dependency_id.in_(asset_ids))
+        if service_ids:
+            predicates.append(DependencyGroupMembership.service_dependency_id.in_(service_ids))
+        if not predicates:
+            return {}
+        memberships = [
+            row
+            for row in self.db.scalars(select(DependencyGroupMembership).where(
+                or_(*predicates),
+                DependencyGroupMembership.valid_from <= generated_at,
+                or_(
+                    DependencyGroupMembership.valid_to.is_(None),
+                    DependencyGroupMembership.valid_to > generated_at,
+                ),
+            ))
+            if row.valid_from <= generated_at
+            and (row.valid_to is None or row.valid_to > generated_at)
+        ]
+        group_ids = {row.dependency_group_id for row in memberships}
+        if not group_ids:
+            return {}
+        groups = {
+            row.id: row
+            for row in self.db.scalars(select(DependencyGroup).where(
+                DependencyGroup.id.in_(group_ids),
+                DependencyGroup.valid_from <= generated_at,
+                or_(DependencyGroup.valid_to.is_(None), DependencyGroup.valid_to > generated_at),
+            ))
+            if row.valid_from <= generated_at
+            and (row.valid_to is None or row.valid_to > generated_at)
+        }
+        rows_by_key = {(family, row.id): row for family, row in candidates}
+        result: dict[tuple[EdgeFamily, uuid.UUID], DependencyGroup] = {}
+        for membership in memberships:
+            if membership.service_asset_dependency_id is not None:
+                key: tuple[EdgeFamily, uuid.UUID] = (
+                    "service_asset",
+                    membership.service_asset_dependency_id,
+                )
+            else:
+                key = ("service_service", membership.service_dependency_id)
+            group = groups.get(membership.dependency_group_id)
+            dependency = rows_by_key.get(key)
+            if group is None or dependency is None:
+                continue
+            subject_id = (
+                dependency.service_id
+                if key[0] == "service_asset"
+                else dependency.source_service_id
+            )
+            if (
+                group.service_id == subject_id
+                and group.customer_id == dependency.customer_id
+                and group.site_id == dependency.site_id
+                and self.principal.can(
+                    "service_dependencies.view", group.customer_id, group.site_id
+                )
+            ):
+                result[key] = group
+        return result
 
     def _node_schemas(
         self,

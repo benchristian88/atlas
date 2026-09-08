@@ -569,6 +569,113 @@ class ServiceDependency(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class DependencyGroup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A temporal semantic set over existing Service dependency rows."""
+
+    __tablename__ = "dependency_groups"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_dependency_groups_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "strategy IN ('all', 'any')", name="valid_strategy"
+        ),
+        CheckConstraint(
+            "requirement IN ('required', 'optional')", name="valid_requirement"
+        ),
+        CheckConstraint(
+            "failure_effect IN ('unavailable', 'degraded', 'unknown')",
+            name="valid_failure_effect",
+        ),
+        Index(
+            "uq_dependency_groups_active_name",
+            "service_id",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    supersedes_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("dependency_groups.id", ondelete="RESTRICT"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(20), nullable=False)
+    requirement: Mapped[str] = mapped_column(String(20), nullable=False)
+    failure_effect: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="unknown"
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class DependencyGroupMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Temporal membership linking a semantic group to one dependency kind."""
+
+    __tablename__ = "dependency_group_memberships"
+    __table_args__ = (
+        CheckConstraint(
+            "(service_asset_dependency_id IS NOT NULL) <> "
+            "(service_dependency_id IS NOT NULL)",
+            name="exactly_one_dependency",
+        ),
+        Index(
+            "uq_dependency_group_memberships_active_asset_dependency",
+            "service_asset_dependency_id",
+            unique=True,
+            postgresql_where=text(
+                "valid_to IS NULL AND service_asset_dependency_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_dependency_group_memberships_active_service_dependency",
+            "service_dependency_id",
+            unique=True,
+            postgresql_where=text(
+                "valid_to IS NULL AND service_dependency_id IS NOT NULL"
+            ),
+        ),
+    )
+
+    dependency_group_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dependency_groups.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    service_asset_dependency_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_asset_dependencies.id", ondelete="RESTRICT"), index=True
+    )
+    service_dependency_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_dependencies.id", ondelete="RESTRICT"), index=True
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
 class BusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "business_functions"
     __table_args__ = (

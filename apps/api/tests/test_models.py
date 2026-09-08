@@ -33,6 +33,8 @@ EXPECTED_TABLES = {
     "services",
     "service_asset_dependencies",
     "service_dependencies",
+    "dependency_groups",
+    "dependency_group_memberships",
     "business_functions",
     "service_business_functions",
     "assets",
@@ -81,6 +83,17 @@ CRITICAL_COLUMNS = {
         "id", "source_asset_id", "target_asset_id", "customer_id", "site_id",
         "relationship_type", "legacy_cross_context", "notes", "metadata",
         "created_at", "updated_at",
+    },
+    "dependency_groups": {
+        "id", "customer_id", "site_id", "service_id", "supersedes_group_id",
+        "name", "strategy", "requirement", "failure_effect", "valid_from",
+        "valid_to", "created_by_user_id", "ended_by_user_id", "created_at",
+        "updated_at",
+    },
+    "dependency_group_memberships": {
+        "id", "dependency_group_id", "service_asset_dependency_id",
+        "service_dependency_id", "valid_from", "valid_to",
+        "created_by_user_id", "ended_by_user_id", "created_at", "updated_at",
     },
     "custom_field_definitions": {
         "id", "key", "name", "description", "help_text", "data_type", "required",

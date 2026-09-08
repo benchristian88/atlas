@@ -890,6 +890,18 @@ tbody tr:hover { background: #fbfdfd; }
 .dependency-row small, .dependency-row span { color: var(--muted); }
 .inline-dependency-form { align-items: end; border-top: 1px solid var(--border); display: grid; gap: 10px; grid-template-columns: minmax(150px, 1fr) minmax(140px, .75fr) minmax(150px, 1fr) auto auto; padding-top: 16px; }
 .inline-dependency-form input, .inline-dependency-form select { min-width: 0; width: 100%; }
+.dependency-semantics { align-items: center; display: flex; flex-basis: 100%; flex-wrap: wrap; gap: 6px 10px; }
+.dependency-semantics > span { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12px; padding: 3px 8px; }
+.dependency-semantics select { min-width: 110px; }
+.dependency-group-row { align-items: flex-start; }
+.dependency-group-row > div:first-child { flex: 1 1 240px; }
+.dependency-group-actions { align-items: end; display: grid !important; flex: 1 1 420px; grid-template-columns: repeat(3, minmax(125px, 1fr)) auto; }
+.dependency-group-actions label { display: grid; gap: 5px; }
+.dependency-group-actions label > span { font-size: 12px; }
+.dependency-group-actions select { min-width: 0; width: 100%; }
+.dependency-group-form { border-top: 1px solid var(--border); display: grid; gap: 16px; margin-top: 8px; padding-top: 18px; }
+.dependency-group-form fieldset { border: 1px solid var(--border); border-radius: 10px; margin: 0; padding: 12px; }
+.dependency-member-options { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; }
 .service-graph-list { display: grid; gap: 8px; }
 .service-graph-list > div { align-items: center; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); padding: 12px; }
 .service-graph-list > div > :last-child { text-align: right; }
@@ -899,6 +911,7 @@ tbody tr:hover { background: #fbfdfd; }
   .gap-row { align-items: flex-start; flex-direction: column; }
   .inline-dependency-form { align-items: stretch; grid-template-columns: 1fr; }
   .dependency-row { align-items: flex-start; }
+  .dependency-group-actions { grid-template-columns: 1fr; }
   .service-graph-list > div { grid-template-columns: 1fr; }
   .service-graph-list > div > :last-child { text-align: left; }
 }

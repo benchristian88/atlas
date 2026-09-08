@@ -2,6 +2,11 @@
 
 Status: C2.1 merged; automated coverage and subsequent live acceptance complete
 
+C2.2 additively extends applicable generic graph edges with stored dependency
+semantics while preserving every C2.1 structural contract in this plan. See
+[`release-c2-lean-dependency-semantics.md`](release-c2-lean-dependency-semantics.md)
+for the semantic and migration checks.
+
 This document preserves the Release C2.1 validation contract and records the
 checks executed against the feature working tree before its merge to `dev`.
 
