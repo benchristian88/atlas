@@ -2,6 +2,11 @@
 
 Status: C2.1 merged; automated coverage and subsequent live acceptance complete
 
+C2.2 additively extends applicable generic graph edges with stored dependency
+semantics while preserving every C2.1 structural contract in this plan. See
+[`release-c2-lean-dependency-semantics.md`](release-c2-lean-dependency-semantics.md)
+for the semantic and migration checks.
+
 This document preserves the Release C2.1 validation contract and records the
 checks executed against the feature working tree before its merge to `dev`.
 
@@ -51,6 +56,17 @@ manual acceptance covered:
 This subsequent acceptance closes the live PostgreSQL/deployed-environment
 release check that was unavailable during the original audit. It does not alter
 or replace the automated counts and environment limitations recorded above.
+
+## C2.2 live regression acceptance
+
+Subsequent C2.2 acceptance in the same deployed PostgreSQL-backed test LXC
+reconfirmed canonical Service→Service edge direction, incoming traversal, and
+generic graph compatibility while projecting the additive `Core Operation`
+dependency semantics. A principal in another tenant also received the normal
+non-disclosing not-found response from the dependency-groups route. This is a
+small C2.1 regression record, not a rewrite of the historical C2.1 acceptance
+above; full C2.2 evidence is recorded in
+[`release-c2-lean-dependency-semantics.md`](release-c2-lean-dependency-semantics.md).
 
 C2.1 is implemented and merged. The reference fixture is deliberately created
 with current manual UI/API capabilities. This plan does not test

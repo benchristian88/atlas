@@ -14,7 +14,8 @@ from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.models import (
-    Asset, BusinessFunction, CriticalityLevel, KnowledgeAssertion, KnowledgeChange,
+    Asset, BusinessFunction, CriticalityLevel, DependencyGroup,
+    DependencyGroupMembership, KnowledgeAssertion, KnowledgeChange,
     KnowledgeCompletenessSummary, KnowledgeGap, RelationshipType,
     RelationshipTypeApplicability, Service, ServiceAssetDependency,
     ServiceBusinessFunction, ServiceDependency, ServiceType, Site,
@@ -23,6 +24,7 @@ from app.routes.changes import _change_response
 from app.routes.crud_helpers import commit, flush, not_found
 from app.routes.knowledge import assertion_response
 from app.schemas import (
+    DependencyGroupCreate, DependencyGroupResponse, DependencyGroupUpdate,
     KnowledgeAssertionResponse, KnowledgeChangeResponse, ServiceArchiveRequest,
     ServiceAssetDependencyCreate, ServiceAssetDependencyResponse,
     ServiceAssetDependencyUpdate, ServiceBusinessFunctionCreate,
@@ -290,18 +292,234 @@ def _applicable_relationship(db: Session, relationship_type_id: uuid.UUID, sourc
     return relationship
 
 
-def _asset_dependency_response(db: Session, item: ServiceAssetDependency) -> dict:
+def _asset_dependency_response(db: Session, item: ServiceAssetDependency, semantics: dict | None = None) -> dict:
     service, asset, relationship = db.get(Service, item.service_id), db.get(Asset, item.asset_id), db.get(RelationshipType, item.relationship_type_id)
     result = ServiceAssetDependencyResponse.model_validate(item).model_dump()
-    result.update(service_name=service.name if service else None, asset_name=asset.name if asset else None, asset_type=asset.asset_type if asset else None, relationship_type_name=relationship.name if relationship else None, source_label=relationship.source_label if relationship else None, target_label=relationship.target_label if relationship else None)
+    result.update(service_name=service.name if service else None, asset_name=asset.name if asset else None, asset_type=asset.asset_type if asset else None, relationship_type_name=relationship.name if relationship else None, source_label=relationship.source_label if relationship else None, target_label=relationship.target_label if relationship else None, **(semantics or _dependency_semantics(db, item, "asset")))
     return result
 
 
-def _service_dependency_response(db: Session, item: ServiceDependency) -> dict:
+def _service_dependency_response(db: Session, item: ServiceDependency, semantics: dict | None = None) -> dict:
     source, target, relationship = db.get(Service, item.source_service_id), db.get(Service, item.target_service_id), db.get(RelationshipType, item.relationship_type_id)
     result = ServiceDependencyResponse.model_validate(item).model_dump()
-    result.update(source_service_name=source.name if source else None, target_service_name=target.name if target else None, relationship_type_name=relationship.name if relationship else None, source_label=relationship.source_label if relationship else None, target_label=relationship.target_label if relationship else None)
+    result.update(source_service_name=source.name if source else None, target_service_name=target.name if target else None, relationship_type_name=relationship.name if relationship else None, source_label=relationship.source_label if relationship else None, target_label=relationship.target_label if relationship else None, **(semantics or _dependency_semantics(db, item, "service")))
     return result
+
+
+def _dependency_semantics(db: Session, item, dependency_kind: str) -> dict:
+    dependency_column = (
+        DependencyGroupMembership.service_asset_dependency_id
+        if dependency_kind == "asset"
+        else DependencyGroupMembership.service_dependency_id
+    )
+    membership = db.scalar(
+        select(DependencyGroupMembership).where(
+            dependency_column == item.id,
+            DependencyGroupMembership.valid_to.is_(None),
+        )
+    )
+    group = db.get(DependencyGroup, membership.dependency_group_id) if membership else None
+    if group is None or group.valid_to is not None:
+        return {
+            "dependency_group_id": None,
+            "dependency_group_name": None,
+            "dependency_strategy": None,
+            "dependency_requirement": "required" if item.required_for_operation else "optional",
+            "failure_effect": "unknown",
+        }
+    return {
+        "dependency_group_id": group.id,
+        "dependency_group_name": group.name,
+        "dependency_strategy": group.strategy,
+        "dependency_requirement": group.requirement,
+        "failure_effect": group.failure_effect,
+    }
+
+
+def _dependency_semantics_by_id(db: Session, items: list, dependency_kind: str) -> dict[uuid.UUID, dict]:
+    if not items:
+        return {}
+    dependency_column = (
+        DependencyGroupMembership.service_asset_dependency_id
+        if dependency_kind == "asset"
+        else DependencyGroupMembership.service_dependency_id
+    )
+    memberships = list(db.scalars(select(DependencyGroupMembership).where(
+        dependency_column.in_([item.id for item in items]),
+        DependencyGroupMembership.valid_to.is_(None),
+    )))
+    group_ids = {membership.dependency_group_id for membership in memberships}
+    groups = {
+        group.id: group
+        for group in db.scalars(select(DependencyGroup).where(
+            DependencyGroup.id.in_(group_ids),
+            DependencyGroup.valid_to.is_(None),
+        ))
+    } if group_ids else {}
+    dependency_attribute = (
+        "service_asset_dependency_id"
+        if dependency_kind == "asset"
+        else "service_dependency_id"
+    )
+    memberships_by_dependency_id = {
+        getattr(membership, dependency_attribute): membership
+        for membership in memberships
+    }
+    result = {}
+    for item in items:
+        membership = memberships_by_dependency_id.get(item.id)
+        group = groups.get(membership.dependency_group_id) if membership else None
+        subject_id = item.service_id if dependency_kind == "asset" else item.source_service_id
+        if group is not None and (
+            group.service_id != subject_id
+            or group.customer_id != item.customer_id
+            or group.site_id != item.site_id
+        ):
+            group = None
+        result[item.id] = {
+            "dependency_group_id": group.id if group else None,
+            "dependency_group_name": group.name if group else None,
+            "dependency_strategy": group.strategy if group else None,
+            "dependency_requirement": group.requirement if group else ("required" if item.required_for_operation else "optional"),
+            "failure_effect": group.failure_effect if group else "unknown",
+        }
+    return result
+
+
+def _group_memberships(
+    db: Session,
+    group_id: uuid.UUID,
+    *,
+    active_only: bool = False,
+) -> list[DependencyGroupMembership]:
+    query = select(DependencyGroupMembership).where(
+        DependencyGroupMembership.dependency_group_id == group_id,
+    )
+    if active_only:
+        query = query.where(DependencyGroupMembership.valid_to.is_(None))
+    return list(db.scalars(query.order_by(
+        DependencyGroupMembership.created_at,
+        DependencyGroupMembership.id,
+    )))
+
+
+def _dependency_group_response(db: Session, item: DependencyGroup) -> dict:
+    memberships = _group_memberships(db, item.id, active_only=item.valid_to is None)
+    result = DependencyGroupResponse.model_validate(item).model_dump()
+    result.update(
+        asset_dependency_ids=[row.service_asset_dependency_id for row in memberships if row.service_asset_dependency_id],
+        service_dependency_ids=[row.service_dependency_id for row in memberships if row.service_dependency_id],
+    )
+    return result
+
+
+def _validated_group_members(
+    db: Session,
+    principal: Principal,
+    service: Service,
+    asset_dependency_ids: list[uuid.UUID],
+    service_dependency_ids: list[uuid.UUID],
+    *,
+    replacing_group_id: uuid.UUID | None = None,
+) -> tuple[list[ServiceAssetDependency], list[ServiceDependency]]:
+    if not asset_dependency_ids and not service_dependency_ids:
+        raise HTTPException(status_code=422, detail="A dependency group must contain at least one dependency")
+
+    asset_rows: list[ServiceAssetDependency] = []
+    service_rows: list[ServiceDependency] = []
+    for dependency_id in asset_dependency_ids:
+        row = db.get(ServiceAssetDependency, dependency_id)
+        if (
+            row is None
+            or row.valid_to is not None
+            or row.service_id != service.id
+            or row.customer_id != service.customer_id
+            or row.site_id != service.site_id
+        ):
+            raise not_found("Service asset dependency")
+        require_scope(principal, "service_dependencies.manage", row.customer_id, row.site_id, hide_existence=True)
+        asset_rows.append(row)
+    for dependency_id in service_dependency_ids:
+        row = db.get(ServiceDependency, dependency_id)
+        if (
+            row is None
+            or row.valid_to is not None
+            or row.source_service_id != service.id
+            or row.customer_id != service.customer_id
+            or row.site_id != service.site_id
+        ):
+            raise not_found("Service dependency")
+        require_scope(principal, "service_dependencies.manage", row.customer_id, row.site_id, hide_existence=True)
+        service_rows.append(row)
+
+    for column, dependency_ids in (
+        (DependencyGroupMembership.service_asset_dependency_id, asset_dependency_ids),
+        (DependencyGroupMembership.service_dependency_id, service_dependency_ids),
+    ):
+        if not dependency_ids:
+            continue
+        memberships = db.scalars(select(DependencyGroupMembership).where(
+            column.in_(dependency_ids),
+            DependencyGroupMembership.valid_to.is_(None),
+        ))
+        if any(row.dependency_group_id != replacing_group_id for row in memberships):
+            raise HTTPException(status_code=422, detail="A dependency already belongs to another active dependency group")
+    return asset_rows, service_rows
+
+
+def _add_group_memberships(
+    db: Session,
+    group: DependencyGroup,
+    asset_rows: list[ServiceAssetDependency],
+    service_rows: list[ServiceDependency],
+    principal: Principal,
+    effective_at: datetime,
+) -> None:
+    required = group.requirement == "required"
+    for dependency in asset_rows:
+        dependency.required_for_operation = required
+        dependency.updated_by_user_id = principal.user.id
+        db.add(DependencyGroupMembership(
+            dependency_group_id=group.id,
+            service_asset_dependency_id=dependency.id,
+            valid_from=effective_at,
+            created_by_user_id=principal.user.id,
+        ))
+    for dependency in service_rows:
+        dependency.required_for_operation = required
+        dependency.updated_by_user_id = principal.user.id
+        db.add(DependencyGroupMembership(
+            dependency_group_id=group.id,
+            service_dependency_id=dependency.id,
+            valid_from=effective_at,
+            created_by_user_id=principal.user.id,
+        ))
+
+
+def _end_dependency_membership(db: Session, dependency_id: uuid.UUID, dependency_kind: str, principal: Principal, effective_at: datetime) -> None:
+    column = (
+        DependencyGroupMembership.service_asset_dependency_id
+        if dependency_kind == "asset"
+        else DependencyGroupMembership.service_dependency_id
+    )
+    membership = db.scalar(select(DependencyGroupMembership).where(
+        column == dependency_id,
+        DependencyGroupMembership.valid_to.is_(None),
+    ))
+    if membership is None:
+        return
+    membership.valid_to = effective_at
+    membership.ended_by_user_id = principal.user.id
+    remaining = db.scalar(select(func.count()).select_from(DependencyGroupMembership).where(
+        DependencyGroupMembership.dependency_group_id == membership.dependency_group_id,
+        DependencyGroupMembership.id != membership.id,
+        DependencyGroupMembership.valid_to.is_(None),
+    ))
+    if not remaining:
+        group = db.get(DependencyGroup, membership.dependency_group_id)
+        if group and group.valid_to is None:
+            group.valid_to = effective_at
+            group.ended_by_user_id = principal.user.id
 
 
 def _relationship_assertion(db: Session, *, service: Service, predicate: str, object_type: str, object_id: uuid.UUID, actor_user_id: uuid.UUID) -> KnowledgeAssertion:
@@ -317,7 +535,9 @@ def list_service_asset_dependencies(service_id: uuid.UUID, principal: Principal 
     item = _service(db, principal, service_id, "service_dependencies.view")
     query = select(ServiceAssetDependency).where(ServiceAssetDependency.service_id == item.id)
     if not include_history: query = query.where(ServiceAssetDependency.valid_to.is_(None))
-    return [_asset_dependency_response(db, row) for row in db.scalars(query.order_by(ServiceAssetDependency.created_at))]
+    rows = list(db.scalars(query.order_by(ServiceAssetDependency.created_at)))
+    semantics = _dependency_semantics_by_id(db, rows, "asset")
+    return [_asset_dependency_response(db, row, semantics[row.id]) for row in rows]
 
 
 @router.post("/services/{service_id}/asset-dependencies", response_model=ServiceAssetDependencyResponse, status_code=status.HTTP_201_CREATED)
@@ -346,6 +566,10 @@ def update_service_asset_dependency(dependency_id: uuid.UUID, payload: ServiceAs
     if item is None or item.valid_to is not None: raise not_found("Service asset dependency")
     service = _service(db, principal, item.service_id, "service_dependencies.manage")
     changes = payload.model_dump(exclude_unset=True)
+    if "required_for_operation" in changes:
+        semantics = _dependency_semantics(db, item, "asset")
+        if semantics["dependency_group_id"] is not None and changes["required_for_operation"] != (semantics["dependency_requirement"] == "required"):
+            raise HTTPException(status_code=422, detail="Change the dependency group's requirement instead")
     old_relationship = db.get(RelationshipType, item.relationship_type_id)
     new_relationship = old_relationship
     if "relationship_type_id" in changes:
@@ -375,7 +599,9 @@ def delete_service_asset_dependency(dependency_id: uuid.UUID, request: Request, 
     item = db.get(ServiceAssetDependency, dependency_id)
     if item is None or item.valid_to is not None: raise not_found("Service asset dependency")
     service = _service(db, principal, item.service_id, "service_dependencies.manage"); asset = db.get(Asset, item.asset_id); relationship = db.get(RelationshipType, item.relationship_type_id)
-    item.valid_to = datetime.now(timezone.utc); item.ended_by_user_id = principal.user.id
+    effective_at = datetime.now(timezone.utc)
+    item.valid_to = effective_at; item.ended_by_user_id = principal.user.id
+    _end_dependency_membership(db, item.id, "asset", principal, effective_at)
     _retract_dependency_assertion(db, service, relationship, "asset", item.asset_id, principal)
     record_change(db, customer_id=service.customer_id, site_id=service.site_id, change_type="service_dependency_removed", entity_type="service", entity_id=service.id, entity_name=service.name, summary=f"Removed dependency on {asset.name if asset else 'unavailable asset'}", actor_user_id=principal.user.id, metadata={"dependency_id": item.id, "relationship_type_id": item.relationship_type_id})
     from app.services.knowledge_completeness import evaluate_service_safely
@@ -389,7 +615,9 @@ def list_service_dependencies(service_id: uuid.UUID, principal: Principal = Depe
     service = _service(db, principal, service_id, "service_dependencies.view")
     query = select(ServiceDependency).where(or_(ServiceDependency.source_service_id == service.id, ServiceDependency.target_service_id == service.id))
     if not include_history: query = query.where(ServiceDependency.valid_to.is_(None))
-    return [_service_dependency_response(db, row) for row in db.scalars(query.order_by(ServiceDependency.created_at))]
+    rows = list(db.scalars(query.order_by(ServiceDependency.created_at)))
+    semantics = _dependency_semantics_by_id(db, rows, "service")
+    return [_service_dependency_response(db, row, semantics[row.id]) for row in rows]
 
 
 @router.post("/services/{service_id}/service-dependencies", response_model=ServiceDependencyResponse, status_code=status.HTTP_201_CREATED)
@@ -418,6 +646,10 @@ def update_service_dependency(dependency_id: uuid.UUID, payload: ServiceDependen
     if item is None or item.valid_to is not None: raise not_found("Service dependency")
     service = _service(db, principal, item.source_service_id, "service_dependencies.manage")
     changes = payload.model_dump(exclude_unset=True)
+    if "required_for_operation" in changes:
+        semantics = _dependency_semantics(db, item, "service")
+        if semantics["dependency_group_id"] is not None and changes["required_for_operation"] != (semantics["dependency_requirement"] == "required"):
+            raise HTTPException(status_code=422, detail="Change the dependency group's requirement instead")
     old_relationship = db.get(RelationshipType, item.relationship_type_id)
     new_relationship = old_relationship
     if "relationship_type_id" in changes:
@@ -440,13 +672,225 @@ def delete_service_dependency(dependency_id: uuid.UUID, request: Request, princi
     item = db.get(ServiceDependency, dependency_id)
     if item is None or item.valid_to is not None: raise not_found("Service dependency")
     service = _service(db, principal, item.source_service_id, "service_dependencies.manage"); target = db.get(Service, item.target_service_id); relationship = db.get(RelationshipType, item.relationship_type_id)
-    item.valid_to = datetime.now(timezone.utc); item.ended_by_user_id = principal.user.id
+    effective_at = datetime.now(timezone.utc)
+    item.valid_to = effective_at; item.ended_by_user_id = principal.user.id
+    _end_dependency_membership(db, item.id, "service", principal, effective_at)
     _retract_dependency_assertion(db, service, relationship, "service", item.target_service_id, principal)
     record_change(db, customer_id=service.customer_id, site_id=service.site_id, change_type="service_dependency_removed", entity_type="service", entity_id=service.id, entity_name=service.name, summary=f"Removed dependency on {target.name if target else 'unavailable Service'}", actor_user_id=principal.user.id, metadata={"dependency_id": item.id})
     from app.services.knowledge_completeness import evaluate_service_safely
     evaluate_service_safely(db, service, trigger_context="service_dependency_removed", actor_user_id=principal.user.id)
     add_audit_event(db, action="service_dependency.ended", target_type="service_dependency", target_id=item.id, actor=principal.user, customer_id=service.customer_id, site_id=service.site_id, summary="Service dependency ended", request=request)
     commit(db, "Service dependency")
+
+
+@router.get("/services/{service_id}/dependency-groups", response_model=list[DependencyGroupResponse])
+def list_dependency_groups(
+    service_id: uuid.UUID,
+    principal: Principal = Depends(require_permission("service_dependencies.view")),
+    include_history: bool = False,
+    db: Session = Depends(get_db),
+):
+    service = _service(db, principal, service_id, "service_dependencies.view")
+    query = select(DependencyGroup).where(DependencyGroup.service_id == service.id)
+    if not include_history:
+        query = query.where(DependencyGroup.valid_to.is_(None))
+    return [
+        _dependency_group_response(db, row)
+        for row in db.scalars(query.order_by(DependencyGroup.valid_from, DependencyGroup.id))
+    ]
+
+
+@router.post(
+    "/services/{service_id}/dependency-groups",
+    response_model=DependencyGroupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_dependency_group(
+    service_id: uuid.UUID,
+    payload: DependencyGroupCreate,
+    request: Request,
+    principal: Principal = Depends(require_permission("service_dependencies.manage")),
+    db: Session = Depends(get_db),
+):
+    service = _service(db, principal, service_id, "service_dependencies.manage")
+    asset_rows, service_rows = _validated_group_members(
+        db,
+        principal,
+        service,
+        payload.asset_dependency_ids,
+        payload.service_dependency_ids,
+    )
+    effective_at = datetime.now(timezone.utc)
+    group = DependencyGroup(
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        service_id=service.id,
+        name=payload.name,
+        strategy=payload.strategy,
+        requirement=payload.requirement,
+        failure_effect=payload.failure_effect,
+        valid_from=effective_at,
+        created_by_user_id=principal.user.id,
+    )
+    db.add(group)
+    flush(db, "Dependency group")
+    _add_group_memberships(db, group, asset_rows, service_rows, principal, effective_at)
+    record_change(
+        db,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        change_type="service_updated",
+        entity_type="service",
+        entity_id=service.id,
+        entity_name=service.name,
+        summary=f"Added dependency behaviour {group.name}",
+        actor_user_id=principal.user.id,
+        metadata={"dependency_group_id": group.id, "strategy": group.strategy, "requirement": group.requirement, "failure_effect": group.failure_effect},
+    )
+    add_audit_event(
+        db,
+        action="dependency_group.created",
+        target_type="dependency_group",
+        target_id=group.id,
+        actor=principal.user,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        summary="Dependency group created",
+        request=request,
+    )
+    commit(db, "Dependency group")
+    db.refresh(group)
+    return _dependency_group_response(db, group)
+
+
+@router.patch("/dependency-groups/{group_id}", response_model=DependencyGroupResponse)
+def update_dependency_group(
+    group_id: uuid.UUID,
+    payload: DependencyGroupUpdate,
+    request: Request,
+    principal: Principal = Depends(require_permission("service_dependencies.manage")),
+    db: Session = Depends(get_db),
+):
+    current = db.get(DependencyGroup, group_id)
+    if current is None or current.valid_to is not None:
+        raise not_found("Dependency group")
+    service = _service(db, principal, current.service_id, "service_dependencies.manage")
+    prior_memberships = _group_memberships(db, current.id, active_only=True)
+    changes = payload.model_dump(exclude_unset=True)
+    asset_ids = changes.pop(
+        "asset_dependency_ids",
+        [row.service_asset_dependency_id for row in prior_memberships if row.service_asset_dependency_id],
+    )
+    service_ids = changes.pop(
+        "service_dependency_ids",
+        [row.service_dependency_id for row in prior_memberships if row.service_dependency_id],
+    )
+    if len(set(asset_ids)) != len(asset_ids) or len(set(service_ids)) != len(service_ids):
+        raise HTTPException(status_code=422, detail="Dependency membership cannot be duplicated")
+    values = {
+        "name": current.name,
+        "strategy": current.strategy,
+        "requirement": current.requirement,
+        "failure_effect": current.failure_effect,
+        **changes,
+    }
+    asset_rows, service_rows = _validated_group_members(
+        db,
+        principal,
+        service,
+        asset_ids,
+        service_ids,
+        replacing_group_id=current.id,
+    )
+    effective_at = datetime.now(timezone.utc)
+    current.valid_to = effective_at
+    current.ended_by_user_id = principal.user.id
+    for membership in prior_memberships:
+        if membership.valid_to is None:
+            membership.valid_to = effective_at
+            membership.ended_by_user_id = principal.user.id
+    replacement = DependencyGroup(
+        customer_id=current.customer_id,
+        site_id=current.site_id,
+        service_id=current.service_id,
+        supersedes_group_id=current.id,
+        valid_from=effective_at,
+        created_by_user_id=principal.user.id,
+        **values,
+    )
+    db.add(replacement)
+    flush(db, "Dependency group")
+    _add_group_memberships(db, replacement, asset_rows, service_rows, principal, effective_at)
+    record_change(
+        db,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        change_type="service_updated",
+        entity_type="service",
+        entity_id=service.id,
+        entity_name=service.name,
+        summary=f"Updated dependency behaviour {replacement.name}",
+        actor_user_id=principal.user.id,
+        metadata={"dependency_group_id": replacement.id, "supersedes_group_id": current.id},
+    )
+    add_audit_event(
+        db,
+        action="dependency_group.updated",
+        target_type="dependency_group",
+        target_id=replacement.id,
+        actor=principal.user,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        summary="Dependency group updated",
+        request=request,
+    )
+    commit(db, "Dependency group")
+    db.refresh(replacement)
+    return _dependency_group_response(db, replacement)
+
+
+@router.delete("/dependency-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_dependency_group(
+    group_id: uuid.UUID,
+    request: Request,
+    principal: Principal = Depends(require_permission("service_dependencies.manage")),
+    db: Session = Depends(get_db),
+):
+    group = db.get(DependencyGroup, group_id)
+    if group is None or group.valid_to is not None:
+        raise not_found("Dependency group")
+    service = _service(db, principal, group.service_id, "service_dependencies.manage")
+    effective_at = datetime.now(timezone.utc)
+    group.valid_to = effective_at
+    group.ended_by_user_id = principal.user.id
+    for membership in _group_memberships(db, group.id, active_only=True):
+        if membership.valid_to is None:
+            membership.valid_to = effective_at
+            membership.ended_by_user_id = principal.user.id
+    record_change(
+        db,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        change_type="service_updated",
+        entity_type="service",
+        entity_id=service.id,
+        entity_name=service.name,
+        summary=f"Removed dependency behaviour {group.name}",
+        actor_user_id=principal.user.id,
+        metadata={"dependency_group_id": group.id},
+    )
+    add_audit_event(
+        db,
+        action="dependency_group.ended",
+        target_type="dependency_group",
+        target_id=group.id,
+        actor=principal.user,
+        customer_id=service.customer_id,
+        site_id=service.site_id,
+        summary="Dependency group ended",
+        request=request,
+    )
+    commit(db, "Dependency group")
 
 
 def _business_function_link_response(db: Session, item: ServiceBusinessFunction) -> dict:

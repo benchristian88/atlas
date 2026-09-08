@@ -1,8 +1,9 @@
 # Release C2 implementation plan
 
-Status: C2.1 implemented and merged; C2.2, C2.3, and C2.4 planned
+Status: C2.1 complete; C2.2 implemented with live acceptance complete; C2.3
+next; C2.4 planned
 
-Delivered increment: **C2.1 — Shared Operational Graph**
+Latest delivered increment: **C2.2 — Lean Dependency Semantics**
 
 ## C2.1 implementation evidence — 3 September 2026
 
@@ -54,6 +55,40 @@ because no Business Function completeness evaluator exists.
 
 No migration, graph table, external graph service, cache, new permission, or
 graph-rendering dependency was introduced.
+
+## C2.2 implementation evidence — 8 September 2026
+
+C2.2 is implemented on the feature working tree based on
+`bd2ab6cacf7b6f11acad188827744f6105e50310`. The additive migration, API,
+generic graph metadata, Service workflow, security tests, and PostgreSQL
+upgrade/downgrade validation are recorded in
+[`../testing/release-c2-lean-dependency-semantics.md`](../testing/release-c2-lean-dependency-semantics.md).
+
+The implementation adds no permission, graph store, rule engine, worker, cache,
+or consequence evaluator. `required_for_operation` and the existing dependency
+routes remain available; their responses gain additive semantic fields.
+
+### Subsequent live LXC acceptance
+
+After that implementation-time validation, C2.2 completed manual acceptance in
+the deployed PostgreSQL-backed test LXC. The upgrade preserved the existing
+Reverse Proxy → DNS Service and DNS Service → Adguard Home Asset
+dependencies without duplicates or fabricated groups. Required/Optional
+compatibility and persistence, explicit failure-effect persistence, behaviour
+removal with ungrouped fallback, and the mixed `Core Operation` Service→Asset
+plus Service→Service group all passed.
+
+The generic Operational Graph projected the mixed edges with one group identity,
+`all`, `required`, `unavailable`, and compatible
+`required_for_operation = true` metadata. Incoming traversal preserved the
+canonical Reverse Proxy → DNS direction and semantics. A principal in another
+tenant received the normal non-disclosing `{"detail":"Record not found"}`
+response from the Service dependency-groups route.
+
+The live topology had no genuine redundant AdGuard pair, so `any` was not
+manually exercised and no fake topology was created. Automated C2.2 coverage
+already exercises `any`. The implementation-time evidence and environment
+limitations remain unchanged in the linked test record.
 
 ## Purpose
 
@@ -537,7 +572,7 @@ C1 records whether a Service dependency is required for operation. Homelab
 consequence analysis needs a small amount of additional meaning for optional
 dependencies, basic redundancy, degradation, and unknown cases.
 
-C2.2 should add explicit semantics before full impact propagation.
+C2.2 adds explicit semantics before full impact propagation.
 
 ## Homelab scope
 
@@ -549,13 +584,17 @@ redundancy strategy: all | any
 failure effect: unavailable | degraded | unknown
 ```
 
-The exact additive schema requires a separate design review. Important
-constraints are:
+The implemented additive schema uses temporal `dependency_groups` and
+`dependency_group_memberships`. A group belongs to one Service and records the
+small vocabulary above. Memberships can reference existing Service→Asset and
+outgoing Service→Service rows, including a mixed set, without replacing those
+authoritative relationships. Important constraints are:
 
 - current rows remain valid after migration;
 - current `required_for_operation` consumers remain compatible;
 - a default migration must not reinterpret optional dependencies as critical;
-- unknown semantics remain visible as knowledge gaps;
+- unknown semantics remain explicit without automatically creating Knowledge
+  Gaps;
 - any groups or memberships preserve history; and
 - relationship direction remains independent from propagation direction.
 
@@ -575,6 +614,18 @@ capabilities without implementing them for Homelab Ready.
 - unresolved semantics producing `unknown`;
 - safe additive migration; and
 - clear UI wording that does not imply a live health signal.
+
+Implemented API/UI surface:
+
+- `GET|POST /api/services/{service_id}/dependency-groups`;
+- `PATCH|DELETE /api/dependency-groups/{group_id}`;
+- additive semantic fields on both dependency response types and applicable
+  generic Operational Graph edges; and
+- compact dependency-set creation and editing on Service detail.
+
+Group updates use temporal supersession. Existing ungrouped rows are not
+backfilled: their required/optional meaning continues to come from
+`required_for_operation`, and their failure effect is safely `unknown`.
 
 # C2.3 — Explainable Dependency Analysis
 

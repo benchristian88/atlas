@@ -41,7 +41,7 @@ update the audited ledger.
 | Release B — Discovery and Reconciliation | Simulation and reconciliation implemented; live plugin operation and worker orchestration remain partial |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services; broader entity coverage remains future work |
 | Release C1 — Homelab Service MVP | Implemented |
-| Release C2 — shared graph and Homelab Ready product foundations | C2.1 implemented; C2.2 lean semantics, C2.3 explainable analysis and C2.4 operations experience planned |
+| Release C2 — shared graph and Homelab Ready product foundations | C2.1 complete; C2.2 implemented with live acceptance complete; C2.3 next; C2.4 planned |
 | F1-lite — Homelab Documentation | Planned; generated Markdown renderer and Document storage exist |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation; configure/test/Run Now/reconcile journey planned |
 | Homelab Ready Release | Planned near-term product target |
@@ -52,9 +52,10 @@ update the audited ledger.
 | Release F — Documentation and intended state | Generated-document foundation partial; user-facing product and intended-state workflow not implemented |
 | Production and community packaging | Not established |
 
-**Release C2.1 — Shared Operational Graph** is implemented and merged to `dev`.
-The near-term target is a polished, secure, self-hosted **Homelab Ready
-Release** through C2.2, C2.3, C2.4, F1-lite, B2-lite, and release hardening.
+**Release C2.1 — Shared Operational Graph** is complete and merged to `dev`.
+**C2.2 — Lean Dependency Semantics** is implemented with live LXC acceptance
+complete. C2.3 is next, while C2.4, F1-lite, B2-lite, and release hardening
+remain on the path to a polished, secure, self-hosted **Homelab Ready Release**.
 See [`product/development-roadmap.md`](product/development-roadmap.md).
 
 ## Product documents
@@ -102,6 +103,8 @@ See [`product/development-roadmap.md`](product/development-roadmap.md).
 - [`testing/release-c2-operational-graph.md`](testing/release-c2-operational-graph.md)
   — C2.1 contract, authorization, temporal, compatibility, performance, and UI
   validation.
+- [`testing/release-c2-lean-dependency-semantics.md`](testing/release-c2-lean-dependency-semantics.md)
+  — C2.2 automated validation and subsequent live LXC acceptance.
 - Existing release-specific and security test plans remain applicable and must
   continue to pass.
 

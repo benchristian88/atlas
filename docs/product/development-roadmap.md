@@ -95,7 +95,7 @@ enterprise Impact Analysis.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete B2-lite for Homelab Ready, then add scheduling, broad retries and richer orchestration later |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and explainable dependency foundation | C2.1 implemented; C2.2, C2.3, and C2.4 planned | Add lean dependency semantics, explainable consequences, and a polished visual operations experience |
+| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 next; C2.4 planned | Apply the stored lean semantics in explainable consequences, then deliver the polished visual operations experience |
 | F1-lite — Homelab Documentation | Planned; renderer and persistence exist | Expose existing generated Markdown through usable Documents API and UI without waiting for C4 |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation | Complete a secure configure, test, Run Now, result, and reconciliation journey for Proxmox |
 | Homelab Ready Release | Planned | Harden and package the combined product as a high-quality self-hosted homelab release |
@@ -108,10 +108,10 @@ enterprise Impact Analysis.
 
 ## Sequencing decision
 
-**C2.1 — Shared Operational Graph** is implemented on `dev`. The immediate
-sequence now optimizes for a visible product outcome: C2.2 Lean Dependency
-Semantics, C2.3 Explainable Dependency Analysis, and C2.4 Homelab Operations
-Experience, followed by F1-lite, B2-lite, and Homelab Ready hardening.
+**C2.1 — Shared Operational Graph** and **C2.2 — Lean Dependency Semantics** are
+complete. C2.3 Explainable Dependency Analysis is next; C2.4 Homelab Operations
+Experience remains planned, followed by F1-lite, B2-lite, and Homelab Ready
+hardening.
 
 F1-lite and B2-lite may proceed in parallel where dependencies permit, but they
 must not broaden into C4 or a production-scale worker control plane. Atlas must
@@ -196,6 +196,8 @@ and the governing decision is
 
 ## C2.2 — Lean Dependency Semantics
 
+**Status:** implemented on the C2.2 feature branch; live LXC acceptance complete
+
 **Outcome:** Atlas can represent the dependency meaning required for truthful,
 useful homelab consequence analysis while preserving the current
 `required_for_operation` contract and an additive path to richer semantics.
@@ -214,6 +216,13 @@ C2.2 does not require `minimum`, quorum, `minimum_available`, weighted or
 conditional rules, recovery preference ordering, or a rich dependency-group
 language. The schema and API should permit those concepts to be added later
 without breaking current identities, history, or consumers.
+
+Implementation uses temporal dependency groups and memberships over the
+existing authoritative Service→Asset and Service→Service rows. Existing
+ungrouped data remains valid, `required_for_operation` remains available, and
+unknown effects remain explicit. The API, Operational Graph contract, and
+normal Service workflow expose the new meaning without performing consequence
+analysis.
 
 ## C2.3 — Explainable Dependency Analysis
 
@@ -610,17 +619,17 @@ Examples:
 
 # Recommended delivery sequence
 
-1. Preserve the completed **C2.1 — Shared Operational Graph**.
-2. Deliver **C2.2 — Lean Dependency Semantics**.
-3. Deliver **C2.3 — Explainable Dependency Analysis**.
-4. Deliver **C2.4 — Homelab Operations Experience**: dashboard, visual
+1. Preserve the completed **C2.1 — Shared Operational Graph** and
+   **C2.2 — Lean Dependency Semantics**.
+2. Deliver **C2.3 — Explainable Dependency Analysis** using the C2.2 inputs.
+3. Deliver **C2.4 — Homelab Operations Experience**: dashboard, visual
    Knowledge Graph, enhanced Service Operations, and product polish.
-5. Deliver **F1-lite — Homelab Documentation**.
-6. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
+4. Deliver **F1-lite — Homelab Documentation**.
+5. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
    inspect results, and reconcile. Contained B2-lite/F1-lite work may proceed in
    parallel where dependencies permit.
-7. Complete **Homelab Ready hardening** and ship the **HOMELAB READY RELEASE**.
-8. Continue the separate **Later Enterprise Evolution** path: richer dependency
+6. Complete **Homelab Ready hardening** and ship the **HOMELAB READY RELEASE**.
+7. Continue the separate **Later Enterprise Evolution** path: richer dependency
    semantics, C3, C4, D, richer B2, E, F, and ITSM/MSP capabilities.
 
 # Release gates

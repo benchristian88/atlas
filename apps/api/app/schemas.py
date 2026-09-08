@@ -1490,6 +1490,11 @@ class ServiceAssetDependencyResponse(ORMResponse):
     source_label: str | None = None
     target_label: str | None = None
     required_for_operation: bool
+    dependency_group_id: uuid.UUID | None = None
+    dependency_group_name: str | None = None
+    dependency_strategy: Literal["all", "any"] | None = None
+    dependency_requirement: Literal["required", "optional"] = "required"
+    failure_effect: Literal["unavailable", "degraded", "unknown"] = "unknown"
     description: str | None
     source: str
     valid_from: datetime
@@ -1524,7 +1529,73 @@ class ServiceDependencyResponse(ORMResponse):
     source_label: str | None = None
     target_label: str | None = None
     required_for_operation: bool
+    dependency_group_id: uuid.UUID | None = None
+    dependency_group_name: str | None = None
+    dependency_strategy: Literal["all", "any"] | None = None
+    dependency_requirement: Literal["required", "optional"] = "required"
+    failure_effect: Literal["unavailable", "degraded", "unknown"] = "unknown"
     description: str | None
+    valid_from: datetime
+    valid_to: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DependencyGroupBase(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    strategy: Literal["all", "any"] = "all"
+    requirement: Literal["required", "optional"] = "required"
+    failure_effect: Literal["unavailable", "degraded", "unknown"] = "unknown"
+    asset_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
+    service_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
+    _name = field_validator("name")(_trim_nonempty)
+
+    @model_validator(mode="after")
+    def validate_members(self):
+        if not self.asset_dependency_ids and not self.service_dependency_ids:
+            raise ValueError("A dependency group must contain at least one dependency")
+        if len(set(self.asset_dependency_ids)) != len(self.asset_dependency_ids):
+            raise ValueError("Asset dependency membership cannot be duplicated")
+        if len(set(self.service_dependency_ids)) != len(self.service_dependency_ids):
+            raise ValueError("Service dependency membership cannot be duplicated")
+        return self
+
+
+class DependencyGroupCreate(DependencyGroupBase):
+    pass
+
+
+class DependencyGroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    strategy: Literal["all", "any"] | None = None
+    requirement: Literal["required", "optional"] | None = None
+    failure_effect: Literal["unavailable", "degraded", "unknown"] | None = None
+    asset_dependency_ids: list[uuid.UUID] | None = None
+    service_dependency_ids: list[uuid.UUID] | None = None
+    _name = field_validator("name")(_trim_nonempty)
+
+    @model_validator(mode="after")
+    def reject_explicit_nulls(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one dependency group field must be changed")
+        for field_name in self.model_fields_set:
+            if getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} must not be null")
+        return self
+
+
+class DependencyGroupResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    service_id: uuid.UUID
+    supersedes_group_id: uuid.UUID | None
+    name: str
+    strategy: Literal["all", "any"]
+    requirement: Literal["required", "optional"]
+    failure_effect: Literal["unavailable", "degraded", "unknown"]
+    asset_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
+    service_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
     valid_from: datetime
     valid_to: datetime | None
     created_at: datetime
@@ -1665,6 +1736,11 @@ class OperationalGraphEdge(BaseModel):
     relationship_type_name: str | None = None
     label: str
     required_for_operation: bool | None = None
+    dependency_group_id: uuid.UUID | None = None
+    dependency_group_name: str | None = None
+    dependency_strategy: Literal["all", "any"] | None = None
+    dependency_requirement: Literal["required", "optional"] | None = None
+    failure_effect: Literal["unavailable", "degraded", "unknown"] | None = None
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     source: str | None = None

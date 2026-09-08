@@ -1,6 +1,6 @@
 # Operational graph architecture
 
-Status: implemented for Release C2.1 and merged to `dev` in `1842d16`
+Status: C2.1 projection implemented; C2.2 lean dependency metadata implemented
 
 This document describes the implemented C2.1 architecture and the approved
 extension boundaries for later graph and analysis releases.
@@ -141,6 +141,8 @@ flowchart LR
 | `Service` | Operational capability node | Current or archived record |
 | `ServiceAssetDependency` | Service-to-Asset edge | `valid_from` and optional `valid_to` |
 | `ServiceDependency` | Service-to-Service edge | `valid_from` and optional `valid_to`; non-self cycles allowed |
+| `DependencyGroup` | Temporal `all`/`any`, required/optional, and failure-effect meaning for one Service need | Superseding versions preserve prior meaning |
+| `DependencyGroupMembership` | Associates existing Service→Asset and Service→Service rows with a group | `valid_from` and optional `valid_to` |
 | `BusinessFunction` | Lightweight business capability node | Current active/inactive record |
 | `ServiceBusinessFunction` | Service-to-Business Function edge | `valid_from` and optional `valid_to` |
 | `RelationshipType` | Stable key, labels, direction, endpoint applicability | Managed reference data |
@@ -237,6 +239,8 @@ Recommended fields:
 - managed relationship type key and name;
 - source-side display label;
 - `required_for_operation` where the source model supports it;
+- dependency group ID/name, `all`/`any` strategy, required/optional meaning,
+  and unavailable/degraded/unknown effect for Service dependency edges;
 - `valid_from` and `valid_to` where supported;
 - source where available; and
 - `knowledge_state`, initially `accepted` for the operational projection.
@@ -276,10 +280,13 @@ Relationship Type, or turns an inverse display label into a different edge.
 This prevents later impact analysis from reinterpreting presentation choices as
 operational meaning.
 
-Release C2.2 adds required/optional meaning, `all`/`any` redundancy, and explicit
-unavailable/degraded/unknown failure effects. Until then,
-`required_for_operation` is useful compatibility metadata but is not enough to
-model redundancy or failure consequences.
+Release C2.2 additively exposes required/optional meaning, `all`/`any`
+redundancy, and explicit unavailable/degraded/unknown failure effects on
+`service_asset` and `service_service` edges. Ungrouped edges retain
+`required_for_operation`, derive the equivalent requirement, and return
+`failure_effect=unknown`; no unavailable result is inferred. These fields
+describe accepted semantics only. The graph still does not calculate failure
+consequences.
 
 ## Authorization and non-disclosure
 
@@ -382,7 +389,7 @@ The builder should:
 7. add newly discovered nodes once;
 8. queue unvisited nodes until the requested structural depth;
 9. stop deterministically at the node limit;
-10. attach bounded metadata in batches;
+10. attach bounded node and dependency-group metadata in batches;
 11. sort the final nodes and edges by stable keys; and
 12. return warnings and truncation state.
 
