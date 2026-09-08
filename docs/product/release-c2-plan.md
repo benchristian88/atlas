@@ -1,9 +1,16 @@
 # Release C2 implementation plan
 
-Status: C2.1 complete; C2.2 implemented with live acceptance complete; C2.3
-next; C2.4 planned
+Status: C2.1 complete; C2.2 complete; C2.3 implemented / acceptance pending;
+C2.4 planned
 
-Latest delivered increment: **C2.2 — Lean Dependency Semantics**
+Latest implemented increment: **C2.3 — Explainable Dependency Analysis**
+
+C2.3 adds `POST /api/dependency-analysis` and a small Preview unavailable panel
+on Asset and Service details. It uses current authorized graph dependencies,
+explicit effects, conservative aggregation, and structured paths without writes
+or migrations. Live test-LXC acceptance remains pending. See
+[the C2.3 test plan](../testing/release-c2-explainable-dependency-analysis.md) and
+[analysis architecture](../architecture/dependency-analysis.md).
 
 ## C2.1 implementation evidence — 3 September 2026
 
@@ -636,22 +643,20 @@ questions: which known Services may be affected when an Asset or Service is
 unavailable, whether the consequence is direct or downstream, why Atlas reached
 that conclusion, and where semantics are too incomplete to decide.
 
-## Proposed internal contract
+## Analysis contract (implemented C2.3)
 
 ```text
-AnalysisInput
-- graph projection or graph query
-- hypothetical state changes
-- analysis timestamp
-- policy/engine version
+POST /api/dependency-analysis
+- focus_type: asset | service
+- focus_id
+- state: unavailable
+- max_depth, max_results, max_paths_per_result
 
-AnalysisResult
-- affected entity states
-- direct and indirect paths
-- reason codes
-- unknowns and knowledge gaps
-- truncation/limit state
-- immutable engine and schema version
+DependencyAnalysisResponse
+- focus_key, focus, analysis_time, scenario_state, assumption
+- schema_version, engine_version
+- truncated, warnings
+- results: service, state, classification, distance, reasons, paths
 ```
 
 ## Required behaviors
@@ -664,7 +669,8 @@ AnalysisResult
 - missing semantics yield `unknown`, not a fabricated outage or probability;
 - each conclusion carries one or more explanation paths;
 - scope is enforced before and during traversal; and
-- the same engine can later accept failure scenarios and intended-state overlays.
+- the domain engine is independent of HTTP and frontend rendering; intended-state
+  overlays and additional scenarios remain deferred.
 
 ## C2.3 non-goals
 

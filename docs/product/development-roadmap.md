@@ -95,7 +95,7 @@ enterprise Impact Analysis.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete B2-lite for Homelab Ready, then add scheduling, broad retries and richer orchestration later |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 next; C2.4 planned | Apply the stored lean semantics in explainable consequences, then deliver the polished visual operations experience |
+| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 implemented / acceptance pending; C2.4 planned | Accept the implemented explainable consequences, then deliver the polished visual operations experience |
 | F1-lite — Homelab Documentation | Planned; renderer and persistence exist | Expose existing generated Markdown through usable Documents API and UI without waiting for C4 |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation | Complete a secure configure, test, Run Now, result, and reconciliation journey for Proxmox |
 | Homelab Ready Release | Planned | Harden and package the combined product as a high-quality self-hosted homelab release |
@@ -109,7 +109,8 @@ enterprise Impact Analysis.
 ## Sequencing decision
 
 **C2.1 — Shared Operational Graph** and **C2.2 — Lean Dependency Semantics** are
-complete. C2.3 Explainable Dependency Analysis is next; C2.4 Homelab Operations
+complete. C2.3 Explainable Dependency Analysis is implemented with live acceptance
+pending; C2.4 Homelab Operations
 Experience remains planned, followed by F1-lite, B2-lite, and Homelab Ready
 hardening.
 
@@ -226,10 +227,13 @@ analysis.
 
 ## C2.3 — Explainable Dependency Analysis
 
+**Status:** implemented on the C2.3 working tree; test-LXC acceptance pending.
+See [implementation and acceptance evidence](../testing/release-c2-explainable-dependency-analysis.md).
+
 **Outcome:** A user can ask what known Services may be affected if an Asset or
 Service becomes unavailable and receive a bounded, deterministic explanation.
 
-C2.3 should answer:
+C2.3 answers:
 
 - which known Services may be affected by an unavailable Asset;
 - which dependent Services may be affected by an unavailable Service;
@@ -621,7 +625,7 @@ Examples:
 
 1. Preserve the completed **C2.1 — Shared Operational Graph** and
    **C2.2 — Lean Dependency Semantics**.
-2. Deliver **C2.3 — Explainable Dependency Analysis** using the C2.2 inputs.
+2. Complete live acceptance of the implemented **C2.3 — Explainable Dependency Analysis**.
 3. Deliver **C2.4 — Homelab Operations Experience**: dashboard, visual
    Knowledge Graph, enhanced Service Operations, and product polish.
 4. Deliver **F1-lite — Homelab Documentation**.

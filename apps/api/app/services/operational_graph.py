@@ -88,10 +88,22 @@ class GraphProjectionRequest:
     # Compatibility routes can retain their C1 expansion shape while using the
     # same authorization, temporal, identity, and metadata implementation.
     edge_families_by_depth: tuple[frozenset[str], ...] | None = None
+    # Internal analysis profile: probe the depth boundary, then complete the
+    # outgoing dependency sets of reached Services using the same loaders.
+    complete_service_dependencies: bool = False
+    edge_limit: int | None = None
 
 
 class GraphFocusNotFound(LookupError):
     """The focus is missing, inactive, archived, or unavailable to the caller."""
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyGraphProjection:
+    graph: OperationalGraphResponse
+    # Internal only: no hidden endpoint identifiers, labels or counts reach
+    # the analysis contract. A partially visible ANY set cannot prove failure.
+    incomplete_group_keys: frozenset[str]
 
 
 class OperationalGraphBuilder:
@@ -109,7 +121,14 @@ class OperationalGraphBuilder:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def build(self, request: GraphProjectionRequest) -> OperationalGraphResponse:
+        return self._build(request).graph
+
+    def build_dependency_projection(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
+        return self._build(request)
+
+    def _build(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
         generated_at = self.clock()
+        incomplete_group_keys: set[str] = set()
         focus = self.db.get(MODEL_BY_ENTITY_TYPE[request.focus_type], request.focus_id)
         if focus is None or not self._node_is_viewable(
             request.focus_type,
@@ -134,21 +153,30 @@ class OperationalGraphBuilder:
         expanded: set[str] = set()
         truncated = False
 
-        for depth in range(request.max_depth):
+        for depth in range(request.max_depth + (2 if request.complete_service_dependencies else 0)):
+            completing = request.complete_service_dependencies and depth == request.max_depth + 1
+            probing = request.complete_service_dependencies and depth == request.max_depth
+            if completing:
+                frontier = [
+                    (object_types[key], objects[key].id)
+                    for key in sorted(member_keys) if object_types[key] == "service"
+                ]
             frontier = sorted(
                 (
                     (entity_type, entity_id)
                     for entity_type, entity_id in frontier
-                    if graph_node_key(entity_type, entity_id) not in expanded
+                    if completing or graph_node_key(entity_type, entity_id) not in expanded
                 ),
                 key=lambda item: graph_node_key(item[0], item[1]),
             )
             if not frontier:
+                if request.complete_service_dependencies:
+                    continue
                 break
             expanded.update(graph_node_key(*item) for item in frontier)
             families = self._families_for_depth(request, depth)
             candidates = self._load_edge_candidates(
-                frontier, families, request.direction, generated_at
+                frontier, families, "outgoing" if completing else request.direction, generated_at
             )
             dependency_groups = self._load_dependency_groups(candidates, generated_at)
             endpoint_refs = {
@@ -189,6 +217,9 @@ class OperationalGraphBuilder:
                     )
                     or not self._edge_is_viewable(family, row, source, target)
                 ):
+                    group = dependency_groups.get((family, row.id))
+                    if group is not None:
+                        incomplete_group_keys.add(f"dependency_group:{group.id}")
                     continue
 
                 # Objects loaded for authorization are not graph members until
@@ -199,6 +230,12 @@ class OperationalGraphBuilder:
                     for ref in (source_ref, target_ref)
                     if graph_node_key(*ref) not in member_keys
                 ]
+                if probing and new_refs:
+                    truncated = True
+                    continue
+                if request.edge_limit is not None and len(edges) >= request.edge_limit:
+                    truncated = True
+                    continue
                 if len(member_keys) + len(set(new_refs)) > request.node_limit:
                     truncated = True
                     # Continue through this frontier so legitimate edges whose
@@ -230,7 +267,7 @@ class OperationalGraphBuilder:
             for edge in edges.values()
             if edge.source_key in member_keys and edge.target_key in member_keys
         ]
-        return OperationalGraphResponse(
+        graph = OperationalGraphResponse(
             focus_key=focus_key,
             generated_at=generated_at,
             requested_depth=request.max_depth,
@@ -239,6 +276,7 @@ class OperationalGraphBuilder:
             nodes=sorted(nodes, key=lambda node: node.key),
             edges=sorted(result_edges, key=lambda edge: edge.key),
         )
+        return DependencyGraphProjection(graph, frozenset(incomplete_group_keys))
 
     @staticmethod
     def _families_for_depth(

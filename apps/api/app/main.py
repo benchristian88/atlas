@@ -21,6 +21,7 @@ from app.routes import (
     knowledge_completeness,
     networks,
     operational_graph,
+    dependency_analysis,
     protected,
     reference_data,
     roles,
@@ -110,6 +111,7 @@ api_router.include_router(service_reference_data.criticality_router)
 api_router.include_router(services.router)
 api_router.include_router(business_functions.router)
 api_router.include_router(operational_graph.router)
+api_router.include_router(dependency_analysis.router)
 api_router.include_router(reference_data.asset_types_router)
 api_router.include_router(reference_data.relationship_types_router)
 api_router.include_router(custom_fields.router)

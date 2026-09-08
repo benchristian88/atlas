@@ -1,6 +1,7 @@
 # Operational graph architecture
 
-Status: C2.1 projection implemented; C2.2 lean dependency metadata implemented
+Status: C2.1 projection implemented; C2.2 lean dependency metadata implemented;
+C2.3 analysis implemented / acceptance pending
 
 This document describes the implemented C2.1 architecture and the approved
 extension boundaries for later graph and analysis releases.
@@ -14,8 +15,8 @@ Atlas currently has several graph-shaped product surfaces:
 - a focused Business Function graph; and
 - summary and completeness views that depend on related operational records.
 
-The next product surfaces — the C2.4 operational homepage, visual Knowledge
-Graph, enhanced Service Operations, C2.3 dependency analysis, and later Change
+C2.3 dependency analysis and the next product surfaces — the C2.4 operational
+homepage, visual Knowledge Graph, enhanced Service Operations, and later Change
 Simulation — need consistent graph identity, direction, scope, metadata, and
 traversal behavior.
 
@@ -120,7 +121,7 @@ does not itself decide failure propagation or business impact.
 
 ### Analysis traversal
 
-A later C2.3 operation that applies lean dependency semantics and a hypothetical
+The C2.3 operation applies lean dependency semantics and a hypothetical
 unavailable input to structural graph paths, returning deterministic reason
 codes, direct/downstream explanations, and unavailable/degraded/unknown results.
 
@@ -505,8 +506,13 @@ enterprise extensions, but they are not C2.2 or Homelab Ready requirements.
 
 ## Extension to C2.3 and Release E
 
-Release C2.3 should consume the shared graph through an internal contract rather
-than requerying every table independently.
+Release C2.3 consumes the shared builder through an internal analysis profile.
+It follows incoming Service dependencies, probes the bounded frontier, then
+completes outgoing dependency sets for reached Services. Endpoint authorization,
+current-valid filtering, group metadata and identity use the existing builder.
+Generic C2.1 routes and their structural depth limits are unchanged. See
+[dependency analysis](dependency-analysis.md) for the implemented contract,
+scenario assumptions, fixed-point evaluation and safety limits.
 
 It adds:
 
