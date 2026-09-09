@@ -60,6 +60,19 @@ def _service(db: Session, principal: Principal, service_id: uuid.UUID, permissio
     return item
 
 
+def _visible_related_ids(db: Session, principal: Principal, model, ids, permission: str, customer_id: uuid.UUID) -> set[uuid.UUID]:
+    """Authorize related records before serializing names, links or member IDs."""
+    ids = set(ids)
+    if not ids:
+        return set()
+    records = db.scalars(select(model).where(model.id.in_(ids), model.customer_id == customer_id))
+    return {
+        record.id for record in records
+        if record.id in ids and record.customer_id == customer_id
+        and principal.can(permission, record.customer_id, record.site_id)
+    }
+
+
 def _validate_context(db: Session, principal: Principal, permission: str, customer_id: uuid.UUID, site_id: uuid.UUID | None) -> None:
     if site_id is not None:
         site = db.get(Site, site_id)
@@ -75,18 +88,23 @@ def _active_type(db: Session, model, item_id: uuid.UUID, label: str, *, allow_in
     return item
 
 
-def service_response(db: Session, item: Service) -> dict:
+def service_response(db: Session, item: Service, principal: Principal) -> dict:
     service_type = db.get(ServiceType, item.service_type_id)
     criticality = db.get(CriticalityLevel, item.criticality_level_id)
     summary = db.scalar(select(KnowledgeCompletenessSummary).where(
         KnowledgeCompletenessSummary.entity_type == "service",
         KnowledgeCompletenessSummary.entity_id == item.id,
-    ))
+    )) if principal.can("knowledge_gaps.view", item.customer_id, item.site_id) else None
     open_gaps = list(db.scalars(select(KnowledgeGap).where(
         KnowledgeGap.entity_type == "service",
         KnowledgeGap.entity_id == item.id,
         KnowledgeGap.status.in_({"open", "deferred"}),
-    )))
+    ))) if principal.can("knowledge_gaps.view", item.customer_id, item.site_id) else []
+    visible_assets = select(Asset.id).where(Asset.customer_id == item.customer_id, scope_condition(principal, "assets.view", Asset.customer_id, Asset.site_id))
+    visible_services = select(Service.id).where(Service.customer_id == item.customer_id, scope_condition(principal, "services.view", Service.customer_id, Service.site_id))
+    visible_functions = select(BusinessFunction.id).where(BusinessFunction.customer_id == item.customer_id, scope_condition(principal, "business_functions.view", BusinessFunction.customer_id, BusinessFunction.site_id))
+    can_dependencies = principal.can("service_dependencies.view", item.customer_id, item.site_id)
+    can_functions = principal.can("business_functions.view", item.customer_id, item.site_id)
     result = ServiceResponse.model_validate(item).model_dump()
     result.update(
         service_type_key=service_type.key if service_type else None,
@@ -96,9 +114,9 @@ def service_response(db: Session, item: Service) -> dict:
         criticality_rank=criticality.rank if criticality else None,
         suggested_rto_minutes=criticality.default_rto_minutes if criticality else None,
         suggested_rpo_minutes=criticality.default_rpo_minutes if criticality else None,
-        asset_dependency_count=int(db.scalar(select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.service_id == item.id, ServiceAssetDependency.valid_to.is_(None))) or 0),
-        service_dependency_count=int(db.scalar(select(func.count()).select_from(ServiceDependency).where(or_(ServiceDependency.source_service_id == item.id, ServiceDependency.target_service_id == item.id), ServiceDependency.valid_to.is_(None))) or 0),
-        business_function_count=int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == item.id, ServiceBusinessFunction.valid_to.is_(None))) or 0),
+        asset_dependency_count=int(db.scalar(select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.service_id == item.id, ServiceAssetDependency.valid_to.is_(None), ServiceAssetDependency.asset_id.in_(visible_assets))) or 0) if can_dependencies else 0,
+        service_dependency_count=int(db.scalar(select(func.count()).select_from(ServiceDependency).where(or_(ServiceDependency.source_service_id == item.id, ServiceDependency.target_service_id == item.id), ServiceDependency.valid_to.is_(None), ServiceDependency.source_service_id.in_(visible_services), ServiceDependency.target_service_id.in_(visible_services))) or 0) if can_dependencies else 0,
+        business_function_count=int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == item.id, ServiceBusinessFunction.valid_to.is_(None), ServiceBusinessFunction.business_function_id.in_(visible_functions))) or 0) if can_functions else 0,
         completeness_status=summary.completeness_status if summary else "not_evaluated",
         open_gap_count=summary.open_gap_count if summary else 0,
         required_gap_count=sum(gap.requirement_level in {"required", "conditional"} for gap in open_gaps),
@@ -168,7 +186,7 @@ def list_services(
             ))
         else:
             raise HTTPException(status_code=422, detail="Unknown Service attention filter")
-    return [service_response(db, item) for item in db.scalars(query.order_by(Service.name).limit(limit))]
+    return [service_response(db, item, principal) for item in db.scalars(query.order_by(Service.name).limit(limit))]
 
 
 @router.get("/services/summary", response_model=ServiceSummaryResponse)
@@ -213,12 +231,12 @@ def create_service(payload: ServiceCreate, request: Request, context: RequestCon
     add_audit_event(db, action="service.created", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service created", request=request)
     commit(db, "Service")
     db.refresh(item)
-    return service_response(db, item)
+    return service_response(db, item, principal)
 
 
 @router.get("/services/{service_id}", response_model=ServiceResponse)
 def get_service(service_id: uuid.UUID, principal: Principal = Depends(require_permission("services.view")), db: Session = Depends(get_db)):
-    return service_response(db, _service(db, principal, service_id, "services.view"))
+    return service_response(db, _service(db, principal, service_id, "services.view"), principal)
 
 
 @router.patch("/services/{service_id}", response_model=ServiceResponse)
@@ -246,7 +264,7 @@ def update_service(service_id: uuid.UUID, payload: ServiceUpdate, request: Reque
         changes["slug"] = _slug(changes["name"])
     semantic_changes = {key: value for key, value in changes.items() if getattr(item, key) != value}
     if not semantic_changes:
-        return service_response(db, item)
+        return service_response(db, item, principal)
     for key, value in semantic_changes.items():
         setattr(item, key, value)
     item.updated_by_user_id = principal.user.id
@@ -257,7 +275,7 @@ def update_service(service_id: uuid.UUID, payload: ServiceUpdate, request: Reque
     add_audit_event(db, action="service.updated", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service updated", metadata={"changed_fields": sorted(semantic_changes)}, request=request)
     commit(db, "Service")
     db.refresh(item)
-    return service_response(db, item)
+    return service_response(db, item, principal)
 
 
 @router.post("/services/{service_id}/archive", response_model=ServiceResponse)
@@ -268,7 +286,7 @@ def archive_service(service_id: uuid.UUID, payload: ServiceArchiveRequest, reque
         record_change(db, customer_id=item.customer_id, site_id=item.site_id, change_type="service_archived", entity_type="service", entity_id=item.id, entity_name=item.name, summary=f"Archived Service {item.name}", actor_user_id=principal.user.id, metadata={"reason": payload.reason})
         add_audit_event(db, action="service.archived", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service archived", request=request)
         commit(db, "Service archive")
-    return service_response(db, item)
+    return service_response(db, item, principal)
 
 
 @router.post("/services/{service_id}/restore", response_model=ServiceResponse)
@@ -279,7 +297,7 @@ def restore_service(service_id: uuid.UUID, request: Request, principal: Principa
         record_change(db, customer_id=item.customer_id, site_id=item.site_id, change_type="service_updated", entity_type="service", entity_id=item.id, entity_name=item.name, summary=f"Restored Service {item.name}", actor_user_id=principal.user.id)
         add_audit_event(db, action="service.restored", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service restored", request=request)
         commit(db, "Service restore")
-    return service_response(db, item)
+    return service_response(db, item, principal)
 
 
 def _applicable_relationship(db: Session, relationship_type_id: uuid.UUID, source_type: str, target_type: str) -> RelationshipType:
@@ -536,6 +554,8 @@ def list_service_asset_dependencies(service_id: uuid.UUID, principal: Principal 
     query = select(ServiceAssetDependency).where(ServiceAssetDependency.service_id == item.id)
     if not include_history: query = query.where(ServiceAssetDependency.valid_to.is_(None))
     rows = list(db.scalars(query.order_by(ServiceAssetDependency.created_at)))
+    visible = _visible_related_ids(db, principal, Asset, (row.asset_id for row in rows), "assets.view", item.customer_id)
+    rows = [row for row in rows if row.asset_id in visible]
     semantics = _dependency_semantics_by_id(db, rows, "asset")
     return [_asset_dependency_response(db, row, semantics[row.id]) for row in rows]
 
@@ -616,6 +636,8 @@ def list_service_dependencies(service_id: uuid.UUID, principal: Principal = Depe
     query = select(ServiceDependency).where(or_(ServiceDependency.source_service_id == service.id, ServiceDependency.target_service_id == service.id))
     if not include_history: query = query.where(ServiceDependency.valid_to.is_(None))
     rows = list(db.scalars(query.order_by(ServiceDependency.created_at)))
+    visible = _visible_related_ids(db, principal, Service, (entity_id for row in rows for entity_id in (row.source_service_id, row.target_service_id)), "services.view", service.customer_id)
+    rows = [row for row in rows if row.source_service_id in visible and row.target_service_id in visible]
     semantics = _dependency_semantics_by_id(db, rows, "service")
     return [_service_dependency_response(db, row, semantics[row.id]) for row in rows]
 
@@ -694,10 +716,14 @@ def list_dependency_groups(
     query = select(DependencyGroup).where(DependencyGroup.service_id == service.id)
     if not include_history:
         query = query.where(DependencyGroup.valid_to.is_(None))
-    return [
-        _dependency_group_response(db, row)
-        for row in db.scalars(query.order_by(DependencyGroup.valid_from, DependencyGroup.id))
-    ]
+    groups = [_dependency_group_response(db, row) for row in db.scalars(query.order_by(DependencyGroup.valid_from, DependencyGroup.id))]
+    if not groups:
+        return []
+    asset_ids = {row["id"] for row in list_service_asset_dependencies(service_id, principal, include_history, db)}
+    service_ids = {row["id"] for row in list_service_dependencies(service_id, principal, include_history, db)}
+    # A partial member set would misrepresent all/any semantics. Return only
+    # groups whose entire membership can be disclosed to this reader.
+    return [group for group in groups if set(group["asset_dependency_ids"]) <= asset_ids and set(group["service_dependency_ids"]) <= service_ids]
 
 
 @router.post(
@@ -907,7 +933,9 @@ def list_service_business_functions(service_id: uuid.UUID, principal: Principal 
     query = select(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == service.id)
     if not include_history:
         query = query.where(ServiceBusinessFunction.valid_to.is_(None))
-    return [_business_function_link_response(db, item) for item in db.scalars(query.order_by(ServiceBusinessFunction.created_at))]
+    rows = list(db.scalars(query.order_by(ServiceBusinessFunction.created_at)))
+    visible = _visible_related_ids(db, principal, BusinessFunction, (row.business_function_id for row in rows), "business_functions.view", service.customer_id)
+    return [_business_function_link_response(db, row) for row in rows if row.business_function_id in visible]
 
 
 @router.post("/services/{service_id}/business-functions", response_model=ServiceBusinessFunctionResponse, status_code=status.HTTP_201_CREATED)

@@ -148,12 +148,42 @@ and dark preference. Desktop uses an adjacent inspector; mobile uses a full-widt
 inspector below a horizontally scrollable graph. The Dashboard preview remains
 pannable and always retains an Open Knowledge Graph action.
 
+## C2.5 entity detail presentation
+
+Service and Business Function details reuse `operations-primitives.js`, PageHeader,
+`ops-card`, `ops-badge` and the existing theme tokens. `entity-detail.js` composes
+shared breadcrumbs/identity/actions, sections, relationship rows and native
+View all/edit disclosures. Styles are scoped to `.entity-detail-page`; Dashboard,
+Graph, Asset and Network detail styling is unchanged. CompletenessPanel has an
+opt-in compact presentation for Service detail; existing Asset callers retain
+their default presentation. Never-evaluated summaries do not display 100%.
+
+Service relationship direction comes from canonical API endpoints and explicit
+source/target labels. Dependency groups retain existing requirement, strategy,
+failure effect and member identity; ungrouped consequences remain Unknown.
+No traversal or inference moves to the frontend. Focus/Preview use `graphHref`.
+Existing archived/inactive graph adapters remain available in native disclosure.
+
+Business Functions retain their authoritative criticality and record lifecycle;
+no Function availability or completeness score is calculated. Supporting-Service
+status/completeness comes from a bounded, authorized one-hop operational graph
+read with the record context. All returned relationship rows remain available
+through disclosure even when optional graph metadata is unavailable or bounded.
+
+Detail loaders discard stale asynchronous responses. Existing related-entity
+read endpoints now filter names/member IDs and Business Function aggregates with
+Principal view/gap scopes. Base Service relationship counts also scope their
+related endpoints and gate gap metadata. Partially inaccessible dependency groups are omitted
+whole so visible subsets are not presented as complete all/any semantics. These
+are read-access corrections, not new semantics or a parallel authorization model.
+API shapes, writes, graph projection and PostgreSQL schema remain unchanged.
+
+See [C2.5 validation and manual acceptance](../testing/release-c2-entity-detail-ux-polish.md).
+
 ## Deferred scope and follow-up
 
-C2.5 Entity Detail UX Polish follows C2.4 before F1-lite. It redesigns Service and
-Business Function details using these primitives, standardizes status,
-criticality/completeness, density, spacing and relationship presentation, and
-adds no major domain semantics.
+C2.5 Entity Detail UX Polish is implemented before F1-lite. Its live/manual
+acceptance remains pending; it adds no major domain semantics.
 
 A post-C2.4 Homelab Ready modeling cleanup should make IP addresses authoritative
 on interfaces, with Asset management/primary IP referencing or deriving from an
@@ -164,4 +194,4 @@ Deferred: enterprise graph scale, minimap, alternate layouts, saved perspectives
 automatic Workloads(N) clustering, dashboard customization/drag-drop, named
 Dashboards, per-Site layouts, network graph lane/topology mode, Business Function
 impact, Asset-to-Asset failure propagation, richer dependency semantics and full
-enterprise Impact Analysis. Service/BF detail redesign is deferred to C2.5.
+enterprise Impact Analysis. Asset/Network detail redesign remains deferred.

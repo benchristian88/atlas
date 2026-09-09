@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
-from app.models import BusinessFunction, CriticalityLevel, KnowledgeGap, ServiceBusinessFunction, Site
+from app.models import BusinessFunction, CriticalityLevel, KnowledgeGap, ServiceBusinessFunction, Service, Site
 from app.routes.crud_helpers import commit, flush, not_found
-from app.routes.services import _business_function_link_response, service_response
+from app.routes.services import _business_function_link_response, _visible_related_ids, service_response
 from app.schemas import BusinessFunctionCreate, BusinessFunctionResponse, BusinessFunctionUpdate, ServiceBusinessFunctionResponse, ServiceGraphResponse, ServiceResponse
 from app.services.operational_graph import (
     GraphFocusNotFound,
@@ -33,14 +33,16 @@ def _function(db: Session, principal: Principal, function_id: uuid.UUID, permiss
     return item
 
 
-def function_response(db: Session, item: BusinessFunction) -> dict:
+def function_response(db: Session, item: BusinessFunction, principal: Principal) -> dict:
     criticality = db.get(CriticalityLevel, item.criticality_level_id) if item.criticality_level_id else None
     service_ids = list(db.scalars(select(ServiceBusinessFunction.service_id).where(ServiceBusinessFunction.business_function_id == item.id, ServiceBusinessFunction.valid_to.is_(None))))
+    visible_service_ids = _visible_related_ids(db, principal, Service, service_ids, "services.view", item.customer_id)
+    gap_service_ids = _visible_related_ids(db, principal, Service, visible_service_ids, "knowledge_gaps.view", item.customer_id)
     result = BusinessFunctionResponse.model_validate(item).model_dump()
     result.update(
         criticality_name=criticality.name if criticality else None,
-        service_count=int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.business_function_id == item.id, ServiceBusinessFunction.valid_to.is_(None))) or 0),
-        open_gap_count=int(db.scalar(select(func.count()).select_from(KnowledgeGap).where(KnowledgeGap.entity_type == "service", KnowledgeGap.entity_id.in_(service_ids or [uuid.uuid4()]), KnowledgeGap.status.in_({"open", "deferred"}))) or 0),
+        service_count=sum(service_id in visible_service_ids for service_id in service_ids),
+        open_gap_count=int(db.scalar(select(func.count()).select_from(KnowledgeGap).where(KnowledgeGap.entity_type == "service", KnowledgeGap.entity_id.in_(gap_service_ids), KnowledgeGap.status.in_({"open", "deferred"}))) or 0) if gap_service_ids else 0,
     )
     return result
 
@@ -53,7 +55,7 @@ def list_business_functions(context: RequestContext, principal: Principal = Depe
     if active_only: query = query.where(BusinessFunction.active.is_(True))
     if search and search.strip():
         pattern = f"%{search.strip()}%"; query = query.where(or_(BusinessFunction.name.ilike(pattern), BusinessFunction.description.ilike(pattern), BusinessFunction.owner_name.ilike(pattern)))
-    return [function_response(db, item) for item in db.scalars(query.order_by(BusinessFunction.name).limit(limit))]
+    return [function_response(db, item, principal) for item in db.scalars(query.order_by(BusinessFunction.name).limit(limit))]
 
 
 @router.post("", response_model=BusinessFunctionResponse, status_code=status.HTTP_201_CREATED)
@@ -71,12 +73,12 @@ def create_business_function(payload: BusinessFunctionCreate, request: Request, 
     db.add(item); flush(db, "Business function")
     add_audit_event(db, action="business_function.created", target_type="business_function", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Business Function created", request=request)
     commit(db, "Business function"); db.refresh(item)
-    return function_response(db, item)
+    return function_response(db, item, principal)
 
 
 @router.get("/{function_id}", response_model=BusinessFunctionResponse)
 def get_business_function(function_id: uuid.UUID, principal: Principal = Depends(require_permission("business_functions.view")), db: Session = Depends(get_db)):
-    return function_response(db, _function(db, principal, function_id, "business_functions.view"))
+    return function_response(db, _function(db, principal, function_id, "business_functions.view"), principal)
 
 
 @router.patch("/{function_id}", response_model=BusinessFunctionResponse)
@@ -98,7 +100,7 @@ def update_business_function(function_id: uuid.UUID, payload: BusinessFunctionUp
         item.updated_by_user_id = principal.user.id
         add_audit_event(db, action="business_function.updated", target_type="business_function", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Business Function updated", metadata={"changed_fields": sorted(semantic)}, request=request)
         commit(db, "Business function")
-    return function_response(db, item)
+    return function_response(db, item, principal)
 
 
 @router.get("/{function_id}/services", response_model=list[ServiceBusinessFunctionResponse])
@@ -106,7 +108,9 @@ def business_function_services(function_id: uuid.UUID, principal: Principal = De
     function = _function(db, principal, function_id, "business_functions.view")
     query = select(ServiceBusinessFunction).where(ServiceBusinessFunction.business_function_id == function.id)
     if not include_history: query = query.where(ServiceBusinessFunction.valid_to.is_(None))
-    return [_business_function_link_response(db, item) for item in db.scalars(query.order_by(ServiceBusinessFunction.created_at))]
+    rows = list(db.scalars(query.order_by(ServiceBusinessFunction.created_at)))
+    visible = _visible_related_ids(db, principal, Service, (row.service_id for row in rows), "services.view", function.customer_id)
+    return [_business_function_link_response(db, row) for row in rows if row.service_id in visible]
 
 
 @router.get("/{function_id}/graph", response_model=ServiceGraphResponse)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CompletenessLine } from "./operations-primitives";
 import { StatusBadge } from "./status-badge";
 import { apiRequest } from "../lib/api";
 
@@ -8,7 +9,7 @@ function label(value) {
   return (value || "not_evaluated").replaceAll("_", " ");
 }
 
-export function CompletenessPanel({ assetId, serviceId, entityType = "asset", completeness, canEvaluate, canDefer, canExcept, onChanged }) {
+export function CompletenessPanel({ assetId, serviceId, entityType = "asset", completeness, canEvaluate, canDefer, canExcept, onChanged, compact = false }) {
   const [working, setWorking] = useState("");
   const [error, setError] = useState("");
   const [action, setAction] = useState(null);
@@ -48,7 +49,7 @@ export function CompletenessPanel({ assetId, serviceId, entityType = "asset", co
     <div className="completeness-body">
       {error && <div className="error-banner" role="alert">{error}</div>}
       {!summary ? <p className="empty-state">Completeness has not been evaluated.</p> : <>
-        <div className="completeness-meter" aria-label={`${summary.required_satisfied} of ${summary.required_total} required requirements satisfied`}><span style={{ width: `${summary.required_total ? Math.round((summary.required_satisfied / summary.required_total) * 100) : 100}%` }} /></div>
+        {compact ? <CompletenessLine node={summary.completeness_status === "not_evaluated" ? null : summary} /> : <div className="completeness-meter" aria-label={`${summary.required_satisfied} of ${summary.required_total} required requirements satisfied`}><span style={{ width: `${summary.required_total ? Math.round((summary.required_satisfied / summary.required_total) * 100) : 100}%` }} /></div>}
         <div className="detail-grid completeness-counts"><div><span>Required</span><strong>{summary.required_satisfied} / {summary.required_total}</strong></div><div><span>Recommended</span><strong>{summary.recommended_satisfied} / {summary.recommended_total}</strong></div><div><span>Open gaps</span><strong>{summary.open_gap_count}</strong></div><div><span>Exceptions</span><strong>{summary.exception_count}</strong></div><div><span>Last evaluated</span><strong>{summary.last_evaluated_at ? new Date(summary.last_evaluated_at).toLocaleString() : "Never"}</strong></div></div>
       </>}
       {groups.map((group) => { const gaps = (completeness?.active_gaps || []).filter(group.match); if (!gaps.length) return null; return <div className="gap-group" key={group.key}><h3>{group.label}</h3>{gaps.map((gap) => <article className="gap-row" key={gap.id}><div><div className="row-actions"><StatusBadge status={gap.severity} /><StatusBadge status={gap.status} /><strong>{gap.requirement_name || gap.summary}</strong></div><p>{gap.summary}</p>{gap.details_json?.why_it_applies && <small>Why: {gap.details_json.why_it_applies}</small>}{gap.remediation_hint && <small>Next step: {gap.remediation_hint}</small>}{gap.exception_reason && <small>Exception: {gap.exception_reason}{gap.exception_expires_at ? ` · expires ${new Date(gap.exception_expires_at).toLocaleDateString()}` : ""}</small>}{gap.deferred_until && <small>Deferred until {new Date(gap.deferred_until).toLocaleString()}</small>}</div><div className="row-actions">{canDefer && gap.status !== "exception" && <button className="text-button" onClick={() => { setAction({ kind: "defer", gap }); setReason(""); setDate(""); }} type="button">Defer</button>}{canExcept && gap.status !== "exception" && <button className="text-button" onClick={() => { setAction({ kind: "exception", gap }); setReason(""); setDate(""); }} type="button">Exception</button>}{canExcept && gap.status === "exception" && <button className="text-button" onClick={async () => { setWorking(gap.id); try { await apiRequest(`/knowledge-gaps/${gap.id}/reopen`, { method: "POST", body: JSON.stringify({ reason: "Exception reopened from asset detail" }) }); await onChanged(); } catch (requestError) { setError(requestError.message); } finally { setWorking(""); } }} type="button">Reopen</button>}</div></article>)}</div>; })}

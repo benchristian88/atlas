@@ -37,7 +37,13 @@ test("panel exposes reasons, paths, empty and truncated states with accessible e
 test("Asset and Service details allow Viewers to preview without manage permission", async () => {
   for (const kind of ["assets", "services"]) {
     const page = await readFile(new URL(`../app/${kind}/[id]/page.js`, import.meta.url), "utf8");
-    assert.match(page, /hasPermissionForObject\("service_dependencies.view",[^\n]+<DependencyAnalysisPanel/);
-    assert.match(page, new RegExp(`focusType="${kind === "assets" ? "asset" : "service"}"`));
+    if (kind === "assets") {
+      assert.match(page, /hasPermissionForObject\("service_dependencies.view",[^\n]+<DependencyAnalysisPanel/);
+      assert.match(page, /focusType="asset"/);
+    } else {
+      assert.match(page, /canPreview=\{!service.archived_at && hasPermissionForObject\("service_dependencies.view"/);
+      const header = await readFile(new URL("../components/entity-detail.js", import.meta.url), "utf8");
+      assert.match(header, /graphHref\(\{ focus: `\$\{type\}:\$\{id\}`, analysis: true \}\)/);
+    }
   }
 });

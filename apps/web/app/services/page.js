@@ -78,13 +78,13 @@ export default function ServicesPage() {
       {canCreate && <Link className="button button-primary" href="/services/new">Add Service</Link>}
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}
-    {summary && <section className="summary-grid compact-summary-grid">
-      <button className="summary-card" onClick={() => router.push("/services")} type="button"><span>All Services</span><strong>{summary.total}</strong></button>
-      <button className="summary-card" onClick={() => update({ criticalityLevelId: levels.find((item) => item.key === "critical")?.id || "" })} type="button"><span>Critical</span><strong>{summary.critical}</strong></button>
-      <button className="summary-card" onClick={() => update({ attention: "missing_owner" })} type="button"><span>Missing owner</span><strong>{summary.missing_owner}</strong></button>
-      <button className="summary-card" onClick={() => update({ attention: "missing_dependencies" })} type="button"><span>Missing dependencies</span><strong>{summary.missing_dependencies}</strong></button>
-      <button className="summary-card" onClick={() => update({ attention: "missing_recovery_targets" })} type="button"><span>Missing recovery targets</span><strong>{summary.missing_recovery_targets}</strong></button>
-      <button className="summary-card" onClick={() => update({ attention: "incomplete" })} type="button"><span>Incomplete</span><strong>{summary.incomplete}</strong></button>
+    {summary && <section className="summary-grid compact-summary-grid" aria-label="Service summary">
+      <button className="asset-type-filter selector-control-text" onClick={() => router.push("/services")} type="button"><span>All Services</span><strong>{summary.total}</strong></button>
+      <button className="asset-type-filter selector-control-text" onClick={() => update({ criticalityLevelId: levels.find((item) => item.key === "critical")?.id || "" })} type="button"><span>Critical</span><strong>{summary.critical}</strong></button>
+      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "missing_owner" })} type="button"><span>Missing owner</span><strong>{summary.missing_owner}</strong></button>
+      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "missing_dependencies" })} type="button"><span>Missing dependencies</span><strong>{summary.missing_dependencies}</strong></button>
+      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "missing_recovery_targets" })} type="button"><span>Missing recovery targets</span><strong>{summary.missing_recovery_targets}</strong></button>
+      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "incomplete" })} type="button"><span>Incomplete</span><strong>{summary.incomplete}</strong></button>
     </section>}
     <section className="asset-filter-panel">
       <form className="asset-list-toolbar" onSubmit={(event) => { event.preventDefault(); update({ search: searchDraft.trim() }); }}>

@@ -95,7 +95,7 @@ enterprise Impact Analysis.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete B2-lite for Homelab Ready, then add scheduling, broad retries and richer orchestration later |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; manual acceptance pending | Build on live-accepted lean consequences to deliver the polished visual operations experience |
+| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; C2.5 implemented; manual acceptance pending | Build on live-accepted lean consequences to deliver the polished visual operations experience |
 | F1-lite — Homelab Documentation | Planned; renderer and persistence exist | Expose existing generated Markdown through usable Documents API and UI without waiting for C4 |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation | Complete a secure configure, test, Run Now, result, and reconciliation journey for Proxmox |
 | Homelab Ready Release | Planned | Harden and package the combined product as a high-quality self-hosted homelab release |
@@ -111,8 +111,9 @@ enterprise Impact Analysis.
 **C2.1 — Shared Operational Graph**, **C2.2 — Lean Dependency Semantics**, and
 **C2.3 — Explainable Dependency Analysis** are complete, including live LXC
 acceptance for their respective scopes. **C2.4 — Homelab Operations Experience**
-is implemented on its feature working tree with manual acceptance pending,
-followed by C2.5 Entity Detail UX Polish, F1-lite, B2-lite, and Homelab Ready hardening.
+is merged into dev. C2.5 Entity Detail UX Polish is implemented with live/manual
+acceptance pending. F1-lite, B2-lite and Homelab Ready hardening remain next;
+this update does not claim a new C2.4 live acceptance result.
 
 F1-lite and B2-lite may proceed in parallel where dependencies permit, but they
 must not broaden into C4 or a production-scale worker control plane. Atlas must
@@ -272,13 +273,18 @@ customer-wide Services without changing tenancy or failure semantics. See
 
 ## C2.5 — Entity Detail UX Polish
 
-**Status:** planned after C2.4 and before F1-lite.
+**Status:** implemented on `feature/c2-5-entity-detail-ux-polish`; live/manual acceptance pending.
 
-Redesign Service and Business Function details using the C2.4 typography/card
-primitives. Correct oversized/inconsistent type, improve spacing and density,
-standardize status, criticality and completeness, and improve relationship
-presentation to align with Dashboard/Knowledge Graph. No major new domain
-semantics. C2.4 only adapts record-context handling where needed for compatibility.
+Service and Business Function details now reuse C2.4 headers, operational cards,
+entity marks, recorded status, managed criticality and completeness presentation.
+Compact relationship rows separate business purpose, providers, dependencies and
+dependents. Dependency groups present existing C2.2 semantics; active records
+link into Knowledge Graph Focus and Service unavailable analysis. Existing edit,
+knowledge-quality and history flows remain available with responsive disclosure
+and keyboard focus. Business Function completeness remains explicitly not evaluated.
+A contained read-authorization correction prevents related record disclosure.
+No new model, schema or analysis semantics were added. See the
+[C2.5 validation and manual acceptance record](../testing/release-c2-entity-detail-ux-polish.md).
 
 ## Post-C2.4 Homelab Ready modeling cleanup
 
@@ -599,8 +605,8 @@ that become richer as roadmap capabilities arrive.
 
 | Product view | Initial foundation | Later enrichment |
 | --- | --- | --- |
-| Homepage | A, B, B.5, C1 data; C2.4 Dashboard implementation (manual gate pending) | C2.5 detail alignment; later C3 ownership, C4 documentation, D recovery readiness, E risk recommendations, and F planned changes |
-| Service Operations | C1 Service model, C2.2 semantics, C2.3 consequences, C2.4 graph experience | C2.5 Service/BF detail polish; later C3/C4/D/E/F enrichment |
+| Homepage | A, B, B.5, C1 data; C2.4 Dashboard implementation (manual gate pending) | C2.5 manual acceptance; later C3 ownership, C4 documentation, D recovery readiness, E risk recommendations, and F planned changes |
+| Service Operations | C1 Service model, C2.2 semantics, C2.3 consequences, C2.4 graph experience, C2.5 detail polish | C2.5 manual acceptance; later C3/C4/D/E/F enrichment |
 | Dependency Analysis | C2.1 graph plus C2.2 semantics | C2.3 explainable homelab consequences; later E enterprise impact and D2 recovery evidence |
 | Change Impact | C2 graph; E analysis engine | C3 owner; C4 change/validation objects; F2 intended-state overlay; F3 post-change reconciliation |
 
@@ -630,7 +636,7 @@ Examples:
    **C2.2 — Lean Dependency Semantics**.
 2. Preserve the completed, live-accepted **C2.3 — Explainable Dependency Analysis**.
 3. Complete live/manual acceptance of **C2.4 — Homelab Operations Experience**.
-4. Deliver **C2.5 — Entity Detail UX Polish**.
+4. Complete live/manual acceptance of **C2.5 — Entity Detail UX Polish**.
 5. Deliver **F1-lite — Homelab Documentation**.
 6. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
    inspect results, and reconcile. Contained B2-lite/F1-lite work may proceed in
