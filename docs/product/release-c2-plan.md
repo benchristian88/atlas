@@ -1,8 +1,8 @@
 # Release C2 implementation plan
 
-Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; manual acceptance pending
+Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented and merged; C2.5 implemented; live/manual acceptance pending
 
-Latest implemented increment: **C2.4 — Homelab Operations Experience**
+Latest implemented increment: **C2.5 — Entity Detail UX Polish**
 
 C2.4 implementation and its pending manual gate are described in the
 [operations architecture](../architecture/homelab-operations-experience.md) and
@@ -733,13 +733,32 @@ included, beyond necessary record-context compatibility adaptations.
 
 ## Relationship to Homelab Ready
 
-After C2.4 manual acceptance, deliver **C2.5 — Entity Detail UX Polish**, then
+**C2.5 — Entity Detail UX Polish** is implemented with live/manual acceptance pending, before
 F1-lite Homelab Documentation, B2-lite Live Proxmox Discovery and release
 hardening. C2.5 standardizes Service/BF typography, cards, status, criticality,
 completeness and relationship presentation without new domain semantics.
 Interface-owned IP cleanup is a post-C2.4 data-preserving backlog item, not a
 migration in this release. See the [roadmap](development-roadmap.md) for scope
 and explicitly deferred enterprise/customization capabilities.
+
+# C2.5 — Entity Detail UX Polish
+
+Implemented on the C2.5 feature working tree based on the merged C2.4 baseline.
+Service and Business Function details use shared compact identity, metadata,
+relationship rows and native disclosure with C2.4 entity/status/completeness
+primitives and theme tokens. Service dependencies and dependents are distinct;
+existing C2.2 group requirement, strategy, effect and members remain editable.
+Active Service Preview unavailable and entity graph navigation reuse C2.4 Focus
+and C2.3 analysis. Business Function completeness is honestly not evaluated;
+its stored criticality and supporting Service metadata remain visible.
+
+Existing actions, recovery knowledge, history and assertions are preserved.
+A contained endpoint read-filter correction enforces related-entity view scopes
+and scoped Business Function counts; no API shapes or schema changed. Responsive
+and keyboard validation plus the exact live checklist are in the
+[C2.5 acceptance record](../testing/release-c2-entity-detail-ux-polish.md).
+No live acceptance, F1-lite, B2-lite, network/IP cleanup or hardening completion
+is claimed.
 
 # Risks and mitigations
 

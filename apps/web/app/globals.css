@@ -1130,3 +1130,70 @@ tbody tr:hover { background: var(--surface-muted); }
 .landscape-disclosure { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .landscape-disclosure .landscape-more { position: static; flex: 1; min-width: 140px; }
 .dependency-presentation strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+
+/* Entity detail uses the C2.4 operational surfaces; styles stay within these pages. */
+.entity-detail-page { display: grid; gap: 16px; max-width: 1200px; min-width: 0; }
+.entity-detail-page > * { min-width: 0; }
+.entity-detail-header { display: grid; gap: 14px; }
+.entity-breadcrumb { display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.entity-breadcrumb a { color: var(--accent-text); }
+.entity-detail-heading { display: flex; align-items: flex-start; gap: 12px; }
+.entity-detail-heading > .entity-mark { width: 30px; height: 30px; margin-top: 3px; flex: 0 0 auto; }
+.entity-detail-heading .page-header { margin: 0; min-width: 0; }
+.entity-detail-heading .page-header h1 { overflow-wrap: anywhere; }
+.entity-detail-heading .page-description { max-width: 76ch; margin-bottom: 0; }
+.entity-detail-summary, .entity-detail-meta, .entity-detail-actions, .entity-relationship-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.entity-detail-summary { justify-content: space-between; }
+.entity-detail-completeness { display: grid; gap: 3px; min-width: 170px; }
+.entity-recorded-state, .entity-relationship-meta > span { display: inline-flex; align-items: center; gap: 6px; }
+.entity-detail-page .ops-badge { white-space: normal; }
+.entity-detail-page .button { white-space: normal; text-align: center; }
+.entity-section { margin: 0; }
+.entity-detail-page .form-card-header { margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+.entity-detail-page .form-card-header h2 { font-size: 16px; margin: 0; }
+.entity-detail-page .eyebrow { font-size: 11px; margin: 0 0 4px; }
+.entity-detail-page .detail-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 20px; margin: 0 0 12px; }
+.entity-detail-page .detail-grid strong { font-size: 13px; overflow-wrap: anywhere; }
+.entity-detail-page .detail-grid small { font-size: 11px; }
+.entity-detail-page .ops-card > p, .entity-detail-page .prose-content { max-width: 85ch; overflow-wrap: anywhere; white-space: pre-line; }
+.entity-detail-page .empty-state { padding: 12px 0; text-align: left; font-size: inherit; }
+.entity-relationship-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; gap: 12px; border-top: 1px solid var(--border); padding: 12px 0; }
+.entity-relationship-row > .entity-mark { width: 24px; height: 24px; }
+.entity-relationship-copy { min-width: 0; overflow-wrap: anywhere; }
+.entity-relationship-name { font-weight: 600; }
+.entity-relationship-copy p { margin: 3px 0 0; }
+.entity-relationship-meta { margin-top: 6px; font-size: 11px; }
+.entity-relationship-meta .ops-completeness { min-width: 100px; }
+.entity-relationship-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.entity-relationship-actions .text-button { font-size: 12px; }
+.entity-disclosure { min-width: 0; }
+.entity-disclosure > summary { color: var(--accent-text); cursor: pointer; padding: 8px 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.entity-edit-disclosure { border-top: 1px solid var(--border); margin-top: 8px; }
+.entity-detail-page .inline-dependency-form { border: 0; padding: 8px 0 0; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.entity-detail-page :is(input, select, textarea) { max-width: 100%; min-width: 0; }
+.entity-detail-page .dependency-semantics { margin-top: 8px; gap: 6px; }
+.entity-detail-page .dependency-semantics > small { flex-basis: 100%; }
+.entity-detail-page .dependency-group-row { border: 1px solid var(--border); border-radius: var(--ops-radius); padding: 12px; background: var(--surface-muted); display: grid; margin: 10px 0; }
+.entity-detail-page .dependency-group-row > div { display: grid; gap: 6px; }
+.entity-detail-page .entity-group-members h4 { margin: 6px 0; }
+.entity-group-members ul { margin: 0; padding-left: 18px; }
+.entity-detail-page .dependency-group-actions { justify-content: start; }
+.entity-detail-page .knowledge-card, .entity-detail-page .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--ops-radius); padding: var(--ops-padding); margin: 0; min-width: 0; }
+.entity-detail-page .completeness-body { padding: 0; }
+.entity-detail-page .knowledge-card h3 { font-size: 14px; }
+.entity-detail-page .completeness-meter { height: 4px; }
+.entity-detail-page :is(a, button, summary, select, input, textarea):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+@media (max-width: 900px) {
+  .entity-detail-page .form-grid, .entity-detail-page .dependency-group-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .entity-detail-summary { align-items: stretch; flex-direction: column; }
+  .entity-detail-completeness { max-width: none; }
+  .entity-detail-actions > * { flex: 1 1 160px; }
+  .entity-relationship-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
+  .entity-relationship-actions { grid-column: 2; }
+  .entity-detail-page .form-grid, .entity-detail-page .dependency-group-actions, .entity-detail-page .inline-dependency-form { grid-template-columns: minmax(0, 1fr); }
+  .entity-detail-page .timeline-heading { flex-wrap: wrap; }
+}
+.entity-detail-page .recorded-status.status-outage { background: var(--danger); }
+.entity-detail-page .recorded-status.status-maintenance { background: var(--info); }
