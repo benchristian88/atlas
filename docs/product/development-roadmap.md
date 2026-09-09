@@ -95,7 +95,7 @@ enterprise Impact Analysis.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete B2-lite for Homelab Ready, then add scheduling, broad retries and richer orchestration later |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 next/planned | Build on live-accepted lean consequences to deliver the polished visual operations experience |
+| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; manual acceptance pending | Build on live-accepted lean consequences to deliver the polished visual operations experience |
 | F1-lite — Homelab Documentation | Planned; renderer and persistence exist | Expose existing generated Markdown through usable Documents API and UI without waiting for C4 |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation | Complete a secure configure, test, Run Now, result, and reconciliation journey for Proxmox |
 | Homelab Ready Release | Planned | Harden and package the combined product as a high-quality self-hosted homelab release |
@@ -111,7 +111,8 @@ enterprise Impact Analysis.
 **C2.1 — Shared Operational Graph**, **C2.2 — Lean Dependency Semantics**, and
 **C2.3 — Explainable Dependency Analysis** are complete, including live LXC
 acceptance for their respective scopes. **C2.4 — Homelab Operations Experience**
-is next/planned, followed by F1-lite, B2-lite, and Homelab Ready hardening.
+is implemented on its feature working tree with manual acceptance pending,
+followed by C2.5 Entity Detail UX Polish, F1-lite, B2-lite, and Homelab Ready hardening.
 
 F1-lite and B2-lite may proceed in parallel where dependencies permit, but they
 must not broaden into C4 or a production-scale worker control plane. Atlas must
@@ -126,13 +127,14 @@ flowchart TD
     C22[C2.2 Lean Dependency Semantics]
     C23[C2.3 Explainable Dependency Analysis]
     C24[C2.4 Homelab Operations Experience]
+    C25[C2.5 Entity Detail UX Polish]
     F1L[F1-lite Homelab Documentation]
     B2L[B2-lite Live Proxmox Discovery]
     HARDEN[Homelab Ready hardening]
     READY[HOMELAB READY RELEASE]
     LATER[Later enterprise evolution\nC2 rich semantics + C3 + C4 + D + E + F + ITSM/MSP]
 
-    BASE --> C22 --> C23 --> C24 --> F1L --> B2L --> HARDEN --> READY
+    BASE --> C22 --> C23 --> C24 --> C25 --> F1L --> B2L --> HARDEN --> READY
     READY --> LATER
 ```
 
@@ -254,41 +256,42 @@ of live outage state.
 
 ## C2.4 — Homelab Operations Experience
 
-**Outcome:** Atlas turns its technical foundations into a polished, highly
-visual product that is compelling to use and demonstrate. This is a major
-product release, not cosmetic cleanup.
+**Status:** implemented on the C2.4 feature working tree; live/manual acceptance pending.
 
-### Operational homepage
+A fixed Dashboard widget registry presents four summary metrics, a navigational
+Business Functions → Services → Assets landscape, knowledge attention, Critical
+Services and recent meaningful changes. The full Knowledge Graph offers Overview,
+Focus and temporary C2.3 Analysis, a persistent inspector, explicit disclosure,
+URL state, accessible controls, and responsive light/dark presentation.
 
-Use real Atlas data to answer: What is my environment? What matters? What does
-Atlas know? What should I look at? Useful content may include Assets, Services,
-Business Functions, completeness, Knowledge Gaps, recent meaningful changes,
-critical Services, and dependency warnings or unknowns. Avoid dashboard clutter
-and do not imply live health without live evidence.
+Existing customer-wide and site-specific Service scope is retained. An explicit
+Site viewpoint can include directly relevant authorized cross-site providers for
+customer-wide Services without changing tenancy or failure semantics. See
+[architecture](../architecture/homelab-operations-experience.md) and
+[validation/manual acceptance](../testing/release-c2-homelab-operations-experience.md).
 
-### Visual Knowledge Graph
+## C2.5 — Entity Detail UX Polish
 
-Build a polished interactive graph over the existing C2.1 API with clear Asset,
-Service, and Business Function distinction; readable labels and semantic
-direction; entity focus and navigation; useful bounded-depth and edge-family
-controls; responsive and accessible behavior; and clear empty, large-result,
-and truncated states. The API remains authoritative for graph membership and
-semantics; impact logic does not move into the browser.
+**Status:** planned after C2.4 and before F1-lite.
 
-### Enhanced Service Operations and exploration
+Redesign Service and Business Function details using the C2.4 typography/card
+primitives. Correct oversized/inconsistent type, improve spacing and density,
+standardize status, criticality and completeness, and improve relationship
+presentation to align with Dashboard/Knowledge Graph. No major new domain
+semantics. C2.4 only adapts record-context handling where needed for compatibility.
 
-Service pages should show what provides a Service, what it depends on, what
-depends on it, which Business Functions it supports, criticality, completeness,
-dependency warnings or unknowns, and available C2.3 consequence information.
-Users should move naturally from Asset to Service to Business Function and
-related infrastructure without understanding the database model.
+## Post-C2.4 Homelab Ready modeling cleanup
 
-### Product polish
+IP addresses should be authoritative on network interfaces. Asset management or
+primary IP should reference/derive from an interface address. Preserve and migrate
+existing duplicated Asset IP data and update discovery/importers. This migration
+is not part of C2.4.
 
-Apply deliberate visual hierarchy, spacing, responsive layouts, graph
-interactions, loading and empty states, consistent terminology, theme
-compatibility, accessibility, and Atlas Impact branding. The result should feel
-like a finished product surface rather than developer scaffolding.
+Deferred beyond C2.4: enterprise graph scale, minimap, alternate layouts, saved
+perspectives, automatic Workloads(N) clustering, dashboard customization/drag-drop,
+named dashboards, per-site layouts, network graph lane/topology mode, Business
+Function impact, Asset-to-Asset failure propagation, richer dependency semantics
+and full enterprise Impact Analysis. Detail redesign belongs to C2.5.
 
 # Release C3 — People, Teams and structured ownership
 
@@ -596,8 +599,8 @@ that become richer as roadmap capabilities arrive.
 
 | Product view | Initial foundation | Later enrichment |
 | --- | --- | --- |
-| Homepage | A, B, B.5, C1 for inventory, changes, reconciliation, Service counts, and knowledge gaps | C2.4 visual environment experience; later C3 ownership, C4 documentation, D recovery readiness, E risk recommendations, and F planned changes |
-| Service Operations | C1 Service model and focused graph | C2.2 semantics, C2.3 consequences, and C2.4 visual experience; later C3/C4/D/E/F enrichment |
+| Homepage | A, B, B.5, C1 data; C2.4 Dashboard implementation (manual gate pending) | C2.5 detail alignment; later C3 ownership, C4 documentation, D recovery readiness, E risk recommendations, and F planned changes |
+| Service Operations | C1 Service model, C2.2 semantics, C2.3 consequences, C2.4 graph experience | C2.5 Service/BF detail polish; later C3/C4/D/E/F enrichment |
 | Dependency Analysis | C2.1 graph plus C2.2 semantics | C2.3 explainable homelab consequences; later E enterprise impact and D2 recovery evidence |
 | Change Impact | C2 graph; E analysis engine | C3 owner; C4 change/validation objects; F2 intended-state overlay; F3 post-change reconciliation |
 
@@ -626,14 +629,14 @@ Examples:
 1. Preserve the completed **C2.1 — Shared Operational Graph** and
    **C2.2 — Lean Dependency Semantics**.
 2. Preserve the completed, live-accepted **C2.3 — Explainable Dependency Analysis**.
-3. Next, deliver **C2.4 — Homelab Operations Experience**: dashboard, visual
-   Knowledge Graph, enhanced Service Operations, and product polish.
-4. Deliver **F1-lite — Homelab Documentation**.
-5. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
+3. Complete live/manual acceptance of **C2.4 — Homelab Operations Experience**.
+4. Deliver **C2.5 — Entity Detail UX Polish**.
+5. Deliver **F1-lite — Homelab Documentation**.
+6. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
    inspect results, and reconcile. Contained B2-lite/F1-lite work may proceed in
    parallel where dependencies permit.
-6. Complete **Homelab Ready hardening** and ship the **HOMELAB READY RELEASE**.
-7. Continue the separate **Later Enterprise Evolution** path: richer dependency
+7. Complete **Homelab Ready hardening** and ship the **HOMELAB READY RELEASE**.
+8. Continue the separate **Later Enterprise Evolution** path: richer dependency
    semantics, C3, C4, D, richer B2, E, F, and ITSM/MSP capabilities.
 
 # Release gates

@@ -17,75 +17,9 @@ import {
   storeContext,
 } from "../lib/context-store";
 
+import { idOf, customerIdOf, selectedFromResponse, resolveSelection } from "../lib/workspace-selection.mjs";
+
 const WorkspaceContext = createContext(null);
-
-function idOf(value) {
-  if (value === null || value === undefined || value === "") return null;
-  return String(value);
-}
-
-function customerIdOf(site) {
-  return idOf(site?.customer_id ?? site?.customerId ?? site?.customer?.id);
-}
-
-function selectedFromResponse(response) {
-  if (
-    !response?.selected
-    && response?.selected_customer_id === undefined
-    && response?.selected_site_id === undefined
-  ) return null;
-  const selected = response?.selected || {};
-  return {
-    customerId: idOf(
-      selected.customer_id
-      ?? selected.customerId
-      ?? selected.customer?.id
-      ?? response?.selected_customer_id,
-    ),
-    siteId: idOf(
-      selected.site_id
-      ?? selected.siteId
-      ?? selected.site?.id
-      ?? response?.selected_site_id,
-    ),
-  };
-}
-
-function resolveSelection({ customers, sites, preferred, serverSelected, allowGlobal }) {
-  const customerIds = new Set(customers.map((customer) => idOf(customer.id)).filter(Boolean));
-  const sitesById = new Map(sites.map((site) => [idOf(site.id), site]));
-
-  function validated(candidate) {
-    if (!candidate) return null;
-    let customerId = idOf(candidate.customerId);
-    const siteId = idOf(candidate.siteId);
-    const site = siteId ? sitesById.get(siteId) : null;
-    if (!customerId && site) customerId = customerIdOf(site);
-    if (!customerId) return allowGlobal && !siteId ? { customerId: null, siteId: null } : null;
-    if (!customerIds.has(customerId)) return null;
-    return {
-      customerId,
-      siteId: site && customerIdOf(site) === customerId ? siteId : null,
-    };
-  }
-
-  let selection = validated(preferred) || validated(serverSelected);
-  if (!selection) {
-    selection = {
-      customerId: customers.length === 1 ? idOf(customers[0].id) : null,
-      siteId: null,
-    };
-  }
-  let { customerId, siteId } = selection;
-
-  const customerSites = customerId
-    ? sites.filter((site) => customerIdOf(site) === customerId)
-    : [];
-  if (siteId && customerIdOf(sitesById.get(siteId)) !== customerId) siteId = null;
-  if (!siteId && customerSites.length === 1) siteId = idOf(customerSites[0].id);
-
-  return { customerId, siteId };
-}
 
 export function WorkspaceContextProvider({ user, children }) {
   const loadGeneration = useRef(0);
@@ -168,26 +102,20 @@ export function WorkspaceContextProvider({ user, children }) {
 
   const selectCustomer = useCallback((value) => {
     const customerId = idOf(value);
-    if (!customerId) {
-      if (state.allowGlobal) commitSelection({ customerId: null, siteId: null });
-      return;
-    }
+    if (!customerId) return;
     if (!state.customers.some((customer) => idOf(customer.id) === customerId)) return;
 
     const customerSites = state.sites.filter((site) => customerIdOf(site) === customerId);
     const currentSiteIsValid = customerSites.some((site) => idOf(site.id) === state.siteId);
     const siteId = currentSiteIsValid
       ? state.siteId
-      : customerSites.length === 1 ? idOf(customerSites[0].id) : null;
+      : customerSites.length > 0 ? idOf(customerSites[0].id) : null;
     commitSelection({ customerId, siteId });
   }, [commitSelection, state.allowGlobal, state.customers, state.siteId, state.sites]);
 
   const selectSite = useCallback((value) => {
     const siteId = idOf(value);
-    if (!siteId) {
-      commitSelection({ customerId: state.customerId, siteId: null });
-      return;
-    }
+    if (!siteId) return;
     const site = state.sites.find((candidate) => idOf(candidate.id) === siteId);
     if (!site || customerIdOf(site) !== state.customerId) return;
     commitSelection({ customerId: state.customerId, siteId });
@@ -206,7 +134,7 @@ export function WorkspaceContextProvider({ user, children }) {
       availableSites,
       activeCustomer,
       activeSite,
-      reloadKey: `${state.customerId || "all-customers"}:${state.siteId || "all-sites"}`,
+      reloadKey: `${state.customerId || "no-customer"}:${state.siteId || "no-site"}`,
       selectCustomer,
       selectSite,
       reload: load,

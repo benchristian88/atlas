@@ -6,78 +6,82 @@ import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
+import { ServiceLandscape } from "../../components/service-landscape";
+import { CompletenessLine, EntityMark, RecordedStatus } from "../../components/operations-primitives";
+import { WIDGETS, graphHref } from "../../lib/operations-experience.mjs";
 import { apiRequest } from "../../lib/api";
+import { useRouter } from "next/navigation";
 
-const cards = [
-  { key: "customers", label: "Customers", href: "/admin/customers", description: "Managed organisations", permission: "customers.view" },
-  { key: "sites", label: "Sites", href: "/admin/sites", description: "Customer locations", permission: "sites.view" },
-  { key: "assets", label: "Assets", href: "/assets", description: "Managed infrastructure", permission: "assets.view" },
-  { key: "services", label: "Services", href: "/services", description: "Operational capabilities", permission: "services.view" },
-  { key: "business_functions", label: "Business Functions", href: "/business-functions", description: "Capabilities Services support", permission: "business_functions.view" },
-  { key: "networks", label: "Networks", href: "/networks", description: "VLANs and network segments", permission: "networks.view" },
-  { key: "relationships", label: "Relationships", href: "/topology", description: "Connections between assets", permission: "relationships.view" },
-  { key: "reconciliation", label: "Reconciliation", href: "/reconciliation", description: "Open knowledge decisions", permission: "reconciliation.view" },
-  { key: "open_knowledge_gap_count", label: "Knowledge gaps", href: "/knowledge-gaps", description: "Open required or conditional gaps", permission: "knowledge_gaps.view" },
-  { key: "topology", label: "Knowledge Graph", href: "/topology", description: "Five focused infrastructure lenses", value: "5", permission: "assets.view" },
+const metrics = [
+  { key: "assets", label: "Assets", type: "asset", href: "/assets", permission: "assets.view" },
+  { key: "services", label: "Services", type: "service", href: "/services", permission: "services.view" },
+  { key: "business_functions", label: "Business Functions", type: "business_function", href: "/business-functions", permission: "business_functions.view" },
+  { key: "open_knowledge_gap_count", label: "Knowledge Gaps", href: "/knowledge-gaps", permission: "knowledge_gaps.view" },
 ];
+
+function Summary({ summary, hasPermission }) {
+  return <section className="summary-grid dashboard-summary-grid" aria-label="Environment summary">{metrics.map((metric) => <Link className="ops-summary-item" href={hasPermission(metric.permission) ? metric.href : "/dashboard"} key={metric.key}>{metric.type && <EntityMark type={metric.type} />}<div><span>{metric.label}</span><strong>{hasPermission(metric.permission) ? summary?.[metric.key] ?? "—" : "—"}</strong></div></Link>)}</section>;
+}
+
+function EnvironmentOverview({ graph, graphError, workspace, hasPermission }) {
+  const router = useRouter();
+  const [quick, setQuick] = useState("all");
+  const services = graph?.nodes.filter((n) => n.entity_type === "service") || [];
+  const partial = services.filter((s) => !graph.edges.some((e) => e.source_key === s.key && ["service_asset", "service_business_function"].includes(e.edge_family))).length;
+  return <section className="ops-card"><header className="ops-section-header"><div><h2>Environment Overview</h2><p>From business purpose to Services and infrastructure.</p></div><Link className="text-button" href="/knowledge-graph">Open Knowledge Graph ↗</Link></header>
+    <div className="ops-segments" aria-label="Environment overview filter">{["all", "critical", "gaps"].map((value) => <button type="button" key={value} aria-pressed={quick === value} onClick={() => setQuick(value)}>{value === "all" ? "All" : value === "critical" ? "Critical" : "With gaps"}</button>)}</div>
+    {graph?.truncated && <p className="warning-banner" role="status">{graph.warnings.join(" ")} Open Focus to explore a specific entity.</p>}
+    {!graph ? <p role="status">{graphError ? "Service landscape is unavailable. Use Try again above to reload." : "Loading service landscape…"}</p> : <>
+      {!graph.edges.length && <div className="ops-guided"><h3>Build your service landscape</h3><p>Atlas can show how Business Functions, Services and Assets connect once those relationships are recorded.</p><div className="row-actions">{hasPermission("services.create") && <Link className="button button-primary" href="/services/new">Add a Service</Link>}{hasPermission("knowledge_gaps.view") && <Link className="button button-secondary" href="/knowledge-gaps">Open Knowledge Gaps</Link>}</div></div>}
+      {graph.nodes.length > 0 && <ServiceLandscape graph={graph} compact siteId={workspace.siteId} quick={quick} onSelect={(node) => router.push(graphHref({ focus: node.key }))} />}
+      {partial > 0 && <p className="ops-meta">{partial} Services are not yet connected to visible Assets or Business Functions.</p>}
+    </>}
+  </section>;
+}
+
+function Attention({ graph, summary, hasPermission }) {
+  const unknown = graph?.edges.filter((e) => e.failure_effect === "unknown").length;
+  const ungrouped = graph?.edges.filter((e) => ["service_asset", "service_service"].includes(e.edge_family) && !e.dependency_group_id).length;
+  const items = [
+    { label: "Unknown dependency effects", count: unknown, href: "/knowledge-graph", text: "Recorded dependencies with an unknown failure effect." },
+    { label: "Ungrouped dependencies", count: ungrouped, href: "/knowledge-graph", text: "Review whether these dependencies need explicit behaviour." },
+    ...(hasPermission("knowledge_gaps.view") ? [{ label: "Knowledge gaps", count: summary?.open_knowledge_gap_count, href: "/knowledge-gaps", text: "Required or conditional knowledge that needs attention." }, { label: "Critical Services with gaps", count: graph?.nodes.filter((n) => n.entity_type === "service" && n.criticality_rank >= 75 && n.open_gap_count > 0).length, href: "/services?attention=required_gaps", text: "High criticality Services with recorded knowledge gaps." }] : []),
+  ];
+  return <section className="ops-card"><header className="ops-section-header"><div><h2>Knowledge attention</h2><p>What Atlas needs you to review.</p></div></header>{items.map((item) => <Link className="ops-attention-row" href={item.href} key={item.label}><div><strong>{item.label}</strong><small>{item.text}</small></div><span className="ops-badge">{item.count ?? "—"}{graph?.truncated && item.href === "/knowledge-graph" ? "+" : ""}</span><span aria-hidden="true">›</span></Link>)}<p className="ops-meta">Knowledge quality based on recorded data.</p></section>;
+}
+
+function CriticalServices({ graph, graphError }) {
+  const services = graph?.nodes.filter((n) => n.entity_type === "service" && n.criticality_rank >= 75).sort((a, b) => b.criticality_rank - a.criticality_rank || a.name.localeCompare(b.name)) || [];
+  return <section className="ops-card"><header className="ops-section-header"><div><h2>Critical Services</h2><p>Recorded status and required knowledge completeness.</p></div><Link className="text-button" href="/services">View all</Link></header><div className="critical-service-grid">{services.slice(0, 3).map((node) => <Link className="critical-service-card" href={graphHref({ focus: node.key })} key={node.key}><strong>{node.name}</strong><div className="row-actions"><span className="ops-badge">{node.criticality_name}</span><RecordedStatus state={node.operational_state} /></div><CompletenessLine node={node} /></Link>)}</div>{!graph ? <p role="status">{graphError ? "Critical Services are unavailable." : "Loading Services…"}</p> : !services.length && <p className="ops-meta">No high criticality Services recorded in this view.</p>}{services.length > 3 && <Link className="text-button" href="/services">View {services.length - 3} more Services →</Link>}</section>;
+}
+
+function RecentChanges({ changes, changesError, hasPermission }) {
+  return <section className="ops-card"><header className="ops-section-header"><div><h2>Recent meaningful changes</h2><p>Updates to accepted Atlas knowledge.</p></div>{hasPermission("changes.view") && <Link className="text-button" href="/changes">View all</Link>}</header>{!hasPermission("changes.view") ? <p className="ops-meta">Changes are unavailable with your current permissions.</p> : changes == null ? <p role="status">{changesError ? "Recent changes are unavailable." : "Loading changes…"}</p> : !changes.length ? <p className="ops-meta">No meaningful changes recorded yet.</p> : <ol className="ops-activity">{changes.map((change) => <li key={change.id}><Link href="/changes"><strong>{change.summary}</strong><small>{change.entity_name_snapshot}</small></Link><time dateTime={change.occurred_at}>{new Date(change.occurred_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></li>)}</ol>}</section>;
+}
+
+const widgetComponents = { "environment-summary": Summary, "environment-overview": EnvironmentOverview, attention: Attention, "critical-services": CriticalServices, "recent-meaningful-changes": RecentChanges };
 
 export default function DashboardPage() {
   const { hasAnyPermission, hasPermission } = useAuth();
   const workspace = useWorkspaceContext();
-  const [counts, setCounts] = useState(null);
-  const [reconciliation, setReconciliation] = useState(null);
-  const [recentChanges, setRecentChanges] = useState([]);
+  const [data, setData] = useState({});
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   const canView = hasAnyPermission(["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view", "services.view", "business_functions.view"]);
-
+  const canGraph = hasAnyPermission(["assets.view", "services.view", "business_functions.view"]);
   useEffect(() => {
-    if (!canView) return;
-    async function loadCounts() {
-      try {
-        const [summary, queueSummary, changes] = await Promise.all([
-          apiRequest("/dashboard/summary"),
-          hasPermission("reconciliation.view") ? apiRequest("/reconciliation-items/summary") : Promise.resolve(null),
-          hasPermission("changes.view") ? apiRequest("/changes?limit=6&offset=0") : Promise.resolve({ items: [] }),
-        ]);
-        setCounts(summary);
-        setReconciliation(queueSummary);
-        setRecentChanges(changes.items);
-      } catch (requestError) {
-        setError(requestError.message || "Atlas could not load dashboard counts.");
-      }
-    }
-    loadCounts();
-  }, [canView, hasPermission, workspace.reloadKey]);
-
+    if (!canView || !workspace.customerId || !workspace.siteId) return;
+    let active = true;
+    setData(canGraph ? {} : { graphError: true }); setError("");
+    const requests = [["summary", "/dashboard/summary?include_customer_wide=true"], ...(canGraph ? [["graph", "/operational-graph/landscape"]] : []), ...(hasPermission("changes.view") ? [["changes", "/changes?limit=6&offset=0&include_customer_wide=true"]] : [])];
+    Promise.all(requests.map(async ([key, path]) => { try { const response = await apiRequest(path); if (active) setData((old) => ({ ...old, [key]: key === "changes" ? response.items : response })); } catch (e) { if (active) { setError(e.message || "Atlas could not load this dashboard."); setData((old) => ({ ...old, [`${key}Error`]: true })); } } }));
+    return () => { active = false; };
+  }, [canView, canGraph, hasPermission, workspace.customerId, workspace.siteId, retry]);
   if (!canView) return <AccessDenied />;
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="Dashboard"
-        title="Infrastructure at a glance"
-        description="Live totals for the active customer and site context."
-      />
-      {error && <div className="error-banner" role="alert">Could not load summary counts. {error}</div>}
-      {!counts && !error && <div className="status-banner" role="status">Loading summary…</div>}
-      <section className="summary-grid dashboard-summary-grid" aria-label="Atlas Impact summary">
-        {cards.filter((card) => hasPermission(card.permission)).map((card) => (
-          <Link className="summary-card" href={card.href} key={card.key}>
-            <span>{card.label}</span>
-            <strong>{card.value || (counts ? counts[card.key] : "—")}</strong>
-            <span className="summary-description">{card.description}</span>
-            <span className="card-link">View <span aria-hidden="true">→</span></span>
-          </Link>
-        ))}
-      </section>
-      {hasPermission("knowledge_gaps.view") && counts && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Completeness</p><h2>Knowledge health</h2></div><Link className="card-link" href="/knowledge-gaps">Review knowledge gaps →</Link></div><div className="detail-grid"><div><span>Critical gaps</span><strong>{counts.critical_knowledge_gap_count}</strong></div><div><span>High gaps</span><strong>{counts.high_knowledge_gap_count}</strong></div><div><span>Assets with critical gaps</span><strong>{counts.assets_with_critical_gaps}</strong></div><div><span>Not evaluated</span><strong>{counts.assets_not_evaluated}</strong></div><div><span>Operationally complete</span><strong>{counts.assets_operationally_complete}</strong></div><div><span>Expired exceptions</span><strong>{counts.expired_exception_count}</strong></div></div></section>}
-      {hasPermission("knowledge_gaps.view") && counts && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Services</p><h2>Service knowledge health</h2></div><Link className="card-link" href="/services?attention=required_gaps">Review Services →</Link></div><div className="detail-grid"><div><span>Total Services</span><strong>{counts.services}</strong></div><div><span>Critical Services</span><strong>{counts.critical_services}</strong></div><div><span>Services with required gaps</span><strong>{counts.services_with_required_gaps}</strong></div><div><span>Missing recovery targets</span><strong>{counts.services_missing_recovery_targets}</strong></div><div><span>Missing Asset dependencies</span><strong>{counts.services_missing_dependencies}</strong></div></div></section>}
-      {hasPermission("reconciliation.view") && reconciliation && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Reconciliation</p><h2>Decision queues</h2></div><Link className="card-link" href="/reconciliation">Review queues →</Link></div><div className="detail-grid"><div><span>Open</span><strong>{reconciliation.by_status.open || 0}</strong></div><div><span>Deferred</span><strong>{reconciliation.by_status.deferred || 0}</strong></div><div><span>Exceptions</span><strong>{reconciliation.by_status.exception || 0}</strong></div><div><span>Actionable</span><strong>{reconciliation.actionable}</strong></div></div></section>}
-      {hasPermission("changes.view") && <section className="detail-card"><div className="form-card-header"><div><p className="eyebrow">Knowledge</p><h2>Recent meaningful changes</h2></div><Link className="card-link" href="/changes">View timeline →</Link></div>{recentChanges.length === 0 ? <p className="secondary-text">No meaningful changes yet.</p> : <div className="dashboard-change-list">{recentChanges.map((change) => <div key={change.id}><span><strong>{change.entity_name_snapshot}</strong> — {change.summary}</span><time>{new Date(change.occurred_at).toLocaleString()}</time></div>)}</div>}</section>}
-      {hasPermission("assets.view") && <section className="dashboard-prompt">
-        <div><p className="eyebrow">Homelab modelling</p><h2>Map infrastructure from hardware to workloads</h2><p>Start with Customer → Site → Proxmox Host → VM/LXC/Docker Host → Workload, then connect dependencies.</p></div>
-        <Link className="button button-primary" href="/topology">Open Topology</Link>
-      </section>}
-    </>
-  );
+  return <div className="operations-page"><PageHeader title="Dashboard" description="Your environment, built from recorded knowledge." />
+    {!workspace.customerId || !workspace.siteId ? <section className="ops-card"><h2>Set up your environment</h2><p>Select a Customer and Site to build your service landscape.</p>{hasPermission("sites.manage") && <Link className="text-button" href="/admin/sites">Manage Sites →</Link>}</section> : <>
+      {error && <div className="error-banner" role="alert">{error} <button className="text-button" onClick={() => setRetry((n) => n + 1)} type="button">Try again</button></div>}
+      <div className="ops-dashboard">{WIDGETS.map((widget) => { const Component = widgetComponents[widget.id]; return <div className={`widget-${widget.id}`} data-widget-id={widget.id} key={widget.id}><Component {...data} workspace={workspace} hasPermission={hasPermission} /></div>; })}</div>
+    </>}
+  </div>;
 }

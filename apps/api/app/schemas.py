@@ -1719,6 +1719,12 @@ class OperationalGraphNode(BaseModel):
     open_gap_count: int | None = None
     source: str | None = None
     updated_at: datetime | None = None
+    site_name: str | None = None
+    criticality_rank: int | None = None
+    required_total: int | None = None
+    required_satisfied: int | None = None
+    contextual_ip: str | None = None
+    contextual_vlan: int | None = None
 
 
 class OperationalGraphEdge(BaseModel):

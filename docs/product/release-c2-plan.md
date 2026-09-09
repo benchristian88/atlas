@@ -1,8 +1,14 @@
 # Release C2 implementation plan
 
-Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 next/planned
+Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; manual acceptance pending
 
-Latest implemented increment: **C2.3 — Explainable Dependency Analysis**
+Latest implemented increment: **C2.4 — Homelab Operations Experience**
+
+C2.4 implementation and its pending manual gate are described in the
+[operations architecture](../architecture/homelab-operations-experience.md) and
+[validation record](../testing/release-c2-homelab-operations-experience.md).
+
+Previous increment: **C2.3 — Explainable Dependency Analysis**
 
 C2.3 adds `POST /api/dependency-analysis` and a small Preview unavailable panel
 on Asset and Service details. It uses current authorized graph dependencies,
@@ -122,7 +128,7 @@ by the DNS/AdGuard scenarios, which is not a live-health claim.
 in the [C2.3 record](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance)
 remain automated-only C2.3 coverage. That document separates these live results
 from the unchanged implementation-time automated counts, commands, environment
-limitations and original manual checklist. C2.4 is next/planned; this acceptance
+limitations and original manual checklist. C2.4 was still planned at that acceptance; it
 does not complete F1-lite, B2-lite or Homelab Ready.
 
 ## Purpose
@@ -140,7 +146,8 @@ The release is split into four increments:
 - **C2.3 — Explainable Dependency Analysis:** bounded consequence analysis,
   actual explanation paths, and small deterministic result states.
 - **C2.4 — Homelab Operations Experience:** a polished dashboard, visual graph,
-  enhanced Service Operations, exploration, and product refinement.
+  integrated Focus/Analysis exploration and product refinement; Service/BF
+  detail redesign is C2.5.
 
 C2.1 is deliberately useful without attempting full impact analysis. The
 near-term target is a Homelab Ready product, not completion of every later
@@ -712,39 +719,27 @@ C2.3 is not a general enterprise reasoning or confidence-scoring framework.
 
 # C2.4 — Homelab Operations Experience
 
-## Purpose
+Implemented on the C2.4 feature working tree; live/manual acceptance pending.
+The fixed Dashboard registry and three-lane navigational landscape, full
+Knowledge Graph Overview/Focus, temporary C2.3 analysis overlay, persistent
+inspector, progressive disclosure, URL state and responsive/accessibility
+foundation are described in the [architecture](../architecture/homelab-operations-experience.md).
 
-C2.4 turns the C1/C2 technical foundation into a polished, highly visual
-product. It is a major product release rather than cosmetic cleanup.
-
-## Product outcomes
-
-- a beautiful operational homepage using defensible real Atlas data to explain
-  the environment, what matters, what Atlas knows, and what needs attention;
-- a polished interactive Knowledge Graph over the existing C2.1 API, with
-  distinct entity types, semantic direction, focus/navigation, bounded depth
-  and edge filters where useful, responsive behavior, accessibility, and clear
-  empty/truncated states;
-- enhanced Service Operations showing providers, dependencies, dependants,
-  supported Business Functions, criticality, completeness, unknown semantics,
-  and C2.3 consequence information where available;
-- natural Asset → Service → Business Function → infrastructure exploration; and
-- deliberate hierarchy, spacing, loading/empty states, terminology, theme
-  compatibility, and Atlas Impact branding.
-
-The API remains authoritative for graph membership, relationship semantics,
-authorization, and dependency conclusions. The browser may lay out and filter
-authorized results but must not become an impact engine. Dashboard summaries
-must not imply live health without live evidence.
+Services remain customer-wide or site-specific. The selected Site is a viewpoint
+for the opt-in C2.4 graph reads; endpoint authorization remains authoritative.
+No schema migration or graph library was added. Existing topology and detail
+routes remain compatible. No Service or Business Function detail redesign is
+included, beyond necessary record-context compatibility adaptations.
 
 ## Relationship to Homelab Ready
 
-After C2.4, the principal product path continues through F1-lite Homelab
-Documentation, B2-lite Live Proxmox Discovery, and Homelab Ready hardening. C3
-People/Teams, C4 formal Knowledge Objects, advanced recovery, richer dependency
-semantics, full enterprise Impact Analysis, and intended-state simulation are
-not C2 acceptance requirements. See
-[`development-roadmap.md`](development-roadmap.md) for the canonical sequence.
+After C2.4 manual acceptance, deliver **C2.5 — Entity Detail UX Polish**, then
+F1-lite Homelab Documentation, B2-lite Live Proxmox Discovery and release
+hardening. C2.5 standardizes Service/BF typography, cards, status, criticality,
+completeness and relationship presentation without new domain semantics.
+Interface-owned IP cleanup is a post-C2.4 data-preserving backlog item, not a
+migration in this release. See the [roadmap](development-roadmap.md) for scope
+and explicitly deferred enterprise/customization capabilities.
 
 # Risks and mitigations
 

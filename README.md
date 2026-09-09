@@ -361,7 +361,8 @@ See the [Service model](docs/architecture/service-model.md),
 Dependency Semantics and C2.3 — Explainable Dependency Analysis are implemented
 with live LXC acceptance complete for their respective scopes.** Atlas's near-term
 product target is a polished, secure, publicly usable **Homelab Ready Release**.
-C2.4 Homelab Operations Experience is next/planned, followed by F1-lite Homelab
+C2.4 Homelab Operations Experience is implemented on its feature working tree
+with manual acceptance pending. C2.5 Entity Detail UX Polish follows, then F1-lite Homelab
 Documentation, B2-lite Live Proxmox Discovery, and contained release hardening.
 
 Manual and curated operational knowledge remains first-class. People/Teams,
