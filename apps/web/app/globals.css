@@ -885,8 +885,10 @@ tbody tr:hover { background: var(--surface-muted); }
 .gap-history { margin-top: 1rem; }
 .completeness-panel, .gap-row, .gap-row > div { min-width: 0; overflow-wrap: anywhere; }
 .form-card select[multiple] { min-height: 7rem; }
-.compact-summary-grid { margin-bottom: 20px; }
-.compact-summary-grid .summary-card { min-height: 112px; text-align: left; }
+.compact-summary-grid { gap: 8px; margin-bottom: 18px; }
+:where(.compact-summary-grid) .asset-type-filter { background: var(--surface); justify-content: space-between; max-width: none; min-width: 0; text-align: left; }
+.compact-summary-grid .asset-type-filter span { white-space: normal; }
+.compact-summary-grid .asset-type-filter strong { flex-shrink: 0; }
 .duration-field { border: 0; margin: 0; min-width: 0; padding: 0; }
 .duration-field legend { color: var(--muted); font-size: 13px; font-weight: 700; margin-bottom: 7px; }
 .duration-control { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(110px, .65fr); }
