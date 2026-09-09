@@ -57,7 +57,7 @@ CRITICAL_COLUMNS = {
         "id", "email", "password_hash", "display_name", "is_active",
         "force_password_change", "last_login_at", "failed_login_count",
         "locked_until", "session_version", "auth_provider", "external_subject",
-        "mfa_enabled", "accent_colour", "created_at", "updated_at",
+        "mfa_enabled", "accent_colour", "theme_mode", "created_at", "updated_at",
     },
     "access_assignments": {
         "id", "user_id", "role_id", "scope_type", "customer_id", "site_id",

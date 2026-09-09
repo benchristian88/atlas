@@ -62,6 +62,7 @@ erDiagram
         string external_subject
         boolean mfa_enabled
         string accent_colour "nullable #RRGGBB preference"
+        string theme_mode "nullable light/dark/system preference"
     }
     ROLE {
         uuid id PK
@@ -232,7 +233,9 @@ use, and `session_version` invalidates already-issued signed sessions.
 release implements local passwords, not external identity or MFA.
 `accent_colour` is a nullable, per-user presentation preference stored as a
 canonical uppercase `#RRGGBB` value. A null value selects the Atlas default
-theme and preserves the existing appearance for upgraded accounts.
+accent. `theme_mode` independently selects `light`, `dark`, or `system`;
+null is presented as `system`, retaining OS-based mode selection for upgraded
+accounts. Both preferences use the authenticated profile update and audit flow.
 
 ### Role, Permission, and AccessAssignment
 

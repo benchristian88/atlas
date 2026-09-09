@@ -76,6 +76,7 @@ def dashboard_summary(
         )
     ),
     db: Session = Depends(get_db),
+    include_customer_wide: bool = False,
 ):
     customer_predicate = scope_condition(
         principal, "customers.view", Customer.id
@@ -190,8 +191,8 @@ def dashboard_summary(
             source.site_id == context.site_id,
             target.site_id == context.site_id,
         )
-        gap_query = gap_query.where(KnowledgeGap.site_id == context.site_id)
-        completeness_query = completeness_query.where(KnowledgeCompletenessSummary.site_id == context.site_id)
+        gap_query = gap_query.where(or_(KnowledgeGap.site_id == context.site_id, KnowledgeGap.site_id.is_(None)) if include_customer_wide else KnowledgeGap.site_id == context.site_id)
+        completeness_query = completeness_query.where(or_(KnowledgeCompletenessSummary.site_id == context.site_id, KnowledgeCompletenessSummary.site_id.is_(None)) if include_customer_wide else KnowledgeCompletenessSummary.site_id == context.site_id)
     open_items = list(db.scalars(open_items_query))
     category_counts = {
         category: sum(item.category == category for item in open_items)

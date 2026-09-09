@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.authorization import Principal, RequestContext, require_any_permission
+from app.authorization import ActiveContext, Principal, RequestContext, require_any_permission
 from app.database import get_db
 from app.schemas import OperationalGraphResponse
 from app.services.operational_graph import (
@@ -21,6 +21,18 @@ from app.services.operational_graph import (
 router = APIRouter(prefix="/operational-graph", tags=["operational graph"])
 
 
+@router.get("/landscape", response_model=OperationalGraphResponse)
+def get_landscape(
+    context: RequestContext,
+    principal: Principal = Depends(require_any_permission("assets.view", "services.view", "business_functions.view")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return OperationalGraphBuilder(db, principal).landscape(context)
+    except GraphFocusNotFound as exc:
+        raise HTTPException(status_code=404, detail="Record not found") from exc
+
+
 @router.get("", response_model=OperationalGraphResponse)
 def get_operational_graph(
     context: RequestContext,
@@ -30,6 +42,7 @@ def get_operational_graph(
     direction: Literal["both", "outgoing", "incoming"] = "both",
     node_limit: int = Query(default=250, ge=1, le=500),
     edge_family: list[str] | None = Query(default=None),
+    site_viewpoint: bool = False,
     principal: Principal = Depends(
         require_any_permission(
             "assets.view", "services.view", "business_functions.view"
@@ -37,6 +50,8 @@ def get_operational_graph(
     ),
     db: Session = Depends(get_db),
 ):
+    if site_viewpoint and context.customer_id is None:
+        raise HTTPException(status_code=404, detail="Record not found")
     requested_families = set()
     for value in edge_family or []:
         requested_families.update(
@@ -61,7 +76,7 @@ def get_operational_graph(
                     if edge_family is not None
                     else EDGE_FAMILIES
                 ),
-                context=context,
+                context=ActiveContext(context.customer_id, None) if site_viewpoint and context.customer_id else context,
             )
         )
     except GraphFocusNotFound as exc:

@@ -82,6 +82,7 @@ def _filtered_changes(
     occurred_to: datetime | None,
     search: str | None,
     attention_required: bool | None,
+    include_customer_wide: bool = False,
 ):
     query = select(KnowledgeChange).where(
         scope_condition(
@@ -96,7 +97,7 @@ def _filtered_changes(
     if effective_customer:
         query = query.where(KnowledgeChange.customer_id == effective_customer)
     if effective_site:
-        query = query.where(KnowledgeChange.site_id == effective_site)
+        query = query.where(or_(KnowledgeChange.site_id == effective_site, KnowledgeChange.site_id.is_(None)) if include_customer_wide else KnowledgeChange.site_id == effective_site)
     if change_type:
         query = query.where(KnowledgeChange.change_type == change_type)
     if entity_type:
@@ -142,6 +143,7 @@ def list_changes(
     principal: Principal = Depends(require_permission("changes.view")),
     customer_id: uuid.UUID | None = None,
     site_id: uuid.UUID | None = None,
+    include_customer_wide: bool = False,
     change_type: str | None = None,
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
@@ -169,6 +171,7 @@ def list_changes(
         occurred_to=date_to,
         search=search,
         attention_required=attention_required,
+        include_customer_wide=include_customer_wide,
     )
     total = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
     rows = db.scalars(

@@ -25,6 +25,29 @@
 > schema, reachable backend path, usable frontend path where applicable, and supporting tests.
 
 
+## C2.4 working-tree audit — 9 September 2026
+
+**Implemented; live/manual acceptance pending.** Feature branch
+`feature/c2-4-homelab-operations-experience`, based on
+`69c9a9a8ee3ca9d8b49d281cb9adf031c806e431` (the C2.3 merge on `dev`).
+The earlier named audit commits below remain historical baselines; C2.4 is
+uncommitted implementation, not a merged or live-accepted release.
+
+Reachable evidence: the Dashboard's five-widget registry and four metrics,
+`/knowledge-graph` Overview/Focus/Analysis, shared lane presentation and inspector,
+`GET /api/operational-graph/landscape`, opt-in authorized Site-viewpoint reads,
+C2.4 tests, and the [validation record](../testing/release-c2-homelab-operations-experience.md).
+The [architecture](../architecture/homelab-operations-experience.md) documents
+progressive disclosure, accessibility, themes, scope and existing completeness
+reuse. No new graph library, engine, persistence or migration was introduced.
+
+Services retain customer-wide or site-specific scope. Customer-wide Services can
+show authorized cross-site providers; existing site-specific link rules remain.
+C2.5 Entity Detail UX Polish is planned before F1-lite. Interface-owned IP cleanup
+remains a post-C2.4 data-preserving backlog item. Full impact semantics and live
+availability claims remain outside this release.
+
+
 ---
 
 # C2.3 current completion record
@@ -58,8 +81,8 @@ isolation and the other cases identified in the acceptance record remain
 automated-only C2.3 evidence. Live `unaffected` observations concerned Nginx Proxy
 Manager as a member unaffected by the scenario, not proof of live health.
 
-Current release status is **C2.1 complete; C2.2 complete; C2.3 complete; C2.4
-next/planned**. C2.4 visual redesign, Business Function impact semantics,
+Current release status is **C2.1/C2.2/C2.3 complete; C2.4 implemented on the
+feature working tree with manual acceptance pending**. Business Function impact semantics,
 automatic Asset→Asset failure propagation, minimum/quorum, weighted/conditional
 rules, confidence scoring, probability, full Impact Analysis, recovery analysis,
 change simulation and scenario persistence remain deferred beyond C2.3.
@@ -276,7 +299,7 @@ The repository audit materially changes several classifications:
 | Release B — Discovery and Reconciliation | **Implemented for simulation and reconciliation; live plugin operation is partial** |
 | B.5 — Knowledge Completeness | **Implemented for Assets and Services** |
 | Release C1 — Homelab Service MVP | **Implemented**            |
-| Release C2 — shared graph and dependency analysis foundations | **C2.1/C2.2/C2.3 complete; C2.4 next/planned**  |
+| Release C2 — shared graph and dependency analysis foundations | **C2.1/C2.2/C2.3 complete; C2.4 implemented; manual acceptance pending**  |
 | F1-lite — Homelab Documentation | **Planned but not implemented; renderer/storage foundation exists** |
 | B2-lite — Live Proxmox Discovery | **Partially implemented foundation; end-to-end journey absent** |
 | Homelab Ready Release | **Planned but not implemented** |
@@ -394,6 +417,7 @@ unchanged.
 | Customer/site context selector | **Implemented** | Foundation | Context API, workspace context and revalidation are present. |
 | User/role/assignment administration | **Implemented** | Foundation | Guarded APIs and administration pages exist. |
 | Per-user accent preference | **Implemented** | UI/account | Persisted, validated and tested. |
+| Per-user theme mode | **Implemented** | UI/account | Profile saves Light, Dark or System independently of accent colour; shared shell, Dashboard and Knowledge Graph tokens follow the resolved mode. Nullable `users.theme_mode` is added by migration `20260909_0015`. |
 | Top-right account menu | **Implemented** | UI/account | Profile/logout dropdown exists and is tested. |
 | Initials/image fallback avatar | **Implemented** | UI/account | `user-avatar.js` provides safe fallback behavior. |
 | Avatar/photo upload | **Deferred** | Future account work | No avatar field, media storage or upload endpoint exists. |
@@ -444,7 +468,7 @@ unchanged.
 | Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
 | All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
 | Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
-| Second-hop Knowledge Graph topology focus | **Planned but not implemented** | C2.4/future topology | The generic operational graph supports depth `0..2`, but the current topology lens remains direct-neighbour focused. |
+| Second-hop Knowledge Graph focus | **Implemented** | C2.4 | `/knowledge-graph` Focus supports depth 1/2 through the generic operational graph. The retained legacy topology lenses remain direct-neighbour focused. |
 | Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
 
 
@@ -637,7 +661,8 @@ unchanged.
 | Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..2`, deduplication, cycles, and explicit limits without impact propagation. |
 | Lean dependency semantics (`all`/`any`, failure effect) | **Implemented; live acceptance complete on feature working tree** | C2.2 | Temporal groups/memberships persist required/optional, all/any, and unavailable/degraded/unknown meaning; APIs, Service UI, and generic graph expose it while retaining `required_for_operation`. Live acceptance covered mixed membership, graph projection, fallback, direction, and non-disclosure; `any` remains automated-only because the live topology had no genuine redundant pair. |
 | Explainable dependency consequence analysis | **Implemented; live acceptance complete for lean scope** | C2.3 | Asset/Service `unavailable` input via `POST /api/dependency-analysis` and preview panels; direct/downstream consequences; `all`/`any` evaluation; `unavailable`/`degraded`/`unknown`/`unaffected` result semantics; structured canonical-edge explanation paths; bounded deterministic, cycle-safe analysis; authorization/non-disclosure. Live acceptance covers unavailable/unknown propagation and the structural/security boundaries; `degraded`, `any`, cycles, truncation and site isolation remain automated-only C2.3 coverage. See [C2.3 evidence](../testing/release-c2-explainable-dependency-analysis.md). |
-| Homelab Operations Experience | **Planned but not implemented** | C2.4 | Existing summaries and graph components are foundations, not the planned polished dashboard, visual graph, and enhanced Service Operations release. |
+| Homelab Operations Experience | **Implemented; manual acceptance pending** | C2.4 | Fixed Dashboard registry, three-lane Knowledge Graph, Focus/Analysis inspector, URL state, explicit disclosure, authorized Site viewpoint, accessibility and responsive themes. See the C2.4 audit above. |
+| Entity Detail UX Polish | **Planned but not implemented** | C2.5 | Service/BF detail redesign and reuse of C2.4 primitives before F1-lite. |
 | Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
 | Dedicated `/impact-analysis` route | **Planned but not implemented** | E       | Navigation entry is unavailable. |
 | Evidence-qualified impact path | **Planned but not implemented** | E       | No path/evidence engine. |
@@ -688,9 +713,9 @@ These items are committed future work in current repository documentation.
 
 ## C2 — remaining Homelab Ready foundations
 
-* C2.4 polished operational homepage, visual Knowledge Graph, enhanced Service
-  Operations, environment exploration, responsiveness, accessibility, and
-  product polish.
+* C2.5 Entity Detail UX Polish: Service and Business Function detail redesign,
+  typography/density, status, criticality, completeness and relationship polish.
+  C2.4 implementation is complete; its live/manual acceptance gate remains open.
 
 The dedicated full Impact Analysis product, blast radius, recovery ordering,
 and business severity remain Release E. C2.3 adds only the contained hypothetical
@@ -936,12 +961,12 @@ C2.1 now provides:
 7. compatibility adapters for both focused C1 routes; and
 8. no impact, outage, recovery, scoring, or change-safety conclusions.
 
-## Homelab Ready stream: C2.3 complete, C2.4 next
+## Homelab Ready stream: C2.4 manual gate, C2.5 next
 
 C2.3 bounded, cycle-safe, authorized consequence analysis explained by actual
-paths is implemented with live acceptance complete for its lean scope. Next is
-C2.4: polished dashboard, visual graph, enhanced Service Operations, environment
-exploration, and deliberate UX refinement.
+paths is implemented with live acceptance complete for its lean scope. C2.4
+Dashboard and Knowledge Graph implementation has manual acceptance pending.
+C2.5 Entity Detail UX Polish follows before F1-lite.
 
 ## Later enterprise release: C3 structured ownership
 
@@ -984,7 +1009,8 @@ Once live discovery and ownership are stable, add:
 | **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Implemented** |
 | **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Implemented; live acceptance complete on feature working tree** |
 | **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Implemented; live acceptance complete for lean scope** |
-| **C2.4 Homelab Operations Experience** | Polished dashboard, visual graph, enhanced Service Operations and exploration | **Planned** |
+| **C2.4 Homelab Operations Experience** | Dashboard, visual graph, Focus/Analysis inspector and exploration | **Implemented; manual acceptance pending** |
+| **C2.5 Entity Detail UX Polish** | Service/BF typography, cards, completeness/status and relationships | **Planned before F1-lite** |
 | **F1-lite Homelab Documentation** | Documents API/list/detail, Markdown rendering, Asset links and honest content status | **Planned; renderer/storage foundation exists** |
 | **Homelab Ready Release** | Onboarding, deployment/upgrade, backup/restore, security, accessibility, device validation and release artefacts | **Planned** |
 | **C3 MSP Ownership** | People, Teams, memberships and role assignments | **Planned after Homelab Ready**   |
@@ -1022,12 +1048,13 @@ live LXC acceptance is complete for its lean scope. Unknown semantics produce
 
 ## Increment 4 — C2.4 Homelab Operations Experience
 
-Deliver the polished operational homepage, interactive visual Knowledge Graph,
-enhanced Service Operations, intuitive environment exploration, and deliberate
-responsive/accessibility/branding refinement.
+Implemented the operational homepage, interactive Knowledge Graph, integrated
+C2.3 analysis, persistent inspector and responsive/accessibility foundation.
+Live/manual acceptance remains pending. Service/BF detail redesign belongs to C2.5.
 
 ## Product completion increments
 
+- Deliver C2.5 Entity Detail UX Polish without major new domain semantics.
 - Deliver F1-lite Documents using the existing renderer/storage foundation.
 - Deliver B2-lite configure/test/Run Now/result/reconcile Proxmox discovery.
 - Complete Interface-first IP, onboarding, deployment/upgrade, backup/restore,
@@ -1041,7 +1068,7 @@ Retain richer dependency semantics, C3, C4, D, broader B2 automation, full E,
 intended-state F work, and ITSM/MSP capabilities after Homelab Ready.
 
 The roadmap must continue to distinguish implemented C2.1 structure and C2.2
-semantics and C2.3 analysis from planned C2.4 product experience and later full
+semantics and C2.3 analysis from C2.4 product experience (manual gate pending) and later full
 Impact Analysis.
 
 ---
@@ -1069,7 +1096,7 @@ The delivered **C2.1 — Shared Operational Graph** and live-accepted **C2.2 —
 Lean Dependency Semantics** let Atlas prove its knowledge, relationship, and
 lean dependency model with manually curated accepted data. C2.3 explainable
 analysis is implemented with live acceptance complete for its lean scope. Next
-are C2.4 product experience, F1-lite,
+are C2.4 manual acceptance, C2.5 Entity Detail UX Polish, F1-lite,
 B2-lite, and release hardening.
 
 C2.1 now has a reusable graph builder, a generic focused graph API,

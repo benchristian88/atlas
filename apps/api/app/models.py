@@ -57,6 +57,7 @@ class TimestampMixin:
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
+        CheckConstraint("theme_mode IN ('light', 'dark', 'system')", name="theme_mode"),
         UniqueConstraint(
             "auth_provider",
             "external_subject",
@@ -69,6 +70,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     accent_colour: Mapped[str | None] = mapped_column(String(7))
+    theme_mode: Mapped[str | None] = mapped_column(String(6))
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
     )

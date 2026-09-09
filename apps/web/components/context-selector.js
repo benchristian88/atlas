@@ -6,7 +6,6 @@ export function ContextSelector() {
   const {
     activeCustomer,
     activeSite,
-    allowGlobal,
     availableSites,
     customerId,
     customers,
@@ -14,7 +13,7 @@ export function ContextSelector() {
     selectSite,
     siteId,
   } = useWorkspaceContext();
-  const customerIsFixed = customers.length === 1 && !allowGlobal;
+  const customerIsFixed = customers.length === 1;
   const siteIsFixed = Boolean(customerId) && availableSites.length === 1;
 
   return (
@@ -33,11 +32,7 @@ export function ContextSelector() {
             onChange={(event) => selectCustomer(event.target.value)}
             value={customerId || ""}
           >
-            {allowGlobal ? (
-              <option value="">All customers</option>
-            ) : (
-              <option disabled value="">Choose customer</option>
-            )}
+            <option disabled value="">Choose customer</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>{customer.name}</option>
             ))}
@@ -50,7 +45,7 @@ export function ContextSelector() {
       {!customerId ? (
         <span className="context-value">
           <span>Site</span>
-          <strong>{allowGlobal ? "All sites" : "Choose a customer"}</strong>
+          <strong>{"Choose a customer"}</strong>
         </span>
       ) : siteIsFixed ? (
         <span className="context-value">
@@ -65,7 +60,7 @@ export function ContextSelector() {
             onChange={(event) => selectSite(event.target.value)}
             value={siteId || ""}
           >
-            <option value="">All sites</option>
+            <option disabled value="">{availableSites.length ? "Choose site" : "No sites available"}</option>
             {availableSites.map((site) => (
               <option key={site.id} value={site.id}>{site.name}</option>
             ))}

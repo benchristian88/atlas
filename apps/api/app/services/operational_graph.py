@@ -11,11 +11,14 @@ from typing import Callable, Literal
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.authorization import ActiveContext, Principal
+from app.authorization import ActiveContext, Principal, scope_condition
 from app.models import (
     Asset,
     AssetRelationship,
     AssetType,
+    AssetInterface,
+    Network,
+    Site,
     BusinessFunction,
     CriticalityLevel,
     DependencyGroup,
@@ -125,6 +128,66 @@ class OperationalGraphBuilder:
 
     def build_dependency_projection(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
         return self._build(request)
+
+    def landscape(self, context: ActiveContext, *, node_limit: int = 500) -> OperationalGraphResponse:
+        """One batched Site-viewpoint read, using the focused projection loaders.
+
+        Seed local/customer-wide knowledge; expand only Service relationships
+        once. A remote provider never seeds expansion of its entire Site.
+        """
+        if context.customer_id is None or context.site_id is None:
+            raise GraphFocusNotFound
+        objects, types = {}, {}
+        truncated = False
+        for entity_type, model in MODEL_BY_ENTITY_TYPE.items():
+            query = select(model).where(
+                model.customer_id == context.customer_id,
+                or_(model.site_id == context.site_id, model.site_id.is_(None)),
+                scope_condition(self.principal, NODE_PERMISSIONS[entity_type], model.customer_id, model.site_id),
+            )
+            if entity_type == "service":
+                query = query.where(Service.archived_at.is_(None))
+            if entity_type == "business_function":
+                query = query.where(BusinessFunction.active.is_(True))
+            for item in self.db.scalars(query.order_by(model.id).limit(node_limit + 1)):
+                if not self._node_is_viewable(entity_type, item, context):
+                    continue
+                if len(objects) >= node_limit:
+                    truncated = True
+                    continue
+                key = graph_node_key(entity_type, item.id)
+                objects[key], types[key] = item, entity_type
+        now = self.clock()
+        frontier = [(types[key], item.id) for key, item in objects.items() if types[key] != "asset"]
+        candidates = self._load_edge_candidates(frontier, EDGE_FAMILIES - {"asset_relationship"}, "both", now)
+        groups = self._load_dependency_groups(candidates, now)
+        members = set(objects)
+        self._batch_load_objects({ref for _, row in candidates for ref in self._edge_endpoints(row)}, objects, types)
+        relationships = list(self.db.scalars(select(RelationshipType)))
+        by_id, by_key = {r.id: r for r in relationships}, {r.key: r for r in relationships}
+        edges = []
+        customer_context = ActiveContext(context.customer_id, None)
+        for family, row in candidates:
+            source_ref, target_ref = self._edge_endpoints(row)
+            source_key, target_key = graph_node_key(*source_ref), graph_node_key(*target_ref)
+            source, target = objects.get(source_key), objects.get(target_key)
+            if (source is None or target is None
+                or not self._node_is_viewable(source_ref[0], source, customer_context)
+                or not self._node_is_viewable(target_ref[0], target, customer_context)
+                or not self._edge_is_viewable(family, row, source, target)):
+                continue
+            new_keys = {source_key, target_key} - members
+            if len(members) + len(new_keys) > node_limit or len(edges) >= 2000:
+                truncated = True
+                continue
+            members.update(new_keys)
+            edges.append(self._edge_schema(family, row, by_id, by_key, groups.get((family, row.id))))
+        return OperationalGraphResponse(
+            focus_key="", generated_at=now, requested_depth=1,
+            truncated=truncated, warnings=[NODE_LIMIT_WARNING] if truncated else [],
+            nodes=sorted(self._node_schemas({k: objects[k] for k in members}, {k: types[k] for k in members}), key=lambda n: n.key),
+            edges=sorted(edges, key=lambda e: e.key),
+        )
 
     def _build(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
         generated_at = self.clock()
@@ -800,6 +863,36 @@ class OperationalGraphBuilder:
                         updated_at=item.updated_at,
                     )
                 )
+        site_ids = {item.site_id for item in objects.values() if item.site_id}
+        sites = {s.id: s for s in self.db.scalars(select(Site).where(Site.id.in_(site_ids)))} if site_ids else {}
+        asset_ids = supported_ids.get("asset", set())
+        interfaces = sorted(
+            self.db.scalars(select(AssetInterface).where(AssetInterface.asset_id.in_(asset_ids))),
+            key=lambda row: (not row.is_primary, row.name, str(row.id)),
+        ) if asset_ids else []
+        primary_interfaces = {}
+        for interface in interfaces:
+            if interface.asset_id in asset_ids and interface.ip_address:
+                primary_interfaces.setdefault(interface.asset_id, interface)
+        network_ids = {i.network_id for i in primary_interfaces.values() if i.network_id}
+        networks = {n.id: n for n in self.db.scalars(select(Network).where(Network.id.in_(network_ids)))} if network_ids else {}
+        for node in nodes:
+            item = objects[node.key]
+            site = sites.get(item.site_id)
+            if site and site.customer_id == item.customer_id:
+                node.site_name = site.name
+            criticality = criticalities.get(getattr(item, "criticality_level_id", None))
+            node.criticality_rank = criticality.rank if criticality else None
+            summary = summaries.get((node.entity_type, node.entity_id))
+            if summary and summary.completeness_status != "not_evaluated":
+                node.required_total = summary.required_total
+                node.required_satisfied = summary.required_satisfied
+            interface = primary_interfaces.get(node.entity_id) if node.entity_type == "asset" else None
+            if interface:
+                node.contextual_ip = interface.ip_address
+                network = networks.get(interface.network_id)
+                if network and network.customer_id == item.customer_id and self.principal.can("networks.view", network.customer_id, network.site_id):
+                    node.contextual_vlan = network.vlan_id
         return nodes
 
 

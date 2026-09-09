@@ -111,6 +111,7 @@ class UserResponse(ORMResponse):
     email: EmailStr
     display_name: str
     accent_colour: str | None
+    theme_mode: Literal["light", "dark", "system"] = "system"
     is_active: bool
     force_password_change: bool
     last_login_at: datetime | None
@@ -137,6 +138,7 @@ class ProfileUpdate(BaseModel):
 
     display_name: str = Field(min_length=1, max_length=255)
     accent_colour: str | None = None
+    theme_mode: Literal["light", "dark", "system"] = "system"
 
     _display_name = field_validator("display_name")(_trim_nonempty)
     _accent_colour = field_validator("accent_colour")(_normalize_accent_colour)
@@ -1719,6 +1721,12 @@ class OperationalGraphNode(BaseModel):
     open_gap_count: int | None = None
     source: str | None = None
     updated_at: datetime | None = None
+    site_name: str | None = None
+    criticality_rank: int | None = None
+    required_total: int | None = None
+    required_satisfied: int | None = None
+    contextual_ip: str | None = None
+    contextual_vlan: int | None = None
 
 
 class OperationalGraphEdge(BaseModel):

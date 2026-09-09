@@ -9,17 +9,15 @@ import { ContextSelector } from "./context-selector";
 import { Navigation } from "./navigation";
 import { useWorkspaceContext } from "./workspace-context";
 import { logout } from "../lib/auth";
-import { accentThemeStyle, deriveAccentTheme } from "../lib/accent-theme.mjs";
+import { accentThemeStyle } from "../lib/accent-theme.mjs";
 
 export function AppShell({ children }) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, resolvedThemeMode } = useAuth();
   const workspace = useWorkspaceContext();
   const [logoutError, setLogoutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
-  const sidebarBrandVariant = deriveAccentTheme(user.accent_colour)?.sidebarForeground === "#000000"
-    ? "light"
-    : "dark";
+  const sidebarBrandVariant = resolvedThemeMode;
 
   async function signOut() {
     setLogoutError("");
@@ -36,7 +34,7 @@ export function AppShell({ children }) {
   }
 
   return (
-    <div className="app-shell" style={accentThemeStyle(user.accent_colour)}>
+    <div className="app-shell" style={accentThemeStyle(user.accent_colour, resolvedThemeMode)}>
       <aside className="sidebar">
         <AtlasBrand href={authenticatedHome(user)} variant={sidebarBrandVariant} />
         <Navigation />

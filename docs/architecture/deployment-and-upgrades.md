@@ -160,10 +160,19 @@ compare per-customer assets/relationships before and after upgrading.
 
 Revision `20260717_0005` adds the nullable `users.accent_colour` column. It does
 not rewrite or delete existing user records: a null value deliberately retains
-the Atlas default theme. Normal API startup applies the revision through
+the Atlas default accent. Normal API startup applies the revision through
 `alembic upgrade head`; no preference backfill or operator input is required.
 The downgrade removes only this preference column, so export any chosen accent
 values first if they need to be retained across a rollback.
+
+## User theme mode migration
+
+Revision `20260909_0015` adds nullable `users.theme_mode`, constrained to
+`light`, `dark`, or `system`. Null is returned as `system`, preserving OS-based
+mode selection for existing accounts. The accent preference remains separate.
+Apply `alembic upgrade head` before serving the updated API (normal API startup
+already does this). No backfill is needed. Downgrading removes the theme mode
+preference only; accent preferences and all other user data are retained.
 
 ## Backup example
 

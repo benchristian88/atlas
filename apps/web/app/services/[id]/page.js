@@ -12,6 +12,7 @@ import { PageHeader } from "../../../components/page-header";
 import { OperationalGraphView } from "../../../components/operational-graph-view";
 import { StatusBadge } from "../../../components/status-badge";
 import { TimelineEvent } from "../../../components/timeline-event";
+import { recordContextOptions } from "../../../lib/record-context.mjs";
 import { apiRequest } from "../../../lib/api";
 import { DEPENDENCY_REQUIREMENT_LABELS, DEPENDENCY_STRATEGY_LABELS, FAILURE_EFFECT_LABELS, dependencySemanticsLabels } from "../../../lib/dependency-semantics.mjs";
 import { formatDuration } from "../../../lib/duration.mjs";
@@ -40,12 +41,13 @@ export default function ServiceDetailPage({ params }) {
     if (!canView) return; setLoading(true); setError("");
     try {
       const item = await apiRequest(`/services/${id}`); setService(item);
+      const recordContext = recordContextOptions(item.customer_id, item.site_id);
       const canDependencies = hasPermissionForObject("service_dependencies.view", item.customer_id, item.site_id);
       const canFunctions = hasPermissionForObject("business_functions.view", item.customer_id, item.site_id);
       const [assetDeps, serviceDeps, groups, links, complete, history, sourceAssertions, graphData, assetRows, serviceRows, functionRows, assetRelRows, serviceRelRows, businessRelRows] = await Promise.all([
         canDependencies ? apiRequest(`/services/${id}/asset-dependencies`) : [], canDependencies ? apiRequest(`/services/${id}/service-dependencies`) : [], canDependencies ? apiRequest(`/services/${id}/dependency-groups`) : [], canFunctions ? apiRequest(`/services/${id}/business-functions`) : [],
         hasPermission("knowledge_gaps.view") ? apiRequest(`/services/${id}/completeness`) : null, hasPermission("changes.view") ? apiRequest(`/services/${id}/history`) : [], apiRequest(`/services/${id}/assertions?current_only=false`), canDependencies ? apiRequest(`/services/${id}/graph`) : { nodes: [], edges: [] },
-        hasPermission("service_dependencies.manage") ? apiRequest("/assets?limit=500") : [], hasPermission("service_dependencies.manage") ? apiRequest("/services?limit=500") : [], hasPermission("business_functions.manage") ? apiRequest("/business-functions?limit=500") : [],
+        hasPermission("service_dependencies.manage") ? apiRequest("/assets?limit=500", recordContext) : [], hasPermission("service_dependencies.manage") ? apiRequest("/services?limit=500", recordContext) : [], hasPermission("business_functions.manage") ? apiRequest("/business-functions?limit=500", recordContext) : [],
         hasPermission("service_dependencies.manage") ? apiRequest("/relationship-types?active_only=true&source_entity_type=service&target_entity_type=asset") : [], hasPermission("service_dependencies.manage") ? apiRequest("/relationship-types?active_only=true&source_entity_type=service&target_entity_type=service") : [], hasPermission("business_functions.manage") ? apiRequest("/relationship-types?active_only=true&source_entity_type=service&target_entity_type=business_function") : [],
       ]);
       setAssetDependencies(assetDeps); setServiceDependencies(serviceDeps); setDependencyGroups(groups); setFunctionLinks(links); setCompleteness(complete); setChanges(history); setAssertions(sourceAssertions); setGraph(graphData); setAssets(assetRows); setServices(serviceRows.filter((row) => row.id !== id)); setFunctions(functionRows); setAssetRelations(assetRelRows); setServiceRelations(serviceRelRows); setBusinessRelations(businessRelRows);

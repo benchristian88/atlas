@@ -1,9 +1,12 @@
+import os
 import uuid
 from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from app.auth import (
     COOKIE_NAME,
@@ -202,20 +205,84 @@ def test_profile_cannot_target_another_user(user: User) -> None:
             json={
                 "display_name": user.display_name,
                 "accent_colour": "#2563EB",
+                "theme_mode": "dark",
                 "user_id": str(uuid.uuid4()),
             },
         )
         assert response.status_code == 422
         assert user.accent_colour is None
+        assert user.theme_mode is None
 
 
 def test_unauthenticated_profile_update_is_rejected(user: User) -> None:
     with client_for(AuthDatabase(user)) as client:
         response = client.patch(
             "/api/auth/profile",
-            json={"display_name": user.display_name, "accent_colour": "#2563EB"},
+            json={"display_name": user.display_name, "accent_colour": "#2563EB", "theme_mode": "dark"},
         )
         assert response.status_code == 401
+
+
+@pytest.mark.parametrize("mode", ["light", "dark", "system"])
+def test_profile_theme_is_independent_and_reloads_after_login(user: User, mode: str) -> None:
+    user.accent_colour = "#2563EB"
+    db = AuthDatabase(user)
+    with client_for(db) as client:
+        credentials = {"email": user.email, "password": "correct horse battery staple"}
+        assert client.post("/api/auth/login", json=credentials).json()["user"]["theme_mode"] == "system"
+        updated = client.patch("/api/auth/profile", json={"display_name": user.display_name, "theme_mode": mode})
+        assert updated.status_code == 200
+        assert updated.json()["theme_mode"] == mode
+        assert updated.json()["accent_colour"] == "#2563EB"
+        audit = next(item for item in db.added if isinstance(item, AuditEvent) and item.event_type == "profile.updated")
+        assert audit.metadata_["theme_mode"] == {"from": "system", "to": mode}
+        # Older clients omitting theme mode must not reset it.
+        changed = client.patch("/api/auth/profile", json={"display_name": user.display_name, "accent_colour": None})
+        assert changed.json()["theme_mode"] == mode
+        assert client.get("/api/auth/me").json()["theme_mode"] == mode
+        assert client.post("/api/auth/logout").status_code == 204
+        signed_in = client.post("/api/auth/login", json=credentials)
+        assert signed_in.json()["user"]["theme_mode"] == mode
+        assert signed_in.json()["user"]["accent_colour"] is None
+
+
+@pytest.mark.parametrize("mode", ["sepia", "DARK", "", None, 1])
+def test_profile_rejects_invalid_theme_modes(user: User, mode) -> None:
+    with client_for(AuthDatabase(user)) as client:
+        client.post("/api/auth/login", json={"email": user.email, "password": "correct horse battery staple"})
+        response = client.patch("/api/auth/profile", json={"display_name": user.display_name, "theme_mode": mode})
+        assert response.status_code == 422
+        assert user.theme_mode is None
+
+
+@pytest.mark.skipif(not os.getenv("ATLAS_TEST_DATABASE_URL"), reason="requires disposable migrated PostgreSQL")
+def test_postgres_profile_preferences_reload_in_new_sessions(user: User) -> None:
+    engine = create_engine(os.environ["ATLAS_TEST_DATABASE_URL"])
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        with Session(connection, join_transaction_mode="create_savepoint") as db:
+            db.add(user)
+            db.commit()
+
+        def override_get_db():
+            with Session(connection, join_transaction_mode="create_savepoint") as db:
+                yield db
+
+        app.dependency_overrides[get_db] = override_get_db
+        try:
+            with TestClient(app) as client:
+                credentials = {"email": "admin@example.com", "password": "correct horse battery staple"}
+                assert client.post("/api/auth/login", json=credentials).status_code == 200
+                updated = client.patch("/api/auth/profile", json={"display_name": "Theme test", "accent_colour": "#7C3AED", "theme_mode": "light"})
+                assert updated.status_code == 200
+                assert client.post("/api/auth/logout").status_code == 204
+                signed_in = client.post("/api/auth/login", json=credentials).json()["user"]
+                assert signed_in["theme_mode"] == "light"
+                assert signed_in["accent_colour"] == "#7C3AED"
+                assert client.get("/api/auth/me").json()["theme_mode"] == "light"
+        finally:
+            transaction.rollback()
+    engine.dispose()
 
 
 @pytest.mark.parametrize("password", ["wrong password", "another wrong password"])

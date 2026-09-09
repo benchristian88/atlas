@@ -156,9 +156,9 @@ access. On login and navigation it applies these rules:
 - Reject a selected customer/site that is not in the fresh accessible set.
 - Clear a site when its customer changes, then show only sites under that
   customer.
-- Automatically select the sole customer and sole site available to a user.
-- Allow an all-customers view only for assignments that actually cover multiple
-  contexts.
+- Restore one valid Customer/Site preference, otherwise choose the first
+  accessible Customer/Site in deterministic API order.
+- Do not expose All Customers or All Sites in the workspace selectors.
 - Require a concrete authorized customer and site for creation.
 
 The selected `Customer / Site` is displayed in the protected header. Asset,
@@ -167,6 +167,13 @@ Asset creation defaults to it, but the API independently validates submitted
 ownership. The web client sends the preference as `X-Atlas-Customer-ID` and
 `X-Atlas-Site-ID`; the central context dependency rejects a mismatched site,
 stale ID, or scope the current assignments do not cover.
+
+C2.4 treats the selected Site as a viewpoint for opt-in graph/analysis reads.
+It retains the selected Customer and per-entity/per-edge permissions, and can
+include directly relevant authorized cross-site providers of customer-wide
+Services. This does not widen any assignment. Customer-wide form mutations
+explicitly send record scope so the viewpoint does not change record ownership.
+See [the operations architecture](homelab-operations-experience.md).
 
 Every asset belongs to one customer and one site. New relationships are allowed
 only when the source and target are both authorized and have the same customer
