@@ -417,6 +417,7 @@ unchanged.
 | Customer/site context selector | **Implemented** | Foundation | Context API, workspace context and revalidation are present. |
 | User/role/assignment administration | **Implemented** | Foundation | Guarded APIs and administration pages exist. |
 | Per-user accent preference | **Implemented** | UI/account | Persisted, validated and tested. |
+| Per-user theme mode | **Implemented** | UI/account | Profile saves Light, Dark or System independently of accent colour; shared shell, Dashboard and Knowledge Graph tokens follow the resolved mode. Nullable `users.theme_mode` is added by migration `20260909_0015`. |
 | Top-right account menu | **Implemented** | UI/account | Profile/logout dropdown exists and is tested. |
 | Initials/image fallback avatar | **Implemented** | UI/account | `user-avatar.js` provides safe fallback behavior. |
 | Avatar/photo upload | **Deferred** | Future account work | No avatar field, media storage or upload endpoint exists. |

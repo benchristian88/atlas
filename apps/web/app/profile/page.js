@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../components/auth-context";
+import { useResolvedThemeMode } from "../../components/theme-mode";
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
@@ -53,6 +54,8 @@ export default function ProfilePage() {
   const { customers, sites } = useWorkspaceContext();
   const [displayName, setDisplayName] = useState(user.display_name || "");
   const [profileStatus, setProfileStatus] = useState({ saving: false, error: "", success: "" });
+  const [themeMode, setThemeMode] = useState(user.theme_mode || "system");
+  const previewMode = useResolvedThemeMode(themeMode);
   const [accentInput, setAccentInput] = useState(user.accent_colour || ATLAS_DEFAULT_ACCENT);
   const [accentPreference, setAccentPreference] = useState(user.accent_colour || null);
   const [appearanceStatus, setAppearanceStatus] = useState({ saving: false, error: "", success: "" });
@@ -158,7 +161,7 @@ export default function ProfilePage() {
   async function persistAppearance(state, successMessage) {
     let payload;
     try {
-      payload = appearanceProfilePayload(user.display_name, state);
+      payload = { ...appearanceProfilePayload(user.display_name, state), theme_mode: state.themeMode };
     } catch (validationError) {
       setAppearanceStatus({ saving: false, error: validationError.message, success: "" });
       return;
@@ -172,6 +175,7 @@ export default function ProfilePage() {
       const updatedUser = responseUser(response);
       if (!updatedUser) throw new Error("Atlas returned an unexpected profile response.");
       updateUser((current) => ({ ...current, ...updatedUser }));
+      setThemeMode(updatedUser.theme_mode || "system");
       setAccentPreference(updatedUser?.accent_colour || null);
       setAccentInput(updatedUser?.accent_colour || ATLAS_DEFAULT_ACCENT);
       setAppearanceStatus({ saving: false, error: "", success: successMessage });
@@ -187,14 +191,14 @@ export default function ProfilePage() {
   function saveAppearance(event) {
     event.preventDefault();
     persistAppearance(
-      { input: accentInput, preference: accentPreference },
+      { input: accentInput, preference: accentPreference, themeMode },
       "Appearance updated.",
     );
   }
 
   function resetAppearance() {
     persistAppearance(
-      { input: ATLAS_DEFAULT_ACCENT, preference: null },
+      { input: ATLAS_DEFAULT_ACCENT, preference: null, themeMode: "system" },
       "Appearance reset to the Atlas default.",
     );
   }
@@ -254,12 +258,21 @@ export default function ProfilePage() {
           <div className="form-card-header">
             <div>
               <p className="eyebrow">Appearance</p>
-              <h2 id="appearance-title">Theme colour</h2>
+              <h2 id="appearance-title">Theme and accent colour</h2>
             </div>
           </div>
           {appearanceStatus.error && <div className="error-banner" id="accent-error" role="alert">{appearanceStatus.error}</div>}
           {appearanceStatus.success && <div className="success-banner" role="status">{appearanceStatus.success}</div>}
           <form className="resource-form" onSubmit={saveAppearance}>
+            <label className="field appearance-mode">
+              <span>Theme mode</span>
+              <select disabled={appearanceStatus.saving} value={themeMode} onChange={(event) => setThemeMode(event.target.value)} aria-describedby="theme-mode-help">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="system">System</option>
+              </select>
+              <small id="theme-mode-help">System follows your device appearance. Save to apply across Atlas; accent colour is independent.</small>
+            </label>
             <div className="appearance-controls">
               <label className="field colour-picker-field">
                 <span>Accent colour</span>
@@ -312,7 +325,7 @@ export default function ProfilePage() {
                 })}
               </div>
             </fieldset>
-            <div className="accent-preview" style={accentThemeStyle(accentPreference)}>
+            <div className="accent-preview" style={accentThemeStyle(accentPreference, previewMode)}>
               <div>
                 <p className="eyebrow">Live preview</p>
                 <strong>Atlas interface accent</strong>

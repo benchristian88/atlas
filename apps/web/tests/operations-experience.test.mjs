@@ -128,6 +128,6 @@ test("reachable UI provides keyboard nodes, inspector semantics, scenario labels
   assert.match(dashboard, /role="status"/);
   assert.doesNotMatch(page, /minimap|layout selector|force.directed/i);
   assert.match(css, /prefers-reduced-motion/);
-  assert.match(css, /prefers-color-scheme: dark/);
+  assert.match(css, /:root\[data-theme="dark"\]/);
   assert.match(css, /focus-visible/);
 });

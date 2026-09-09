@@ -4,6 +4,77 @@ Date: 9 September 2026. **Implementation complete; automated validation complete
 live/manual acceptance pending.** This record concerns the uncommitted C2.4
 working tree. It does not claim deployment, merge or live acceptance.
 
+## Follow-up: sidebar icons and independent theme mode
+
+The sidebar now uses consistent 18px decorative inline SVGs for all available
+destinations, including the existing Reference Data and Administration links.
+No icon dependency was added. Permissions, destinations and layout are unchanged.
+
+Profile → Appearance separates Theme mode (Light, Dark, System) from the retained
+accent picker, hex input and presets. Save appearance persists both through
+`PATCH /api/auth/profile`; reset selects System and the default accent. The
+additive `theme_mode` response field reloads through login and `/api/auth/me`.
+Migration `20260909_0015` adds the nullable, constrained preference; null means
+System. The existing authenticated self-profile and audit boundary is retained.
+No customer/site or graph authorization behavior changes.
+
+`RootShell` resolves System with `matchMedia`, listens for device-mode changes,
+and applies `data-theme` to the document root. Shared CSS tokens control surfaces
+and native control colour schemes. Accent derivation leaves surface/sidebar
+colours alone and computes readable text, soft highlights and focus rings for
+either palette. Preference loading uses the existing server mechanism; there
+is no new local-storage theme cache.
+
+Follow-up validation:
+
+- `apps/web`: `npm test` — 97 passed; `npm run build` — 34 pages built.
+- `apps/api`: `.venv/bin/python -m pytest tests/test_auth.py -q` — 31 passed
+  before adding the PostgreSQL persistence case.
+- Full `.venv/bin/python -m pytest -q` with `ATLAS_TEST_DATABASE_URL` pointing
+  to a fresh disposable PostgreSQL instance — 248 passed, no skips. This includes
+  persistence through separate database sessions, logout/login, audit history,
+  invalid values, omitted-field compatibility and self-profile authorization.
+- `.venv/bin/alembic upgrade head` on that disposable database — passed through
+  `20260909_0015`; `.venv/bin/alembic heads` — one head, `20260909_0015`.
+- `.venv/bin/alembic upgrade 20260908_0014:head --sql` — additive column and
+  correctly named check constraint inspected.
+- Chrome: `ATLAS_WEB_TEST_ORIGIN=http://127.0.0.1:3105 node
+  scripts/check-operations-browser.mjs` against Next development — full C2.4 and
+  appearance checks passed, with no runtime exceptions.
+- Chrome: `ATLAS_BROWSER_APPEARANCE_ONLY=1
+  ATLAS_WEB_TEST_ORIGIN=http://127.0.0.1:3106 node
+  scripts/check-operations-browser.mjs` against the standalone production build
+  passed the focused sidebar/theme acceptance checks with no runtime exceptions.
+  Evidence is saved separately
+  to `/private/tmp/atlas-c24-browser/appearance-evidence.json`.
+- The complete browser script against production still times out waiting for
+  the graph **Preview unavailable** analysis scenario. The unchanged script also
+  reproduces this on an isolated, untouched `cecbca1` source snapshot built with
+  Webpack. This production smoke issue remains outside the sidebar/theme update;
+  verify Preview unavailable manually on the deployed instance. No graph
+  traversal or analysis behavior was changed to address it.
+- `git diff --check` — clean.
+
+Manual acceptance for this follow-up (against your normally migrated instance):
+
+1. Open Profile → Appearance. Choose **Light**, select **Blue**, then **Save
+   appearance**. With the device set to dark, confirm Atlas stays light.
+2. Open Dashboard and Knowledge Graph; select an Asset to open the inspector.
+   Check backgrounds, cards, graph lanes/nodes, controls and text in both pages.
+3. Check icons beside each permitted sidebar destination. Hover links, navigate
+   to one, and Tab through links to verify hover, selected and focus states.
+4. Repeat steps 1–3 with **Dark** while the device is set to light. Try another
+   preset and custom `#FFFFFF`/`#000000`; mode must remain unchanged and controls,
+   links and focus rings must remain readable.
+5. Refresh, return to Profile, then sign out and sign back in. Confirm both saved
+   preferences reload. Tab to Theme mode, choose with arrow keys, and save using
+   the keyboard.
+6. Save **System**, then change the device appearance while Atlas is open.
+   Confirm Atlas follows it. **Reset to Atlas default** should save System and
+   the default teal accent.
+7. Repeat at desktop, tablet and phone widths; check the Profile controls and
+   sidebar remain usable and the Graph inspector remains accessible.
+
 ## A–I. Implementation and architecture
 
 - **A — Delivered:** a compact operations Dashboard and visual Knowledge Graph

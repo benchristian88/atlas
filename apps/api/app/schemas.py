@@ -111,6 +111,7 @@ class UserResponse(ORMResponse):
     email: EmailStr
     display_name: str
     accent_colour: str | None
+    theme_mode: Literal["light", "dark", "system"] = "system"
     is_active: bool
     force_password_change: bool
     last_login_at: datetime | None
@@ -137,6 +138,7 @@ class ProfileUpdate(BaseModel):
 
     display_name: str = Field(min_length=1, max_length=255)
     accent_colour: str | None = None
+    theme_mode: Literal["light", "dark", "system"] = "system"
 
     _display_name = field_validator("display_name")(_trim_nonempty)
     _accent_colour = field_validator("accent_colour")(_normalize_accent_colour)
