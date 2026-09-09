@@ -1,6 +1,7 @@
 // Optional local acceptance smoke check; no browser dependency or production data.
 // Start Next on port 3104, then run with Node 22+ and Chrome installed.
 // Set ATLAS_BROWSER_APPEARANCE_ONLY=1 for the focused sidebar/theme checks.
+// Set ATLAS_BROWSER_DASHBOARD_ONLY=1 for dashboard refinements plus shared appearance checks.
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
@@ -75,7 +76,12 @@ try {
     else if (url.pathname === "/api/auth/profile") { Object.assign(fixtureUser, JSON.parse(request.postData)); body = fixtureUser; }
     else if (url.pathname === "/api/context") body = { global_access: true, customers: [{ id: customer, name: "Home Lab" }], sites: [{ id: site, customer_id: customer, name: "Local lab" }, { id: remote, customer_id: customer, name: "Remote lab" }] };
     else if (url.pathname === "/api/dashboard/summary") body = { assets: 3, services: 2, business_functions: 1, open_knowledge_gap_count: 2 };
-    else if (url.pathname === "/api/changes") body = { items: [{ id: id(80), summary: "Dependency behaviour updated", entity_name_snapshot: dns.name, occurred_at: "2026-09-09T01:00:00Z" }] };
+    else if (url.pathname === "/api/changes") body = { items: [
+      { id: id(80), change_type: "service_dependency_added", summary: "Service dependency added", entity_name_snapshot: dns.name, occurred_at: "2026-09-09T01:00:00Z" },
+      { id: id(81), change_type: "knowledge_gap_resolved", summary: "Knowledge gap resolved", entity_name_snapshot: proxy.name, occurred_at: "2026-09-09T00:50:00Z" },
+      { id: id(82), change_type: "entity_discovered", summary: "Asset discovered", entity_name_snapshot: provider.name, occurred_at: "2026-09-09T00:40:00Z" },
+      { id: id(83), change_type: "fact_changed", summary: "Recorded fact changed", entity_name_snapshot: host.name, occurred_at: "2026-09-09T00:30:00Z" },
+    ] };
     else if (url.pathname.startsWith("/api/operational-graph")) {
       if (variant === "error") { status = 500; body = { detail: "Fixture graph error" }; }
       else if (variant === "empty") body = { ...base, nodes: [], edges: [] };
@@ -159,7 +165,49 @@ try {
     await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: mode }] });
     await until(`document.documentElement.dataset.theme === '${mode}'`);
   }
-  if (process.env.ATLAS_BROWSER_APPEARANCE_ONLY === "1") {
+  if (process.env.ATLAS_BROWSER_DASHBOARD_ONLY === "1") {
+    const refinements = [];
+    for (const mode of ["light", "dark"]) {
+      await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: mode }] });
+      for (const width of [1600, 1280, 900, 390]) {
+        await call("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+        await navigate("/dashboard");
+        await until("document.querySelectorAll('.ops-activity li').length === 4 && document.querySelectorAll('.critical-service-card').length === 2");
+        assert.equal(await evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
+        const gap = await evaluate("document.querySelector('.page-header h1').getBoundingClientRect().top - document.querySelector('.topbar').getBoundingClientRect().bottom");
+        assert.equal(gap, width > 900 ? 20 : 16);
+        assert.equal(await evaluate("document.querySelector('.page-header .eyebrow')"), null);
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('.nav-link.active')).borderLeftWidth"), "0px");
+        assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.nav-link.active')).backgroundColor"), "rgba(0, 0, 0, 0)");
+        assert.deepEqual(await evaluate("[...document.querySelectorAll('.ops-summary-item strong')].map(n=>n.textContent)"), ["3", "2", "1", "2"]);
+        assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-item')].every(n=>n.querySelector('svg') && n.querySelector('small').textContent === 'Current recorded total')"), true);
+        assert.equal(await evaluate("new Set([...document.querySelectorAll('.ops-summary-item')].map(n=>n.getBoundingClientRect().height)).size"), 1);
+        assert.equal(await evaluate("document.querySelectorAll('.ops-attention-row svg').length"), 4);
+        assert.equal(await evaluate("[...document.querySelectorAll('.critical-service-card')].every(n=>n.querySelector('.entity-mark') && n.querySelector('.ops-badge') && n.querySelector('[aria-label=\"Recorded status: operational\"]') && n.querySelector('[role=meter]').getAttribute('aria-valuenow') === '75')"), true);
+        assert.equal(await evaluate("new Set([...document.querySelectorAll('.ops-activity .ops-icon-tile path')].map(n=>n.getAttribute('d'))).size"), 4);
+        assert.equal(await evaluate("document.querySelectorAll('.ops-activity time[datetime]').length"), 4);
+        assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-copy, .ops-attention-row > div, .critical-service-card, .ops-activity-copy')].every(n=>n.scrollWidth <= n.clientWidth)"), true);
+        for (const selector of [".nav-link.active", ".ops-summary-item", ".ops-attention-row", ".critical-service-card", ".ops-activity a"]) {
+          await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
+          await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
+          await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
+          await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+          assert.equal(await evaluate(`document.activeElement.matches(${JSON.stringify(selector)})`), true);
+          assert.equal(await evaluate("getComputedStyle(document.activeElement).outlineStyle"), "solid");
+        }
+        await evaluate("document.activeElement.blur(); window.scrollTo(0, 0)");
+        await screenshot(`dashboard-refined-${mode}-${width}`);
+        await evaluate("document.querySelector('.widget-critical-services').scrollIntoView({block:'center'})");
+        await screenshot(`dashboard-refined-details-${mode}-${width}`);
+        refinements.push({ mode, width, headingGap: gap });
+      }
+    }
+    assert.deepEqual(errors, []);
+    const evidence = { appearance: appearanceEvidence, refinements, checks: "Shared title gap, selected pill without accent line, four truthful summary cards and icons, attention icons, recorded Service status/completeness, four event icon categories including fallback, keyboard focus, no overflowing content", runtimeExceptions: errors, screenshots: output };
+    await writeFile(`${output}/dashboard-evidence.json`, JSON.stringify(evidence, null, 2));
+    console.log(JSON.stringify(evidence, null, 2));
+  } else if (process.env.ATLAS_BROWSER_APPEARANCE_ONLY === "1") {
     assert.deepEqual(errors, []);
     const evidence = { appearance: appearanceEvidence, checks: "14 sidebar icons, hover/selected/focus, page and panel surfaces, profile mobile layout, independent accents, saved preferences on refresh, System changes, reset", screenshots: output, runtimeExceptions: errors };
     await writeFile(`${output}/appearance-evidence.json`, JSON.stringify(evidence, null, 2));

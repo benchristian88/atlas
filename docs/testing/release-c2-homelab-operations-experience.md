@@ -4,6 +4,48 @@ Date: 9 September 2026. **Implementation complete; automated validation complete
 live/manual acceptance pending.** This record concerns the uncommitted C2.4
 working tree. It does not claim deployment, merge or live acceptance.
 
+## Follow-up: compact Dashboard and sidebar refinements
+
+Shared shell top padding is now 20px on desktop and 16px at widths up to 900px.
+`PageHeader` omits an absent eyebrow instead of rendering its empty margin;
+provided eyebrows remain visible. Sidebar selection retains its themed pill,
+bold text, `aria-current` and focus ring, with the separate left border removed.
+
+All four Dashboard totals have consistent icon tiles, large counts and the
+truthful supporting line “Current recorded total”. Missing or inaccessible
+totals retain a dash and explanatory text. No comparative analytics are inferred.
+Knowledge attention adds small icons and compact actionable rows. Critical
+Services reuse entity icons, recorded status (with visible text), managed
+criticality and existing completeness meters, now inset in each card. Recent
+changes use existing change types for decorative event icons (with a generic
+fallback), and retain the recorded summary, entity name and timestamp.
+
+Validation for this refinement:
+
+- `cd apps/web && npm test` — 97 passed.
+- `cd apps/web && npm run build` — passed; 34 pages generated.
+- With that build served locally on port 3114, run from `apps/web`:
+  `ATLAS_BROWSER_DASHBOARD_ONLY=1 ATLAS_WEB_TEST_ORIGIN=http://127.0.0.1:3114 ATLAS_BROWSER_OUTPUT=/private/tmp/atlas-c24-refinements node scripts/check-operations-browser.mjs`
+  — passed against fixture API data in Chrome. Light and dark modes at 1600,
+  1280, 900 and 390px verify title spacing, selected styling, equal card heights,
+  truthful totals, all attention icons, status/completeness, event icons and
+  timestamps, keyboard focus, and absence of content overflow/runtime exceptions.
+  Existing appearance checks also pass. Screenshots were visually reviewed;
+  evidence is in `/private/tmp/atlas-c24-refinements/dashboard-evidence.json`.
+- `git diff --check` — clean.
+
+Manual checks: select a populated Customer/Site, compare Dashboard totals with
+their lists, follow attention and Critical Service links, and review recent
+changes against Changes. Check the tighter title spacing on Dashboard, Knowledge
+Graph and a page with an eyebrow such as My profile. Repeat in Light and Dark
+at desktop, tablet and phone widths; hover and Tab through the sidebar, summary
+cards and actionable rows. Confirm the selected pill has no left accent, long
+names wrap, and recorded status/completeness remain readable.
+
+No backend, schema, API, route or authorization changes; feature-ledger status
+is unchanged. Live-data manual acceptance remains pending. This focused check
+does not rerun the full graph analysis smoke described below.
+
 ## Follow-up: sidebar icons and independent theme mode
 
 The sidebar now uses consistent 18px decorative inline SVGs for all available
