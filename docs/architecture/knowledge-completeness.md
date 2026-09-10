@@ -12,7 +12,7 @@ Atlas separates three kinds of knowledge state:
 
 ## Data model
 
-`KnowledgeRequirementDefinition` stores database-driven, non-executable rules. A null `asset_type_id` is global; otherwise the immutable Asset Type UUID anchors a type profile. Human-readable type and relationship names are resolved at read time, so renames do not break rules. References use restrictive foreign keys and are validated before persistence.
+`KnowledgeRequirementDefinition` stores database-driven, non-executable rules. Applicability is partitioned by `entity_type`: Asset profiles include only Asset requirements and Service profiles include only Service requirements. Within that entity type, a null `asset_type_id` (Asset) or `service_type_id` (Service) is global; otherwise the immutable type UUID anchors a type profile. Human-readable type and relationship names are resolved at read time, so renames do not break rules. References use restrictive foreign keys and are validated before persistence.
 
 `KnowledgeGap` stores the lifecycle of a failed rule for an entity. A PostgreSQL partial unique index permits only one active (`open`, `deferred`, or `exception`) gap for a requirement/entity pair while retaining resolved and superseded history.
 
@@ -48,3 +48,18 @@ The generic entity type/ID boundary and
 Function completeness remains unimplemented. Future analysis may use scoped
 gaps and exceptions as qualifiers, but completeness is not Impact Analysis and
 does not prove health, outage behavior, protection, or recoverability.
+
+## Knowledge profile administration
+
+Asset Type and Service Type profiles separate global requirements from type-specific
+requirements. Both show the requirement name above its description, retain precise
+wrapped rule summaries, and identify scope, level, severity and state. Lifecycle
+actions retain the existing global management permission and history-safe behavior.
+
+Migration `20260910_0017` repairs the 16 built-in Service descriptions using their
+immutable keys, Service entity applicability, system-defined flag, global scope,
+and exact original text. It changes only descriptions; administrator-customized
+text and requirement identity, rules, history and state remain intact. New installs
+receive the same repair through the migration chain. Downgrade retains improved
+copy to avoid overwriting later administrator choices. Asset requirements have no
+built-in description seed to repair.

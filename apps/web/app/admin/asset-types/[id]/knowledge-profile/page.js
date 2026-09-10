@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AccessDenied } from "../../../../../components/access-denied";
 import { useAuth } from "../../../../../components/auth-context";
 import { PageHeader } from "../../../../../components/page-header";
-import { StatusBadge } from "../../../../../components/status-badge";
+import { KnowledgeProfileTable } from "../../../../../components/knowledge-profile-table";
 import { apiRequest } from "../../../../../lib/api";
 
 const CORE_FIELDS = ["name", "asset_type", "hostname", "ip_address", "status", "vendor", "model", "description", "source"];
@@ -88,7 +88,6 @@ export default function KnowledgeProfilePage() {
     finally { setLoading(false); }
   }, [canView, hasPermission, id]);
   useEffect(() => { load(); }, [load]);
-  const typeNames = useMemo(() => Object.fromEntries(assetTypes.map((item) => [item.id, item.name])), [assetTypes]);
   if (!canView) return <AccessDenied />;
 
   function update(name, value) { setForm((current) => ({ ...current, [name]: value })); setValidation(null); }
@@ -114,7 +113,7 @@ export default function KnowledgeProfilePage() {
 
   const relationshipRule = form.rule_type.includes("relationship"); const interfaceRule = form.rule_type.startsWith("interface") || form.rule_type === "minimum_interface_count"; const customRule = form.rule_type.startsWith("custom_field");
   return <>
-    <div className="page-heading-row"><PageHeader eyebrow="Reference Data · Asset types" title={`${assetType?.name || "Asset type"} knowledge profile`} description="Define the operational knowledge Atlas expects for this asset type. Global rules are shown alongside this type-specific profile." />{canManage && <div className="row-actions"><button className="button button-secondary" disabled={saving} onClick={reevaluate} type="button">Re-evaluate assets</button><button className="button button-primary" onClick={() => begin()} type="button">Add requirement</button></div>}</div>
+    <div className="page-heading-row"><PageHeader eyebrow="Reference Data · Asset types" title={`${assetType?.name || "Asset type"} knowledge profile`} description="Define the operational knowledge Atlas expects for this asset type. Global Asset requirements apply to every Asset Type; type-specific requirements apply only to this type." />{canManage && <div className="row-actions"><button className="button button-secondary" disabled={saving} onClick={reevaluate} type="button">Re-evaluate assets</button><button className="button button-primary" onClick={() => begin()} type="button">Add requirement</button></div>}</div>
     {error && <div className="error-banner" role="alert">{error}</div>}{notice && <div className="success-banner" role="status">{notice}</div>}
     {showForm && <section className="form-card"><div className="form-card-header"><h2>{editing ? "Edit" : "Add"} requirement</h2><button className="icon-button" onClick={() => setShowForm(false)} type="button">×</button></div><form onSubmit={save}><div className="form-grid">
       <label className="field"><span>Key *</span><input disabled={Boolean(editing)} onChange={(event) => update("key", event.target.value)} pattern="[a-z][a-z0-9_]+" required value={form.key} /></label>
@@ -134,6 +133,6 @@ export default function KnowledgeProfilePage() {
       {form.unless_field_id && <label className="field"><span>Unless values</span><input onChange={(event) => update("unless_values", event.target.value)} placeholder="root, core" required value={form.unless_values} /></label>}
       <label className="field field-wide"><span>Description</span><textarea onChange={(event) => update("description", event.target.value)} value={form.description} /></label><label className="field field-wide"><span>Remediation hint</span><textarea onChange={(event) => update("remediation_hint", event.target.value)} value={form.remediation_hint} /></label><label className="field"><span>Sort order</span><input min="0" onChange={(event) => update("sort_order", event.target.value)} type="number" value={form.sort_order} /></label><label className="field checkbox-field"><input checked={form.active} onChange={(event) => update("active", event.target.checked)} type="checkbox" /><span>Active</span></label>
     </div>{validation && <div className={validation.valid ? "success-banner" : "error-banner"} role="status"><strong>{validation.interpretation}</strong>{validation.errors?.map((item) => <span key={item}>{item}</span>)}</div>}<p className="warning-banner">Changing this requirement may create or resolve gaps on {editing ? editing.affected_asset_count : assetType?.in_use_count || 0} affected assets.</p><div className="form-actions"><button className="button button-secondary" onClick={() => setShowForm(false)} type="button">Cancel</button><button className="button button-secondary" onClick={validate} type="button">Validate configuration</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save requirement"}</button></div></form></section>}
-    <section className="table-card"><div className="table-meta"><span>{loading ? "Loading…" : `${requirements.length} requirements`}</span><button className="text-button" onClick={load} type="button">Refresh</button></div><div className="table-scroll"><table><thead><tr><th>Requirement</th><th>Level</th><th>Severity</th><th>Rule</th><th>Scope</th><th>State</th>{canManage && <th>Actions</th>}</tr></thead><tbody>{!loading && requirements.length === 0 && <tr><td className="empty-state" colSpan={canManage ? 7 : 6}>No knowledge requirements yet.</td></tr>}{requirements.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small className="secondary-text">{item.description || item.remediation_hint || "No description"}</small></td><td>{item.requirement_level}</td><td><StatusBadge status={item.severity} /></td><td>{item.rule_summary}</td><td>{item.asset_type_id ? typeNames[item.asset_type_id] || "Unavailable" : "Global"}</td><td><StatusBadge status={!item.configuration_valid ? "Invalid" : item.active ? "Active" : "Inactive"} /></td>{canManage && <td><div className="row-actions">{item.asset_type_id === id && <button className="text-button" onClick={() => begin(item)} type="button">Edit</button>}{item.asset_type_id === id && <button className="text-button" onClick={() => begin(item, true)} type="button">Duplicate</button>}<button className="text-button" onClick={() => toggle(item)} type="button">{item.active ? "Deactivate" : "Activate"}</button>{item.asset_type_id === id && <button className="text-button text-danger" onClick={() => remove(item)} type="button">Delete</button>}</div></td>}</tr>)}</tbody></table></div></section>
+    <KnowledgeProfileTable requirements={requirements} entityLabel="Asset" typeId={id} loading={loading} canManage={canManage} onRefresh={load} onEdit={begin} onToggle={toggle} onRemove={remove} />
   </>;
 }

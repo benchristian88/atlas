@@ -80,7 +80,7 @@ def list_profile_requirements(asset_type_id: uuid.UUID, principal: Principal = D
     require_global(principal, "knowledge_requirements.view")
     if db.get(AssetType, asset_type_id) is None:
         raise not_found("Asset type")
-    rows = db.scalars(select(KnowledgeRequirementDefinition).where(or_(KnowledgeRequirementDefinition.asset_type_id == asset_type_id, KnowledgeRequirementDefinition.asset_type_id.is_(None))).order_by(KnowledgeRequirementDefinition.sort_order, KnowledgeRequirementDefinition.name))
+    rows = db.scalars(select(KnowledgeRequirementDefinition).where(KnowledgeRequirementDefinition.entity_type == "asset", or_(KnowledgeRequirementDefinition.asset_type_id == asset_type_id, KnowledgeRequirementDefinition.asset_type_id.is_(None))).order_by(KnowledgeRequirementDefinition.sort_order, KnowledgeRequirementDefinition.name))
     return [_requirement_response(db, item) for item in rows]
 
 

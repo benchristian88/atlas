@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AccessDenied } from "../../../../../components/access-denied";
 import { useAuth } from "../../../../../components/auth-context";
 import { PageHeader } from "../../../../../components/page-header";
-import { StatusBadge } from "../../../../../components/status-badge";
+import { KnowledgeProfileTable } from "../../../../../components/knowledge-profile-table";
 import { apiRequest } from "../../../../../lib/api";
 
 const SERVICE_FIELDS = [
@@ -61,7 +61,6 @@ export default function ServiceKnowledgeProfilePage() {
   const { id } = useParams();
   const { hasGlobalPermission } = useAuth();
   const [serviceType, setServiceType] = useState(null);
-  const [serviceTypes, setServiceTypes] = useState([]);
   const [requirements, setRequirements] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(null);
@@ -83,7 +82,6 @@ export default function ServiceKnowledgeProfilePage() {
         apiRequest("/service-types"),
         apiRequest(`/service-types/${id}/knowledge-requirements`),
       ]);
-      setServiceTypes(types);
       setServiceType(types.find((item) => item.id === id));
       setRequirements(rules);
     } catch (requestError) {
@@ -93,7 +91,6 @@ export default function ServiceKnowledgeProfilePage() {
     }
   }, [canView, id]);
   useEffect(() => { load(); }, [load]);
-  const typeNames = useMemo(() => Object.fromEntries(serviceTypes.map((item) => [item.id, item.name])), [serviceTypes]);
 
   if (!canView) return <AccessDenied />;
   function update(name, value) { setForm((current) => ({ ...current, [name]: value })); setValidation(null); }
@@ -156,7 +153,7 @@ export default function ServiceKnowledgeProfilePage() {
   const fieldRule = form.rule_type === "service_field_present" || form.rule_type === "one_of";
   return <>
     <div className="page-heading-row">
-      <PageHeader eyebrow="Reference Data · Service types" title={`${serviceType?.name || "Service type"} knowledge profile`} description="Define the operational knowledge Atlas expects for this Service type. Global Service rules are shown alongside type-specific rules." />
+      <PageHeader eyebrow="Reference Data · Service types" title={`${serviceType?.name || "Service type"} knowledge profile`} description="Define the operational knowledge Atlas expects for this Service type. Global Service requirements apply to every Service Type; type-specific requirements apply only to this type." />
       {canManage && <button className="button button-primary" onClick={() => begin()} type="button">Add requirement</button>}
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}
@@ -184,12 +181,6 @@ export default function ServiceKnowledgeProfilePage() {
       <div className="form-actions"><button className="button button-secondary" onClick={() => setShowForm(false)} type="button">Cancel</button><button className="button button-secondary" onClick={validate} type="button">Validate configuration</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save requirement"}</button></div>
       </form>
     </section>}
-    <section className="table-card">
-      <div className="table-meta"><span>{loading ? "Loading…" : `${requirements.length} requirements`}</span><button className="text-button" onClick={load} type="button">Refresh</button></div>
-      <div className="table-scroll"><table><thead><tr><th>Requirement</th><th>Level</th><th>Severity</th><th>Rule</th><th>Scope</th><th>State</th>{canManage && <th>Actions</th>}</tr></thead><tbody>
-        {!loading && requirements.length === 0 && <tr><td className="empty-state" colSpan={canManage ? 7 : 6}>No Service knowledge requirements yet.</td></tr>}
-        {requirements.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small className="secondary-text">{item.description || item.remediation_hint || "No description"}</small></td><td>{item.requirement_level}</td><td><StatusBadge status={item.severity} /></td><td>{item.rule_summary}</td><td>{item.service_type_id ? typeNames[item.service_type_id] || "Unavailable" : "Global"}</td><td><StatusBadge status={!item.configuration_valid ? "Invalid" : item.active ? "Active" : "Inactive"} /></td>{canManage && <td><div className="row-actions">{item.service_type_id === id && <button className="text-button" onClick={() => begin(item)} type="button">Edit</button>}{item.service_type_id === id && <button className="text-button" onClick={() => begin(item, true)} type="button">Duplicate</button>}<button className="text-button" onClick={() => toggle(item)} type="button">{item.active ? "Deactivate" : "Activate"}</button>{item.service_type_id === id && <button className="text-button text-danger" onClick={() => remove(item)} type="button">Delete</button>}</div></td>}</tr>)}
-      </tbody></table></div>
-    </section>
+    <KnowledgeProfileTable requirements={requirements} entityLabel="Service" typeId={id} loading={loading} canManage={canManage} onRefresh={load} onEdit={begin} onToggle={toggle} onRemove={remove} />
   </>;
 }
