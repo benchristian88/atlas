@@ -1,29 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { visibleAdminSections } from "../../components/admin-sections";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
-import { PageHeader } from "../../components/page-header";
+import { useWorkspaceContext } from "../../components/workspace-context";
+import { visibleSystemSections } from "../../lib/system-navigation.mjs";
 
-export default function AdministrationPage() {
-  const { user } = useAuth();
-  const sections = visibleAdminSections(user);
-  return (
-    <>
-      <PageHeader
-        eyebrow="Administration"
-        title="Atlas administration"
-        description="Manage identities, customer structure, reference data, and platform governance from one place."
-      />
-      <div className="admin-card-grid">
-        {sections.map((section) => (
-          <Link className="admin-card" href={section.href} key={section.href}>
-            <strong>{section.label}</strong>
-            <span>{section.description}</span>
-            <span className="card-link">Open section <span aria-hidden="true">→</span></span>
-          </Link>
-        ))}
-      </div>
-    </>
-  );
+export default function SystemLandingRedirect() {
+  const router = useRouter();
+  const auth = useAuth();
+  const { customerId, siteId } = useWorkspaceContext();
+  const destination = visibleSystemSections({ ...auth, customerId, siteId })[0]?.href;
+  useEffect(() => { if (destination) router.replace(destination); }, [destination, router]);
+  return destination ? <p role="status">Opening System…</p> : <AccessDenied />;
 }

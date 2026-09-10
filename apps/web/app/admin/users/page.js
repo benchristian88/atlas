@@ -174,7 +174,7 @@ export default function UsersAdminPage() {
   return (
     <>
       <div className="page-heading-row">
-        <PageHeader eyebrow="Administration" title="Users" description="Manage local accounts, lifecycle state, and role assignments. Passwords are never displayed." />
+        <PageHeader eyebrow="Organisation" title="Users" description="Manage local accounts, lifecycle state, and role assignments. Passwords are never displayed." />
         {canCreate && <button className="button button-primary" onClick={openCreate} type="button">Add user</button>}
       </div>
       {error && <div className="error-banner" role="alert">{error}</div>}

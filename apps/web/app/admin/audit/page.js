@@ -51,7 +51,7 @@ export default function AuditAdminPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Administration" title="Audit log" description="Review security-sensitive and administrative changes within your authorised scope." />
+      <PageHeader eyebrow="System" title="Audit log" description="Review security-sensitive and administrative changes within your authorised scope." />
       <form className="filter-card" onSubmit={submit}>
         <div className="form-grid audit-filter-grid">
           <label className="field"><span>Actor</span><input onChange={(event) => setFilters({ ...filters, actor: event.target.value })} placeholder="Email or display name" value={filters.actor} /></label>

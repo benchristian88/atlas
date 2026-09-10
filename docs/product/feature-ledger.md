@@ -1,5 +1,7 @@
 # Atlas product feature ledger — repository-reconciled edition
 
+**C2.6 working-tree audit:** 10 September 2026; implementation complete, manual acceptance pending
+
 **Repository audit date:** 30 August 2026
 **C2.1 merged-state audit date:** 3 September 2026
 **C2.1 subsequent live acceptance date:** 3 September 2026
@@ -983,12 +985,14 @@ C2.1 now provides:
 7. compatibility adapters for both focused C1 routes; and
 8. no impact, outage, recovery, scoring, or change-safety conclusions.
 
-## Homelab Ready stream: C2.5 manual acceptance pending
+## Homelab Ready stream: C2.6 manual acceptance pending
 
 C2.3 bounded, cycle-safe, authorized consequence analysis explained by actual
 paths is implemented with live acceptance complete for its lean scope. C2.4
 Dashboard and Knowledge Graph implementation has manual acceptance pending.
-C2.5 Entity Detail UX Polish is implemented before F1-lite; live/manual acceptance is pending.
+C2.5 Entity Detail UX Polish and C2.6 Usability & Lifecycle Polish are implemented;
+live/manual acceptance remains pending. The immediate path is C2.6 → F1-lite →
+B2-lite → Homelab Ready hardening → Homelab Ready release.
 
 ## Later enterprise release: C3 structured ownership
 
@@ -1124,3 +1128,17 @@ B2-lite, and release hardening.
 C2.1 now has a reusable graph builder, a generic focused graph API,
 compatibility adapters for the existing graph routes, authorization and
 non-disclosure tests, shared web primitives, and updated implementation evidence.
+
+## C2.6 — Usability & Lifecycle Polish (10 September 2026)
+
+| Capability | Repository status | Evidence |
+| --- | --- | --- |
+| Delete mistakes / Archive history | **Implemented**; manual acceptance pending | `entity_lifecycle.py`, migration `20260910_0016`, Service/BF eligibility + DELETE APIs, shared entity deletion dialog and PostgreSQL integration tests. Tombstones preserve creation evidence and history; operational references and substantive edits block deletion. |
+| Business Function Archive/Restore | **Implemented** | Named API/UI actions reuse existing `active` lifecycle; distinct nullable `deleted_at` represents deletion. |
+| System information architecture | **Implemented** | `system-navigation.mjs`, admin layout and redirect. Organisation + Reference Data use authorized local URL links; Audit Log and System Settings are direct. Old deep links remain valid. |
+| System Settings sections | **Implemented** | General shows existing non-sensitive settings; About labels the real web package version. No deployment secrets are exposed. |
+| Backup & Restore / Updates | **Planned but not implemented** | Truthful System Settings placeholders only; delivery remains Homelab Ready hardening. |
+
+[Exact rules/reference audit](../architecture/entity-lifecycle.md) and
+[validation/manual acceptance checklist](../testing/release-c2-usability-lifecycle-polish.md).
+No live acceptance, deployment, F1-lite, B2-lite or hardening completion is claimed.

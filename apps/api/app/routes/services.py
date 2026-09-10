@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
+from app.schemas import EntityDeletionEligibilityResponse
 from app.models import (
     Asset, BusinessFunction, CriticalityLevel, DependencyGroup,
     DependencyGroupMembership, KnowledgeAssertion, KnowledgeChange,
@@ -54,7 +55,7 @@ def _slug(value: str) -> str:
 
 def _service(db: Session, principal: Principal, service_id: uuid.UUID, permission: str) -> Service:
     item = db.get(Service, service_id)
-    if item is None:
+    if item is None or item.deleted_at is not None:
         raise not_found("Service")
     require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
     return item
@@ -224,11 +225,11 @@ def create_service(payload: ServiceCreate, request: Request, context: RequestCon
     item = Service(**values, source="manual", created_by_user_id=principal.user.id, updated_by_user_id=principal.user.id)
     db.add(item)
     flush(db, "Service")
-    declare_service_changes(db, service=item, previous_values={field: None for field in MANUAL_SERVICE_KNOWLEDGE_FIELDS}, actor_user_id=principal.user.id, record_changes=False)
+    initial_assertions = declare_service_changes(db, service=item, previous_values={field: None for field in MANUAL_SERVICE_KNOWLEDGE_FIELDS}, actor_user_id=principal.user.id, record_changes=False)
     record_change(db, customer_id=item.customer_id, site_id=item.site_id, change_type="service_created", entity_type="service", entity_id=item.id, entity_name=item.name, summary=f"Created Service {item.name}", actor_user_id=principal.user.id)
     from app.services.knowledge_completeness import evaluate_service_safely
     evaluate_service_safely(db, item, trigger_context="service_created", actor_user_id=principal.user.id)
-    add_audit_event(db, action="service.created", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service created", request=request)
+    add_audit_event(db, action="service.created", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service created", metadata={"initial_assertion_ids": [str(assertion.id) for assertion in initial_assertions]}, request=request)
     commit(db, "Service")
     db.refresh(item)
     return service_response(db, item, principal)
@@ -1040,3 +1041,17 @@ def service_graph(
     except GraphFocusNotFound:
         raise not_found("Service")
     return operational_graph_to_service_graph(graph)
+
+
+@router.get("/services/{service_id}/deletion-eligibility", response_model=EntityDeletionEligibilityResponse)
+def service_deletion_eligibility(service_id: uuid.UUID, principal: Principal = Depends(require_permission("services.archive")), db: Session = Depends(get_db)):
+    from app.services.entity_lifecycle import deletion_eligible, MESSAGE
+    item = _service(db, principal, service_id, "services.archive")
+    eligible = deletion_eligible(db, item)
+    return {"eligible": eligible, "reason": None if eligible else MESSAGE.format(label="Service")}
+
+
+@router.delete("/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_service(service_id: uuid.UUID, request: Request, principal: Principal = Depends(require_permission("services.archive")), db: Session = Depends(get_db)):
+    from app.services.entity_lifecycle import delete_mistake
+    delete_mistake(db, _service(db, principal, service_id, "services.archive"), principal, request)

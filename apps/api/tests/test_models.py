@@ -162,7 +162,7 @@ CRITICAL_COLUMNS = {
         "operational_status", "owner_name", "technical_contact", "support_group",
         "documentation_url", "runbook_url", "rto_minutes", "rpo_minutes",
         "backup_notes", "recovery_notes", "notes", "source", "created_by_user_id",
-        "updated_by_user_id", "archived_at", "archived_by_user_id", "archive_reason",
+        "updated_by_user_id", "archived_at", "archived_by_user_id", "archive_reason", "deleted_at",
         "created_at", "updated_at",
     },
 }

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
+from app.schemas import EntityDeletionEligibilityResponse
 from app.models import BusinessFunction, CriticalityLevel, KnowledgeGap, ServiceBusinessFunction, Service, Site
 from app.routes.crud_helpers import commit, flush, not_found
 from app.routes.services import _business_function_link_response, _visible_related_ids, service_response
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/business-functions", tags=["business functions"])
 
 def _function(db: Session, principal: Principal, function_id: uuid.UUID, permission: str) -> BusinessFunction:
     item = db.get(BusinessFunction, function_id)
-    if item is None:
+    if item is None or item.deleted_at is not None:
         raise not_found("Business function")
     require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
     return item
@@ -91,6 +92,7 @@ def update_business_function(function_id: uuid.UUID, payload: BusinessFunctionUp
         if changes["site_id"]:
             site = db.get(Site, changes["site_id"])
             if site is None or site.customer_id != item.customer_id: raise HTTPException(status_code=422, detail="Site does not belong to the selected customer")
+    require_scope(principal, "business_functions.manage", item.customer_id, changes.get("site_id", item.site_id))
     if changes.get("criticality_level_id"):
         criticality = db.get(CriticalityLevel, changes["criticality_level_id"])
         if criticality is None or not criticality.active: raise HTTPException(status_code=422, detail="Criticality level is not active or does not exist")
@@ -138,3 +140,27 @@ def business_function_graph(
     except GraphFocusNotFound:
         raise not_found("Business function")
     return operational_graph_to_service_graph(graph)
+
+
+@router.get("/{function_id}/deletion-eligibility", response_model=EntityDeletionEligibilityResponse)
+def function_deletion_eligibility(function_id: uuid.UUID, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
+    from app.services.entity_lifecycle import deletion_eligible, MESSAGE
+    item = _function(db, principal, function_id, "business_functions.manage")
+    eligible = deletion_eligible(db, item)
+    return {"eligible": eligible, "reason": None if eligible else MESSAGE.format(label="Business Function")}
+
+
+@router.delete("/{function_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_business_function(function_id: uuid.UUID, request: Request, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
+    from app.services.entity_lifecycle import delete_mistake
+    delete_mistake(db, _function(db, principal, function_id, "business_functions.manage"), principal, request)
+
+
+@router.post("/{function_id}/archive", response_model=BusinessFunctionResponse)
+def archive_business_function(function_id: uuid.UUID, request: Request, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
+    return update_business_function(function_id, BusinessFunctionUpdate(active=False), request, principal, db)
+
+
+@router.post("/{function_id}/restore", response_model=BusinessFunctionResponse)
+def restore_business_function(function_id: uuid.UUID, request: Request, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
+    return update_business_function(function_id, BusinessFunctionUpdate(active=True), request, principal, db)

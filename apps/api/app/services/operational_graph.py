@@ -361,6 +361,8 @@ class OperationalGraphBuilder:
         *,
         allow_inactive: bool = False,
     ) -> bool:
+        if entity_type in {"service", "business_function"} and item.deleted_at is not None:
+            return False
         if (
             not allow_inactive
             and entity_type == "service"

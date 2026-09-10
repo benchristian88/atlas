@@ -156,7 +156,7 @@ export default function ServiceKnowledgeProfilePage() {
   const fieldRule = form.rule_type === "service_field_present" || form.rule_type === "one_of";
   return <>
     <div className="page-heading-row">
-      <PageHeader eyebrow="Administration · Service types" title={`${serviceType?.name || "Service type"} knowledge profile`} description="Define the operational knowledge Atlas expects for this Service type. Global Service rules are shown alongside type-specific rules." />
+      <PageHeader eyebrow="Reference Data · Service types" title={`${serviceType?.name || "Service type"} knowledge profile`} description="Define the operational knowledge Atlas expects for this Service type. Global Service rules are shown alongside type-specific rules." />
       {canManage && <button className="button button-primary" onClick={() => begin()} type="button">Add requirement</button>}
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}

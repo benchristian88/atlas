@@ -31,7 +31,7 @@ export default function CriticalityLevelsAdminPage() {
     canCreate={manage} canDelete={false} canEdit={manage}
     columns={columns} description="Rank Service importance and provide recovery suggestions. Explicit Service targets are never overwritten."
     emptyValues={{ key: "", name: "", rank: "50", default_rto_minutes: "", default_rpo_minutes: "", sort_order: "100", active: true, description: "" }}
-    endpoint="/criticality-levels" eyebrow="Administration" fields={fields}
+    endpoint="/criticality-levels" eyebrow="Reference Data" fields={fields}
     preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, rank: Number(form.rank), default_rto_minutes: form.default_rto_minutes === "" ? null : Number(form.default_rto_minutes), default_rpo_minutes: form.default_rpo_minutes === "" ? null : Number(form.default_rpo_minutes), sort_order: Number(form.sort_order), active: form.active, description: form.description || null })}
     title="Criticality levels"
   />;

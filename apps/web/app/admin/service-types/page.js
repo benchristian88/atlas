@@ -37,7 +37,7 @@ export default function ServiceTypesAdminPage() {
       columns={visibleColumns}
       description="Define stable operational Service categories. Referenced types can be renamed or deactivated without breaking Services."
       emptyValues={{ key: "", name: "", icon_key: "", sort_order: "100", active: true, requires_asset_dependency: true, description: "" }}
-      endpoint="/service-types" eyebrow="Administration" fields={fields}
+      endpoint="/service-types" eyebrow="Reference Data" fields={fields}
       preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, icon_key: form.icon_key || null, sort_order: Number(form.sort_order), active: form.active, requires_asset_dependency: form.requires_asset_dependency, description: form.description || null })}
       title="Service types"
     />

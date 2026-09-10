@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EntityDeleteAction } from "../../../components/entity-delete-action";
 import { AccessDenied } from "../../../components/access-denied";
 import { AssertionsPanel } from "../../../components/assertions-panel";
 import { useAuth } from "../../../components/auth-context";
@@ -111,6 +112,7 @@ export default function ServiceDetailPage({ params }) {
     {graph.nodes.length > 0 && <EntityEditDisclosure title="Recorded Service graph"><section className="ops-card"><div className="form-card-header"><div><p className="eyebrow">Projection</p><h2>Service graph</h2></div></div><OperationalGraphView graph={graph} /></section></EntityEditDisclosure>}
     <section className="ops-card entity-section"><div className="form-card-header"><div><p className="eyebrow">Recovery</p><h2>Recovery knowledge</h2></div></div><div className="prose-content"><h3>Recovery notes</h3><p>{service.recovery_notes || "Not documented."}</p><h3>Backup notes</h3><p>{service.backup_notes || "Not documented."}</p><h3>General notes</h3><p>{service.notes || "—"}</p></div></section>
     {hasPermission("changes.view") && <section className="ops-card entity-section"><div className="form-card-header"><div><p className="eyebrow">History</p><h2>Meaningful changes</h2></div></div>{changes.length === 0 ? <p className="empty-state">No Service history yet.</p> : <div className="timeline">{changes.map((change) => <TimelineEvent key={change.id}><div className="timeline-heading"><strong>{change.summary}</strong><time>{new Date(change.occurred_at).toLocaleString()}</time></div>{change.predicate && <small>{change.predicate.replaceAll("_", " ")}</small>}</TimelineEvent>)}</div>}</section>}
+    {canArchive && <EntitySection title="Record lifecycle" description="Delete mistakes. Archive history."><EntityDeleteAction kind="service" item={service} /></EntitySection>}
     <AssertionsPanel assertions={assertions} assetsById={assetsById} canDelete={hasPermission("assertions.delete")} canRetract={hasPermission("assertions.retract")} entityLabel="Service" onChanged={load} />
   </div>;
 }

@@ -57,7 +57,7 @@ export default function RelationshipTypesAdminPage() {
       description="Define the vocabulary and permitted endpoint types used by Atlas topology relationships."
       emptyValues={{ key: "", name: "", source_label: "", target_label: "", inverse_label: "", sort_order: "100", directional: true, active: true, allowed_source_asset_type_keys: [], allowed_target_asset_type_keys: [], applicability_pairs: [], description: "" }}
       endpoint="/relationship-types"
-      eyebrow="Administration"
+      eyebrow="Reference Data"
       fields={fields}
       preparePayload={(form, editingId) => ({
         ...(!editingId ? { key: form.key } : {}),

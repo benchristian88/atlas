@@ -88,3 +88,9 @@ requirement, such as a local Asset dependency for an External Service.
 Full impact analysis, SLO/SLA tracking, incident management, catalogs,
 on-call/escalation models, and Person/Team ownership are intentionally outside
 Release C1.
+
+## Record lifecycle
+
+C2.6 distinguishes mistaken-record Delete (retained tombstone) from Archive.
+See [Service and Business Function lifecycle](entity-lifecycle.md) for exact
+eligibility, authorization, historical preservation and concurrency rules.

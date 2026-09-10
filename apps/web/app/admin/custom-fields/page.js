@@ -73,7 +73,7 @@ export default function CustomFieldsAdminPage() {
       description="Add up to ten typed enrichment fields per asset type without changing the core inventory schema."
       emptyValues={{ key: "", name: "", data_type: "text", sort_order: "100", required: false, active: true, applies_to_all_asset_types: true, asset_type_keys: [], options_text: "", description: "", help_text: "" }}
       endpoint="/custom-fields"
-      eyebrow="Administration"
+      eyebrow="Reference Data"
       fields={fields}
       preparePayload={(form, editingId) => {
         const payload = {

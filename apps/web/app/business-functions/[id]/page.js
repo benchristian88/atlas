@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EntityDeleteAction } from "../../../components/entity-delete-action";
 import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
 import { EntityDetailHeader, EntitySection, EntityRelationshipRow, EntityRelationshipList, EntityEditDisclosure } from "../../../components/entity-detail";
@@ -87,16 +88,23 @@ export default function BusinessFunctionDetailPage({ params }) {
           <label className="field"><span>Name *</span><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
           <label className="field"><span>Owner</span><input value={form.owner_name} onChange={(event) => setForm({ ...form, owner_name: event.target.value })} /></label>
           <label className="field"><span>Criticality</span><select value={form.criticality_level_id} onChange={(event) => setForm({ ...form, criticality_level_id: event.target.value })}><option value="">Not set</option>{criticalityLevels.filter((level) => level.active || level.id === item.criticality_level_id).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select></label>
-          <label className="field checkbox-field"><span>Active</span><input checked={form.active} type="checkbox" onChange={(event) => setForm({ ...form, active: event.target.checked })} /></label>
           <label className="field field-wide"><span>Description</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
         </div>
         <div className="form-actions"><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save"}</button></div>
       </form>
     </section>}
+    {canManage && <EntitySection title="Record lifecycle" description="Delete mistakes. Archive history.">
+      <button className="button button-secondary" type="button" disabled={saving} onClick={async () => {
+        setSaving(true); setError("");
+        try { await apiRequest(`/business-functions/${id}/${item.active ? "archive" : "restore"}`, { method: "POST" }); await load(); }
+        catch (failure) { setError(failure.message); } finally { setSaving(false); }
+      }}>{item.active ? "Archive" : "Restore archived Business Function"}</button>
+      <EntityDeleteAction kind="business_function" item={item} />
+    </EntitySection>}
     <EntitySection title="Overview" description="The business outcome supported by Services.">
       <div className="detail-grid">
         <div><span>Owner</span><strong>{item.owner_name || "Not recorded"}</strong></div>
-        <div><span>Record lifecycle</span><strong>{item.active ? "Active" : "Inactive"}</strong></div>
+        <div><span>Record lifecycle</span><strong>{item.active ? "Active" : "Archived"}</strong></div>
         <div><span>Scope</span><strong>{item.site_id ? "Site" : "Customer-wide"}</strong></div>
         <div><span>Supporting relationships</span><strong>{links.length}</strong></div>
         <div><span>Connected Assets</span><strong>{connectedAssets.length}</strong></div>
