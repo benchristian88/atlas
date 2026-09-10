@@ -25,7 +25,7 @@ test("knowledge gaps use a dedicated workflow outside reconciliation", async () 
 });
 
 test("knowledge profile editor uses dynamic reference records and structured rules", async () => {
-  const profile = await readFile(new URL("../app/admin/asset-types/[id]/knowledge-profile/page.js", import.meta.url), "utf8");
+  const profile = await readFile(new URL("../components/asset-knowledge-profile.js", import.meta.url), "utf8");
   assert.match(profile, /apiRequest\("\/asset-types"\)/);
   assert.match(profile, /apiRequest\("\/custom-fields"\)/);
   assert.match(profile, /apiRequest\("\/relationship-types"\)/);

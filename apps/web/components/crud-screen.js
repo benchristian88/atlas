@@ -39,6 +39,7 @@ export function CrudScreen({
   deleteReason,
   contextReloadKey,
   onMutation,
+  headingActions,
 }) {
   const dependencySignature = JSON.stringify(
     dependencies.map((dependency) => [dependency.key, dependency.endpoint]),
@@ -159,11 +160,14 @@ export function CrudScreen({
     <>
       <div className="page-heading-row">
         <PageHeader eyebrow={eyebrow} title={title} description={description} />
-        {showCreate && (
-          <button className="button button-primary" onClick={openCreate} type="button">
-            Add {title.replace(/s$/, "")}
-          </button>
-        )}
+        {(headingActions || showCreate) && <div className="row-actions crud-heading-actions">
+          {headingActions}
+          {showCreate && (
+            <button className="button button-primary" onClick={openCreate} type="button">
+              Add {title.replace(/s$/, "")}
+            </button>
+          )}
+        </div>}
       </div>
 
       {error && <div className="error-banner" role="alert">{error}</div>}

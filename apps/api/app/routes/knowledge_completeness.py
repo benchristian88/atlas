@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
@@ -22,6 +23,7 @@ from app.schemas import (
     KnowledgeRequirementUpdate, KnowledgeRequirementValidationRequest,
     KnowledgeRequirementValidationResponse,
     ServiceCompletenessResponse,
+    GlobalKnowledgeRequirementResponse,
 )
 from app.services.knowledge_completeness import ACTIVE_GAP_STATUSES, evaluate_asset, evaluate_assets_for_asset_type, evaluate_service, evaluate_services_for_service_type
 from app.services.knowledge_changes import record_change
@@ -140,6 +142,20 @@ def validate_requirement(payload: KnowledgeRequirementValidationRequest, princip
     require_global(principal, "knowledge_requirements.view")
     valid, errors, interpretation = validate_rule_config(db, payload.rule_type, payload.rule_config_json)
     return {"valid": valid, "errors": errors, "interpretation": interpretation}
+
+
+@router.get("/knowledge-requirements", response_model=list[GlobalKnowledgeRequirementResponse])
+def list_global_requirements(entity_type: Literal["asset", "service"] = Query(...), principal: Principal = Depends(require_permission("knowledge_requirements.view")), db: Session = Depends(get_db)):
+    """Global policy management; inherited requirements remain viewable in profiles."""
+    require_global(principal, "knowledge_requirements.view")
+    require_global(principal, "knowledge_requirements.manage")
+    has_history = exists().where(KnowledgeGap.requirement_definition_id == KnowledgeRequirementDefinition.id)
+    rows = db.execute(select(KnowledgeRequirementDefinition, has_history).where(
+        KnowledgeRequirementDefinition.entity_type == entity_type,
+        KnowledgeRequirementDefinition.asset_type_id.is_(None),
+        KnowledgeRequirementDefinition.service_type_id.is_(None),
+    ).order_by(KnowledgeRequirementDefinition.sort_order, KnowledgeRequirementDefinition.name))
+    return [dict(_requirement_response(db, item), can_delete=not item.system_defined and not history) for item, history in rows]
 
 
 @router.post("/knowledge-requirements", response_model=KnowledgeRequirementResponse, status_code=status.HTTP_201_CREATED)

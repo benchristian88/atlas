@@ -39,6 +39,7 @@ export default function ServiceTypesAdminPage() {
       emptyValues={{ key: "", name: "", icon_key: "", sort_order: "100", active: true, requires_asset_dependency: true, description: "" }}
       endpoint="/service-types" eyebrow="Reference Data" fields={fields}
       preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, icon_key: form.icon_key || null, sort_order: Number(form.sort_order), active: form.active, requires_asset_dependency: form.requires_asset_dependency, description: form.description || null })}
+      headingActions={hasGlobalPermission("knowledge_requirements.view") && hasGlobalPermission("knowledge_requirements.manage") && <Link className="button button-secondary" href="/admin/service-types/requirements/global">Manage global requirements</Link>}
       title="Service types"
     />
   </>;
