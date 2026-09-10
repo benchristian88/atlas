@@ -1,8 +1,8 @@
 # Release C2 implementation plan
 
-Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented and merged; C2.5 implemented; live/manual acceptance pending
+Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented and merged; C2.5 implemented; C2.6 implemented; live/manual acceptance pending
 
-Latest implemented increment: **C2.5 — Entity Detail UX Polish**
+Latest implemented increment: **C2.6 — Usability & Lifecycle Polish**
 
 C2.4 implementation and its pending manual gate are described in the
 [operations architecture](../architecture/homelab-operations-experience.md) and
@@ -794,3 +794,34 @@ This checklist guided the delivered implementation:
    and legacy Service Asset conversion have not entered the C2.1 change set.
 10. Run all supported tests and builds.
 11. Update the feature ledger at the delivered commit.
+
+# C2.6 — Usability & Lifecycle Polish
+
+Implementation complete; automated validation recorded in the
+[C2.6 acceptance record](../testing/release-c2-usability-lifecycle-polish.md).
+**Manual acceptance pending.** No live acceptance or release is claimed.
+
+Delete mistakes / Archive history is implemented with Service and Business
+Function tombstones. Automatic initial declarations, creation audit/Changes and
+completeness artefacts alone do not force Archive. Substantive relationships,
+later edits and knowledge/discovery participation block Delete. Archive keeps
+its existing Service state; Business Function Archive uses `active=false`.
+See [exact eligibility and reference audit](../architecture/entity-lifecycle.md).
+
+The System sidebar is Organisation, Reference Data, Audit Log and System
+Settings. Organisation groups Users, Roles & permissions, Customers and Sites.
+Reference Data groups all five existing taxonomy pages. Authorized local links
+track the URL; admin deep links remain supported and `/admin` redirects.
+Audit Log is direct. The Administration overview/cards are retired.
+
+System Settings contains General (existing safe settings only), Backup & Restore
+(planned), Updates (planned) and About (authoritative web package version).
+No secret editor, backup engine, version polling or self-update is introduced.
+
+Immediate delivery: **C2.6 → F1-lite Homelab Documentation → B2-lite Live Proxmox
+Discovery → Homelab Ready hardening → Homelab Ready release**. Hardening enriches
+System Settings with backup/restore, update/version checking, About/build
+information and safe runtime settings, while retaining onboarding, optional
+starter data, Interface-first IP cleanup, install/upgrade, migration, security,
+Docker, browser/mobile/accessibility, release and support/compatibility work.
+C3/C4/D/E remain later additive evolution.

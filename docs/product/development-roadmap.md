@@ -95,7 +95,7 @@ enterprise Impact Analysis.
 | Release B — Discovery and Reconciliation | Core simulation and reconciliation implemented; live operation partial | Complete B2-lite for Homelab Ready, then add scheduling, broad retries and richer orchestration later |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services | Extend later to Business Functions, ownership, recovery, documentation, and intended-state objects |
 | Release C1 — Homelab Service MVP | Implemented | Preserve first-class Services, Business Functions, temporal dependencies, recovery fields, provenance, completeness, and focused graphs |
-| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; C2.5 implemented; manual acceptance pending | Build on live-accepted lean consequences to deliver the polished visual operations experience |
+| Release C2 — shared graph and explainable dependency foundation | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; C2.5 implemented; C2.6 implemented; manual acceptance pending | Build on live-accepted lean consequences to deliver the polished visual operations experience |
 | F1-lite — Homelab Documentation | Planned; renderer and persistence exist | Expose existing generated Markdown through usable Documents API and UI without waiting for C4 |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation | Complete a secure configure, test, Run Now, result, and reconciliation journey for Proxmox |
 | Homelab Ready Release | Planned | Harden and package the combined product as a high-quality self-hosted homelab release |
@@ -112,7 +112,10 @@ enterprise Impact Analysis.
 **C2.3 — Explainable Dependency Analysis** are complete, including live LXC
 acceptance for their respective scopes. **C2.4 — Homelab Operations Experience**
 is merged into dev. C2.5 Entity Detail UX Polish is implemented with live/manual
-acceptance pending. F1-lite, B2-lite and Homelab Ready hardening remain next;
+acceptance pending. **C2.6 — Usability & Lifecycle Polish** is implemented, with
+manual acceptance pending. The immediate path is C2.6 → F1-lite Homelab
+Documentation → B2-lite Live Proxmox Discovery → Homelab Ready hardening →
+Homelab Ready release;
 this update does not claim a new C2.4 live acceptance result.
 
 F1-lite and B2-lite may proceed in parallel where dependencies permit, but they
@@ -129,13 +132,14 @@ flowchart TD
     C23[C2.3 Explainable Dependency Analysis]
     C24[C2.4 Homelab Operations Experience]
     C25[C2.5 Entity Detail UX Polish]
+    C26[C2.6 Usability & Lifecycle Polish]
     F1L[F1-lite Homelab Documentation]
     B2L[B2-lite Live Proxmox Discovery]
     HARDEN[Homelab Ready hardening]
     READY[HOMELAB READY RELEASE]
     LATER[Later enterprise evolution\nC2 rich semantics + C3 + C4 + D + E + F + ITSM/MSP]
 
-    BASE --> C22 --> C23 --> C24 --> C25 --> F1L --> B2L --> HARDEN --> READY
+    BASE --> C22 --> C23 --> C24 --> C25 --> C26 --> F1L --> B2L --> HARDEN --> READY
     READY --> LATER
 ```
 
@@ -576,6 +580,22 @@ it. Scheduling, broad retry/cancellation policy, distributed worker control,
 multiple plugins, and production-scale orchestration are later B2 evolution;
 scheduling should follow a reliable Run Now journey.
 
+## C2.6 — Usability & Lifecycle Polish
+
+Implemented; automated validation recorded separately; live/manual acceptance
+pending. **Delete mistakes. Archive history.** Eligible Services and Business
+Functions are tombstoned, preserving automatic creation evidence and audit
+history. Substantive participation blocks Delete; Archive remains the normal
+lifecycle action. See [exact eligibility](../architecture/entity-lifecycle.md).
+
+System navigation is Organisation (Users, Roles & permissions, Customers,
+Sites), Reference Data (Asset types, Relationship types, Service types,
+Criticality levels, Custom fields), direct Audit Log and System Settings.
+Existing deep links remain valid; `/admin` redirects. System Settings contains
+General, planned Backup & Restore, planned Updates and About using truthful
+web package metadata. No deployment secrets or update/backup engine are added.
+See [C2.6 validation and acceptance](../testing/release-c2-usability-lifecycle-polish.md).
+
 # Homelab Ready hardening
 
 This is a contained quality bar for a high-quality self-hosted release, not
@@ -585,13 +605,16 @@ enterprise production certification:
   Network records consistently in Asset create, edit, list, filtering, and
   sorting journeys; retain `Asset.ip_address` only for migration and read
   compatibility until a deliberate deprecation decision is made;
-- installation and upgrade testing;
-- backup and restore guidance;
+- installation, upgrade and migration validation;
+- enrich System Settings with Backup & Restore, update/version checking,
+  About/build information refinement and safe instance-level runtime settings;
+- optional homelab starter/template data;
+- backup/restore implementation, validation and recovery guidance;
 - security review;
 - operator documentation and first-run/onboarding improvement;
 - browser, mobile, theme, and accessibility validation;
 - Docker deployment validation;
-- repeatable release artefacts;
+- repeatable release artefacts and documentation/support/compatibility guidance;
 - replace the mock Integrations page through B2-lite rather than treating the
   current scaffolding as a complete product journey;
 - expose the existing generated Asset Markdown through F1-lite; and
@@ -637,12 +660,13 @@ Examples:
 2. Preserve the completed, live-accepted **C2.3 — Explainable Dependency Analysis**.
 3. Complete live/manual acceptance of **C2.4 — Homelab Operations Experience**.
 4. Complete live/manual acceptance of **C2.5 — Entity Detail UX Polish**.
-5. Deliver **F1-lite — Homelab Documentation**.
-6. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
+5. Complete manual acceptance of **C2.6 — Usability & Lifecycle Polish**.
+6. Deliver **F1-lite — Homelab Documentation**.
+7. Deliver **B2-lite — Live Proxmox Discovery**: configure, test, Run Now,
    inspect results, and reconcile. Contained B2-lite/F1-lite work may proceed in
    parallel where dependencies permit.
-7. Complete **Homelab Ready hardening** and ship the **HOMELAB READY RELEASE**.
-8. Continue the separate **Later Enterprise Evolution** path: richer dependency
+8. Complete **Homelab Ready hardening** and ship the **HOMELAB READY RELEASE**.
+9. Continue the separate **Later Enterprise Evolution** path: richer dependency
    semantics, C3, C4, D, richer B2, E, F, and ITSM/MSP capabilities.
 
 # Release gates

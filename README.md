@@ -220,8 +220,11 @@ than one link per technical page:
 - **Operations:** Discovery run activity and simulation, plus Reconciliation
   for reviewing sourced changes before they enter the operational model.
 - **Connections:** Integrations.
-- **System:** permission-filtered Users & Access, Reference Data, and an
-  Administration landing page linking to available administration sections.
+- **System:** permission-filtered Organisation (Users, Roles & permissions,
+  Customers, Sites), Reference Data, direct Audit Log and System Settings.
+  Existing admin deep links remain valid; `/admin` redirects to the first
+  authorized section. System Settings contains General, planned Backup & Restore,
+  planned Updates and About.
 - **Profile:** kept separate because it contains user-specific identity,
   password, access-summary, and appearance preferences.
 
@@ -235,12 +238,23 @@ KNOWLEDGE      Knowledge Graph; Assets; Services; Business Functions;
 OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
                Backup & Recovery (roadmap); Documentation (roadmap)
 CONNECTIONS    Integrations
-SYSTEM         Users & Access; Reference Data; Administration
+SYSTEM         Organisation; Reference Data; Audit Log; System Settings
 PROFILE        Profile
 ```
 
 Future usable features should be enabled within these domains rather than
 added as arbitrary top-level links.
+
+## Service and Business Function lifecycle
+
+**Delete mistakes. Archive history.** C2.6 adds Delete for unused mistakes even
+when automatic creation declarations, gaps and audit records exist. Deletion
+retains a tombstone and history while excluding the entity from operational
+views; substantive relationships, later edits and knowledge participation block
+Delete. Archive preserves genuinely used records. See
+[the exact lifecycle rules](docs/architecture/entity-lifecycle.md) and
+[C2.6 manual acceptance checklist](docs/testing/release-c2-usability-lifecycle-polish.md).
+Manual acceptance remains pending.
 
 ## Customer and site context
 

@@ -13,9 +13,10 @@ const paths = {
   reconciliation: "M4 7h16l-4-4 M20 17H4l4 4 M20 7l-4 4 M4 17l4-4",
   "knowledge-gaps": "M12 3 2 21h20L12 3z M12 9v5 M12 17v1",
   integrations: "M8 3v5 M16 3v5 M6 8h12v4a6 6 0 0 1-12 0V8z M12 18v4",
-  "users-access": "M9 3a3 3 0 1 0 0 6 3 3 0 1 0 0-6 M2 21v-3a7 7 0 0 1 10-6 M18 11l4 2v4c0 2-4 4-4 4s-4-2-4-4v-4l4-2z",
+  organisation: "M9 3a3 3 0 1 0 0 6 3 3 0 1 0 0-6 M2 21v-3a7 7 0 0 1 10-6 M18 11l4 2v4c0 2-4 4-4 4s-4-2-4-4v-4l4-2z",
   "reference-data": "M4 3h16v18H4z M4 9h16 M4 15h16 M10 3v18",
-  administration: "M3 6h18 M3 12h18 M3 18h18 M7 3v6 M17 9v6 M10 15v6",
+  "audit-log": "M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5",
+  "system-settings": "M3 6h18 M3 12h18 M3 18h18 M7 3v6 M17 9v6 M10 15v6",
 };
 
 export function NavigationIcon({ name }) {

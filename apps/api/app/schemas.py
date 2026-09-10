@@ -1816,3 +1816,8 @@ class TopologyResponse(BaseModel):
     relationships: list[AssetRelationshipResponse]
     networks: list[NetworkResponse]
     asset_interfaces: list[AssetInterfaceResponse]
+
+
+class EntityDeletionEligibilityResponse(BaseModel):
+    eligible: bool
+    reason: str | None = None

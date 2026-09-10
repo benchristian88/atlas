@@ -47,7 +47,7 @@ export default function AssetTypesAdminPage() {
       description="Define the inventory taxonomy and default icon used when an asset has no override."
       emptyValues={{ key: "", name: "", category: "", default_icon_url: "", sort_order: "100", active: true, description: "" }}
       endpoint="/asset-types"
-      eyebrow="Administration"
+      eyebrow="Reference Data"
       fields={fields}
       preparePayload={(form, editingId) => ({
         ...(!editingId ? { key: form.key } : {}),

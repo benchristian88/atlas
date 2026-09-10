@@ -396,7 +396,7 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "customer_id",
             text("lower(name)"),
             unique=True,
-            postgresql_where=text("site_id IS NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         Index(
             "uq_services_customer_site_name",
@@ -404,14 +404,14 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "site_id",
             text("lower(name)"),
             unique=True,
-            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         Index(
             "uq_services_customer_slug_without_site",
             "customer_id",
             "slug",
             unique=True,
-            postgresql_where=text("site_id IS NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         Index(
             "uq_services_customer_site_slug",
@@ -419,11 +419,13 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "site_id",
             "slug",
             unique=True,
-            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         CheckConstraint("rto_minutes IS NULL OR rto_minutes >= 0", name="valid_rto_minutes"),
         CheckConstraint("rpo_minutes IS NULL OR rpo_minutes >= 0", name="valid_rpo_minutes"),
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -687,9 +689,11 @@ class BusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_business_functions_customer_site_sites",
             ondelete="RESTRICT",
         ),
-        Index("uq_business_functions_customer_name_without_site", "customer_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NULL")),
-        Index("uq_business_functions_customer_site_name", "customer_id", "site_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NOT NULL")),
+        Index("uq_business_functions_customer_name_without_site", "customer_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NULL AND deleted_at IS NULL")),
+        Index("uq_business_functions_customer_site_name", "customer_id", "site_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NOT NULL AND deleted_at IS NULL")),
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True

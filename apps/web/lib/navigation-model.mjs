@@ -1,3 +1,5 @@
+import { SYSTEM_GROUPS } from "./system-navigation.mjs";
+
 export const NAVIGATION_GROUPS = [
   {
     id: "overview",
@@ -47,47 +49,7 @@ export const NAVIGATION_GROUPS = [
     id: "system",
     label: "System",
     placement: "bottom",
-    items: [
-      {
-        id: "users-access",
-        label: "Users & Access",
-        destinations: [
-          { href: "/admin/users", globalPermission: "users.view" },
-          { href: "/admin/roles", globalPermission: "roles.view" },
-        ],
-        activeRoutes: ["/admin/users", "/admin/roles"],
-      },
-      {
-        id: "reference-data",
-        label: "Reference Data",
-        destinations: [
-          { href: "/admin/asset-types", globalPermission: "asset_types.manage" },
-          { href: "/admin/relationship-types", globalPermission: "relationship_types.manage" },
-          { href: "/admin/service-types", globalPermission: "service_types.manage" },
-          { href: "/admin/criticality-levels", globalPermission: "criticality_levels.manage" },
-          { href: "/admin/custom-fields", globalPermission: "custom_fields.manage" },
-          { href: "/admin/customers", permission: "customers.manage" },
-          { href: "/admin/sites", permission: "sites.manage" },
-        ],
-        activeRoutes: [
-          "/admin/asset-types",
-          "/admin/relationship-types",
-          "/admin/service-types",
-          "/admin/criticality-levels",
-          "/admin/custom-fields",
-          "/admin/customers",
-          "/admin/sites",
-        ],
-      },
-      {
-        id: "administration",
-        label: "Administration",
-        destinations: [
-          { href: "/admin", globalPermission: "system_settings.manage" },
-        ],
-        activeRoutes: ["/admin"],
-      },
-    ],
+    items: SYSTEM_GROUPS,
   },
 ];
 
