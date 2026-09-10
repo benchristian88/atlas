@@ -58,6 +58,7 @@ export default function AssetTypesAdminPage() {
         active: form.active,
         description: form.description || null,
       })}
+      headingActions={hasGlobalPermission("knowledge_requirements.view") && hasGlobalPermission("knowledge_requirements.manage") && <Link className="button button-secondary" href="/admin/asset-types/requirements/global">Manage global requirements</Link>}
       title="Asset types"
     />
   );

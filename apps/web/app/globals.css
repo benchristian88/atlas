@@ -383,6 +383,7 @@ a { color: inherit; text-decoration: none; }
 .row-actions .text-button:disabled { cursor: not-allowed; }
 .text-danger { color: var(--danger); }
 .row-actions { display: flex; gap: 12px; white-space: nowrap; }
+.crud-heading-actions { flex-wrap: wrap; }
 .empty-state { color: var(--muted); padding: 36px; text-align: center; }
 
 .asset-icon {
@@ -617,6 +618,24 @@ tbody tr:hover { background: var(--surface-muted); }
 .primary-cell { font-weight: 650; }
 .table-cell-identity { display: grid; gap: 4px; min-width: 0; }
 .table-cell-identity .secondary-text { line-height: 1.4; }
+.knowledge-profile-table { table-layout: fixed; min-width: 920px; }
+.knowledge-profile-table th, .knowledge-profile-table td { padding: 12px 10px; white-space: normal; overflow-wrap: anywhere; }
+.knowledge-profile-table td { vertical-align: top; }
+.knowledge-profile-table .profile-requirement-column { width: 30%; }
+.knowledge-profile-table .profile-level-column { width: 105px; }
+.knowledge-profile-table .profile-severity-column { width: 90px; }
+.knowledge-profile-table .profile-scope-column { width: 105px; }
+.knowledge-profile-table .profile-state-column { width: 90px; }
+.knowledge-profile-table .profile-actions-column { width: 90px; }
+.knowledge-profile-table .table-cell-identity { gap: 6px; }
+.knowledge-profile-table .table-cell-identity small, .knowledge-profile-table .profile-rule { font-size: 12px; line-height: 1.5; }
+.knowledge-profile-table .profile-group-heading th { text-transform: none; letter-spacing: normal; font-size: 13px; }
+.profile-group-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.knowledge-profile-table .row-actions { flex-wrap: wrap; gap: 8px; }
+.knowledge-profile-table .text-button { font-size: 12px; }
+.knowledge-profile-table thead th { white-space: nowrap; }
+.knowledge-profile-table .status-badge { overflow-wrap: normal; }
+.knowledge-profile-table .status-badge:not(.status-critical):not(.status-high):not(.status-medium):not(.status-low):not(.status-active) { background: var(--surface-muted); color: var(--muted); }
 .secondary-text { color: var(--muted); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 

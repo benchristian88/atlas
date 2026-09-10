@@ -299,12 +299,13 @@ def test_downgrade_refuses_to_resurrect_tombstones(env):
     assert env.client.delete(f"/api/services/{item['id']}").status_code == 204
     with env.engine.connect() as connection:
         transaction = connection.begin()
+        original_revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
         with Operations.context(MigrationContext.configure(connection)):
             from sqlalchemy.exc import DBAPIError
             with pytest.raises(DBAPIError, match="Cannot downgrade while entity tombstones exist"):
                 migration.downgrade()
         transaction.rollback()
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260910_0016"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == original_revision
 
 
 def test_business_function_move_requires_destination_scope(env):

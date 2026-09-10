@@ -1215,6 +1215,11 @@ class KnowledgeRequirementResponse(ORMResponse):
     updated_at: datetime
 
 
+class GlobalKnowledgeRequirementResponse(KnowledgeRequirementResponse):
+    # Presentation hint only; DELETE always rechecks the existing history guard.
+    can_delete: bool
+
+
 class KnowledgeRequirementValidationRequest(BaseModel):
     rule_type: str = Field(min_length=1, max_length=80)
     rule_config_json: dict[str, Any] = Field(default_factory=dict)

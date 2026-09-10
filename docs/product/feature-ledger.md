@@ -1142,3 +1142,31 @@ non-disclosure tests, shared web primitives, and updated implementation evidence
 [Exact rules/reference audit](../architecture/entity-lifecycle.md) and
 [validation/manual acceptance checklist](../testing/release-c2-usability-lifecycle-polish.md).
 No live acceptance, deployment, F1-lite, B2-lite or hardening completion is claimed.
+
+### Post-C2.6 Knowledge Profile usability tidy-up
+
+Asset Type profile queries now constrain `entity_type=asset`, fixing accidental
+inclusion of Service requirements whose `asset_type_id` is null. Service profile
+selection and completeness evaluation semantics are unchanged. Both administration
+pages share a compact table with separate global/type-specific sections, stacked
+names and descriptions, wrapped technical rules and secondary lifecycle actions.
+Migration `20260910_0017` repairs only exact known built-in Service description
+text; custom copy and historical references are preserved. This is a usability
+fix, not a new feature release. Regression coverage lives in
+`test_knowledge_profiles.py`, `knowledge-profile-table.test.mjs`, and the opt-in
+`check-knowledge-profiles-browser.mjs` browser check.
+
+### Global requirement administration tidy-up
+
+Global Asset and Global Service requirements have dedicated secondary management
+pages under `/admin/asset-types/requirements/global` and
+`/admin/service-types/requirements/global`. They reuse the existing structured
+editors, rule semantics and lifecycle APIs. Asset types and Service types expose
+a secondary management action; their existing Reference Data tabs are unchanged.
+Inherited global rows on type profiles are now reference-only, with manager-only
+links to the global pages. The global list API requires global view/manage
+permissions and returns only the requested entity class with no type scope.
+History and built-in status determine Delete availability, rechecked by the
+existing backend guard. Empty Asset policy lists remain valid. No database
+schema, seed requirements or migrations changed. This is an administration
+usability improvement, not a new feature release.
