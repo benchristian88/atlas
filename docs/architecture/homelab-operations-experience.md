@@ -89,6 +89,17 @@ or completeness evaluator exists.
 
 ## Overview, Focus, and Analysis
 
+Relationship and node-type filters project the authorized graph before lane
+selection and layout. Focus retains only the component reachable from its focus
+through visible edges in either direction, always preserving the focus itself.
+Alternative visible paths keep nodes connected. Overview retains genuinely
+unlinked records and visible components, but removes records orphaned by filters.
+Dependency markers are generated only from surviving visible member edges.
+Hidden inspector selections fall back to Focus (or the empty Overview inspector).
+Analysis retains its existing overlay context even when relationship lines are
+filtered; this visual projection does not change C2.3 analysis or API traversal.
+
+
 `/knowledge-graph` is Overview. `?focus=service:<uuid>` selects Focus; `depth=2`
 expands the backend-bounded neighbourhood. `analysis=unavailable` temporarily
 layers the existing C2.3 scenario onto Focus. Exiting analysis retains focus,

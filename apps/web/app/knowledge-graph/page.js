@@ -10,7 +10,7 @@ import { useWorkspaceContext } from "../../components/workspace-context";
 import { ServiceLandscape } from "../../components/service-landscape";
 import { GraphInspector } from "../../components/graph-inspector";
 import { apiRequest } from "../../lib/api";
-import { LANES, RELATIONSHIPS, analysisOverlay, graphHref, parseGraphState } from "../../lib/operations-experience.mjs";
+import { LANES, RELATIONSHIPS, analysisOverlay, graphHref, parseGraphState, projectVisibleGraph, visibleGraphSelection } from "../../lib/operations-experience.mjs";
 
 export default function KnowledgeGraphPage() { return <Suspense fallback={<p role="status">Loading Knowledge Graph…</p>}><KnowledgeGraph /></Suspense>; }
 
@@ -23,7 +23,6 @@ function KnowledgeGraph() {
   const [graph, setGraph] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [selected, setSelected] = useState(state.focus);
-  const [selectedRecord, setSelectedRecord] = useState(null);
   const [group, setGroup] = useState(null);
   const [error, setError] = useState("");
   const [analysisError, setAnalysisError] = useState("");
@@ -36,12 +35,12 @@ function KnowledgeGraph() {
   const [retry, setRetry] = useState(0);
   const canView = hasAnyPermission(["assets.view", "services.view", "business_functions.view"]);
   const update = (patch) => router.push(graphHref({ ...state, ...patch }));
-  const selectNode = (node) => { setSelected(node.key); setSelectedRecord(node); setGroup(null); };
+  const selectNode = (node) => { setSelected(node.key); setGroup(null); };
   const focusNode = (node) => { selectNode(node); setSearch(""); update({ focus: node.key, analysis: false, types: state.types.includes(node.entity_type) ? state.types : [...state.types, node.entity_type] }); };
   useEffect(() => {
     if (!canView || !workspace.customerId || !workspace.siteId) return;
     let active = true;
-    setGraph(null); setError(""); setSelected(state.focus); setSelectedRecord(null); setGroup(null);
+    setGraph(null); setError(""); setSelected(state.focus); setGroup(null);
     const [type, id] = state.focus.split(":");
     const path = state.focus ? `/operational-graph?focus_type=${type}&focus_id=${id}&max_depth=${state.depth}&site_viewpoint=true` : "/operational-graph/landscape";
     apiRequest(path).then((value) => { if (active) setGraph(value); }).catch((e) => { if (active) setError(e.message || "Atlas could not load the graph."); });
@@ -74,7 +73,12 @@ function KnowledgeGraph() {
     return () => { active = false; clearTimeout(timer); };
   }, [search, workspace.customerId, hasPermission]);
   const displayed = useMemo(() => analysisOverlay(graph || {}, analysis), [graph, analysis]);
-  const selectedNode = displayed.nodesByKey[selected] || (selectedRecord?.key === selected ? selectedRecord : null);
+  const visibleGraph = useMemo(() => projectVisibleGraph(displayed, { types: state.types, families: state.families, focus: state.focus, analysis: Boolean(analysis) }), [displayed, state.types, state.families, state.focus, analysis]);
+  const { node: selectedNode, group: visibleGroup } = visibleGraphSelection(visibleGraph, selected, state.focus, group);
+  useEffect(() => {
+    if (selected !== (selectedNode?.key || "")) setSelected(selectedNode?.key || "");
+    if (group && !visibleGroup) setGroup(null);
+  }, [selected, selectedNode, group, visibleGroup]);
   const scenarioName = displayed.nodesByKey[state.focus]?.name;
   function toggle(key, value) { update({ [key]: state[key].includes(value) ? state[key].filter((v) => v !== value) : [...state[key], value] }); }
   if (!canView) return <AccessDenied />;
@@ -94,8 +98,8 @@ function KnowledgeGraph() {
       {analysisError && <div className="error-banner" role="alert">{analysisError}</div>}
       {(graph?.truncated || analysis?.truncated) && <div className="warning-banner" role="status">{[...(graph?.warnings || []), ...(analysis?.warnings || [])].join(" ")}</div>}
       {!graph && !error && <div className="ops-card" role="status">Loading Knowledge Graph…</div>}
-      {graph && <div className="graph-workspace"><section className="ops-card graph-surface" aria-label="Graph workspace">{!graph.nodes.length ? <div className="ops-guided"><h2>Build your service landscape</h2><p>Record Services and their relationships to Assets and Business Functions.</p>{hasPermission("services.create") && <Link className="button button-primary" href="/services/new">Add a Service</Link>}{hasPermission("knowledge_gaps.view") && <Link className="text-button" href="/knowledge-gaps">Open Knowledge Gaps</Link>}</div> : <ServiceLandscape graph={displayed} selected={selected} centerKey={state.focus} types={state.types} families={state.families} siteId={workspace.siteId} fitKey={fitKey} analysis={analysis} onSelect={selectNode} onFocus={focusNode} onGroup={setGroup} />}</section>
-        <GraphInspector selected={selectedNode} group={group} graph={displayed} analysis={analysis} analysisActive={state.analysis} siteId={workspace.siteId} onFocus={focusNode} onSelect={selectNode} onPreview={(node) => { setSelected(node.key); update({ focus: node.key, analysis: true }); }} />
+      {graph && <div className="graph-workspace"><section className="ops-card graph-surface" aria-label="Graph workspace">{!graph.nodes.length ? <div className="ops-guided"><h2>Build your service landscape</h2><p>Record Services and their relationships to Assets and Business Functions.</p>{hasPermission("services.create") && <Link className="button button-primary" href="/services/new">Add a Service</Link>}{hasPermission("knowledge_gaps.view") && <Link className="text-button" href="/knowledge-gaps">Open Knowledge Gaps</Link>}</div> : <ServiceLandscape graph={displayed} selected={selectedNode?.key || ""} centerKey={state.focus} types={state.types} families={state.families} siteId={workspace.siteId} fitKey={fitKey} analysis={analysis} onSelect={selectNode} onFocus={focusNode} onGroup={setGroup} />}</section>
+        <GraphInspector key={selectedNode?.key || "empty"} selected={selectedNode} group={visibleGroup} graph={displayed} analysis={analysis} analysisActive={state.analysis} siteId={workspace.siteId} onFocus={focusNode} onSelect={selectNode} onPreview={(node) => { setSelected(node.key); update({ focus: node.key, analysis: true }); }} />
       </div>}
       {state.analysis && analysis && !analysis.results.length && <p className="ops-card" role="status">No Service consequences were found in the authorized knowledge for this scenario.</p>}
     </>}

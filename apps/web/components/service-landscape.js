@@ -14,7 +14,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
     if (viewport.current) observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
-  const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected }), [graph, types, families, quick, compact, expanded, selected]);
+  const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
   const layout = useMemo(() => {
     const stepX = compact ? Math.max(222, viewportWidth / 3) : 330;
     const nodeWidth = compact ? stepX - 36 : 226;

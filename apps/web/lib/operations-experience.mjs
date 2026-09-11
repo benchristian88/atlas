@@ -46,10 +46,48 @@ export function graphHref(state = {}) {
   return `/knowledge-graph${params.size ? `?${params}` : ""}`;
 }
 
-export function presentLandscape(graph, { types = LANES.map((l) => l.type), families = DEFAULT_FAMILIES, limit = 8, expanded = [], selected = "", quick = "all" } = {}) {
+// Connectivity is presentation-only and bidirectional, over the bounded API result.
+export function projectVisibleGraph(graph, { types = LANES.map((l) => l.type), families = DEFAULT_FAMILIES, focus = "", analysis = false } = {}) {
   const normalized = normalizeOperationalGraph(graph);
-  let nodes = normalized.nodes.filter((n) => types.includes(n.entity_type));
-  let edges = normalized.edges.filter((e) => families.includes(e.edge_family));
+  let nodes = normalized.nodes.filter((n) => n.key === focus || types.includes(n.entity_type));
+  const candidates = new Set(nodes.map((n) => n.key));
+  let edges = normalized.edges.filter((e) => families.includes(e.edge_family) && candidates.has(e.source_key) && candidates.has(e.target_key));
+  const adjacent = new Map(nodes.map((n) => [n.key, []]));
+  for (const edge of edges) {
+    adjacent.get(edge.source_key).push(edge.target_key);
+    adjacent.get(edge.target_key).push(edge.source_key);
+  }
+  // Analysis may include explanation context beyond the focused structural graph.
+  if (!analysis) {
+    if (focus) {
+      const reachable = new Set(candidates.has(focus) ? [focus] : []);
+      const queue = [...reachable];
+      for (let i = 0; i < queue.length; i++) for (const key of adjacent.get(queue[i])) {
+        if (!reachable.has(key)) { reachable.add(key); queue.push(key); }
+      }
+      nodes = nodes.filter((n) => reachable.has(n.key));
+    } else {
+      // Overview keeps genuinely unlinked knowledge, but not records orphaned by filters.
+      const linked = new Set(normalized.edges.flatMap((e) => [e.source_key, e.target_key]));
+      nodes = nodes.filter((n) => !linked.has(n.key) || adjacent.get(n.key).length);
+    }
+  }
+  const visible = new Set(nodes.map((n) => n.key));
+  edges = edges.filter((e) => visible.has(e.source_key) && visible.has(e.target_key));
+  return { ...normalized, nodes, edges, nodesByKey: Object.fromEntries(nodes.map((n) => [n.key, n])) };
+}
+
+export function visibleGraphSelection(graph, selected, focus, group) {
+  const edges = group ? graph.edges.filter((e) => e.dependency_group_id === group.dependency_group_id) : [];
+  return {
+    node: graph.nodesByKey[selected] || graph.nodesByKey[focus] || null,
+    group: edges.length ? { ...group, edges } : null,
+  };
+}
+
+export function presentLandscape(graph, { types = LANES.map((l) => l.type), families = DEFAULT_FAMILIES, limit = 8, expanded = [], selected = "", quick = "all", focus = "", analysis = false } = {}) {
+  const normalized = normalizeOperationalGraph(graph);
+  let { nodes, edges } = projectVisibleGraph(normalized, { types, families, focus, analysis });
   if (quick !== "all") {
     const serviceKeys = new Set(nodes.filter((n) => n.entity_type === "service" && (quick === "critical" ? n.criticality_rank >= 75 : n.open_gap_count > 0)).map((n) => n.key));
     const related = new Set(serviceKeys);
@@ -59,8 +97,12 @@ export function presentLandscape(graph, { types = LANES.map((l) => l.type), fami
   const lanes = LANES.map((lane) => {
     const all = nodes.filter((n) => n.entity_type === lane.type).sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     let shown = expanded.includes(lane.type) ? all : all.slice(0, limit);
-    const pinned = all.find((n) => n.key === selected);
-    if (pinned && !shown.includes(pinned)) shown = [...shown.slice(0, Math.max(0, limit - 1)), pinned];
+    const pinned = all.filter((n) => n.key === focus || n.key === selected);
+    for (const node of pinned) if (!shown.includes(node)) {
+      const removable = shown.findLastIndex((n) => !pinned.includes(n));
+      shown = shown.filter((_, index) => index !== removable);
+      shown.push(node);
+    }
     return { ...lane, nodes: shown, omitted: all.length - shown.length, total: all.length };
   });
   const visible = new Set(lanes.flatMap((l) => l.nodes.map((n) => n.key)));
