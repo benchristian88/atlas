@@ -81,6 +81,10 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 - [`history/implementation-prompts`](history/implementation-prompts) — archived
   C2.1 Codex prompts; not current specifications.
 
+## User and administrator guides
+
+- [Exploring the Knowledge Graph](admin/knowledge-graph.md): expanded view, Focus depth, filters and inspector.
+
 ## Architecture documents
 
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) — current

@@ -91,3 +91,18 @@ test("UI uses the shared projection for layout and inspector fallback", async ()
   assert.match(landscape, /presentLandscape\(graph, \{[^\n]*focus: centerKey, analysis: Boolean\(analysis\)/);
   assert.match(landscape, /for \(const edge of presentation.edges\) if \(edge.dependency_group_id\)/);
 });
+
+test("depth 3 structural chain prunes third-hop orphans and stale inspector selection", () => {
+  const cluster = node("asset:cluster", "Cluster");
+  const input = { nodes: [...graph.nodes, cluster], edges: [...graph.edges, edge("cluster-link", pve.key, cluster.key, "asset_relationship")] };
+  const expanded = projectVisibleGraph(input, { focus, families: all });
+  assert.ok(keys(expanded).includes(cluster.key));
+  assert.equal(visibleGraphSelection(expanded, cluster.key, focus).node.key, cluster.key);
+  const filtered = projectVisibleGraph(input, { focus });
+  assert.ok(!keys(filtered).includes(cluster.key));
+  assert.ok(!keys(filtered).includes(pve.key));
+  assert.equal(visibleGraphSelection(filtered, cluster.key, focus).node.key, focus);
+  const embedded = projectVisibleGraph(graph, { focus, families: all });
+  assert.equal(visibleGraphSelection(embedded, cluster.key, focus).node.key, focus);
+  assert.ok(presentLandscape(input, { focus }).edges.some(e => e.dependency_group_id === "core"));
+});

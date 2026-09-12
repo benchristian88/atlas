@@ -38,7 +38,7 @@ def get_operational_graph(
     context: RequestContext,
     focus_type: Literal["asset", "service", "business_function"],
     focus_id: uuid.UUID,
-    max_depth: int = Query(default=1, ge=0, le=2),
+    max_depth: int = Query(default=1, ge=0, le=3),
     direction: Literal["both", "outgoing", "incoming"] = "both",
     node_limit: int = Query(default=250, ge=1, le=500),
     edge_family: list[str] | None = Query(default=None),

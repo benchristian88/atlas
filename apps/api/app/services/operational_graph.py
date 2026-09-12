@@ -125,6 +125,8 @@ class OperationalGraphBuilder:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def build(self, request: GraphProjectionRequest) -> OperationalGraphResponse:
+        if not 0 <= request.max_depth <= 3:
+            raise ValueError("Structural graph depth must be between 0 and 3.")
         return self._build(request).graph
 
     def build_dependency_projection(self, request: GraphProjectionRequest) -> DependencyGraphProjection:

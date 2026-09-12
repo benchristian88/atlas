@@ -373,7 +373,7 @@ captured generation/request time; it does not imply historical reconstruction.
 C2.1 supports a focused bounded projection:
 
 - focus entity required;
-- structural depth `0..2`;
+- structural depth `0..3`;
 - incoming, outgoing, or both directions;
 - optional edge-family filter;
 - deterministic node limit; and
@@ -515,7 +515,7 @@ Release C2.3 consumes the shared builder through an internal analysis profile.
 It follows incoming Service dependencies, probes the bounded frontier, then
 completes outgoing dependency sets for reached Services. Endpoint authorization,
 current-valid filtering, group metadata and identity use the existing builder.
-Generic C2.1 routes and their structural depth limits are unchanged. See
+The generic structural route now accepts depth `0..3` for expanded Knowledge Graph exploration; the analysis profile and its independent bounds are unchanged. See
 [dependency analysis](dependency-analysis.md) for the implemented contract,
 scenario assumptions, fixed-point evaluation and safety limits.
 

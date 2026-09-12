@@ -29,7 +29,7 @@ export function parseGraphState(params) {
   const focus = params.get("focus") || "";
   const valid = /^(asset|service|business_function):[0-9a-f-]{36}$/i.test(focus);
   return {
-    focus: valid ? focus : "", depth: params.get("depth") === "2" ? 2 : 1,
+    focus: valid ? focus : "", depth: ["2", "3"].includes(params.get("depth")) ? Number(params.get("depth")) : 1,
     analysis: valid && !focus.startsWith("business_function:") && params.get("analysis") === "unavailable",
     types: params.has("types") ? params.get("types").split(",").filter((type) => LANES.some((lane) => lane.type === type)) : LANES.map((l) => l.type),
     families: params.has("relationships") ? params.get("relationships").split(",").filter((f) => f in RELATIONSHIPS) : DEFAULT_FAMILIES,
@@ -39,7 +39,7 @@ export function parseGraphState(params) {
 export function graphHref(state = {}) {
   const params = new URLSearchParams();
   if (state.focus) params.set("focus", state.focus);
-  if (state.depth === 2) params.set("depth", "2");
+  if ([2, 3].includes(state.depth)) params.set("depth", String(state.depth));
   if (state.analysis && state.focus && !state.focus.startsWith("business_function:")) params.set("analysis", "unavailable");
   if (state.types) params.set("types", state.types.join(","));
   if (state.families) params.set("relationships", state.families.join(","));

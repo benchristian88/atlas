@@ -493,6 +493,7 @@ unchanged.
 | Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
 | All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
 | Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
+| Expanded Knowledge Graph | **Implemented; live manual acceptance pending** | UI | Application viewport dialog retains the same graph, inspector, filters, selection and analysis. Expanded Focus offers depth 1/2/3; close returns to at most 2 and reopening stays at 2. Dashboard remains compact. See [guide](../admin/knowledge-graph.md). |
 | Second-hop Knowledge Graph focus | **Implemented** | C2.4 | `/knowledge-graph` Focus supports depth 1/2 through the generic operational graph. The retained legacy topology lenses remain direct-neighbour focused. |
 | Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
 
@@ -602,7 +603,7 @@ unchanged.
 | Business Function assertions/history | **Partially implemented/absent** | Future C extension | No first-class assertions, completeness or change-history page. |
 | Focused Service graph | **Implemented and C2.1-hardened** | C1/C2.1 | `/api/services/{id}/graph` uses the shared builder and preserves the C1 response contract with independent endpoint authorization. |
 | Focused Business Function graph | **Implemented and shared** | C1/C2.1 | `/api/business-functions/{id}/graph` uses the same builder and preserves its C1 response contract. |
-| Generic operational graph API | **Implemented** | C2.1 | `/api/operational-graph` supports authorized Asset, Service, and Business Function focus, depth `0..2`, semantic direction, edge-family filtering, deterministic limits, and safe truncation. |
+| Generic operational graph API | **Implemented** | C2.1 | `/api/operational-graph` supports authorized Asset, Service, and Business Function focus, depth `0..3`, semantic direction, edge-family filtering, deterministic limits, and safe truncation. |
 | Namespaced graph identity | **Implemented** | C2.1 | Node and edge keys include entity type/family, preventing cross-table UUID collisions. |
 | Shared web graph foundation | **Implemented** | C2.1 | Shared normalization and accessible rendering consume API labels, hrefs, semantic endpoints, and truncation state. |
 | Recursive global Service graph | **Deferred** | C2/E    | Explicitly outside C1. |
@@ -683,7 +684,7 @@ unchanged.
 | Business Function connected Assets | **Implemented** | C1 | Business Function detail and graph expose Assets connected through supporting Services; this is not impact analysis. |
 | Focused Service projection | **Implemented** | C1 | Structural graph endpoint exists. |
 | Recursive analysis traversal | **Implemented** | C2.3 | Bounded two-stage consequence closure over the authorized C2 graph; cycles terminate and retain explanation edges. Full enterprise impact remains deferred. |
-| Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..2`, deduplication, cycles, and explicit limits without impact propagation. |
+| Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..3`, deduplication, cycles, and explicit limits without impact propagation. |
 | Lean dependency semantics (`all`/`any`, failure effect) | **Implemented; live acceptance complete on feature working tree** | C2.2 | Temporal groups/memberships persist required/optional, all/any, and unavailable/degraded/unknown meaning; APIs, Service UI, and generic graph expose it while retaining `required_for_operation`. Live acceptance covered mixed membership, graph projection, fallback, direction, and non-disclosure; `any` remains automated-only because the live topology had no genuine redundant pair. |
 | Explainable dependency consequence analysis | **Implemented; live acceptance complete for lean scope** | C2.3 | Asset/Service `unavailable` input via `POST /api/dependency-analysis` and preview panels; direct/downstream consequences; `all`/`any` evaluation; `unavailable`/`degraded`/`unknown`/`unaffected` result semantics; structured canonical-edge explanation paths; bounded deterministic, cycle-safe analysis; authorization/non-disclosure. Live acceptance covers unavailable/unknown propagation and the structural/security boundaries; `degraded`, `any`, cycles, truncation and site isolation remain automated-only C2.3 coverage. See [C2.3 evidence](../testing/release-c2-explainable-dependency-analysis.md). |
 | Homelab Operations Experience | **Implemented; manual acceptance pending** | C2.4 | Fixed Dashboard registry, three-lane Knowledge Graph, Focus/Analysis inspector, URL state, explicit disclosure, authorized Site viewpoint, accessibility and responsive themes. See the C2.4 audit above. |

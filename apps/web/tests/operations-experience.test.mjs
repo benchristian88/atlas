@@ -131,3 +131,10 @@ test("reachable UI provides keyboard nodes, inspector semantics, scenario labels
   assert.match(css, /:root\[data-theme="dark"\]/);
   assert.match(css, /focus-visible/);
 });
+
+test("depth 3 Focus URLs round trip without adding expanded display state", () => {
+  const state = { focus, depth: 3, analysis: true, types: ["asset", "service"], families: ["service_asset", "asset_relationship"] };
+  assert.deepEqual(parseGraphState(new URL(graphHref(state), "https://atlas.test").searchParams), state);
+  assert.equal(parseGraphState(new URLSearchParams("depth=4")).depth, 1);
+  assert.ok(!graphHref(state).includes("expanded"));
+});
