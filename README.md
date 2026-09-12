@@ -300,11 +300,14 @@ one asset type is limited to 10, including global fields. Keys remain stable
 after use, typed values are validated by the API, and deactivation preserves
 existing values.
 
-Asset types can define an HTTPS icon URL and an asset can override it. Atlas
-resolves `asset override -> type default -> generic fallback`. Remote SVG URLs
-and non-HTTPS URLs are rejected. The API validates and stores the URL but does
-not fetch it; the user's browser fetches the image and falls back safely if it
-fails.
+Asset types can define an HTTPS default icon and an Asset can override it with
+a public HTTPS PNG, JPEG or WebP source. Atlas securely downloads and caches an
+Asset-specific local copy on first display, then reuses it until its source URL
+changes. Resolution is `cached Asset image -> type default -> generic fallback`.
+Clearing the URL restores the fallback. Private addresses, remote SVG, oversized
+images and unsafe redirects are blocked; retrieval failures do not prevent Asset
+saves. Type defaults retain their existing browser HTTPS behavior. See the
+[icon guide](docs/admin/asset-icons.md) and [cache design](docs/architecture/asset-icon-cache.md).
 
 For example, an operator can configure externally hosted Proxmox, Home
 Assistant, or UniFi artwork for a type or specific asset. Atlas does not bundle

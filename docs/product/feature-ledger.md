@@ -473,9 +473,9 @@ unchanged.
 | Typed Custom Fields | **Implemented** | Foundation | Definition, applicability, options and values are implemented. |
 | Ten-field active limit per type | **Implemented** | Foundation | Enforced and tested. |
 | Customer-specific taxonomies | **Deferred** | Enterprise/MSP | Asset/Relationship Types and Custom Field definitions remain global. |
-| Asset/type icons | **Implemented** | Foundation/UI | Safe HTTPS non-SVG icon handling and fallback exist. |
-| Uploaded icon/media library | **Deferred** | Future media system | No blob/media route or storage. |
-| Server-side icon proxy | **Deferred** | Future media system | No remote fetch/proxy. |
+| Asset/type icons | **Implemented** | Foundation/UI | Shared cached Asset → Type → generic rendering across list, detail, graphs and dashboard; bounded authenticated PostgreSQL cache with lazy retrieval and URL-based invalidation. |
+| Uploaded icon/media library | **Deferred** | Future media system | No upload route or general media library; the Asset icon cache is narrowly scoped. |
+| Server-side Asset icon cache | **Implemented** | UI/platform | Public HTTPS raster retrieval with DNS/peer/redirect checks, bounded decoding, persistent cache and Asset-scoped serving. See [design](../architecture/asset-icon-cache.md). |
 | Atlas Impact branding in shell/login | **Implemented** | UI      | Shared supplied lockups are theme-aware in the shell and used on login. |
 | Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
 | Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
@@ -849,7 +849,7 @@ The following are explicitly postponed or excluded from the current MVP/C1:
 * customer-specific reference taxonomies;
 * cross-customer/cross-site relationships;
 * uploaded icon/media library;
-* icon proxying;
+* general media proxying beyond the bounded Asset icon cache;
 * runtime/customer-specific branding;
 * avatar upload;
 * plugins beyond Proxmox;

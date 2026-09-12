@@ -234,7 +234,7 @@ def test_asset_icon_resolution_override_then_type_then_generic() -> None:
         updated_at=now,
     )
     db = AdminDatabase(item=asset_type)
-    assert asset_response_data(db, asset)["resolved_icon_url"] == asset.icon_url
+    assert asset_response_data(db, asset)["resolved_icon_url"].startswith(f"/api/assets/{asset.id}/icon?v=")
     asset.icon_url = None
     assert asset_response_data(db, asset)["resolved_icon_url"] == asset_type.default_icon_url
     asset_type.default_icon_url = None

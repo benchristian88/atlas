@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     Numeric,
     String,
@@ -1439,6 +1440,21 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )
+
+
+class AssetIconCache(Base):
+    """Disposable bounded image bytes; never part of accepted Asset knowledge."""
+    __tablename__ = "asset_icon_cache"
+    __table_args__ = (
+        CheckConstraint("octet_length(data) <= 524288", name="bounded_icon_data"),
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True)
+    source_hash: Mapped[str | None] = mapped_column(String(64))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    attempted_source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    retry_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempt_token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
 
 class AssetRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):

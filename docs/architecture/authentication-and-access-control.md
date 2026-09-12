@@ -233,17 +233,13 @@ inactive.
 
 ## Icon safety
 
-`AssetType.default_icon_url` and `Asset.icon_url` are optional. Resolution is:
-
-```text
-asset override -> asset-type default -> generic application icon
-```
-
-Only syntactically valid HTTPS URLs are accepted, and remote SVG URLs are
-rejected. Atlas does not perform a privileged server-side fetch, which avoids
-turning icon configuration into an SSRF primitive. The browser loads the URL
-and replaces a missing, blocked, or broken image with the generic fallback.
-Inline HTML and `data:`/`javascript:` sources are not accepted.
+Asset icon URLs are external sources for the [secure local icon cache](asset-icon-cache.md).
+An authenticated, Asset-scoped endpoint serves validated raster images from
+PostgreSQL. Resolution is cached Asset image, then Asset Type default, then the
+generic icon. Public HTTPS/DNS/peer/redirect validation, download and decoding
+limits protect the server fetch boundary. URL changes refresh lazily; successful
+unchanged sources are never periodically refreshed. Asset Type defaults retain
+the existing browser HTTPS behavior. Remote SVG is not supported.
 
 ## Audit events
 

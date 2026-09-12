@@ -227,7 +227,7 @@ function NetworkHeader({ network }) {
 
 function NetworkMember({ asset, assetTypeDefinitions, interfaceRecord }) {
   if (!asset) return null;
-  return <Link className="network-member" href={`/assets/${asset.id}`}><span className="asset-inline-identity"><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} size={30} /><strong>{asset.name}</strong></span><span>{managedTypeName(assetTypeDefinitions, asset.asset_type)}</span><span>{asset.hostname || "No hostname"}</span><span>{interfaceRecord.name} · {interfaceRecord.ip_address || "No interface IP"}</span></Link>;
+  return <Link className="network-member" href={`/assets/${asset.id}`}><span className="asset-inline-identity"><AssetIcon asset={asset} size={30} /><strong>{asset.name}</strong></span><span>{managedTypeName(assetTypeDefinitions, asset.asset_type)}</span><span>{asset.hostname || "No hostname"}</span><span>{interfaceRecord.name} · {interfaceRecord.ip_address || "No interface IP"}</span></Link>;
 }
 
 function primaryInterfaceIps(interfaces) {
@@ -236,5 +236,5 @@ function primaryInterfaceIps(interfaces) {
 }
 
 function AssetNode({ asset, assetTypeDefinitions, interfaceIp, workloadCount }) {
-  return <Link className="asset-node" href={`/assets/${asset.id}`}><span className="asset-node-heading"><span className="asset-inline-identity"><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} size={32} /><strong>{asset.name}</strong></span><StatusBadge status={asset.status} /></span><span>{managedTypeName(assetTypeDefinitions, asset.asset_type)}</span><small>{interfaceIp || asset.ip_address || asset.hostname || "No interface IP"}</small>{workloadCount ? <span className="workload-badge">{workloadCount} workload{workloadCount === 1 ? "" : "s"}</span> : null}</Link>;
+  return <Link className="asset-node" href={`/assets/${asset.id}`}><span className="asset-node-heading"><span className="asset-inline-identity"><AssetIcon asset={asset} size={32} /><strong>{asset.name}</strong></span><StatusBadge status={asset.status} /></span><span>{managedTypeName(assetTypeDefinitions, asset.asset_type)}</span><small>{interfaceIp || asset.ip_address || asset.hostname || "No interface IP"}</small>{workloadCount ? <span className="workload-badge">{workloadCount} workload{workloadCount === 1 ? "" : "s"}</span> : null}</Link>;
 }

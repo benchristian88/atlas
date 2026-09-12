@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.authorization import Principal, role_names
 from app.models import Asset, AssetType, KnowledgeCompletenessSummary
 from app.services.custom_fields import custom_field_values
+from app.services.asset_icons import icon_fields
 
 
 def user_response_data(principal: Principal, *, administrative: bool = False) -> dict:
@@ -66,9 +67,7 @@ def asset_response_data(db: Session, asset: Asset) -> dict:
         "name": asset.name,
         "asset_type": asset.asset_type,
         "icon_url": asset.icon_url,
-        "resolved_icon_url": asset.icon_url or (
-            asset_type.default_icon_url if asset_type is not None else None
-        ),
+        **icon_fields(asset, asset_type),
         "vendor": asset.vendor,
         "model": asset.model,
         "hostname": asset.hostname,

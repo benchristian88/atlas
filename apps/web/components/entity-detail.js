@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AssetIcon } from "./asset-icon";
 import { Children } from "react";
 import { PageHeader } from "./page-header";
 import { CompletenessLine, EntityMark, RecordedStatus } from "./operations-primitives";
@@ -27,7 +28,7 @@ export function EntitySection({ title, description, count, children, id }) {
 
 export function EntityRelationshipRow({ type, name, href, context, description, metadata, children, actions }) {
   return <article className="entity-relationship-row">
-    <EntityMark type={type} /><div className="entity-relationship-copy"><Link className="entity-relationship-name" href={href}>{name}</Link>{context && <p className="ops-meta">{context}</p>}{description && <p>{description}</p>}{metadata && <div className="entity-relationship-meta">{metadata.criticality_name && <span className="ops-badge">{metadata.criticality_name}</span>}{type === "service" && metadata.operational_state && <span><RecordedStatus state={metadata.operational_state} /> Recorded: {metadata.operational_state}</span>}{type === "service" && <CompletenessLine node={metadata} />}</div>}{children}</div>
+    {type === "asset" ? <AssetIcon asset={metadata} size={32} /> : <EntityMark type={type} />}<div className="entity-relationship-copy"><Link className="entity-relationship-name" href={href}>{name}</Link>{context && <p className="ops-meta">{context}</p>}{description && <p>{description}</p>}{metadata && <div className="entity-relationship-meta">{metadata.criticality_name && <span className="ops-badge">{metadata.criticality_name}</span>}{type === "service" && metadata.operational_state && <span><RecordedStatus state={metadata.operational_state} /> Recorded: {metadata.operational_state}</span>}{type === "service" && <CompletenessLine node={metadata} />}</div>}{children}</div>
     <div className="entity-relationship-actions"><Link className="text-button" href={href} aria-label={`Open ${name}`}>Open<span aria-hidden="true"> ↗</span></Link>{actions}</div>
   </article>;
 }

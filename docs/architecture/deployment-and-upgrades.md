@@ -216,7 +216,9 @@ tests a safe path.
 - Put secrets in the deployment platform's secret store where possible rather
   than long-lived plaintext environment files.
 - Set a narrow CORS origin list and security headers/content-security policy at
-  the edge. Remote icon hosts should be explicitly allowed by image policy.
+  the edge. Cached Asset icons use Atlas itself; allow remote hosts only for
+  the existing Asset Type default images. See [Asset icon caching](asset-icon-cache.md)
+  for the additive migration and PostgreSQL persistence.
 - Send logs and audit events to protected external retention if tamper evidence
   or regulatory retention is required.
 - Add reverse-proxy rate limits and monitoring for repeated authentication
