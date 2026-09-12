@@ -6,7 +6,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
 import { EntityMark, RecordedStatus } from "./operations-primitives";
 
-export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, centerKey = "" }) {
+// Pan only this canvas; locating a node must not scroll the page or modal toolbar.
+function locateNode(viewport, key) {
+  const node = key && viewport?.querySelector(`[data-node-key="${CSS.escape(key)}"]`);
+  if (!node) return;
+  const bounds = viewport.getBoundingClientRect(), target = node.getBoundingClientRect();
+  const vertical = target.top < bounds.top ? target.top - bounds.top : target.bottom > bounds.bottom ? target.bottom - bounds.bottom : 0;
+  viewport.scrollTo({ left: viewport.scrollLeft + target.left - bounds.left - (viewport.clientWidth - target.width) / 2, top: viewport.scrollTop + vertical, behavior: "instant" });
+}
+
+export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, centerKey = "", locateRequest = null }) {
   const viewport = useRef(null);
   const [expanded, setExpanded] = useState([]);
   const [zoom, setZoom] = useState(1);
@@ -56,9 +65,13 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   }, [fitKey, layout.width]);
   useEffect(() => {
     if (!centerKey) return;
-    const node = viewport.current?.querySelector(`[data-node-key="${CSS.escape(centerKey)}"]`);
-    node?.scrollIntoView({ block: "nearest", inline: "center", behavior: "instant" });
+    locateNode(viewport.current, centerKey);
   }, [centerKey, graph]);
+
+  useEffect(() => {
+    if (!locateRequest) return;
+    locateNode(viewport.current, locateRequest.key);
+  }, [locateRequest]);
 
   const pathKeys = new Set((analysis?.results || []).flatMap((r) => r.paths.flatMap((p) => p.edges.map((e) => e.key))));
   function edgePath(source, target, sourceWidth = layout.nodeWidth) {

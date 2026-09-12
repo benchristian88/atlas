@@ -100,15 +100,33 @@ Analysis retains its existing overlay context even when relationship lines are
 filtered; this visual projection does not change C2.3 analysis or API traversal.
 
 
+The full Knowledge Graph uses one mounted graph/inspector tree inside a native
+nonmodal dialog. Expand promotes the surface with `showModal()` to the browser
+top layer (not the Fullscreen API). Background content becomes inert; the
+surface traps Tab, handles Escape and restores focus and prior page scrolling.
+Desktop uses a roughly 75/25 graph/inspector split; mobile stacks an internally
+scrollable inspector below the graph. Dashboard stays compact and has no Expand.
+
+Depth 3 is available only in expanded Focus. Embedded depth is clamped to 2;
+closing at 3 replaces the current URL depth with 2 without adding history.
+Reopening stays at 2. Incoming depth-3 URLs remain readable while collapsed
+at 2 and use 3 when expanded. Expand/Close themselves are ephemeral UI state.
+Per-focus graph responses are reused by depth during this page session, cleared
+when focus, Customer, Site or retry changes. Expansion alone never fetches.
+Analysis requests depend on the scenario and workspace, not structural depth;
+the same analysis response is projected over the newly visible graph.
+
 `/knowledge-graph` is Overview. `?focus=service:<uuid>` selects Focus; `depth=2`
 expands the backend-bounded neighbourhood. `analysis=unavailable` temporarily
 layers the existing C2.3 scenario onto Focus. Exiting analysis retains focus,
-depth, and filters. The browser router handles refresh, copied URLs, and history.
+depth, and filters. Next-integrated native history updates the query state without server navigation,
+preserving refresh, copied URLs, and browser back/forward.
 The existing `/topology` lenses and focused detail graph contracts remain
 reachable for compatibility. Main Knowledge Graph navigation uses the new route.
 
 One click or Enter/Space selects an entity and updates the persistent inspector.
-Double click, Find, and explicit Focus actions enter Focus. Find preserves depth
+Double click, Customer search matches, and explicit Focus actions enter Focus.
+Find also offers visible-graph matches that select and locate without changing Focus. Find preserves depth
 and relationship filters and makes the selected entity type visible. The
 inspector can load a bounded one-hop neighbourhood independently without
 rebuilding the graph. Assets show interface-backed IP and authorized VLAN;

@@ -368,8 +368,9 @@ def test_depth_direction_cycles_and_semantic_direction_are_deterministic():
         (NOW - timedelta(seconds=2), NOW - timedelta(seconds=1), False),
     ],
 )
+@pytest.mark.parametrize("depth", [1, 3])
 def test_temporal_boundaries_are_inclusive_from_and_exclusive_to(
-    valid_from, valid_to, included
+    valid_from, valid_to, included, depth
 ):
     customer_id, site_id = uuid.uuid4(), uuid.uuid4()
     service_type, criticality, asset_type, depends_on, runs_on, supports = reference_records()
@@ -386,7 +387,7 @@ def test_temporal_boundaries_are_inclusive_from_and_exclusive_to(
         item, host, dependency,
     )
     graph = graph_builder.build(GraphProjectionRequest(
-        focus_type="service", focus_id=item.id,
+        focus_type="service", focus_id=item.id, max_depth=depth,
         edge_families=frozenset({"service_asset"}),
     ))
     assert bool(graph.edges) is included
@@ -460,7 +461,8 @@ def test_all_edge_families_metadata_and_completeness_are_projected_in_batches():
     assert sum(count for (kind, _), count in db.queries.items() if kind == "get") == 1
 
 
-def test_authorization_context_and_truncation_do_not_disclose_hidden_nodes():
+@pytest.mark.parametrize("depth", [1, 3])
+def test_authorization_context_and_truncation_do_not_disclose_hidden_nodes(depth):
     customer_a, customer_b, site_a, site_b = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     service_type, criticality, asset_type, depends_on, runs_on, supports = reference_records()
     item = service("Visible", customer_a, service_type, criticality, site_id=site_a)
@@ -481,7 +483,7 @@ def test_authorization_context_and_truncation_do_not_disclose_hidden_nodes():
     )
     graph_builder = OperationalGraphBuilder(db, scoped, clock=lambda: NOW)
     graph = graph_builder.build(GraphProjectionRequest(
-        focus_type="service", focus_id=item.id, node_limit=1,
+        focus_type="service", focus_id=item.id, max_depth=depth, node_limit=1,
         context=ActiveContext(customer_a, site_a),
     ))
     assert [node.name for node in graph.nodes] == ["Visible"]
@@ -496,7 +498,8 @@ def test_authorization_context_and_truncation_do_not_disclose_hidden_nodes():
         ))
 
 
-def test_accessible_limit_is_explicit_deterministic_and_has_no_dangling_edges():
+@pytest.mark.parametrize("depth", [1, 3])
+def test_accessible_limit_is_explicit_deterministic_and_has_no_dangling_edges(depth):
     customer_id, site_id = uuid.uuid4(), uuid.uuid4()
     service_type, criticality, asset_type, depends_on, runs_on, supports = reference_records()
     item = service("Focus", customer_id, service_type, criticality, site_id=site_id)
@@ -518,7 +521,7 @@ def test_accessible_limit_is_explicit_deterministic_and_has_no_dangling_edges():
         item, first, second, *rows,
     )
     graph = graph_builder.build(GraphProjectionRequest(
-        focus_type="service", focus_id=item.id, node_limit=2,
+        focus_type="service", focus_id=item.id, max_depth=depth, node_limit=2,
         edge_families=frozenset({"service_asset"}),
     ))
     assert graph.truncated is True
@@ -618,6 +621,16 @@ def test_generic_route_serializes_contract_validates_limits_and_hides_cross_cust
             assert payload["nodes"][0]["entity_id"] == str(visible.id)
             assert "confidence" not in payload
 
+            assert client.get(
+                "/api/operational-graph",
+                params={"focus_type": "asset", "focus_id": str(visible.id), "max_depth": 3},
+            ).status_code == 200
+            for invalid_depth in [-1, 4, 100]:
+                assert client.get(
+                    "/api/operational-graph",
+                    params={"focus_type": "asset", "focus_id": str(visible.id), "max_depth": invalid_depth},
+                ).status_code == 422
+
             hidden_response = client.get(
                 "/api/operational-graph",
                 params={"focus_type": "asset", "focus_id": str(hidden.id)},
@@ -688,3 +701,65 @@ def test_existing_service_and_business_function_routes_use_compatible_responses(
         }
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("direction", ["incoming", "outgoing", "both"])
+def test_third_hop_preserves_cycles_ordering_and_canonical_direction(direction):
+    customer = uuid.uuid4()
+    refs = reference_records()
+    services = [service(f"Service {i}", customer, refs[0], refs[1]) for i in range(5)]
+    rows = [ServiceDependency(
+        id=uuid.uuid4(), customer_id=customer, site_id=None,
+        source_service_id=services[i].id, target_service_id=services[(i + 1) % 5].id,
+        relationship_type_id=refs[3].id, required_for_operation=True,
+        valid_from=NOW, valid_to=None,
+    ) for i in range(5)]
+    _, graph_builder = builder(*refs, *services, *rows)
+    request = GraphProjectionRequest(focus_type="service", focus_id=services[0].id, max_depth=3, direction=direction)
+    graph = graph_builder.build(request)
+    assert graph == graph_builder.build(request)
+    _, reversed_builder = builder(*reversed([*refs, *services, *rows]))
+    assert graph == reversed_builder.build(request)
+    expected = {"outgoing": [0, 1, 2, 3], "incoming": [0, 4, 3, 2], "both": list(range(5))}[direction]
+    assert {node.entity_id for node in graph.nodes} == {services[i].id for i in expected}
+    assert len({node.key for node in graph.nodes}) == len(graph.nodes)
+    assert len({edge.key for edge in graph.edges}) == len(graph.edges)
+    for edge in graph.edges:
+        row = next(row for row in rows if row.id == edge.edge_id)
+        assert edge.source_key == f"service:{row.source_service_id}"
+        assert edge.target_key == f"service:{row.target_service_id}"
+    for depth in [-1, 4]:
+        with pytest.raises(ValueError, match="between 0 and 3"):
+            graph_builder.build(GraphProjectionRequest(focus_type="service", focus_id=services[0].id, max_depth=depth))
+
+
+@pytest.mark.parametrize("boundary", ["node_limit", "customer", "future", "ended"])
+def test_third_hop_obeys_limits_scope_and_temporal_boundaries(boundary):
+    customer, site = uuid.uuid4(), uuid.uuid4()
+    refs = reference_records()
+    services = [service(f"Hop {i}", customer, refs[0], refs[1], site_id=site) for i in range(4)]
+    rows = [ServiceDependency(
+        id=uuid.uuid4(), customer_id=customer, site_id=site,
+        source_service_id=services[i].id, target_service_id=services[i + 1].id,
+        relationship_type_id=refs[3].id, required_for_operation=True,
+        valid_from=NOW, valid_to=None,
+    ) for i in range(3)]
+    if boundary == "customer":
+        services[-1].customer_id = uuid.uuid4()
+    elif boundary == "future":
+        rows[-1].valid_from = NOW + timedelta(seconds=1)
+    elif boundary == "ended":
+        rows[-1].valid_to = NOW
+    db = GraphDatabase(*refs, *services, *rows)
+    graph_builder = OperationalGraphBuilder(db, principal("services.view", "service_dependencies.view", customer_id=customer), clock=lambda: NOW)
+    request = GraphProjectionRequest(
+        focus_type="service", focus_id=services[0].id, max_depth=3,
+        direction="outgoing", context=ActiveContext(customer, site),
+        node_limit=3 if boundary == "node_limit" else 250,
+    )
+    graph = graph_builder.build(request)
+    assert graph == graph_builder.build(request)
+    assert {node.entity_id for node in graph.nodes} == {item.id for item in services[:3]}
+    assert {edge.edge_id for edge in graph.edges} == {row.id for row in rows[:2]}
+    assert graph.truncated is (boundary == "node_limit")
+    assert str(services[-1].id) not in graph.model_dump_json()

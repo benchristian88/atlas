@@ -2,6 +2,8 @@ import { createElement } from "react";
 
 // Small inline line icons, following the existing EntityMark SVG convention.
 const paths = {
+  expand: "M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5 M3 3l6 6 M21 3l-6 6 M3 21l6-6 M21 21l-6-6",
+  close: "M6 6l12 12 M18 6 6 18",
   dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   changes: "M3 11a9 9 0 1 1 2 7 M3 4v7h7 M12 7v5l3 2",
   "knowledge-graph": "M4 4h4v4H4z M16 4h4v4h-4z M10 16h4v4h-4z M8 6h8 M6 8v4l6 4 6-4V8",
