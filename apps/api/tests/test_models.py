@@ -38,6 +38,7 @@ EXPECTED_TABLES = {
     "business_functions",
     "service_business_functions",
     "assets",
+    "asset_icon_cache",
     "asset_relationships",
     "networks",
     "asset_interfaces",

@@ -1,5 +1,7 @@
 "use client";
 
+import { AssetIcon } from "./asset-icon";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
 import { EntityMark, RecordedStatus } from "./operations-primitives";
@@ -95,7 +97,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
           {[...layout.positions.values()].map(({ node, x, y }) => {
             const state = analysisState(node, analysis);
             return <button className={`landscape-node entity-${node.entity_type} ${node.key === selected ? "is-selected" : ""} ${state ? `analysis-${state}` : analysis ? "analysis-context" : ""}`} key={node.key} data-node-key={node.key} style={{ left: x, top: y, width: layout.nodeWidth }} type="button" aria-pressed={node.key === selected} aria-label={`${node.entity_type.replaceAll("_", " ")}: ${node.name}${state ? `. Scenario: ${state}` : ""}`} onClick={() => onSelect?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect?.(node); } }} onDoubleClick={() => onFocus?.(node)}>
-              <EntityMark type={node.entity_type} /><span className="landscape-node-text"><strong>{node.name}</strong><small>{node.entity_type.replaceAll("_", " ")}{!compact && node.criticality_name && <span className="ops-badge">{node.criticality_name}</span>}</small>
+              {node.entity_type === "asset" ? <AssetIcon asset={node} size={32} /> : <EntityMark type={node.entity_type} />}<span className="landscape-node-text"><strong>{node.name}</strong><small>{node.entity_type.replaceAll("_", " ")}{!compact && node.criticality_name && <span className="ops-badge">{node.criticality_name}</span>}</small>
                 {node.site_id && node.site_id !== siteId && <small className="site-badge">{node.site_name || "Another authorized Site"}</small>}
                 {state && <small className="analysis-label">{state.toUpperCase()}</small>}
               </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import BackgroundTasks, APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.authorization import (
 from app.database import get_db
 from app.models import (
     Asset,
+    AssetIconCache,
     AssetInterface,
     AssetRelationship,
     AssetType,
@@ -36,6 +37,8 @@ from app.services.manual_knowledge import (
     MANUAL_ASSET_KNOWLEDGE_FIELDS,
     declare_asset_changes,
 )
+
+from app.services import asset_icons
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -283,6 +286,37 @@ def get_asset(
     return asset_response_data(db, asset)
 
 
+@router.get("/{asset_id}/icon")
+def get_asset_icon(
+    asset_id: uuid.UUID,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    principal: Principal = Depends(require_permission("assets.view")),
+    db: Session = Depends(get_db),
+):
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Record not found")
+    require_scope(principal, "assets.view", asset.customer_id, asset.site_id, hide_existence=True)
+    # Revalidate authenticated access even when the browser already has bytes.
+    headers = {"Cache-Control": "private, no-cache", "Vary": "Cookie, Authorization",
+               "X-Content-Type-Options": "nosniff"}
+    if not asset.icon_url:
+        return Response(status_code=204, headers={**headers, "Cache-Control": "no-store"})
+    cache = db.get(AssetIconCache, asset_id)
+    data = asset_icons.current_bytes(cache, asset.icon_url)
+    if data is not None:
+        etag = f'"{cache.content_hash}"'
+        headers["ETag"] = etag
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(data, media_type="image/png", headers=headers)
+    token = asset_icons.claim_attempt(db, asset.id, asset.icon_url)
+    if token:
+        background_tasks.add_task(asset_icons.refresh_icon, asset.id, asset.icon_url, token)
+    return Response(status_code=204, headers={**headers, "Cache-Control": "no-store"})
+
+
 @router.patch("/{asset_id}", response_model=ManualAssetResponse)
 def update_asset(
     asset_id: uuid.UUID,
@@ -350,6 +384,9 @@ def update_asset(
     }
     apply_changes(asset, changes)
     flush(db, "Asset")
+    if "icon_url" in changes and not asset.icon_url:
+        # Match background publication lock order: Asset before cache row.
+        asset_icons.clear_icon_cache(db, asset.id)
     declare_asset_changes(
         db,
         asset=asset,

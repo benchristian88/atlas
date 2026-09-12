@@ -12,6 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.authorization import ActiveContext, Principal, scope_condition
+from app.services.asset_icons import icon_fields
 from app.models import (
     Asset,
     AssetRelationship,
@@ -805,6 +806,7 @@ class OperationalGraphBuilder:
                         site_id=item.site_id,
                         name=item.name,
                         subtitle=asset_type.name if asset_type else item.asset_type,
+                        **icon_fields(item, asset_type),
                         href=f"/assets/{item.id}",
                         lifecycle_state=item.status,
                         completeness_status=(

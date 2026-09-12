@@ -15,7 +15,7 @@ from app.authorization import Principal, RequestContext, require_permission, req
 from app.database import get_db
 from app.schemas import EntityDeletionEligibilityResponse
 from app.models import (
-    Asset, BusinessFunction, CriticalityLevel, DependencyGroup,
+    Asset, AssetType, BusinessFunction, CriticalityLevel, DependencyGroup,
     DependencyGroupMembership, KnowledgeAssertion, KnowledgeChange,
     KnowledgeCompletenessSummary, KnowledgeGap, RelationshipType,
     RelationshipTypeApplicability, Service, ServiceAssetDependency,
@@ -34,6 +34,7 @@ from app.schemas import (
     ServiceDependencyResponse, ServiceDependencyUpdate, ServiceGraphResponse,
     ServiceResponse, ServiceSummaryResponse, ServiceUpdate,
 )
+from app.services.asset_icons import icon_fields
 from app.services.knowledge_assertions import accept_assertion, record_assertion
 from app.services.knowledge_changes import record_assertion_change, record_change
 from app.services.knowledge_lifecycle import retract_assertion
@@ -314,6 +315,9 @@ def _applicable_relationship(db: Session, relationship_type_id: uuid.UUID, sourc
 def _asset_dependency_response(db: Session, item: ServiceAssetDependency, semantics: dict | None = None) -> dict:
     service, asset, relationship = db.get(Service, item.service_id), db.get(Asset, item.asset_id), db.get(RelationshipType, item.relationship_type_id)
     result = ServiceAssetDependencyResponse.model_validate(item).model_dump()
+    if asset is not None:
+        asset_type = db.scalar(select(AssetType).where(AssetType.key == asset.asset_type))
+        result.update(icon_fields(asset, asset_type))
     result.update(service_name=service.name if service else None, asset_name=asset.name if asset else None, asset_type=asset.asset_type if asset else None, relationship_type_name=relationship.name if relationship else None, source_label=relationship.source_label if relationship else None, target_label=relationship.target_label if relationship else None, **(semantics or _dependency_semantics(db, item, "asset")))
     return result
 

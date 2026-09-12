@@ -250,7 +250,7 @@ export default function AssetDetailPage() {
 
   return (
     <>
-      <div className="page-heading-row"><div className="asset-detail-heading"><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} assetType={assetType} alt="" size={58} /><PageHeader eyebrow="Asset detail" title={asset.name} description={`${customer?.name || "Unknown customer"} / ${site?.name || "Unknown site"}`} /></div>{canEdit && <Link className="button button-secondary" href={`/assets/${id}/edit`}>Edit asset</Link>}</div>
+      <div className="page-heading-row"><div className="asset-detail-heading"><AssetIcon asset={asset} assetType={assetType} alt="" size={58} /><PageHeader eyebrow="Asset detail" title={asset.name} description={`${customer?.name || "Unknown customer"} / ${site?.name || "Unknown site"}`} /></div>{canEdit && <Link className="button button-secondary" href={`/assets/${id}/edit`}>Edit asset</Link>}</div>
       {searchParams.get("updated") === "1" && <div className="success-banner" role="status">Asset updated successfully.</div>}
       {error && <div className="error-banner" role="alert">{error}</div>}
       <section className="detail-card"><div className="detail-grid">

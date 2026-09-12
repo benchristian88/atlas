@@ -326,6 +326,8 @@ class ManualAssetResponse(ORMResponse):
     asset_type: str
     icon_url: str | None
     resolved_icon_url: str | None = None
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
     vendor: str | None
     model: str | None
     hostname: str | None
@@ -1484,6 +1486,9 @@ class ServiceAssetDependencyUpdate(BaseModel):
 
 
 class ServiceAssetDependencyResponse(ORMResponse):
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
+    resolved_icon_url: str | None = None
     id: uuid.UUID
     customer_id: uuid.UUID
     site_id: uuid.UUID | None
@@ -1710,6 +1715,9 @@ class ServiceGraphResponse(BaseModel):
 
 
 class OperationalGraphNode(BaseModel):
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
+    resolved_icon_url: str | None = None
     key: str
     entity_type: Literal["asset", "service", "business_function"]
     entity_id: uuid.UUID
