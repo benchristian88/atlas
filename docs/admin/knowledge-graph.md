@@ -2,6 +2,8 @@
 
 The Knowledge Graph shows recorded connections between Business Functions,
 Services and Assets. Select a node to read its details in the inspector.
+For hosting, Networks, VLANs and technical connectivity, use the separate
+[Infrastructure Topology](infrastructure-topology.md) surface.
 
 Use **Expand Knowledge Graph** beside **Fit** to fill the application viewport.
 The same graph, filters, selected entity and inspector remain available. On a

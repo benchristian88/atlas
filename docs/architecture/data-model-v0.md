@@ -291,7 +291,11 @@ context rather than accepting plugin-selected tenancy.
 ### AssetType
 
 The UUID `id` is the internal primary key; the unique string `key` is the stable
-inventory reference used by assets. Display name, description, category,
+inventory reference used by assets. Every type requires a managed AssetCategory
+through non-null `category_id`. The compatibility `category` API field resolves
+the current managed name; its legacy database column is a frozen upgrade snapshot.
+See [managed categories and topology](infrastructure-topology.md).
+Display name, description, category assignment,
 default icon URL, active state, and sort order are editable subject to policy. A
 system-defined or referenced type cannot be deleted; inactive types remain
 resolvable for existing assets.

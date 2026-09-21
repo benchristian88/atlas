@@ -466,6 +466,7 @@ unchanged.
 | Customer CRUD | **Implemented** | Foundation | Models, routes and pages use real APIs. |
 | Site CRUD | **Implemented** | Foundation | Models, routes and pages use real APIs. |
 | Manual Asset CRUD | **Implemented** | Foundation | Scoped APIs and create/detail/edit UI exist. |
+| Managed Asset Categories | **Implemented** | Infrastructure Topology | Required category FK, protected Uncategorized, deterministic legacy migration, lifecycle API/UI, dynamic Assets/topology filters; see [architecture](../architecture/infrastructure-topology.md). |
 | Managed Asset Types | **Implemented** | Foundation | Stable-key database records and administration UI exist. |
 | Asset Type safe lifecycle | **Implemented** | Foundation | Inactive and referenced deletion behavior is tested. |
 | Managed Relationship Types | **Implemented** | Foundation | Database-managed labels/direction/type constraints exist. |
@@ -486,15 +487,16 @@ unchanged.
 | Asset Relationships | **Implemented** | Foundation | Scoped CRUD, type validation and same-context rules exist. |
 | New cross-site/customer relationships | **Deferred/prohibited** | Security boundary | Explicitly rejected and tested. |
 | Legacy cross-context relationships | **Implemented as compatibility** | Migration support | Readable only when both endpoints are authorised. |
-| Knowledge Graph topology API | **Implemented** | Foundation | Returns authorised Assets, relationships, networks and interfaces. |
-| Physical lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Platform lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Network/VLAN lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
-| All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
+| Infrastructure Topology API | **Implemented** | Infrastructure Topology | Existing `/api/topology` collections retained with managed category/type metadata and platform links; endpoint visibility strengthened. |
+| Infrastructure Overview | **Implemented** | Infrastructure Topology | Authorized counts and dynamic category/Network summaries. |
+| Platform view | **Implemented** | Infrastructure Topology | Wrapping category grid, recorded parent/child links, eight-child preview and Show all; cycles and standalone Assets retained. |
+| Network & VLAN view | **Implemented** | Infrastructure Topology | Vertical master/detail and explicit interface membership, including multihoming. |
+| Connectivity view | **Implemented** | Infrastructure Topology | Backend 1/2-hop bounded traversal, centred layout, Asset/Network nodes, canonical labels and inspector links. |
+| Expanded Infrastructure Topology | **Implemented; live manual acceptance pending** | Infrastructure Topology | Shared application-viewport dialog preserves tab, filters, selection, child expansion and Network state; isolated browser fixtures validate desktop/light/dark behavior. |
+| Old Physical/Platform/Network/Dependency/All Relationships lenses | **Abandoned / superseded** | UI supersession | Replaced by the four Infrastructure Topology views while retaining `/topology`. |
+| Old generic hierarchy tabs | **Abandoned / superseded** | UI supersession | Replaced by subsequent lenses and now Infrastructure Topology. |
 | Expanded Knowledge Graph | **Implemented; live manual acceptance pending** | UI | Application viewport dialog retains the same graph, inspector, filters, selection and analysis. Expanded Focus offers depth 1/2/3; close returns to at most 2 and reopening stays at 2. Dashboard remains compact. See [guide](../admin/knowledge-graph.md). |
-| Second-hop Knowledge Graph focus | **Implemented** | C2.4 | `/knowledge-graph` Focus supports depth 1/2 through the generic operational graph. The retained legacy topology lenses remain direct-neighbour focused. |
+| Second-hop Knowledge Graph focus | **Implemented** | C2.4 | `/knowledge-graph` Focus supports depth 1/2 through the generic operational graph. Infrastructure Topology separately supports bounded 1/2-hop technical Connectivity. |
 | Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
 
 
@@ -876,7 +878,7 @@ The following are explicitly postponed or excluded from the current MVP/C1:
 | Browser `localStorage` session tokens | Superseded by HttpOnly cookie sessions. |
 | Split-origin default production design | Superseded by same-origin `/api`; split-origin remains dev compatibility. |
 | Missing Knowledge as a Reconciliation queue | Superseded by dedicated Knowledge Gaps. |
-| Generic Hierarchy/Relationships topology tabs | Superseded by Physical, Platform, Network/VLAN, Dependency and All Relationships lenses. |
+| Generic Hierarchy/Relationships topology tabs | Superseded first by the five legacy lenses, then by Infrastructure Topology’s four projections. |
 | Standalone Profile sidebar navigation | Superseded by top-right account menu. |
 | Visible placeholder roadmap navigation | Superseded by hiding unavailable routes. |
 | Role-name-only/browser-only authorisation | Superseded by backend permission keys and scoped assignments. |

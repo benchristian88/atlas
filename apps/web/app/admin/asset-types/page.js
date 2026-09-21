@@ -9,7 +9,7 @@ import { CrudScreen } from "../../../components/crud-screen";
 const fields = [
   { name: "key", label: "Key", createOnly: true, required: true, placeholder: "home_assistant", help: "Lowercase letters, numbers, and underscores; cannot change later." },
   { name: "name", label: "Name", required: true },
-  { name: "category", label: "Category", placeholder: "Platform, Network, Workload…" },
+  { name: "category_id", label: "Category", type: "select", required: true, placeholder: "Select a category", optionsKey: "categories", optionsFilter: (category, form) => category.active || category.id === form.category_id },
   { name: "default_icon_url", label: "Default icon URL", type: "url", help: "Absolute HTTPS image URL. Remote SVG files are not accepted." },
   { name: "sort_order", label: "Sort order", type: "number", required: true },
   { name: "active", label: "Available for new assets", type: "checkbox" },
@@ -45,14 +45,15 @@ export default function AssetTypesAdminPage() {
       columns={columns}
       deleteReason={deleteReason}
       description="Define the inventory taxonomy and default icon used when an asset has no override."
-      emptyValues={{ key: "", name: "", category: "", default_icon_url: "", sort_order: "100", active: true, description: "" }}
+      emptyValues={{ key: "", name: "", category_id: "", default_icon_url: "", sort_order: "100", active: true, description: "" }}
       endpoint="/asset-types"
+      dependencies={[{ key: "categories", endpoint: "/asset-categories" }]}
       eyebrow="Reference Data"
       fields={fields}
       preparePayload={(form, editingId) => ({
         ...(!editingId ? { key: form.key } : {}),
         name: form.name,
-        category: form.category || null,
+        category_id: form.category_id,
         default_icon_url: form.default_icon_url || null,
         sort_order: Number(form.sort_order),
         active: form.active,

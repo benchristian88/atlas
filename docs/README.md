@@ -83,9 +83,14 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 
 ## User and administrator guides
 
+- [Infrastructure Topology](admin/infrastructure-topology.md): four infrastructure views, filtering, focus and expansion.
+- [Asset Categories](admin/asset-categories.md): managed taxonomy, lifecycle and default topology visibility.
+
 - [Exploring the Knowledge Graph](admin/knowledge-graph.md): expanded view, Focus depth, filters and inspector.
 
 ## Architecture documents
+
+- [Infrastructure Topology and managed categories](architecture/infrastructure-topology.md): contracts, migration, scoping and projection semantics.
 
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) — current
   baseline through C1.

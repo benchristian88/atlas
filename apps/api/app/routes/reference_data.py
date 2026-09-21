@@ -17,6 +17,7 @@ from app.authorization import (
 from app.database import get_db
 from app.models import (
     Asset,
+    AssetCategory,
     AssetRelationship,
     AssetType,
     CustomFieldAssetType,
@@ -87,7 +88,9 @@ def _asset_type_response(
             "key": item.key,
             "name": item.name,
             "description": item.description,
-            "category": item.category,
+            "category": item.category_record.name if item.category_record else "Uncategorized",
+            "category_id": item.category_id,
+            "category_key": item.category_record.key if item.category_record else "uncategorized",
             "default_icon_url": item.default_icon_url,
             "system_defined": item.system_defined,
             "active": item.active,
@@ -197,6 +200,7 @@ def create_asset_type(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "asset_types.manage")
+    _validate_category(db, payload.category_id)
     item = AssetType(**payload.model_dump(), system_defined=False)
     db.add(item)
     flush(db, "Asset type")
@@ -232,6 +236,8 @@ def update_asset_type(
     if item is None:
         raise HTTPException(status_code=404, detail="Asset type not found")
     changes = payload.model_dump(exclude_unset=True)
+    if "category_id" in changes:
+        _validate_category(db, changes["category_id"], current_id=item.category_id)
     referenced_requirements = requirements_referencing(db, item.id) if changes.get("active") is False else []
     for key, value in changes.items():
         setattr(item, key, value)
@@ -514,3 +520,10 @@ def delete_relationship_type(
     db.delete(item)
     commit(db, "Relationship type")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _validate_category(db: Session, category_id, current_id=None):
+    category = db.get(AssetCategory, category_id) if category_id else None
+    if category is None or (not category.active and category_id != current_id):
+        raise HTTPException(status_code=422, detail="Select an active Asset Category")
+    return category

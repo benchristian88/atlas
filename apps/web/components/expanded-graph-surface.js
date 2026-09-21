@@ -5,7 +5,7 @@ import { NavigationIcon } from "./navigation-icon.mjs";
 
 // Keep one mounted graph/inspector tree. A native modal promotes that same tree
 // into the top layer and makes the application beneath it inert.
-export function ExpandedGraphSurface({ expanded, onClose, returnFocus, scrollPosition, children }) {
+export function ExpandedGraphSurface({ expanded, onClose, returnFocus, scrollPosition, children, title = "Knowledge Graph" }) {
   const dialog = useRef(null);
   const closeButton = useRef(null);
   const restoreScroll = useRef(null);
@@ -43,7 +43,7 @@ export function ExpandedGraphSurface({ expanded, onClose, returnFocus, scrollPos
   }, [expanded, returnFocus, scrollPosition]);
 
   return <dialog ref={dialog} className={`knowledge-graph-surface ${expanded ? "is-expanded" : "is-embedded"}`}
-    role={expanded ? "dialog" : "region"} aria-modal={expanded ? true : undefined} aria-label="Knowledge Graph"
+    role={expanded ? "dialog" : "region"} aria-modal={expanded ? true : undefined} aria-label={title}
     onCancel={(event) => { event.preventDefault(); onClose(); }}
     onKeyDown={(event) => {
       if (!expanded || event.key !== "Tab") return;
@@ -53,8 +53,8 @@ export function ExpandedGraphSurface({ expanded, onClose, returnFocus, scrollPos
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }}>
     <div className="expanded-graph-heading" hidden={!expanded}>
-      <h2>Knowledge Graph</h2>
-      <button ref={closeButton} className="button button-secondary graph-icon-button" type="button" aria-label="Close expanded Knowledge Graph" title="Close expanded Knowledge Graph" onClick={onClose}><NavigationIcon name="close" /></button>
+      <h2>{title}</h2>
+      <button ref={closeButton} className="button button-secondary graph-icon-button" type="button" aria-label={`Close expanded ${title}`} title={`Close expanded ${title}`} onClick={onClose}><NavigationIcon name="close" /></button>
     </div>
     {children}
   </dialog>;

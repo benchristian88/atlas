@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "knowledge_gaps",
     "knowledge_completeness_summaries",
     "asset_types",
+    "asset_categories",
     "relationship_types",
     "relationship_type_applicabilities",
     "service_types",
@@ -64,8 +65,9 @@ CRITICAL_COLUMNS = {
         "id", "user_id", "role_id", "scope_type", "customer_id", "site_id",
         "created_at", "updated_at",
     },
+    "asset_categories": {"id", "key", "name", "description", "sort_order", "active", "show_in_topology", "created_at", "updated_at"},
     "asset_types": {
-        "id", "key", "name", "description", "category", "default_icon_url",
+        "id", "key", "name", "description", "category", "category_id", "default_icon_url",
         "system_defined", "active", "sort_order", "created_at", "updated_at",
     },
     "relationship_types": {

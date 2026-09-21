@@ -10,6 +10,7 @@ const paths = {
   assets: "M3 4h18v7H3z M3 14h18v7H3z M6 7.5h1 M6 17.5h1 M11 7.5h7 M11 17.5h7",
   services: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18 M12 3c-5 5-5 13 0 18 5-5 5-13 0-18 M3 12h18 M5 7h14 M5 17h14",
   "business-functions": "M9 7V4h6v3 M3 7h18v14H3z M3 12l9 3 9-3 M10 14v3h4v-3",
+  topology: "M9 3h6v6H9z M3 17h6v4H3z M15 17h6v4h-6z M12 9v4 M6 17v-4h12v4",
   networks: "M9 3h6v6H9z M3 17h6v4H3z M15 17h6v4h-6z M12 9v4 M6 17v-4h12v4",
   discovery: "M11 3a8 8 0 1 0 0 16 8 8 0 1 0 0-16 M17 17l4 4 M7 11h8 M11 7v8",
   reconciliation: "M4 7h16l-4-4 M20 17H4l4 4 M20 7l-4 4 M4 17l4-4",

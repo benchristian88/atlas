@@ -22,7 +22,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -190,6 +190,24 @@ class AccessAssignment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
 
 
+UNCATEGORIZED_ID = uuid.UUID("cbb23449-f856-5a92-a031-02c83946b579")
+
+
+class AssetCategory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "asset_categories"
+    __table_args__ = (
+        CheckConstraint("key <> 'uncategorized' OR active", name="uncategorized_active"),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    # Exact names preserve distinct legacy values, including case differences.
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100", index=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", index=True)
+    show_in_topology: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
 class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asset_types"
     __table_args__ = (
@@ -201,7 +219,13 @@ class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
+    # Frozen upgrade snapshot; never read or edited as managed taxonomy.
     category: Mapped[str | None] = mapped_column(String(100), index=True)
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("asset_categories.id", ondelete="RESTRICT"), nullable=False,
+        index=True, server_default=str(UNCATEGORIZED_ID),
+    )
+    category_record: Mapped["AssetCategory"] = relationship(lazy="joined")
     default_icon_url: Mapped[str | None] = mapped_column(String(2048))
     system_defined: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"

@@ -478,11 +478,48 @@ class AssetInterfaceResponse(ORMResponse):
     updated_at: datetime
 
 
+class AssetCategoryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    sort_order: int = Field(default=100, ge=0)
+    active: bool = True
+    show_in_topology: bool = True
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class AssetCategoryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    sort_order: int | None = Field(default=None, ge=0)
+    active: bool | None = None
+    show_in_topology: bool | None = None
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class AssetCategoryResponse(ORMResponse):
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str | None
+    sort_order: int
+    active: bool
+    show_in_topology: bool
+    asset_types_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
 class AssetTypeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
-    category: str | None = Field(default=None, max_length=100)
+    category_id: uuid.UUID
     default_icon_url: str | None = Field(default=None, max_length=2048)
     active: bool = True
     sort_order: int = Field(default=100, ge=0)
@@ -492,9 +529,10 @@ class AssetTypeCreate(BaseModel):
 
 
 class AssetTypeUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
-    category: str | None = Field(default=None, max_length=100)
+    category_id: uuid.UUID | None = None
     default_icon_url: str | None = Field(default=None, max_length=2048)
     active: bool | None = None
     sort_order: int | None = Field(default=None, ge=0)
@@ -509,6 +547,8 @@ class AssetTypeResponse(ORMResponse):
     name: str
     description: str | None
     category: str | None
+    category_id: uuid.UUID | None = None
+    category_key: str | None = None
     default_icon_url: str | None
     system_defined: bool
     active: bool
@@ -1822,7 +1862,41 @@ class CompletenessBatchRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
 
 
+class TopologyPlatformLink(BaseModel):
+    relationship_id: uuid.UUID
+    parent_id: uuid.UUID
+    child_id: uuid.UUID
+
+
+class ConnectivityNode(BaseModel):
+    key: str
+    entity_type: Literal["asset", "network"]
+    entity_id: uuid.UUID
+    name: str
+    distance: int
+
+
+class ConnectivityEdge(BaseModel):
+    key: str
+    source_key: str
+    target_key: str
+    label: str
+    kind: Literal["relationship", "membership"]
+    directional: bool
+
+
+class ConnectivityResponse(BaseModel):
+    focus_key: str
+    nodes: list[ConnectivityNode]
+    edges: list[ConnectivityEdge]
+    truncated: bool
+
+
 class TopologyResponse(BaseModel):
+    categories: list[AssetCategoryResponse] = Field(default_factory=list)
+    asset_types: list[AssetTypeResponse] = Field(default_factory=list)
+    relationship_types: list[RelationshipTypeResponse] = Field(default_factory=list)
+    platform_links: list[TopologyPlatformLink] = Field(default_factory=list)
     customers: list[CustomerResponse]
     sites: list[SiteResponse]
     assets: list[ManualAssetResponse]

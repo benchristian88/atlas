@@ -1,0 +1,134 @@
+"""Opt-in tests against a disposable Alembic-migrated PostgreSQL database."""
+import os
+import uuid
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.orm import Session
+
+from app.authorization import ActiveContext, Principal, ScopeGrant, get_principal
+from app.database import get_db
+from app.main import app
+from app.models import Asset, AssetCategory, AssetInterface, AssetRelationship, AssetType, Customer, Network, Site, Workspace, UNCATEGORIZED_ID
+from app.routes.topology import get_topology
+from app.schemas import TopologyResponse
+from app.services.infrastructure_topology import connectivity
+from tests.test_administration import make_principal
+
+pytestmark = pytest.mark.skipif(not os.getenv("ATLAS_TEST_DATABASE_URL"), reason="requires disposable migrated PostgreSQL")
+
+
+@pytest.fixture
+def db():
+    engine = create_engine(os.environ["ATLAS_TEST_DATABASE_URL"])
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
+            yield session
+        transaction.rollback()
+    engine.dispose()
+
+
+@pytest.fixture
+def client(db):
+    principal = make_principal("asset_types.view", "asset_types.manage", "assets.view")
+    db.add(principal.user)
+    db.flush()
+    app.dependency_overrides[get_principal] = lambda: principal
+    app.dependency_overrides[get_db] = lambda: db
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+def test_category_and_docker_compose_lifecycle(client, db):
+    result = client.post("/api/asset-categories", json={"key": "test_workload", "name": "Workload"})
+    assert result.status_code == 201, result.text
+    category = result.json()
+    assert category["show_in_topology"] and category["asset_types_count"] == 0
+    assert client.patch(f"/api/asset-categories/{category['id']}", json={"key": "changed"}).status_code == 422
+    assert client.post("/api/asset-types", json={"key": "docker_compose", "name": "Docker Compose"}).status_code == 422
+    result = client.post("/api/asset-types", json={"key": "docker_compose", "name": "Docker Compose", "category_id": category["id"]})
+    assert result.status_code == 201, result.text
+    asset_type = result.json()
+    assert asset_type["category"] == "Workload" and asset_type["category_key"] == "test_workload"
+    assert client.delete(f"/api/asset-categories/{category['id']}").status_code == 409
+    updated = client.patch(f"/api/asset-categories/{category['id']}", json={"name": "Custom Workloads", "active": False, "show_in_topology": False})
+    assert updated.status_code == 200 and updated.json()["asset_types_count"] == 1
+    assert client.patch(f"/api/asset-types/{asset_type['id']}", json={"category_id": category["id"], "description": "Still valid"}).status_code == 200
+    assert client.post("/api/asset-types", json={"key": "other_type", "name": "Other type", "category_id": category["id"]}).status_code == 422
+    assert client.patch(f"/api/asset-types/{asset_type['id']}", json={"category_id": None}).status_code == 422
+    result = client.patch(f"/api/asset-types/{asset_type['id']}", json={"category_id": str(UNCATEGORIZED_ID)})
+    assert result.status_code == 200 and result.json()["category"] == "Uncategorized"
+    assert client.delete(f"/api/asset-categories/{category['id']}").status_code == 204
+    categories = client.get("/api/asset-categories").json()
+    fallback = next(c for c in categories if c["key"] == "uncategorized")
+    assert fallback["active"] and not fallback["show_in_topology"]
+    assert client.delete(f"/api/asset-categories/{UNCATEGORIZED_ID}").status_code == 409
+    assert client.patch(f"/api/asset-categories/{UNCATEGORIZED_ID}", json={"active": False}).status_code == 409
+    assert client.patch(f"/api/asset-categories/{UNCATEGORIZED_ID}", json={"name": "Changed"}).status_code == 409
+    assert db.scalar(select(AssetType).where(AssetType.id == uuid.UUID(asset_type["id"]))).category_id == UNCATEGORIZED_ID
+
+
+def test_reference_permissions_and_scoped_manage_cannot_change_global_taxonomy(client, db):
+    user = make_principal("assets.view")
+    app.dependency_overrides[get_principal] = lambda: user
+    assert client.get("/api/asset-categories").status_code == 403
+    assert client.post("/api/asset-categories", json={"key": "custom", "name": "Custom"}).status_code == 403
+    grant = ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Scoped", scope_type="customer", customer_id=uuid.uuid4(), site_id=None, permissions=frozenset({"asset_types.view", "asset_types.manage"}))
+    app.dependency_overrides[get_principal] = lambda: Principal(user.user, (grant,))
+    assert client.get("/api/asset-categories").status_code == 200
+    assert client.post("/api/asset-categories", json={"key": "custom", "name": "Custom"}).status_code == 403
+
+
+def seed_scope(db):
+    workspace = Workspace(name="Topology test", slug=f"topology-{uuid.uuid4()}")
+    db.add(workspace); db.flush()
+    customers = [Customer(workspace_id=workspace.id, name=n) for n in ("Visible customer", "Hidden customer")]
+    db.add_all(customers); db.flush()
+    sites = [Site(customer_id=customers[0].id, name="Visible Site"), Site(customer_id=customers[0].id, name="Hidden Site"), Site(customer_id=customers[1].id, name="Other Customer Site")]
+    db.add_all(sites); db.flush()
+    assets = [Asset(workspace_id=workspace.id, customer_id=site.customer_id, site_id=site.id, name=name, asset_type="server") for site, name in ((sites[0], "AdGuard Home"), (sites[0], "PVE1"), (sites[1], "Hidden host"), (sites[2], "Other customer host"))]
+    db.add_all(assets); db.flush()
+    networks = [Network(customer_id=site.customer_id, site_id=site.id, name=name, network_type="vlan", vlan_id=vlan, gateway="10.0.99.1") for site, name, vlan in ((sites[0], "Management", 99), (sites[1], "Secret Network", 123), (sites[0], "Apps", 10))]
+    db.add_all(networks); db.flush()
+    db.add_all([AssetInterface(asset_id=assets[0].id, network_id=networks[0].id, name="eth0", ip_address="10.0.99.5"), AssetInterface(asset_id=assets[0].id, network_id=networks[1].id, name="legacy", ip_address="10.0.123.5"), AssetInterface(asset_id=assets[0].id, network_id=networks[2].id, name="eth1"), AssetInterface(asset_id=assets[2].id, network_id=networks[0].id, name="hidden-interface")])
+    db.add_all([AssetRelationship(customer_id=sites[0].customer_id, site_id=sites[0].id, source_asset_id=assets[0].id, target_asset_id=target.id, relationship_type="runs_on") for target in assets[1:]])
+    db.flush()
+    return sites, assets, networks
+
+
+def test_authorized_topology_counts_endpoints_context_and_network_non_disclosure(db):
+    sites, assets, networks = seed_scope(db)
+    base = make_principal("relationships.view", "networks.view", "sites.view", "customers.view")
+    scoped = ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Site", scope_type="site", customer_id=sites[0].customer_id, site_id=sites[0].id, permissions=frozenset({"assets.view", "networks.view", "sites.view", "customers.view"}))
+    # Global relationships permission must not disclose Assets outside assets.view.
+    global_relationships = make_principal("relationships.view").grants[0]
+    principal = Principal(base.user, (scoped, global_relationships))
+    topology = get_topology(ActiveContext(None, None), principal, db)
+    TopologyResponse.model_validate(topology)
+    assert {a["id"] for a in topology["assets"]} == {a.id for a in assets[:2]}
+    assert len(topology["relationships"]) == 1 and len(topology["platform_links"]) == 1
+    assert len(topology["asset_interfaces"]) == 3
+    assert next(i for i in topology["asset_interfaces"] if i["name"] == "legacy")["network_id"] is None
+    assert networks[1].id not in {n["id"] for n in topology["networks"]}
+    assert assets[2].name not in str(topology) and str(assets[2].id) not in str(topology)
+    graph = connectivity(topology, assets[0].id, hops=2)
+    assert len(graph["nodes"]) == 4
+    assert "Secret" not in str(graph) and "10.0.99.1" not in str(graph)
+    assert get_topology(ActiveContext(sites[2].customer_id, sites[2].id), principal, db)["assets"] == []
+    # No Network permission means no interfaces or membership counts.
+    asset_only = Principal(base.user, (ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Asset only", scope_type="global", customer_id=None, site_id=None, permissions=frozenset({"assets.view"})),))
+    projection = get_topology(ActiveContext(None, None), asset_only, db)
+    assert projection["networks"] == projection["asset_interfaces"] == projection["relationships"] == []
+
+
+def test_assets_category_filter_uses_managed_ids(client, db):
+    sites, assets, _ = seed_scope(db)
+    category_id = db.scalar(select(AssetType.category_id).where(AssetType.key == "server"))
+    scope = f"customer_id={sites[0].customer_id}&site_id={sites[0].id}"
+    response = client.get(f"/api/assets?category_id={category_id}&{scope}")
+    assert response.status_code == 200
+    assert {a["id"] for a in response.json()} == {str(a.id) for a in assets[:2]}
+    assert client.get(f"/api/assets?category_id={UNCATEGORIZED_ID}&{scope}").json() == []

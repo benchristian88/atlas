@@ -138,7 +138,7 @@ class AtlasDiscoverySync:
                 key=key,
                 name=key.replace("_", " ").title(),
                 description="Registered by discovery",
-                category="discovered",
+                # New discovery types use the managed Uncategorized fallback.
                 system_defined=False,
                 active=True,
                 sort_order=1000,

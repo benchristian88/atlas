@@ -24,6 +24,7 @@ function hookValue(hook, record, fallback) {
 export function CrudScreen({
   eyebrow,
   title,
+  singularTitle = title.replace(/s$/, ""),
   description,
   endpoint,
   listEndpoint = endpoint,
@@ -164,7 +165,7 @@ export function CrudScreen({
           {headingActions}
           {showCreate && (
             <button className="button button-primary" onClick={openCreate} type="button">
-              Add {title.replace(/s$/, "")}
+              Add {singularTitle}
             </button>
           )}
         </div>}
@@ -175,7 +176,7 @@ export function CrudScreen({
       {formOpen && (
         <section className="form-card">
           <div className="form-card-header">
-            <h2>{editingId ? `Edit ${title.replace(/s$/, "")}` : `Add ${title.replace(/s$/, "")}`}</h2>
+            <h2>{editingId ? `Edit ${singularTitle}` : `Add ${singularTitle}`}</h2>
             <button className="icon-button" onClick={closeForm} type="button" aria-label="Close form">×</button>
           </div>
           <form className="resource-form" onSubmit={submit}>
