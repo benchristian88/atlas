@@ -601,10 +601,11 @@ See [C2.6 validation and acceptance](../testing/release-c2-usability-lifecycle-p
 This is a contained quality bar for a high-quality self-hosted release, not
 enterprise production certification:
 
-- complete the Interface-first IP experience by using primary Interface and
-  Network records consistently in Asset create, edit, list, filtering, and
-  sorting journeys; retain `Asset.ip_address` only for migration and read
-  compatibility until a deliberate deprecation decision is made;
+- Interface-first IP UI cleanup is implemented: Asset forms omit top-level IP,
+  detail uses Interfaces, and topology/search use authorised Interface IPs.
+  Retain deprecated `Asset.ip_address` storage, API read/write acceptance and
+  reconciliation writers until a deliberate compatibility migration; see the
+  [audit](../testing/interface-first-ip-transition.md);
 - installation, upgrade and migration validation;
 - enrich System Settings with Backup & Restore, update/version checking,
   About/build information refinement and safe instance-level runtime settings;

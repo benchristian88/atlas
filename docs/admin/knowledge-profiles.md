@@ -24,3 +24,8 @@ Gap actions live on Asset detail and the Operations **Knowledge Gaps** page:
 - Reopen removes the active waiver and evaluates again.
 
 Exceptions should document reality, not conceal unknowns. Prefer providing the missing field, interface, relationship, or sourced assertion when it is available.
+
+IP addresses belong to Asset Interfaces. For IP completeness, choose **Interface
+has an IP address**. New Asset-field requirements do not offer an IP field.
+Existing legacy IP requirements remain editable with a deprecated label so their
+meaning is preserved until an administrator deliberately replaces them.

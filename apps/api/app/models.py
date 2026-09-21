@@ -1449,6 +1449,7 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     vendor: Mapped[str | None] = mapped_column(String(100), index=True)
     model: Mapped[str | None] = mapped_column(String(255))
     hostname: Mapped[str | None] = mapped_column(String(255), index=True)
+    # Deprecated compatibility storage; current IPs belong to AssetInterface.
     ip_address: Mapped[str | None] = mapped_column(String(45), index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="active", index=True

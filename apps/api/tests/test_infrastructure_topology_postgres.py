@@ -174,3 +174,39 @@ def test_category_preview_source_count_excludes_other_sites(db):
     assert len(data["assets"]) == 25
     assert all(a["site_id"] == sites[0].id for a in data["assets"])
     assert len(data["assets"][6:]) == 19
+
+
+@pytest.mark.parametrize("route", ["assets", "manual-assets"])
+def test_legacy_ip_api_compatibility_and_interface_first_acceptance(client, db, route):
+    sites, assets, _ = seed_scope(db)
+    actor = make_principal("assets.view", "assets.create", "assets.edit", "networks.view", "networks.create")
+    actor = Principal(app.dependency_overrides[get_principal]().user, actor.grants)
+    app.dependency_overrides[get_principal] = lambda: actor
+    result = client.post(f"/api/{route}", json={
+        "customer_id": str(sites[0].customer_id), "site_id": str(sites[0].id),
+        "name": "AdGuard Home", "asset_type": "server", "ip_address": "192.0.2.254",
+    })
+    assert result.status_code == 201, result.text
+    record = result.json()
+    assert record["ip_address"] == "192.0.2.254"
+    url = f"/api/{route}/{record['id']}"
+    # Ordinary web edits omit the deprecated field and preserve stored history.
+    result = client.patch(url, json={"description": "Updated without legacy IP"})
+    assert result.status_code == 200, result.text
+    assert result.json()["ip_address"] == "192.0.2.254"
+    assert client.get(url).json()["ip_address"] == "192.0.2.254"
+    for name, address in (("eth0", "192.168.99.5"), ("eth1", "192.168.5.5")):
+        response = client.post("/api/asset-interfaces", json={
+            "asset_id": record["id"], "name": name, "ip_address": address, "is_primary": name == "eth0",
+        })
+        assert response.status_code == 201, response.text
+        assert [a["id"] for a in client.get(f"/api/assets?search={address}").json()] == [record["id"]]
+    assert client.get("/api/assets?search=192.0.2.254").json() == []
+    interfaces = client.get(f"/api/asset-interfaces?asset_id={record['id']}").json()
+    assert {(i["name"], i["ip_address"]) for i in interfaces} == {("eth0", "192.168.99.5"), ("eth1", "192.168.5.5")}
+    # External clients retain explicit legacy updates and clearing.
+    for address in ("192.0.2.253", None):
+        result = client.patch(url, json={"ip_address": address})
+        assert result.status_code == 200, result.text
+        assert result.json()["ip_address"] == address
+    assert len(client.get(f"/api/asset-interfaces?asset_id={record['id']}").json()) == 2

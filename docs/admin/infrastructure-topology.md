@@ -71,3 +71,11 @@ not shown. Missing fields are omitted rather than invented.
 The Assets table shows hostname rather than the legacy top-level Asset IP. IP
 search matches recorded interface addresses where you have permission to view
 interfaces; legacy Asset IPs no longer supply search matches.
+
+## Record an IP address
+
+IP addresses belong to Asset Interfaces. Create the Asset with its identity and
+inventory details, then open its detail page and use **Interfaces and networks →
+Add interface**. Enter the interface name, IP address and optional Network. Mark
+an interface primary when appropriate. Asset editing does not change interface
+addresses. Assets without an Interface IP show no address in topology.

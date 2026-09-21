@@ -495,8 +495,10 @@ below; do not drop/recreate the database.
 
 Networks and VLANs represent subnets and broadcast/routing domains. Assets can
 have one or more interfaces, and interface records are the source of truth for
-IP and network membership. The legacy asset-level IP field remains API-compatible
-but is not used by the web workflow.
+IP and network membership. Asset create/edit forms have no top-level IP field; add addresses through
+**Interfaces and networks** on Asset detail. The legacy asset-level `ip_address`
+field is deprecated compatibility only: existing API clients may still read or
+write it, but Asset UI, topology display and list search do not use it.
 
 1. Create customer **Home Lab** and site **Home**.
 2. Open **Networks** and create **Apps VLAN** as a `vlan`, VLAN ID `5`, CIDR `192.168.5.0/24`, and gateway `192.168.5.1`.

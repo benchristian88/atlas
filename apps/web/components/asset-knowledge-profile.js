@@ -7,7 +7,7 @@ import { PageHeader } from "./page-header";
 import { KnowledgeProfileTable } from "./knowledge-profile-table";
 import { apiRequest } from "../lib/api";
 
-const CORE_FIELDS = ["name", "asset_type", "hostname", "ip_address", "status", "vendor", "model", "description", "source"];
+const CORE_FIELDS = ["name", "asset_type", "hostname", "status", "vendor", "model", "description", "source"];
 const RULE_TYPES = [
   ["field_present", "Asset field is present"], ["field_value_in", "Asset field has an allowed value"],
   ["custom_field_present", "Custom field is present"], ["custom_field_value_in", "Custom field has an allowed value"],
@@ -23,7 +23,7 @@ const EMPTY = {
   rule_type: "field_present", field: "hostname", values: "", custom_field_id: "",
   relationship_type_ids: [], target_asset_type_ids: [], direction: "outgoing", minimum: "1",
   interface_role: "", allow_any_role: true, require_primary: false, address_family: "either",
-  predicate: "", maximum_age_days: "30", alternative_field: "ip_address",
+  predicate: "", maximum_age_days: "30", alternative_field: "description",
   unless_field_id: "", unless_values: "", remediation_hint: "", active: true, sort_order: "100",
 };
 
@@ -48,14 +48,14 @@ function configFor(form) {
 function formFrom(item) {
   const config = item.rule_config_json || {};
   return {
-    ...EMPTY, ...item, sort_order: String(item.sort_order), field: config.field || "hostname",
+    ...EMPTY, ...item, sort_order: String(item.sort_order), field: config.field || config.rules?.[0]?.rule_config?.field || "hostname",
     values: (config.values || []).join(", "), custom_field_id: config.custom_field_definition_id || "",
     relationship_type_ids: config.relationship_type_ids || [], target_asset_type_ids: config.allowed_target_asset_type_ids || [],
     direction: config.direction || "outgoing", minimum: String(config.minimum || 1), interface_role: config.interface_role || "",
     allow_any_role: config.allow_any_role ?? true, require_primary: config.require_primary || false,
     address_family: config.allowed_address_families?.length === 1 ? config.allowed_address_families[0] : "either",
     predicate: config.predicate || "", maximum_age_days: String(config.maximum_age_days || 30),
-    alternative_field: config.rules?.[1]?.rule_config?.field || "ip_address",
+    alternative_field: config.rules?.[1]?.rule_config?.field || "description",
     unless_field_id: config.unless?.rule_config?.custom_field_definition_id || "",
     unless_values: (config.unless?.rule_config?.values || []).join(", "),
   };
@@ -120,8 +120,8 @@ export function AssetKnowledgeProfile({ typeId: id, globalScope = false }) {
       <label className="field"><span>Level</span><select onChange={(event) => update("requirement_level", event.target.value)} value={form.requirement_level}><option value="required">Required</option><option value="conditional">Conditional</option><option value="recommended">Recommended</option></select></label>
       <label className="field"><span>Severity</span><select onChange={(event) => update("severity", event.target.value)} value={form.severity}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
       <label className="field field-wide"><span>Rule</span><select onChange={(event) => update("rule_type", event.target.value)} value={form.rule_type}>{RULE_TYPES.map(([value, name, disabled]) => <option disabled={disabled} key={value} value={value}>{name}</option>)}</select></label>
-      {["field_present", "field_value_in", "explicit_state_or_exception", "one_of"].includes(form.rule_type) && <label className="field"><span>Asset field</span><select onChange={(event) => update("field", event.target.value)} value={form.field}>{CORE_FIELDS.map((item) => <option key={item}>{item}</option>)}</select></label>}
-      {form.rule_type === "one_of" && <label className="field"><span>Alternative field</span><select onChange={(event) => update("alternative_field", event.target.value)} value={form.alternative_field}>{CORE_FIELDS.map((item) => <option key={item}>{item}</option>)}</select></label>}
+      {["field_present", "field_value_in", "explicit_state_or_exception", "one_of"].includes(form.rule_type) && <label className="field"><span>Asset field</span><select onChange={(event) => update("field", event.target.value)} value={form.field}>{form.field === "ip_address" && <option value="ip_address">Legacy Asset IP (deprecated)</option>}{CORE_FIELDS.map((item) => <option key={item}>{item}</option>)}</select></label>}
+      {form.rule_type === "one_of" && <label className="field"><span>Alternative field</span><select onChange={(event) => update("alternative_field", event.target.value)} value={form.alternative_field}>{form.alternative_field === "ip_address" && <option value="ip_address">Legacy Asset IP (deprecated)</option>}{CORE_FIELDS.map((item) => <option key={item}>{item}</option>)}</select></label>}
       {["field_value_in", "custom_field_value_in", "explicit_state_or_exception"].includes(form.rule_type) && <label className="field"><span>Allowed values (comma-separated)</span><input onChange={(event) => update("values", event.target.value)} required value={form.values} /></label>}
       {customRule && <label className="field"><span>Custom field</span><select onChange={(event) => update("custom_field_id", event.target.value)} required value={form.custom_field_id}><option value="">Select field</option>{customFields.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
       {relationshipRule && <><MultiSelect label="Relationship types" onChange={(value) => update("relationship_type_ids", value)} required value={form.relationship_type_ids}>{relationshipTypes.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</MultiSelect><label className="field"><span>Direction</span><select onChange={(event) => update("direction", event.target.value)} value={form.direction}><option value="outgoing">Outgoing</option><option value="incoming">Incoming</option><option value="either">Either</option></select></label><MultiSelect label="Allowed counterpart types (optional)" onChange={(value) => update("target_asset_type_ids", value)} value={form.target_asset_type_ids}>{assetTypes.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</MultiSelect></>}

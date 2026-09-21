@@ -311,9 +311,11 @@ The repository audit materially changes several classifications:
 6. **Business Function lifecycle is only partially implemented.**
    Business Functions exist, but they do not yet have their own assertions,
    completeness profiles, gap summaries or change history.
-7. **The Interface-first IP transition is incomplete.**
-   Interfaces and topology use structured IP data, but Asset create/edit forms still expose
-   the legacy direct `Asset.ip_address`.
+7. **The Interface-first IP UI transition is implemented.**
+   Asset create/edit and detail no longer expose a top-level IP. Interfaces own IP
+   addresses; topology and authorised list search use them. The deprecated API
+   field and reconciliation compatibility writers remain; see the
+   [compatibility audit](../testing/interface-first-ip-transition.md).
 
 ## Current release position
 
@@ -351,7 +353,7 @@ transcript-derived report and the audited repository.
 | Generated Documentation | Planned/unknown                 | **Partially implemented**        | Deterministic Asset Markdown and `Document` persistence exist, but no documents router or usable UI exists. |
 | Impact Analysis | Planned but not implemented     | **Planned but not implemented**  | Focused Service/Business Function graphs are structural prerequisites, not an impact engine; no outage semantics or `/impact-analysis` exists. |
 | Business Function completeness/history | Not separately classified       | **Partially implemented**        | Business Function CRUD and graph exist, but no assertions, profiles, gaps or history. |
-| Interface-first IP UX | Implemented                     | **Partially implemented**        | Interfaces are first-class, but Asset create/edit forms still use direct `ip_address`; list display/search now exclude it. |
+| Interface-first IP UX | Implemented | **Implemented** | Create/edit omit the legacy field; detail uses Interfaces, topology and list IP search use Interfaces, and the list has no IP column. |
 | Discovery cancellation | Assumed part of lifecycle       | **Planned but not implemented**  | `cancelled` is a valid status and B2 now commits to cancellation, but no cancel endpoint, UI, action, or test exists. |
 | Full Reconciliation action set | Broadly treated as implemented  | **Core decisions implemented; some advanced actions not evidenced** | Accept/reject/defer/lifecycle paths are tested; reclassify, bulk operations and broad merge journeys are not present. |
 | Full Documentation product | Planned but not implemented     | **Partially implemented**        | The renderer and storage are already real, but the product surface is absent. |
@@ -481,8 +483,8 @@ unchanged.
 | Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
 | Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
 | Asset Interfaces | **Implemented** | Foundation | Interface, network, IP, MAC, primary and notes are persisted and managed. |
-| Direct Asset IP field | **Partially superseded** | Foundation migration | Remains in create/edit forms and API/schema for compatibility; removed from list display/search. |
-| Interface-first IP UX | **Partially implemented** | Future polish | Topology/Platform and list IP search use interfaces; create/edit still expose direct `ip_address`. |
+| Direct Asset IP field | **Deferred** | Compatibility removal | Deprecated database/API field and reconciliation writers retained; excluded from ordinary Asset UI, topology display and list search. |
+| Interface-first IP UX | **Implemented** | Foundation hardening | Asset forms do not read/write the legacy field; detail shows Interface IPs; topology and authorised IP search use Interfaces only. |
 | Safe CIDR membership suggestions | **Unknown** | Network UX | No implementation or explicit decision. |
 | Asset Relationships | **Implemented** | Foundation | Scoped CRUD, type validation and same-context rules exist. |
 | New cross-site/customer relationships | **Deferred/prohibited** | Security boundary | Explicitly rejected and tested. |
@@ -964,18 +966,19 @@ The generation component already works. The next increment is relatively contain
 
 This converts hidden technical capability into visible user value.
 
-## Foundation hardening: complete Interface-first IP UX
+## Delivered foundation hardening: Interface-first IP UX
 
-Remove or de-emphasise direct `Asset.ip_address` from:
+IP addresses belong to Asset Interfaces. The shared Asset create/edit form omits
+legacy IP state and payloads; Asset detail presents addresses in Interfaces only.
+Platform and Connectivity retain deterministic interface summaries without a
+legacy fallback. The Assets table has no IP column; authorised Interface IPs are
+searchable. New knowledge requirements use interface-IP rules; existing legacy
+field rules remain identifiable as deprecated for compatibility.
 
-* Asset create/edit form;
-* remaining legacy editing workflows.
-
-Asset list display and IP search now use the interface-first policy described in
-[Infrastructure Topology](../architecture/infrastructure-topology.md).
-
-Use primary interface information consistently, retaining the legacy field only as a
-migration/read-compatibility mechanism.
+The database column, API acceptance/serialization, manual assertion provenance,
+and reconciliation compatibility writers remain deliberately intact. Schema
+metadata marks the field deprecated. No data migration or discovery rewrite was
+introduced. See the [audit and validation](../testing/interface-first-ip-transition.md).
 
 ## Delivered product foundation: C2.1 Shared Operational Graph
 

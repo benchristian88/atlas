@@ -288,7 +288,7 @@ class ManualAssetCreate(BaseModel):
     vendor: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=255)
     hostname: str | None = Field(default=None, max_length=255)
-    ip_address: str | None = Field(default=None, max_length=45)
+    ip_address: str | None = Field(default=None, max_length=45, json_schema_extra={"deprecated": True}, description="Deprecated compatibility field. IP addresses belong to Asset Interfaces; use /asset-interfaces.")
     status: str = Field(default="active", min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=10000)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -307,7 +307,7 @@ class ManualAssetUpdate(BaseModel):
     vendor: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=255)
     hostname: str | None = Field(default=None, max_length=255)
-    ip_address: str | None = Field(default=None, max_length=45)
+    ip_address: str | None = Field(default=None, max_length=45, json_schema_extra={"deprecated": True}, description="Deprecated compatibility field. IP addresses belong to Asset Interfaces; use /asset-interfaces.")
     status: str | None = Field(default=None, min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=10000)
     metadata: dict[str, Any] | None = None
@@ -331,7 +331,7 @@ class ManualAssetResponse(ORMResponse):
     vendor: str | None
     model: str | None
     hostname: str | None
-    ip_address: str | None
+    ip_address: str | None = Field(json_schema_extra={"deprecated": True}, description="Deprecated compatibility field. IP addresses belong to Asset Interfaces; use /asset-interfaces.")
     status: str
     description: str | None
     source: str
