@@ -16,7 +16,7 @@ const site = { id: id(2), customer_id: customer.id, name: "Home", status: "activ
 const permissions = ["assets.view", "assets.create", "asset_types.view", "asset_types.manage", "customers.view", "sites.view", "networks.view", "networks.create", "networks.edit", "relationships.view"];
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSawAAAAASUVORK5CYII=", "base64");
 function fixture() {
-  const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
+  const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: n === 0 ? "Backup" : `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
   const types = [{ id: id(20), key: "server", name: "Server", category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
   const asset = (n, name, type = "server") => ({ id: id(n), name, asset_type: type, customer_id: customer.id, site_id: site.id, status: "operational", hostname: `${name.toLowerCase().replaceAll(" ", "-")}.home`, cached_icon_url: `/api/assets/${id(n)}/icon?v=${"a".repeat(64)}` });
   const hosts = [asset(30, "PVE1"), asset(31, "PVE2"), asset(32, "PVE3"), asset(33, "PVE4")];
@@ -51,6 +51,14 @@ async function checkIdentityContrast(page, selector = ".infrastructure-topology 
   const hex = rgb=>"#" + rgb.match(/[\d.]+/g).slice(0,3).map(n=>Math.round(Number(n)).toString(16).padStart(2,"0")).join("");
   assert.ok(colours.length);
   for (const colour of colours) assert.ok(contrastRatio(hex(colour.foreground),hex(colour.background))>=4.5,JSON.stringify(colour));
+}
+
+async function checkConnectivityContrast(page) {
+  const networkCount = await page.locator('[data-node-key^="network:"]').count();
+  const selector = ".topology-connectivity-world .presentation-icon";
+  assert.equal(await page.locator(selector).count(), networkCount);
+  // Asset-only graphs use AssetIcon; the temporary filter icons are now closed.
+  if (networkCount) await checkIdentityContrast(page, selector);
 }
 
 const accentLabel = key => key[0].toUpperCase() + key.slice(1);
@@ -131,6 +139,174 @@ async function checkCompactPicker(page, theme, width, surface) {
   await page.keyboard.press("Space");
   await checkPreview(page, "application", "rose", await page.locator('input[name="name"]').inputValue());
 }
+async function checkTopologyInteractions(page, data, requests, theme, width) {
+  const button = name => page.getByRole("button", { name, exact: true });
+  const filters = page.getByRole("button", { name: /^Filters(?: · \d+)?$/ });
+  const panel = page.locator(".topology-filter-popover");
+  const search = page.getByLabel("Search Assets", { exact: true });
+  const expand = button("Expand Infrastructure Topology"), close = button("Close expanded Infrastructure Topology");
+  const contextBefore = await page.locator(".context-selector").innerText();
+  const originalUrl = page.url();
+  const defaults = async () => {
+    assert.equal(await filters.innerText(), "Filters");
+    assert.equal(await filters.getAttribute("aria-expanded"), "false");
+    await filters.click();
+    for (const category of data.categories) assert.equal(await panel.getByLabel(category.name, { exact: true }).isChecked(), category.show_in_topology);
+    await page.keyboard.press("Escape");
+  };
+  const overrides = async () => {
+    await filters.click();
+    await panel.getByLabel("Backup", { exact: true }).uncheck();
+    await panel.getByLabel("Uncategorized", { exact: true }).check();
+    assert.equal(await filters.innerText(), "Filters · 2");
+    await page.keyboard.press("Escape");
+  };
+  await button("Platform").click();
+  const before = await page.locator(".topology-platform-grid").first().boundingBox();
+  await filters.focus(); await page.keyboard.press("Enter");
+  assert.equal(await filters.getAttribute("aria-expanded"), "true");
+  assert.equal(await filters.getAttribute("aria-controls"), await panel.getAttribute("id"));
+  assert.equal(await panel.getByRole("checkbox").count(), data.categories.length);
+  assert.equal(await page.locator(".topology-category-filters").count(), 0);
+  assert.equal(await panel.getByRole("checkbox").first().evaluate(el => el === document.activeElement), true);
+  const box = await panel.boundingBox();
+  assert.ok(box.width >= 320 && box.width <= 420 && box.x >= 0 && box.x + box.width <= width);
+  assert.equal(await panel.locator(".topology-filter-options").evaluate(el => getComputedStyle(el).gridTemplateColumns.split(" ").length), 2);
+  assert.equal((await page.locator(".topology-platform-grid").first().boundingBox()).y, before.y, "Opening filters does not move topology");
+  const compute = panel.locator("label").filter({ has: page.getByLabel("Compute", { exact: true }) });
+  assert.equal(await compute.locator('[data-presentation-icon="server"]').getAttribute("data-presentation-accent"), "blue");
+  assert.ok((await compute.locator(".presentation-icon").boundingBox()).width <= 24);
+  await checkIdentityContrast(page, ".topology-filter-popover .presentation-icon");
+  await page.screenshot({ path: `${output}/filters-${theme}-${width}.png`, fullPage: true });
+  await panel.getByLabel("Uncategorized", { exact: true }).check();
+  assert.equal(await filters.innerText(), "Filters · 1");
+  assert.equal(await page.locator(`[data-platform-id="${id(150)}"]`).count(), 1, "Toggles apply immediately");
+  await panel.getByLabel("Uncategorized", { exact: true }).uncheck();
+  assert.equal(await filters.innerText(), "Filters");
+  await panel.getByLabel("Backup", { exact: true }).uncheck();
+  await panel.getByLabel("Uncategorized", { exact: true }).check();
+  await button("Reset to defaults").click();
+  assert.equal(await panel.count(), 1);
+  assert.equal(await filters.innerText(), "Filters");
+  assert.equal(await panel.getByLabel("Backup", { exact: true }).isChecked(), true);
+  assert.equal(await panel.getByLabel("Uncategorized", { exact: true }).isChecked(), false);
+  await page.getByRole("heading", { name: "Infrastructure Topology", exact: true }).click(); assert.equal(await panel.count(), 0, "Outside click closes");
+  await filters.click(); await page.keyboard.press("Escape");
+  assert.equal(await panel.count(), 0);
+  assert.equal(await filters.evaluate(el => el === document.activeElement), true);
+  await filters.click(); await button("Reset to defaults").focus(); await page.keyboard.press("Tab");
+  assert.equal(await panel.count(), 0, "Tab leaves the non-modal selector");
+  assert.equal(await button("Refresh").evaluate(el => el === document.activeElement), true);
+
+  const pve = page.locator(`[data-platform-id="${id(30)}"]`);
+  await pve.getByRole("button", { name: "Show all 20 (+12 more)", exact: true }).click();
+  await pve.locator(".topology-asset-identity").first().click();
+  await search.fill("AdGuard"); await overrides();
+  for (const action of [async () => { await expand.click(); await close.click(); }, async () => {
+    const count = requests.filter(r => r === "/api/topology").length;
+    await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === "/api/topology"), button("Refresh").click()]);
+    assert.ok(requests.filter(r => r === "/api/topology").length > count);
+  }]) {
+    await action();
+    assert.equal(await search.inputValue(), "AdGuard");
+    assert.equal(await filters.innerText(), "Filters · 2");
+    assert.equal(await page.locator(".topology-detail-inspector").count(), 1);
+  }
+  await button("Platform").click(); assert.equal(await search.inputValue(), "AdGuard", "Active tab does not reset");
+  await filters.click(); await button("Overview").click();
+  assert.equal(await page.locator(".topology-detail-inspector").count(), 0);
+  await defaults();
+  await overrides(); await expand.click(); await close.click();
+  assert.equal(await filters.innerText(), "Filters · 2");
+  await button("Platform").click();
+  assert.equal(await search.inputValue(), "");
+  assert.equal(await pve.locator(".topology-child").count(), 8);
+  assert.equal(await page.locator(".topology-detail-inspector").count(), 0);
+  await defaults();
+
+  await button("Network & VLAN").click();
+  const networkSearch = page.getByLabel("Search Networks and connected Assets", { exact: true });
+  await page.locator(".topology-network-list").getByRole("button", { name: /^Management/ }).click();
+  await networkSearch.fill("Management"); await overrides();
+  await expand.click(); await close.click();
+  assert.equal(await networkSearch.inputValue(), "Management");
+  assert.match(await page.locator(".topology-network-heading").innerText(), /Management/);
+  assert.equal(await filters.innerText(), "Filters · 2");
+  await button("Platform").click(); await button("Network & VLAN").click();
+  assert.equal(await networkSearch.inputValue(), "");
+  assert.equal(await page.locator(".topology-network-heading").innerText(), "Default");
+  await defaults();
+
+  await button("Connectivity").click();
+  const focus = page.getByLabel("Focus Asset or Network", { exact: true });
+  const world = page.locator(".topology-connectivity-world");
+  await world.waitFor();
+  const defaultFocus = await focus.inputValue();
+  await focus.selectOption(id(31)); await button("2 hops").click();
+  await overrides(); await search.fill("PVE");
+  await page.locator(`[data-node-key="asset:${id(36)}"]`).waitFor();
+  await page.locator(`[data-node-key="asset:${id(36)}"]`).click();
+  await page.getByLabel("Networks", { exact: true }).uncheck();
+  await world.waitFor();
+  const fitTransform = await world.evaluate(el => el.style.transform);
+  await button("Zoom in").click();
+  const zoomTransform = await world.evaluate(el => el.style.transform);
+  assert.notEqual(zoomTransform, fitTransform);
+  await page.locator(".topology-connectivity-viewport").evaluate(el => { el.scrollLeft += 50; el.scrollTop += 50; });
+  const pan = await page.locator(".topology-connectivity-viewport").evaluate(el => [el.scrollLeft, el.scrollTop]);
+  await page.waitForTimeout(50); // Let the native scroll event record the user pan.
+  await expand.click();
+  await filters.click(); await page.keyboard.press("Escape");
+  assert.equal(await close.isVisible(), true, "First Escape dismisses only Filters");
+  await close.click();
+  await page.waitForFunction(expected => document.querySelector(".topology-connectivity-world")?.style.transform === expected, zoomTransform);
+  assert.equal(await world.evaluate(el => el.style.transform), zoomTransform, "Expand preserves zoom");
+  const restoredPan = await page.locator(".topology-connectivity-viewport").evaluate(el => [el.scrollLeft, el.scrollTop]);
+  assert.ok(restoredPan.every((value, index) => Math.abs(value - pan[index]) <= 1), "Expand preserves pan");
+  await Promise.all([page.waitForResponse(response => response.url().includes("/api/topology/connectivity?")), button("Refresh").click()]);
+  assert.equal(await focus.inputValue(), id(31));
+  assert.equal(await search.inputValue(), "PVE");
+  assert.equal(await button("2 hops").getAttribute("aria-pressed"), "true");
+  assert.equal(await page.getByLabel("Networks", { exact: true }).isChecked(), false);
+  assert.equal(await filters.innerText(), "Filters · 2");
+  assert.equal(await world.evaluate(el => el.style.transform), zoomTransform, "Refresh preserves zoom");
+  assert.deepEqual(await page.locator(".topology-connectivity-viewport").evaluate(el => [el.scrollLeft, el.scrollTop]), restoredPan, "Refresh preserves pan");
+  assert.equal(await page.locator('[aria-label="Topology inspector"] h2').innerText(), "USW-16-poe");
+  await button("Platform").click(); await button("Connectivity").click(); await world.waitFor();
+  assert.equal(await focus.inputValue(), defaultFocus);
+  assert.equal(await search.inputValue(), "");
+  assert.equal(await button("1 hop").getAttribute("aria-pressed"), "true");
+  assert.equal(await page.getByLabel("Networks", { exact: true }).isChecked(), true);
+  assert.equal(await page.locator(".topology-graph-node.is-selected:not(.is-focus)").count(), 0);
+  const resetTransform = await world.evaluate(el => el.style.transform);
+  await button("Fit").click(); assert.equal(await world.evaluate(el => el.style.transform), resetTransform);
+  await defaults();
+  // Existing intentional navigation supplies a fresh initial focus or Network.
+  await button("Platform").click(); await pve.locator(".topology-asset-identity").first().click();
+  await button("Focus Connectivity").click();
+  assert.equal(await focus.inputValue(), id(30));
+  await page.locator(`[data-node-key="asset:${id(30)}"]`).waitFor();
+  await button("Platform").click(); await overrides();
+  await page.locator(`[data-platform-id="${id(150)}"] .topology-asset-identity`).click();
+  await button("Focus Connectivity").click();
+  assert.equal(await focus.inputValue(), id(150), "Explicit navigation honours an Asset in a default-hidden category");
+  await button("Platform").click(); await button("Connectivity").click();
+  assert.equal(await focus.inputValue(), defaultFocus, "Ordinary tab entry discards that explicit focus");
+  await button("Overview").click();
+  await page.locator(".topology-network-row").filter({ hasText: /^Apps/ }).click();
+  assert.equal(await page.locator(".topology-network-heading").innerText(), "Apps");
+  await button("Overview").click();
+  assert.equal(await page.locator(".context-selector").innerText(), contextBefore);
+  assert.equal(page.url(), originalUrl, "Temporary controls do not write browser history");
+  const backup = data.categories.find(category => category.name === "Backup");
+  backup.show_in_topology = false;
+  await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === "/api/topology"), button("Refresh").click()]);
+  await button("Platform").click(); await defaults();
+  backup.show_in_topology = true;
+  await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === "/api/topology"), button("Refresh").click()]);
+  await button("Overview").click(); await defaults();
+}
+
 async function checkTopologyHeaders(page) {
   for (const view of ["Overview", "Platform", "Network & VLAN", "Connectivity"]) {
     await page.getByRole("button", { name: view, exact: true }).click();
@@ -263,6 +439,7 @@ try {
     await page.goto(`${base}/topology`);
     await page.getByRole("heading", { name:"Environment at a glance" }).waitFor();
     await checkTopologyHeaders(page);
+    await checkTopologyInteractions(page, data, requests, theme, width);
     assert.equal(await page.locator(".topology-metrics strong").first().innerText(), "33");
     assert.equal(await page.locator(".topology-summary-row").count(), 10);
     const workloadSummary = page.locator(".topology-summary-row").filter({ has: page.getByRole("link", {name:"View all Workload Assets", exact:true}) });
@@ -381,18 +558,18 @@ try {
     assert.equal(await page.locator(`[data-node-key="asset:${id(36)}"]`).count(),1);
     assert.equal(await page.locator(`[data-node-key="asset:${id(101)}"]`).count(),0);
     await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     await page.screenshot({ path:`${output}/adguard-two-hops-${theme}-${width}.png`,fullPage:true });
     await page.getByLabel("Focus Asset or Network",{exact:true}).selectOption(id(30));
     await page.getByRole("button",{name:"1 hop",exact:true}).click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===22);
     await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     await page.getByLabel("Focus Asset or Network",{exact:true}).selectOption(`network:${id(305)}`);
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===21);
     assert.equal(await page.locator(`[data-node-key="asset:${id(101)}"]`).count(),1);
     await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     await page.locator(`[data-node-key="asset:${id(100)}"]`).click();
     assert.equal(await page.locator('[aria-label="Topology inspector"] h2').innerText(), "AdGuard Home");
     await page.getByRole("button",{name:"Focus Connectivity",exact:true}).click();
@@ -402,29 +579,31 @@ try {
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length>=10);
     assert.ok(await page.locator("[data-node-key]").count()<=15);
     await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     for (const control of ["Zoom in", "Zoom in", "Zoom out", "Fit"]) {
       await page.getByRole("button",{name:control,exact:true}).click();
       await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     }
     if (width === 1440) assert.ok((await page.locator("[data-node-key]").first().boundingBox()).width >= 85, "Fit keeps 14-node cards readable on desktop");
     await page.screenshot({ path:`${output}/useful-two-hops-${theme}-${width}.png`,fullPage:true });
     await expand.click(); await close.waitFor();
     await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     await page.getByRole("button", { name:"Zoom in",exact:true }).click();
     await page.locator(".topology-connectivity-viewport").evaluate(el => { el.scrollLeft += 60; el.scrollTop += 60; });
     await checkGeometry(page);
-    await checkIdentityContrast(page);
+    await checkConnectivityContrast(page);
     await page.getByRole("button", { name:"Fit",exact:true }).click();
     await page.screenshot({ path:`${output}/useful-two-hops-expanded-${theme}-${width}.png`,fullPage:true });
     await close.click();
     await page.getByLabel("Focus Asset or Network",{exact:true}).selectOption(id(100));
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===5);
+    await page.getByRole("button",{name:"Filters",exact:true}).click();
     await page.getByLabel("Compute",{exact:true}).uncheck();
     await page.locator(`[data-node-key="asset:${id(30)}"]`).waitFor({state:"detached"});
     await page.getByLabel("Compute",{exact:true}).check();
+    await page.keyboard.press("Escape");
     await page.locator(`[data-node-key="asset:${id(30)}"]`).waitFor();
     await page.getByRole("button",{name:"1 hop",exact:true}).click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===4);

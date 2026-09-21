@@ -6,7 +6,8 @@ Knowledge Graph remains the place for Service and Business Function context.
 Both views use Atlas knowledge; topology adds no separate truth store.
 
 Choose a Customer and Site using the normal workspace context. Counts and details
-include only records you may view. **Refresh** reloads the current records. No
+include only records you may view. **Refresh** reloads the current records while
+preserving valid search, filters, focus, selection and graph viewport. No
 live monitoring or freshness estimate is implied.
 
 - **Overview** summarises visible Assets, Networks, interfaces and represented
@@ -45,10 +46,26 @@ Connectivity shows at most 25 nodes and 150 edges, with a truncation notice when
 necessary. Category and Network filters apply before traversal, so a hidden node
 cannot connect two otherwise disconnected visible nodes.
 
-**Filters** lists managed Asset Categories, including administrator-created and
-inactive categories. Initial choices follow **Show in Infrastructure Topology by
-default**. You can enable Uncategorized or another hidden category temporarily.
-These changes apply only to the current view and never edit Atlas knowledge.
+**Filters** opens a compact temporary category selector beside the button,
+including administrator-created and inactive categories with their configured
+icons and accents. Choices apply immediately; click outside or press Escape to
+close it. Tab moves through the checkboxes and back into the page. Initial choices
+follow **Show in Infrastructure Topology by default** in managed Asset Categories.
+You can enable Uncategorized or another hidden category temporarily. The button
+counts only choices changed from those defaults. **Reset to defaults** restores
+the managed choices and keeps the selector open. These changes never edit Atlas
+knowledge or Reference Data.
+
+Clicking a different topology view starts it with fresh defaults: blank search,
+managed category choices, closed Filters and no previous inspector selection.
+Platform returns to its child previews and normal ordering. Network & VLAN selects
+the first Network in VLAN/name/ID order. Connectivity returns to one hop, Networks
+enabled, its first visible Asset in name/ID order, and a fitted viewport.
+Customer, Site and theme stay unchanged. Clicking the current view does not reset
+it. Explicit **Focus Connectivity** and **Open Network detail** navigation honour
+the requested Asset or Network as the new initial context. An explicitly focused
+Asset's category is enabled for that view if needed.
+
 Search finds Platform Assets and children, Networks and their connected Assets,
 or Assets in the Connectivity selector.
 
@@ -77,7 +94,8 @@ both themes. Refresh after editing presentation settings to reload them.
 
 The four-arrow **Expand Infrastructure Topology** button fills the Atlas viewport without using browser
 fullscreen. Close with the button or Escape. Tab, selection, filters, expanded
-child lists and Network detail remain intact, and page scrolling is restored.
+child lists, graph zoom/pan and Network detail remain intact, and page scrolling
+is restored. Expand and Refresh do not apply the tab-switch reset rule.
 This surface is designed for desktop and laptop use; narrower windows retain a
 usable stacked layout.
 

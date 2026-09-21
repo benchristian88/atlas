@@ -98,6 +98,24 @@ default, modal focus/scroll handling and a single mounted tree. Shared AssetIcon
 preserves cached Asset → type default → generic precedence. Existing Atlas
 branding and theme tokens remain authoritative.
 
+The topology workbench has one explicit view-entry initializer. Ordinary clicks
+on a different tab clear category overrides, search, inspector/parent/Network
+selection, child expansions and Connectivity focus/hops/Network-toggle state.
+The destination graph mounts at Fit; Network and Asset fallback ordering remains
+deterministic. A shared category-selection helper resolves temporary overrides
+against current `show_in_topology` values and counts only differences. Filters
+uses Atlas dropdown styling with native labelled checkboxes in an anchored,
+non-modal popover; it never changes document flow or persists Reference Data.
+Expand retains the mounted tree and viewport state. Refresh retains current data
+while refetching and replaces the authorized projection without clearing valid
+controls or remounting an unchanged Connectivity graph.
+
+Explicit inspector focus and Network navigation supply new initial context to
+view entry, including visibility of the requested Asset's category. The topology
+route currently has no URL/query-state or Asset-detail deep-link contract; this
+polish does not add one. Existing `/knowledge-graph?focus=…&depth=1` inspector links
+are unchanged. Temporary controls and ordinary topology tabs do not write history.
+
 ## Bounded presentation identity
 
 Migration `20260921_0020` adds non-null `icon_key` and `accent_key` strings to

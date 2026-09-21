@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { topologyPresentation, platformMatches, connectivityLayout, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, compactInterfaceIp, matchesSearch, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
+import { topologyCategorySelection, topologyPresentation, platformMatches, connectivityLayout, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, compactInterfaceIp, matchesSearch, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
 import { assetListFiltersHref, parseAssetListFilters } from "../lib/asset-list-filters.mjs";
 
 function fixture() {
@@ -12,7 +12,7 @@ function fixture() {
 }
 
 test("dynamic category defaults, arbitrary type, standalone Assets and 20 children", () => {
-  const data = fixture(), enabled = new Set(data.categories.filter(c => c.show_in_topology).map(c => c.id));
+  const data = fixture(), { enabled } = topologyCategorySelection(data.categories);
   const view = topologyPresentation(data, enabled);
   assert.equal(view.assets.length, 25);
   assert.equal(view.categories[0].name, "Home Automation Infrastructure");
@@ -26,6 +26,19 @@ test("dynamic category defaults, arbitrary type, standalone Assets and 20 childr
   assert.equal(view.networks.at(-1).vlan_id, 99);
   enabled.add("uncategorized");
   assert.equal(topologyPresentation(data, enabled).assets.length, 26);
+});
+
+test("category overrides count differences only and reset against current managed defaults", () => {
+  const { categories } = fixture();
+  assert.deepEqual(topologyCategorySelection(categories), { enabled: new Set(["custom"]), changedCount: 0 });
+  const overrides = { custom: false, uncategorized: true, removedCategory: true };
+  assert.deepEqual(topologyCategorySelection(categories, overrides), { enabled: new Set(["uncategorized"]), changedCount: 2 });
+  assert.equal(topologyCategorySelection(categories, { custom: true, uncategorized: false }).changedCount, 0);
+  categories[0].show_in_topology = false;
+  categories[1].show_in_topology = true;
+  assert.deepEqual(topologyCategorySelection(categories), { enabled: new Set(["uncategorized"]), changedCount: 0 });
+  assert.equal(topologyCategorySelection(categories, overrides).changedCount, 0);
+  assert.deepEqual(topologyCategorySelection([], overrides), { enabled: new Set(), changedCount: 0 });
 });
 
 test("cycles remain visible and filtering a parent does not lose its child", () => {

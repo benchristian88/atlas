@@ -1260,9 +1260,19 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
 .topology-toolbar .lens-selector { margin: 0; flex-wrap: wrap; }
 .topology-search { max-width: 440px; margin-bottom: 16px; }
-.topology-category-filters { display: flex; flex-wrap: wrap; gap: 12px 20px; border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 0 0 16px; }
-.topology-category-filters label { display: flex; align-items: center; gap: 6px; }
-.topology-category-filters legend { font-weight: 600; }
+.topology-filter { position: relative; }
+.topology-filter-popover { box-sizing: border-box; padding: 12px; overflow-y: auto; gap: 12px; }
+.topology-filter-popover fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.topology-filter-popover legend { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.topology-filter-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; }
+.topology-filter-options label { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 0; font-size: 13px; cursor: pointer; }
+.topology-filter-options input { flex: 0 0 auto; accent-color: var(--text); }
+.topology-filter-options .presentation-identity { gap: 6px; overflow-wrap: anywhere; }
+.topology-filter-options .presentation-icon { width: 22px; height: 22px; flex-basis: 22px; }
+.topology-filter-options .nav-icon { width: 15px; height: 15px; flex-basis: 15px; }
+.topology-filter-options label:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-radius: 4px; }
+.topology-filter-popover > .text-button { justify-self: start; font-size: 13px; }
+@media (max-width: 400px) { .topology-filter-options { grid-template-columns: minmax(0, 1fr); } }
 .topology-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .topology-metrics .ops-card { display: grid; gap: 12px; color: var(--muted); }
 .topology-metrics strong { font-size: 28px; font-weight: 650; color: var(--text); }
@@ -1310,7 +1320,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-detail-inspector { margin-top: 20px; }
 .topology-detail-inspector .graph-inspector { position: static; max-height: none; }
 .infrastructure-topology .is-expanded .topology-network-list { max-height: 75vh; }
-.infrastructure-topology .is-expanded :is(.topology-toolbar, .topology-category-filters, .topology-search, .topology-connectivity-controls) { margin-top: 0; margin-bottom: 0; flex-shrink: 0; }
+.infrastructure-topology .is-expanded :is(.topology-toolbar, .topology-search, .topology-connectivity-controls) { margin-top: 0; margin-bottom: 0; flex-shrink: 0; }
 
 .infrastructure-topology .is-expanded .graph-inspector { max-height: 75vh; }
 @media (max-width: 1000px) {

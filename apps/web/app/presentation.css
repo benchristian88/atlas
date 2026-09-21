@@ -98,9 +98,6 @@
 .infrastructure-topology .topology-network-heading { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 7px; border-bottom: 1px solid var(--identity-border); background: var(--identity-tint); }
 .infrastructure-topology .topology-platform-card { border-top: 2px solid var(--identity-border); }
 .infrastructure-topology .topology-child { border-color: var(--identity-border); background: var(--identity-tint); }
-.infrastructure-topology .topology-category-filters label { border: 1px solid var(--identity-border); border-radius: 7px; padding: 5px 8px; background: var(--identity-tint); }
-.infrastructure-topology .topology-category-filters input { accent-color: var(--text); }
-.infrastructure-topology .topology-category-filters label:has(input:checked) { outline: 1px solid var(--text); outline-offset: -1px; }
 .infrastructure-topology .topology-network-row { border-bottom-color: var(--identity-border); border-radius: 6px; background: var(--identity-tint); margin-bottom: 5px; }
 .infrastructure-topology .topology-network-row .presentation-identity { font: inherit; color: var(--text); }
 .infrastructure-topology .topology-network-row .presentation-identity > span:last-child { color: inherit; font: inherit; }

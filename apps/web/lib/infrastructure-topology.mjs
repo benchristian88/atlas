@@ -4,6 +4,18 @@ export const CATEGORY_PREVIEW_COUNT = 6;
 export const CONNECTIVITY_NODE_WIDTH = 180;
 export const CONNECTIVITY_NODE_HEIGHT = 88;
 
+// Empty overrides always resolve against the latest managed defaults.
+export function topologyCategorySelection(categories, overrides = {}) {
+  const enabled = new Set();
+  let changedCount = 0;
+  for (const category of categories) {
+    const checked = overrides[category.id] ?? category.show_in_topology;
+    if (checked) enabled.add(category.id);
+    if (checked !== category.show_in_topology) changedCount++;
+  }
+  return { enabled, changedCount };
+}
+
 // Stable interface ordering; the legacy Asset IP is deliberately excluded.
 export function compactInterfaceIp(interfaces) {
   const ordered = interfaces.filter(i => i.ip_address).sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || (a.name || "").localeCompare(b.name || "") || a.id.localeCompare(b.id));
