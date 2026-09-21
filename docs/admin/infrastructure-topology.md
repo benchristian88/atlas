@@ -80,6 +80,11 @@ use a subtle category accent while keeping the Asset's own icon. Child tiles use
 the child's category, even when the parent belongs to another category. The four
 top Overview metrics use fixed Atlas icons and accents.
 
+Platform cards, child tiles and category headings use neutral Atlas borders.
+Network & VLAN list rows and detail surfaces also use neutral borders; configured
+colours remain in icon tiles and subtle background tints. The selected Network
+keeps its stronger neutral outline and inset marker in both themes.
+
 Network icons and accents come from [Network presentation settings](networks.md).
 They repeat in the Network list, detail header and Connectivity nodes. Dashed
 interface membership lines use their Network's accent; solid technical

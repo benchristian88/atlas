@@ -432,6 +432,24 @@ async function checkGeometry(page) {
   }
 }
 
+async function checkStyleTokens(locator, expectations) {
+  assert.ok(await locator.count(), "Style check has rendered elements");
+  const results = await locator.evaluateAll((nodes, expectations) => nodes.flatMap(node => {
+    const probe = document.createElement("span");
+    node.append(probe);
+    const style = getComputedStyle(node);
+    const values = Object.entries(expectations).map(([property, token]) => {
+      probe.style.color = `var(${token})`;
+      return { element: node.className, property, actual: style[property], expected: getComputedStyle(probe).color };
+    });
+    probe.remove();
+    return values;
+  }), expectations);
+  for (const result of results) assert.equal(result.actual, result.expected, `${result.element} ${result.property}`);
+}
+
+const neutralBorders = Object.fromEntries(["Top", "Right", "Bottom", "Left"].map(side => [`border${side}Color`, "--border"]));
+
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
 let checks = 0;
 try {
@@ -578,6 +596,11 @@ try {
     assert.equal(await pve.locator(".topology-child").first().getAttribute("data-presentation-accent"), "green");
     assert.equal(await pve.locator(".topology-asset-identity .asset-icon").count(),9);
     assert.equal(await page.locator(".topology-platform-section > h2 [data-presentation-icon]").first().getAttribute("data-presentation-icon"), "server");
+    await checkStyleTokens(page.locator(".topology-platform-card, .topology-child"), neutralBorders);
+    await checkStyleTokens(page.locator(".topology-platform-section > h2"), { borderBottomColor: "--border", backgroundColor: "--identity-tint" });
+    await checkStyleTokens(page.locator(".topology-child"), { backgroundColor: "--identity-tint" });
+    await checkStyleTokens(page.locator(".topology-platform-section > h2 .presentation-icon"), { color: "--identity-foreground", backgroundColor: "--identity-tile" });
+    assert.equal(await pve.evaluate(el => getComputedStyle(el).borderTopWidth), "2px", "Preserve card dimensions");
     assert.match(await pve.innerText(), /10.0.99.21/);
     assert.match(await pve.locator(".topology-child").filter({hasText:"AdGuard Home"}).innerText(), /10.0.99.5 \+1/);
     assert.doesNotMatch(await pve.innerText(), /192.0.2.254/);
@@ -607,11 +630,25 @@ try {
     assert.equal(await page.evaluate(()=>document.body.style.position),"");
     await page.getByRole("button",{name:"Network & VLAN",exact:true}).click();
     assert.equal(await page.locator(".topology-network-list button").count(),14);
+    await checkStyleTokens(page.locator(".topology-network-list button"), { borderBottomColor: "--border" });
+    await checkStyleTokens(page.locator(".topology-network-list, .topology-network-detail"), neutralBorders);
     for (const name of ["Main", "IoT", "Apps", "Infra", "Default", "Management"]) {
       const network = data.networks.find(n=>n.name===name);
       const row = page.locator(".topology-network-list button").filter({has:page.locator("strong",{hasText:new RegExp(`^${name}$`)})});
       assert.equal(await row.getAttribute("data-presentation-accent"),network.accent_key);
       await row.click();
+      assert.equal(await row.getAttribute("aria-current"), "true");
+      await checkStyleTokens(row, { outlineColor: "--text", backgroundColor: "--surface-muted" });
+      await checkStyleTokens(page.locator('.topology-network-list button:not([aria-current="true"])'), { backgroundColor: "--identity-tint" });
+      const selectedStyle = await row.evaluate(el => {
+        const css = getComputedStyle(el);
+        return { outline: css.outlineStyle, width: css.outlineWidth, shadow: css.boxShadow, text: css.color };
+      });
+      assert.equal(selectedStyle.outline, "solid");
+      assert.equal(selectedStyle.width, "1px");
+      assert.ok(selectedStyle.shadow.includes(selectedStyle.text) && selectedStyle.shadow.includes("inset"), "Neutral inset selection marker remains");
+      await checkStyleTokens(page.locator(".topology-network-heading"), { borderBottomColor: "--border", backgroundColor: "--identity-tint" });
+      await checkStyleTokens(row.locator(".presentation-icon"), { color: "--identity-foreground", backgroundColor: "--identity-tile" });
       assert.equal(await page.locator(".topology-network-heading").getAttribute("data-presentation-accent"),network.accent_key);
       assert.match(await page.locator(".topology-network-detail").innerText(),new RegExp(network.cidr.replaceAll(".","\\.")));
     }
@@ -641,6 +678,7 @@ try {
     assert.equal(await page.locator('.topology-connectivity-world line[stroke="var(--muted)"]').count(),1);
     assert.equal(await adguardNode.evaluate(el=>getComputedStyle(el).borderWidth),"2px");
     assert.notEqual(await adguardNode.evaluate(el=>getComputedStyle(el).boxShadow),"none");
+    await checkStyleTokens(page.locator('.topology-graph-node:not(.is-focus)'), { borderTopColor: "--identity-border", backgroundColor: "--identity-tint" });
     // A multihomed Asset stays green when a Network accent changes on reload.
     data.networks.find(n=>n.id===id(305)).accent_key = "purple";
     await page.getByRole("button",{name:"Refresh",exact:true}).click();
