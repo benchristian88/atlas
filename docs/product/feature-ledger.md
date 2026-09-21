@@ -482,6 +482,7 @@ unchanged.
 | Atlas Impact branding in shell/login | **Implemented** | UI      | Shared supplied lockups are theme-aware in the shell and used on login. |
 | Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
 | Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
+| Category and Network presentation identity | **Implemented** | Infrastructure Topology | Bounded icon/accent API fields and migration, shared admin pickers, category-based Asset accents retaining AssetIcon, Network identity and dashed membership accents; light/dark fixture acceptance and PostgreSQL preservation tests. |
 | Asset Interfaces | **Implemented** | Foundation | Interface, network, IP, MAC, primary and notes are persisted and managed. |
 | Direct Asset IP field | **Deferred** | Compatibility removal | Deprecated database/API field and reconciliation writers retained; excluded from ordinary Asset UI, topology display and list search. |
 | Interface-first IP UX | **Implemented** | Foundation hardening | Asset forms do not read/write the legacy field; detail shows Interface IPs; topology and authorised IP search use Interfaces only. |

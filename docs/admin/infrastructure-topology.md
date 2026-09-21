@@ -57,6 +57,24 @@ interfaces and key relationships. **Open Asset** opens its detail page; **View i
 Knowledge Graph** opens broader recorded context. Asset artwork uses the shared
 cached Asset icon, then the type default, then the generic Asset icon.
 
+Category icons and accents come from [managed Asset Categories](asset-categories.md).
+They identify Overview summaries, Filters and Platform headings. Asset cards
+use a subtle category accent while keeping the Asset's own icon. Child tiles use
+the child's category, even when the parent belongs to another category. The four
+top Overview metrics use fixed Atlas icons and accents.
+
+Network icons and accents come from [Network presentation settings](networks.md).
+They repeat in the Network list, detail header and Connectivity nodes. Dashed
+interface membership lines use their Network's accent; solid technical
+relationships retain their existing styling. A multihomed Asset keeps its
+category accent regardless of its Networks. Repeated Network colours are normal;
+names, VLAN IDs and CIDRs distinguish the records.
+
+Accents express identity, never health or status. Focused Connectivity nodes have
+a heavier border; selected nodes have an outer ring, and keyboard focus uses a
+dashed outline. These remain distinct from the category or Network accent in
+both themes. Refresh after editing presentation settings to reload them.
+
 The four-arrow **Expand Infrastructure Topology** button fills the Atlas viewport without using browser
 fullscreen. Close with the button or Escape. Tab, selection, filters, expanded
 child lists and Network detail remain intact, and page scrolling is restored.

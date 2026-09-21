@@ -10,6 +10,20 @@ Add a name, stable key, optional description, sort order, active state and
 numbers and underscores, starting with a letter; they cannot change after
 creation. Categories sort by sort order, then name.
 
+Choose an **Icon** and **Accent** from the Atlas presets. The icon identifies
+the category in summaries, section headings and filters. The accent adds a pale
+tint or subtle border to those areas and to the category's Asset cards. Individual
+Assets retain their own artwork: cached Asset icon, then Asset Type default,
+then the generic Asset icon. Category icons never replace that artwork.
+
+The palette is Blue, Green, Purple, Orange, Red, Teal, Cyan, Amber, Slate and Rose.
+It adapts to light and dark themes. Colour is presentation only: a green category
+does not mean healthy or operational. Labels, icons and recorded status remain
+visible. New categories default to Infrastructure / Slate; administrators may
+change these choices, including for Uncategorized. Custom categories such as
+Home Automation can use Home / Teal without any code change. Refresh topology
+after saving to see the current presentation.
+
 Every Asset Type requires a category. Its create/edit form offers active
 categories and retains its current category even if that category is inactive.
 To try a custom taxonomy, create **Workload**, enable its topology default, then

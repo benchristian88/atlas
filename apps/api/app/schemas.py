@@ -17,6 +17,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.presentation import PresentationIcon, PresentationAccent
 from app.taxonomy import NETWORK_TYPES
 
 
@@ -383,6 +384,8 @@ class AssetRelationshipResponse(ORMResponse):
 
 
 class NetworkCreate(BaseModel):
+    icon_key: PresentationIcon = "network"
+    accent_key: PresentationAccent = "blue"
     customer_id: uuid.UUID
     site_id: uuid.UUID | None = None
     name: str = Field(min_length=1, max_length=255)
@@ -421,6 +424,8 @@ class NetworkUpdate(NetworkCreate):
 
 
 class NetworkResponse(ORMResponse):
+    icon_key: str = "network"
+    accent_key: str = "blue"
     id: uuid.UUID
     customer_id: uuid.UUID
     site_id: uuid.UUID | None
@@ -479,6 +484,8 @@ class AssetInterfaceResponse(ORMResponse):
 
 
 class AssetCategoryCreate(BaseModel):
+    icon_key: PresentationIcon = "infrastructure"
+    accent_key: PresentationAccent = "slate"
     model_config = ConfigDict(extra="forbid")
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=255)
@@ -491,6 +498,8 @@ class AssetCategoryCreate(BaseModel):
 
 
 class AssetCategoryUpdate(BaseModel):
+    icon_key: PresentationIcon = "infrastructure"
+    accent_key: PresentationAccent = "slate"
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
@@ -502,6 +511,8 @@ class AssetCategoryUpdate(BaseModel):
 
 
 class AssetCategoryResponse(ORMResponse):
+    icon_key: str = "infrastructure"
+    accent_key: str = "slate"
     id: uuid.UUID
     key: str
     name: str

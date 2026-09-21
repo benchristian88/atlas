@@ -98,6 +98,35 @@ default, modal focus/scroll handling and a single mounted tree. Shared AssetIcon
 preserves cached Asset → type default → generic precedence. Existing Atlas
 branding and theme tokens remain authoritative.
 
+## Bounded presentation identity
+
+Migration `20260921_0020` adds non-null `icon_key` and `accent_key` strings to
+AssetCategory and Network, preserving IDs and existing fields. Server/API
+defaults are infrastructure/slate for categories and network/blue for Networks.
+Exact known category names receive one-time migration defaults: Compute
+server/blue, Software and Workload cube/green, Network network/cyan, Storage
+database/purple, Backup archive/orange, Data database/teal. Other/custom names
+and Uncategorized receive infrastructure/slate. No runtime category-name or
+VLAN-based presentation rules exist. Downgrade removes only the four new fields.
+
+`app/presentation.py` defines the API write contract, mirrored by the shared
+frontend `presentation-registry.json`; a contract test compares every key.
+Fourteen icon choices resolve through NavigationIcon. Ten predefined accents
+resolve through `presentation.css` to theme-aware foreground, tile, border,
+tint and emphasis variables, independently of workspace branding and status
+tokens. Invalid writes (including explicit null) are rejected. Omitted fields
+use defaults on creation and remain unchanged on PATCH. Response strings permit
+historical values; renderers fall back to infrastructure/network and slate.
+
+Existing category/Network response schemas carry the metadata through the
+authorized topology projection without additional queries or permissions.
+Asset presentation resolves through its type's category once during projection.
+AssetIcon's cached/type/generic precedence remains intact. Membership edges
+resolve the target Network's accent; relationship edges retain their styling.
+Neither this metadata nor its colour affects graph traversal, scope, status,
+membership or dependency semantics. Native labelled radio controls, checkboxes,
+text labels, heavier focus borders and selection rings keep colour secondary.
+
 ## Source audit and deliberate omissions
 
 The old UI hard-coded Asset Type sets and five relationship lenses. Assets already

@@ -16,10 +16,13 @@ export const matchesSearch = (asset, query) => !query || [asset.name, asset.host
 
 export function topologyPresentation(data, enabled) {
   const types = Object.fromEntries(data.asset_types.map(t => [t.key, t]));
+  const categoryById = Object.fromEntries(data.categories.map(c => [c.id, c]));
+  const networkById = Object.fromEntries(data.networks.map(n => [n.id, n]));
   const categories = data.categories.filter(c => enabled.has(c.id));
   const interfaceGroups = {};
   for (const item of data.asset_interfaces) (interfaceGroups[item.asset_id] ||= []).push(item);
   const assets = data.assets.filter(a => enabled.has(types[a.asset_type]?.category_id)).map(a => ({ ...a,
+    presentation: categoryById[types[a.asset_type]?.category_id],
     interface_ips: (interfaceGroups[a.id] || []).map(i => i.ip_address).filter(Boolean),
     display_ip: compactInterfaceIp(interfaceGroups[a.id] || []),
   })).sort(byName);
@@ -52,7 +55,7 @@ export function topologyPresentation(data, enabled) {
   const interfaces = data.asset_interfaces.filter(i => byId[i.asset_id]);
   const definitions = Object.fromEntries(data.relationship_types.map(t => [t.key, t]));
   const relationships = data.relationships.filter(r => byId[r.source_asset_id] && byId[r.target_asset_id]).map(r => ({ ...r, display_label: definitions[r.relationship_type]?.source_label, directional: definitions[r.relationship_type]?.directional }));
-  return { assets, byId, types, categories, children, roots, cycleRoots, interfaces, relationships, networks: [...data.networks].sort(byNetwork) };
+  return { assets, byId, types, categories, children, roots, cycleRoots, interfaces, relationships, networkById, networks: [...data.networks].sort(byNetwork) };
 }
 
 export function platformMatches(asset, children, query) {

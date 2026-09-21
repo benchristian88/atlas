@@ -195,6 +195,7 @@ export function CrudScreen({
                     ? field.disabled(form, editingId)
                     : field.disabled),
                 );
+                if (field.render) return <div className="field-wide" key={field.name}>{field.render({ form, setForm, disabled: fieldDisabled })}</div>;
                 return (
                   <label
                     className={`${field.wide ? "field field-wide" : "field"}${field.type === "checkbox" ? " checkbox-field" : ""}`}

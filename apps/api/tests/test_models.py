@@ -65,7 +65,10 @@ CRITICAL_COLUMNS = {
         "id", "user_id", "role_id", "scope_type", "customer_id", "site_id",
         "created_at", "updated_at",
     },
-    "asset_categories": {"id", "key", "name", "description", "sort_order", "active", "show_in_topology", "created_at", "updated_at"},
+    "asset_categories": {
+        "id", "key", "name", "description", "sort_order", "active",
+        "show_in_topology", "icon_key", "accent_key", "created_at", "updated_at",
+    },
     "asset_types": {
         "id", "key", "name", "description", "category", "category_id", "default_icon_url",
         "system_defined", "active", "sort_order", "created_at", "updated_at",

@@ -84,7 +84,8 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 ## User and administrator guides
 
 - [Infrastructure Topology](admin/infrastructure-topology.md): four infrastructure views, filtering, focus and expansion.
-- [Asset Categories](admin/asset-categories.md): managed taxonomy, lifecycle and default topology visibility.
+- [Asset Categories](admin/asset-categories.md): managed taxonomy, presentation, lifecycle and default topology visibility.
+- [Networks](admin/networks.md): Network records, bounded icons/accents and topology presentation.
 
 - [Exploring the Knowledge Graph](admin/knowledge-graph.md): expanded view, Focus depth, filters and inspector.
 

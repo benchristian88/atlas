@@ -2,6 +2,16 @@ import { createElement } from "react";
 
 // Small inline line icons, following the existing EntityMark SVG convention.
 const paths = {
+  cube: "M12 2 3 7v10l9 5 9-5V7L12 2z M3 7l9 5 9-5 M12 12v10 M7.5 4.5l9 5",
+  database: "M3 6a9 4 0 1 0 18 0 9 4 0 1 0-18 0 M3 6v12a9 4 0 0 0 18 0V6 M3 12a9 4 0 0 0 18 0",
+  archive: "M3 3h18v5H3z M5 8v13h14V8 M9 12h6",
+  switch: "M3 8h18v10H3z M6 13h1 M10 13h1 M14 13h1 M18 13h1 M7 4h10 M14 2l3 2-3 2",
+  router: "M3 13h18v7H3z M6 17h1 M10 17h1 M6 13V6 M18 13V6 M9 8a4 4 0 0 1 6 0 M7 5a7 7 0 0 1 10 0",
+  shield: "M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6l-9-4z M8 12l3 3 5-6",
+  bridge: "M3 20V4 M21 20V4 M3 7c5 9 13 9 18 0 M3 16h18 M8 12v4 M16 12v4",
+  cloud: "M6 19a5 5 0 0 1-1-10 7 7 0 0 1 13-2 6 6 0 0 1 0 12H6z",
+  device: "M3 3h18v14H3z M8 21h8 M12 17v4",
+  home: "M2 11 12 2l10 9 M5 9v12h14V9 M9 21v-8h6v8",
   expand: "M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5 M3 3l6 6 M21 3l-6 6 M3 21l6-6 M21 21l-6-6",
   close: "M6 6l12 12 M18 6 6 18",
   dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",

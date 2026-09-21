@@ -1,0 +1,19 @@
+{
+  "icons": [
+    { "key": "infrastructure", "label": "Infrastructure", "navigation": "topology" },
+    { "key": "server", "label": "Server", "navigation": "assets" },
+    { "key": "cube", "label": "Cube / workload", "navigation": "cube" },
+    { "key": "database", "label": "Database / storage", "navigation": "database" },
+    { "key": "archive", "label": "Backup / archive", "navigation": "archive" },
+    { "key": "network", "label": "Network", "navigation": "networks" },
+    { "key": "switch", "label": "Switch", "navigation": "switch" },
+    { "key": "router", "label": "Router", "navigation": "router" },
+    { "key": "shield", "label": "Firewall / shield", "navigation": "shield" },
+    { "key": "bridge", "label": "Bridge", "navigation": "bridge" },
+    { "key": "cloud", "label": "Cloud", "navigation": "cloud" },
+    { "key": "device", "label": "Device", "navigation": "device" },
+    { "key": "home", "label": "Home", "navigation": "home" },
+    { "key": "application", "label": "Application", "navigation": "dashboard" }
+  ],
+  "accents": ["blue", "green", "purple", "orange", "red", "teal", "cyan", "amber", "slate", "rose"]
+}

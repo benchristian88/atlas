@@ -200,6 +200,8 @@ class AssetCategory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    icon_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="infrastructure")
+    accent_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="slate")
     # Exact names preserve distinct legacy values, including case differences.
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
@@ -1540,6 +1542,8 @@ class Network(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    icon_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="network")
+    accent_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="blue")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     network_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     vlan_id: Mapped[int | None] = mapped_column(Integer)
