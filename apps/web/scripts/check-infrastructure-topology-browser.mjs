@@ -601,6 +601,16 @@ try {
     await checkStyleTokens(page.locator(".topology-child"), { backgroundColor: "--identity-tint" });
     await checkStyleTokens(page.locator(".topology-platform-section > h2 .presentation-icon"), { color: "--identity-foreground", backgroundColor: "--identity-tile" });
     assert.equal(await pve.evaluate(el => getComputedStyle(el).borderTopWidth), "2px", "Preserve card dimensions");
+    for (const card of [pve, pve.locator(".topology-child").first()]) {
+      const identity = card.locator(".topology-asset-identity").first();
+      await identity.click();
+      await checkStyleTokens(card, neutralBorders);
+      assert.equal(await card.evaluate(el => getComputedStyle(el).outlineStyle), "none", "Platform selection adds no frame");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      assert.equal(await identity.evaluate(el => el.matches(":focus-visible") && getComputedStyle(el).outlineStyle !== "none"), true, "Platform keyboard focus remains visible");
+      await page.getByRole("button", { name: "Close details", exact: true }).click();
+    }
     assert.match(await pve.innerText(), /10.0.99.21/);
     assert.match(await pve.locator(".topology-child").filter({hasText:"AdGuard Home"}).innerText(), /10.0.99.5 \+1/);
     assert.doesNotMatch(await pve.innerText(), /192.0.2.254/);
@@ -638,15 +648,24 @@ try {
       assert.equal(await row.getAttribute("data-presentation-accent"),network.accent_key);
       await row.click();
       assert.equal(await row.getAttribute("aria-current"), "true");
-      await checkStyleTokens(row, { outlineColor: "--text", backgroundColor: "--surface-muted" });
+      await checkStyleTokens(row, { borderBottomColor: "--border", backgroundColor: "--identity-tile" });
       await checkStyleTokens(page.locator('.topology-network-list button:not([aria-current="true"])'), { backgroundColor: "--identity-tint" });
       const selectedStyle = await row.evaluate(el => {
         const css = getComputedStyle(el);
-        return { outline: css.outlineStyle, width: css.outlineWidth, shadow: css.boxShadow, text: css.color };
+        return { outline: css.outlineStyle, shadow: css.boxShadow };
       });
-      assert.equal(selectedStyle.outline, "solid");
-      assert.equal(selectedStyle.width, "1px");
-      assert.ok(selectedStyle.shadow.includes(selectedStyle.text) && selectedStyle.shadow.includes("inset"), "Neutral inset selection marker remains");
+      assert.equal(selectedStyle.outline, "none", "Pointer selection has no persistent outer outline");
+      assert.equal(selectedStyle.shadow, "none", "Selection has no inset frame or glow");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      const focusStyle = await row.evaluate(el => {
+        const css = getComputedStyle(el);
+        return { focused: el.matches(":focus-visible"), outline: css.outlineStyle, width: css.outlineWidth };
+      });
+      assert.deepEqual(focusStyle, { focused: true, outline: "dashed", width: "3px" }, "Selected card retains keyboard focus indication");
+      await checkStyleTokens(row, { outlineColor: "--text" });
+      if (name === "Management") await page.screenshot({ path: `${output}/network-keyboard-focus-${theme}-${width}.png`, fullPage: true });
+      await page.getByRole("heading", { name: "Infrastructure Topology", exact: true }).click();
       await checkStyleTokens(page.locator(".topology-network-heading"), { borderBottomColor: "--border", backgroundColor: "--identity-tint" });
       await checkStyleTokens(row.locator(".presentation-icon"), { color: "--identity-foreground", backgroundColor: "--identity-tile" });
       assert.equal(await page.locator(".topology-network-heading").getAttribute("data-presentation-accent"),network.accent_key);

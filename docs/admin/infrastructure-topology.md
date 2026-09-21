@@ -83,7 +83,8 @@ top Overview metrics use fixed Atlas icons and accents.
 Platform cards, child tiles and category headings use neutral Atlas borders.
 Network & VLAN list rows and detail surfaces also use neutral borders; configured
 colours remain in icon tiles and subtle background tints. The selected Network
-keeps its stronger neutral outline and inset marker in both themes.
+uses a slightly stronger configured background tint in both themes, with the
+same neutral border as unselected rows. Keyboard focus retains its dashed outline.
 
 Network icons and accents come from [Network presentation settings](networks.md).
 They repeat in the Network list, detail header and Connectivity nodes. Dashed

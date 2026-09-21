@@ -103,7 +103,7 @@
 .infrastructure-topology .topology-network-row .presentation-identity { font: inherit; color: var(--text); }
 .infrastructure-topology .topology-network-row .presentation-identity > span:last-child { color: inherit; font: inherit; }
 .infrastructure-topology .topology-network-row .presentation-icon { color: var(--identity-foreground); }
-.infrastructure-topology .topology-network-row[aria-current="true"] { box-shadow: inset 3px 0 var(--text); outline: 1px solid var(--text); outline-offset: -1px; }
+.infrastructure-topology .topology-network-row[aria-current="true"] { background: var(--identity-tile); box-shadow: none; }
 .infrastructure-topology .topology-graph-node { border-color: var(--identity-border); background: var(--identity-tint); }
 .infrastructure-topology .topology-graph-node.is-focus { border: 2px solid var(--text); }
 .infrastructure-topology .topology-graph-node.is-selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
