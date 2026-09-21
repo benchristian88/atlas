@@ -52,11 +52,19 @@ redacted; neither its name nor a membership edge is emitted. Network, Customer
 and Site records retain their own permission checks. Counts are derived only
 from these authorized collections.
 
-`GET /api/topology/connectivity` accepts a required `focus_asset_id`, `hops=1|2`,
+`GET /api/topology/connectivity` accepts exactly one of `focus_asset_id` or `focus_network_id`, `hops=1|2`,
 optional repeated `category_ids`, `show_networks` and `limit` (default 25, maximum
 60). An inaccessible or nonexistent focus returns the same 404. Omitted category
 IDs use managed visibility defaults. The domain service performs deterministic,
 cycle-safe breadth-first traversal after authorization and presentation filtering.
+Traversal tracks arrival state: child→parent arrival suppresses parent→child
+containment expansion; Asset→Network membership arrival suppresses membership
+expansion back to peer Assets. Other relationship families remain eligible.
+An explicit host/Network focus has no arrival restriction. Parallel eligible
+technical paths are considered separately. This is presentation connectivity,
+not a claim of physical connection or failure impact. Each node adds nullable
+`parent_key` discovery metadata for deterministic branch layout; that key can
+only reference an authorized returned node.
 Edges retain recorded direction even when traversed backwards. Nodes use
 `asset:<UUID>` / `network:<UUID>` identity; edges use `relationship:<UUID>` or
 `interface:<UUID>`. Network membership comes only from `AssetInterface.network_id`.
@@ -78,7 +86,13 @@ Connectivity without acquiring invented containment meaning.
 React only groups/filters the authorized domain projection. Platform displays
 compact child previews in an auto-fitting desktop grid. Network & VLAN uses
 vertical master/detail. Connectivity positions the focus centrally with bounded
-concentric rings. Cycles remain selectable and do not disappear. The existing
+branch sectors with fixed 180×88 cards. Radial targets snap to card-sized cells;
+dense second-hop branches occupy adjacent rows outside the first ring. Layout
+space grows with the returned nodes;
+a uniform Fit transform scales the complete layout rather than compressing node
+positions. Cards live in an HTML layer over SVG edges, so shared AssetIcon's
+positioned image layers share the card's normal HTML containing block instead
+of an SVG foreignObject. Network cards use the shared semantic Network icon. Cycles remain selectable and do not disappear. The existing
 `ExpandedGraphSurface` now accepts a title while retaining Knowledge Graph's
 default, modal focus/scroll handling and a single mounted tree. Shared AssetIcon
 preserves cached Asset → type default → generic precedence. Existing Atlas
@@ -104,3 +118,21 @@ VM identifiers and all utilization/uptime/traffic/backup-health telemetry rather
 than assigning cross-vendor meaning or freshness to those fields. No new telemetry
 fields, inferred gateway devices, physical links or shared-subnet relationships
 were introduced.
+
+## Interface-first display and search
+
+Overview shows six authorized Asset previews per category, plus an explicit
+remainder and category-filtered Assets link. Preview links open canonical Asset
+detail routes and never create an Overview inspector. The sidebar label is
+Topology; the product/page name remains Infrastructure Topology.
+
+Platform cards and child tiles use a shared deterministic interface IP helper:
+primary interfaces first, then interface name/ID; distinct additional IPs appear
+as +N. No recorded interface IP means no IP line. The legacy Asset field is not
+used by topology presentation or search. The Assets table retains hostname and
+removes the legacy IP value. Assets API search uses a correlated EXISTS over
+AssetInterface IPs, with networks.view scoped to the owning Asset, matching
+existing interface visibility. This avoids duplicate rows/pagination distortion
+and prevents interface existence leaking through search. Asset/customer/site
+scoping remains authoritative. The legacy schema/API field is retained; no
+migration is needed.

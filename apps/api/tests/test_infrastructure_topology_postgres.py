@@ -132,3 +132,45 @@ def test_assets_category_filter_uses_managed_ids(client, db):
     assert response.status_code == 200
     assert {a["id"] for a in response.json()} == {str(a.id) for a in assets[:2]}
     assert client.get(f"/api/assets?category_id={UNCATEGORIZED_ID}&{scope}").json() == []
+
+
+def test_interface_ip_search_scope_duplicates_and_legacy_exclusion(client, db):
+    sites, assets, networks = seed_scope(db)
+    assets[1].ip_address = "192.0.2.231"
+    db.add(AssetInterface(asset_id=assets[0].id, name="duplicate-ip", ip_address="10.0.99.5"))
+    db.add(AssetInterface(asset_id=assets[2].id, name="secret-ip", ip_address="192.0.2.232"))
+    db.flush()
+    # Interface presence must not become an oracle for assets-only users.
+    assert client.get("/api/assets?search=10.0.99.5").json() == []
+    actor = make_principal("assets.view", "networks.view")
+    app.dependency_overrides[get_principal] = lambda: actor
+    response = client.get("/api/assets?search=10.0.99.5&limit=1&offset=0")
+    assert response.status_code == 200, response.text
+    assert [a["id"] for a in response.json()] == [str(assets[0].id)]
+    assert client.get("/api/assets?search=10.0.99.5&limit=1&offset=1").json() == []
+    assert client.get("/api/assets?search=192.0.2.231").json() == []
+    scope = f"customer_id={sites[0].customer_id}&site_id={sites[0].id}"
+    assert client.get(f"/api/assets?search=192.0.2.232&{scope}").json() == []
+    grant = ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Site", scope_type="site", customer_id=sites[0].customer_id, site_id=sites[0].id, permissions=frozenset({"assets.view", "networks.view"}))
+    app.dependency_overrides[get_principal] = lambda: Principal(actor.user, (grant,))
+    assert client.get("/api/assets?search=192.0.2.232").json() == []
+    assert len(client.get("/api/assets?search=10.0.99.5").json()) == 1
+    visible = client.get(f"/api/topology/connectivity?focus_network_id={networks[0].id}")
+    assert visible.status_code == 200, visible.text
+    assert {n["entity_id"] for n in visible.json()["nodes"]} == {str(networks[0].id), str(assets[0].id)}
+    assert client.get(f"/api/topology/connectivity?focus_network_id={networks[1].id}").status_code == 404
+    assert client.get(f"/api/topology/connectivity?focus_network_id={uuid.uuid4()}").status_code == 404
+    assert client.get("/api/topology/connectivity").status_code == 422
+    assert client.get(f"/api/topology/connectivity?focus_network_id={networks[0].id}&focus_asset_id={assets[0].id}").status_code == 422
+
+
+def test_category_preview_source_count_excludes_other_sites(db):
+    sites, assets, _ = seed_scope(db)
+    db.add_all([Asset(workspace_id=assets[0].workspace_id, customer_id=sites[0].customer_id, site_id=sites[0].id, name=f"Visible {i:02}", asset_type="server") for i in range(23)])
+    db.flush()
+    actor = make_principal("assets.view")
+    grant = ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Site", scope_type="site", customer_id=sites[0].customer_id, site_id=sites[0].id, permissions=frozenset({"assets.view"}))
+    data = get_topology(ActiveContext(None, None), Principal(actor.user, (grant,)), db)
+    assert len(data["assets"]) == 25
+    assert all(a["site_id"] == sites[0].id for a in data["assets"])
+    assert len(data["assets"][6:]) == 19

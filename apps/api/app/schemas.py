@@ -1869,6 +1869,7 @@ class TopologyPlatformLink(BaseModel):
 
 
 class ConnectivityNode(BaseModel):
+    parent_key: str | None = None
     key: str
     entity_type: Literal["asset", "network"]
     entity_id: uuid.UUID

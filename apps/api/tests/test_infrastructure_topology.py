@@ -108,3 +108,50 @@ def test_dense_edge_limit_retains_paths_to_every_returned_node():
             if edge["source_key"] in reached or edge["target_key"] in reached:
                 reached.update((edge["source_key"], edge["target_key"]))
     assert reached == {n["key"] for n in graph["nodes"]}
+
+
+def homelab_topology():
+    t = fixture_topology()
+    siblings = ["Grafana", "Authentik", "Immich", "NPM", "Paperless"] + [f"Workload {i:02}" for i in range(14)]
+    t["assets"] += [{"id": name, "name": name, "asset_type": "custom"} for name in siblings + ["USW-16-poe"]]
+    for i, name in enumerate(siblings):
+        key = ["runs_on", "member_of", "hosts", "contains", "runs"][i % 5]
+        source, target = (name, "PVE1") if key in ("runs_on", "member_of") else ("PVE1", name)
+        t["relationships"].append({"id": f"sibling{i}", "source_asset_id": source, "target_asset_id": target, "relationship_type": key})
+        t["asset_interfaces"].append({"id": f"peer{i}", "asset_id": name, "network_id": "n1", "name": "eth0", "ip_address": None})
+    t["relationships"].append({"id": "switch", "source_asset_id": "PVE1", "target_asset_id": "USW-16-poe", "relationship_type": "connects_to"})
+    for key in ("member_of", "hosts", "contains", "runs", "connects_to"):
+        t["relationship_types"].append({"key": key, "source_label": key, "directional": True})
+    return t, siblings
+
+
+def test_child_focus_suppresses_siblings_and_network_peers_but_preserves_technical_paths():
+    t, siblings = homelab_topology()
+    graph = connectivity(t, "AdGuard", hops=2)
+    keys = {n["key"] for n in graph["nodes"]}
+    assert keys == {"asset:AdGuard", "asset:PVE1", "asset:PVE2", "asset:USW-16-poe", "network:n1", "network:n2"}
+    assert not graph["truncated"]  # Deliberate semantic pruning is not cap clipping.
+    switch = next(n for n in graph["nodes"] if n["key"] == "asset:USW-16-poe")
+    assert switch["distance"] == 2 and switch["parent_key"] == "asset:PVE1"
+    t["relationships"].reverse()
+    t["asset_interfaces"].reverse()
+    assert connectivity(t, "AdGuard", hops=2) == graph
+
+
+def test_explicit_host_and_network_focus_show_direct_children_and_members():
+    t, siblings = homelab_topology()
+    host = connectivity(t, "PVE1", hops=1)
+    assert {f"asset:{n}" for n in siblings + ["AdGuard"]} <= {n["key"] for n in host["nodes"]}
+    network = connectivity(t, None, hops=1, focus_network_id="n1")
+    assert {n["key"] for n in network["nodes"]} == {f"asset:{n}" for n in siblings + ["AdGuard"]} | {"network:n1"}
+    assert connectivity(t, None, focus_network_id="n1", limit=5)["truncated"]
+    assert connectivity(t, None, focus_network_id="n1", show_networks=False)["nodes"] == []
+    with pytest.raises(HTTPException) as exc:
+        connectivity(t, None, focus_network_id="inaccessible")
+    assert exc.value.status_code == 404
+
+
+def test_parallel_technical_path_can_reach_peer_even_if_containment_path_cannot():
+    t, _ = homelab_topology()
+    t["relationships"].append({"id": "parallel", "source_asset_id": "AdGuard", "target_asset_id": "PVE1", "relationship_type": "connects_to"})
+    assert "asset:Grafana" in {n["key"] for n in connectivity(t, "AdGuard", hops=2, limit=60)["nodes"]}

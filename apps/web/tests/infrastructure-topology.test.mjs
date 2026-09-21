@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { topologyPresentation, platformMatches, connectivityLayout, CHILD_PREVIEW_COUNT } from "../lib/infrastructure-topology.mjs";
+import { topologyPresentation, platformMatches, connectivityLayout, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, compactInterfaceIp, matchesSearch, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
 import { assetListFiltersHref, parseAssetListFilters } from "../lib/asset-list-filters.mjs";
 
 function fixture() {
@@ -40,11 +40,17 @@ test("cycles remain visible and filtering a parent does not lose its child", () 
 });
 
 test("radial layout centres focus and remains deterministic with 25 nodes", () => {
-  const graph = { focus_key: "asset:focus", nodes: [{ key: "asset:focus", name: "Focus", distance: 0 }, ...Array.from({ length: 24 }, (_, i) => ({ key: `asset:${i}`, name: `Asset ${i}`, distance: i < 8 ? 1 : 2 }))] };
+  const graph = { focus_key: "asset:focus", nodes: [{ key: "asset:focus", name: "Focus", distance: 0 }, ...Array.from({ length: 24 }, (_, i) => ({ key: `asset:${i}`, name: `Asset ${i}`, distance: i < 8 ? 1 : 2, parent_key: i < 8 ? "asset:focus" : `asset:${i % 8}` }))] };
   const layout = connectivityLayout(graph);
-  assert.deepEqual({ x: layout[0].x, y: layout[0].y }, { x: 550, y: 550 });
+  assert.deepEqual({ x: layout[0].x, y: layout[0].y }, { x: 0, y: 0 });
   assert.equal(new Set(layout.map(n => `${n.x}/${n.y}`)).size, 25);
-  assert.ok(layout.every(n => n.x >= 100 && n.x <= 1000 && n.y >= 100 && n.y <= 1000));
+  for (const [i, a] of layout.entries()) for (const b of layout.slice(i + 1)) {
+    assert.ok(Math.abs(a.x - b.x) >= CONNECTIVITY_NODE_WIDTH || Math.abs(a.y - b.y) >= CONNECTIVITY_NODE_HEIGHT, `${a.key} overlaps ${b.key}`);
+  }
+  for (const n of layout.filter(n => n.distance === 2)) {
+    const parent = layout.find(p => p.key === n.parent_key);
+    assert.ok(n.x * parent.x + n.y * parent.y > 0, "Second hop shares its parent sector");
+  }
   graph.nodes.reverse();
   assert.deepEqual(connectivityLayout(graph), layout);
 });
@@ -61,4 +67,37 @@ test("category form uses required managed choices and retains inactive current a
   assert.match(form, /category.active \|\| category.id === form.category_id/);
   assert.match(form, /endpoint: "\/asset-categories"/);
   assert.doesNotMatch(form, /name: "category",|category: form.category/);
+});
+
+
+test("category preview is six of 25 and interface IP display is deterministic", () => {
+  const data = fixture();
+  const view = topologyPresentation(data, new Set(["custom"]));
+  assert.equal(view.assets.length, 25);
+  assert.equal(view.assets.slice(0, CATEGORY_PREVIEW_COUNT).length, 6);
+  assert.equal(view.assets.length - CATEGORY_PREVIEW_COUNT, 19);
+  assert.equal(compactInterfaceIp([]), "");
+  const ips = [{ id: "b", name: "eth1", ip_address: "192.168.3.53" }, { id: "a", name: "eth0", ip_address: "192.168.99.21" }];
+  assert.equal(compactInterfaceIp(ips.slice(0, 1)), "192.168.3.53");
+  assert.equal(compactInterfaceIp(ips), "192.168.99.21 +1");
+  assert.equal(compactInterfaceIp([...ips].reverse()), "192.168.99.21 +1");
+  ips[0].is_primary = true;
+  assert.equal(compactInterfaceIp(ips), "192.168.3.53 +1");
+  assert.equal(compactInterfaceIp([...ips, { ...ips[0], id: "duplicate" }]), "192.168.3.53 +1");
+  data.assets[0].ip_address = "192.0.2.111";
+  data.asset_interfaces.push({ id: "ip", asset_id: data.assets[0].id, name: "eth0", ip_address: "192.0.2.222" });
+  const asset = topologyPresentation(data, new Set(["custom"])).byId[data.assets[0].id];
+  assert.equal(asset.display_ip, "192.0.2.222");
+  assert.equal(matchesSearch(asset, "192.0.2.222"), true);
+  assert.equal(matchesSearch(asset, "192.0.2.111"), false);
+});
+
+test("Assets table excludes legacy IP and both graphs use the same expand icon", async () => {
+  const assets = await readFile(new URL("../app/assets/page.js", import.meta.url), "utf8");
+  assert.doesNotMatch(assets, /asset\.ip_address|Hostname \/ IP/);
+  for (const path of ["topology", "knowledge-graph"]) {
+    const page = await readFile(new URL(`../app/${path}/page.js`, import.meta.url), "utf8");
+    assert.match(page, /graph-icon-button/);
+    assert.match(page, /NavigationIcon name="expand"/);
+  }
 });

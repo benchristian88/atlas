@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, aliased
 
@@ -122,7 +122,8 @@ def get_topology(
 @router.get("/connectivity", response_model=ConnectivityResponse)
 def get_connectivity(
     context: RequestContext,
-    focus_asset_id: uuid.UUID,
+    focus_asset_id: uuid.UUID | None = None,
+    focus_network_id: uuid.UUID | None = None,
     hops: int = Query(1, ge=1, le=2),
     category_ids: list[uuid.UUID] | None = Query(None),
     show_networks: bool = True,
@@ -130,5 +131,7 @@ def get_connectivity(
     principal: Principal = Depends(require_permission("assets.view")),
     db: Session = Depends(get_db),
 ):
+    if (focus_asset_id is None) == (focus_network_id is None):
+        raise HTTPException(422, "Choose exactly one Asset or Network focus")
     topology = get_topology(context, principal, db)
-    return connectivity(topology, focus_asset_id, hops, category_ids, show_networks, limit)
+    return connectivity(topology, focus_asset_id, hops, category_ids, show_networks, limit, focus_network_id)

@@ -145,7 +145,11 @@ def list_assets(
             or_(
                 Asset.name.ilike(pattern),
                 Asset.hostname.ilike(pattern),
-                Asset.ip_address.ilike(pattern),
+                select(AssetInterface.id).where(
+                    AssetInterface.asset_id == Asset.id,
+                    AssetInterface.ip_address.ilike(pattern),
+                    scope_condition(principal, "networks.view", Asset.customer_id, Asset.site_id),
+                ).exists(),
                 Asset.vendor.ilike(pattern),
                 Asset.model.ilike(pattern),
             )

@@ -312,7 +312,7 @@ The repository audit materially changes several classifications:
    Business Functions exist, but they do not yet have their own assertions,
    completeness profiles, gap summaries or change history.
 7. **The Interface-first IP transition is incomplete.**
-   Interfaces and topology use structured IP data, but Asset forms/lists still expose
+   Interfaces and topology use structured IP data, but Asset create/edit forms still expose
    the legacy direct `Asset.ip_address`.
 
 ## Current release position
@@ -351,7 +351,7 @@ transcript-derived report and the audited repository.
 | Generated Documentation | Planned/unknown                 | **Partially implemented**        | Deterministic Asset Markdown and `Document` persistence exist, but no documents router or usable UI exists. |
 | Impact Analysis | Planned but not implemented     | **Planned but not implemented**  | Focused Service/Business Function graphs are structural prerequisites, not an impact engine; no outage semantics or `/impact-analysis` exists. |
 | Business Function completeness/history | Not separately classified       | **Partially implemented**        | Business Function CRUD and graph exist, but no assertions, profiles, gaps or history. |
-| Interface-first IP UX | Implemented                     | **Partially implemented**        | Interfaces are first-class, but Asset forms and list still use direct `ip_address`. |
+| Interface-first IP UX | Implemented                     | **Partially implemented**        | Interfaces are first-class, but Asset create/edit forms still use direct `ip_address`; list display/search now exclude it. |
 | Discovery cancellation | Assumed part of lifecycle       | **Planned but not implemented**  | `cancelled` is a valid status and B2 now commits to cancellation, but no cancel endpoint, UI, action, or test exists. |
 | Full Reconciliation action set | Broadly treated as implemented  | **Core decisions implemented; some advanced actions not evidenced** | Accept/reject/defer/lifecycle paths are tested; reclassify, bulk operations and broad merge journeys are not present. |
 | Full Documentation product | Planned but not implemented     | **Partially implemented**        | The renderer and storage are already real, but the product surface is absent. |
@@ -481,17 +481,17 @@ unchanged.
 | Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
 | Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
 | Asset Interfaces | **Implemented** | Foundation | Interface, network, IP, MAC, primary and notes are persisted and managed. |
-| Direct Asset IP field | **Partially superseded** | Foundation migration | Remains in forms/lists for compatibility even though interfaces are first-class. |
-| Interface-first IP UX | **Partially implemented** | Future polish | Topology/detail use interfaces; create/edit/list still prioritise direct `ip_address`. |
+| Direct Asset IP field | **Partially superseded** | Foundation migration | Remains in create/edit forms and API/schema for compatibility; removed from list display/search. |
+| Interface-first IP UX | **Partially implemented** | Future polish | Topology/Platform and list IP search use interfaces; create/edit still expose direct `ip_address`. |
 | Safe CIDR membership suggestions | **Unknown** | Network UX | No implementation or explicit decision. |
 | Asset Relationships | **Implemented** | Foundation | Scoped CRUD, type validation and same-context rules exist. |
 | New cross-site/customer relationships | **Deferred/prohibited** | Security boundary | Explicitly rejected and tested. |
 | Legacy cross-context relationships | **Implemented as compatibility** | Migration support | Readable only when both endpoints are authorised. |
 | Infrastructure Topology API | **Implemented** | Infrastructure Topology | Existing `/api/topology` collections retained with managed category/type metadata and platform links; endpoint visibility strengthened. |
-| Infrastructure Overview | **Implemented** | Infrastructure Topology | Authorized counts and dynamic category/Network summaries. |
-| Platform view | **Implemented** | Infrastructure Topology | Wrapping category grid, recorded parent/child links, eight-child preview and Show all; cycles and standalone Assets retained. |
+| Infrastructure Overview | **Implemented** | Infrastructure Topology | Authorized counts, six-icon category previews with +N, canonical Asset links and category-filtered View all. |
+| Platform view | **Implemented** | Infrastructure Topology | Wrapping category grid, recorded parent/child links, eight-child preview and Show all, deterministic interface-derived IPs; cycles and standalone Assets retained. |
 | Network & VLAN view | **Implemented** | Infrastructure Topology | Vertical master/detail and explicit interface membership, including multihoming. |
-| Connectivity view | **Implemented** | Infrastructure Topology | Backend 1/2-hop bounded traversal, centred layout, Asset/Network nodes, canonical labels and inspector links. |
+| Connectivity view | **Implemented** | Infrastructure Topology | Path-aware bounded 1/2-hop traversal suppresses shared-host/Network sibling fan-out; explicit host/Network focus, collision-free branch layout, contained shared icons and limit notices. |
 | Expanded Infrastructure Topology | **Implemented; live manual acceptance pending** | Infrastructure Topology | Shared application-viewport dialog preserves tab, filters, selection, child expansion and Network state; isolated browser fixtures validate desktop/light/dark behavior. |
 | Old Physical/Platform/Network/Dependency/All Relationships lenses | **Abandoned / superseded** | UI supersession | Replaced by the four Infrastructure Topology views while retaining `/topology`. |
 | Old generic hierarchy tabs | **Abandoned / superseded** | UI supersession | Replaced by subsequent lenses and now Infrastructure Topology. |
@@ -969,8 +969,10 @@ This converts hidden technical capability into visible user value.
 Remove or de-emphasise direct `Asset.ip_address` from:
 
 * Asset create/edit form;
-* Asset list display;
-* filtering and sorting.
+* remaining legacy editing workflows.
+
+Asset list display and IP search now use the interface-first policy described in
+[Infrastructure Topology](../architecture/infrastructure-topology.md).
 
 Use primary interface information consistently, retaining the legacy field only as a
 migration/read-compatibility mechanism.

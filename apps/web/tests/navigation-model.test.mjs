@@ -54,7 +54,7 @@ test("viewer navigation includes only authorized System pages", () => {
 
   assert.deepEqual(groupMap(groups), {
     Overview: ["Dashboard", "Changes"],
-    Knowledge: ["Knowledge Graph", "Infrastructure Topology", "Assets", "Services", "Business Functions", "Networks"],
+    Knowledge: ["Knowledge Graph", "Topology", "Assets", "Services", "Business Functions", "Networks"],
     Operations: ["Discovery", "Reconciliation", "Knowledge Gaps"],
     Connections: ["Integrations"],
     System: ["Organisation", "Reference Data"],
