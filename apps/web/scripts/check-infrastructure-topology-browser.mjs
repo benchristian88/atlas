@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { PRESENTATION_ICONS, PRESENTATION_ACCENTS } from "../lib/presentation.mjs";
 import { contrastRatio } from "../lib/accent-theme.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
@@ -18,10 +18,11 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 function fixture() {
   const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: n === 0 ? "Backup" : `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
   const types = [{ id: id(20), key: "server", name: "Server", category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
+  types.push({ id: id(23), key: "backup_appliance", name: "Backup Appliance", category_id: id(6), category: "Backup", active: true });
   const asset = (n, name, type = "server") => ({ id: id(n), name, asset_type: type, customer_id: customer.id, site_id: site.id, status: "operational", hostname: `${name.toLowerCase().replaceAll(" ", "-")}.home`, cached_icon_url: `/api/assets/${id(n)}/icon?v=${"a".repeat(64)}` });
   const hosts = [asset(30, "PVE1"), asset(31, "PVE2"), asset(32, "PVE3"), asset(33, "PVE4")];
   const children = Array.from({ length: 25 }, (_, i) => asset(100+i, i === 1 ? "Atlas DNS" : i ? `Workload ${String(i).padStart(2,"0")}` : "AdGuard Home", "docker_compose"));
-  const assets = [...hosts, asset(34,"PBS"), asset(35,"Synology"), asset(36,"USW-16-poe"), asset(37,"Router"), ...children, asset(150,"Uncategorized Asset","unknown")];
+  const assets = [...hosts, asset(34,"PBS","backup_appliance"), asset(35,"Synology"), asset(36,"USW-16-poe"), asset(37,"Router"), ...children, asset(150,"Uncategorized Asset","unknown")];
   const relationships = children.map((a,i) => ({ id: id(200+i), source_asset_id: a.id, target_asset_id: hosts[i < 20 ? 0 : i < 24 ? 1 : i < 27 ? 2 : 3].id, relationship_type: "runs_on" }));
   const platform_links = relationships.map(r => ({ relationship_id: r.id, parent_id: r.target_asset_id, child_id: r.source_asset_id }));
   for (const [source, target] of [[30,36], [31,36], [36,34], [36,35], [36,37], [36,32], [36,110], [36,111], [36,112]]) relationships.push({ id: id(500+relationships.length), source_asset_id: id(source), target_asset_id: id(target), relationship_type: "connects_to" });
@@ -139,6 +140,103 @@ async function checkCompactPicker(page, theme, width, surface) {
   await page.keyboard.press("Space");
   await checkPreview(page, "application", "rose", await page.locator('input[name="name"]').inputValue());
 }
+// Evaluation is read-only diagnostics/assertions; every activation below is a
+// real pointer click or keyboard input, including native label activation.
+async function checkCategoryPointerInput(page, data, theme, width) {
+  const filters = page.getByRole("button", { name: /^Filters(?: · \d+)?$/ });
+  const panel = page.locator(".topology-filter-popover");
+  const checkbox = name => panel.getByRole("checkbox", { name, exact: true });
+  const row = name => panel.locator("label").filter({ has: page.getByRole("checkbox", { name, exact: true }) });
+  const card = n => page.locator(`[data-platform-id="${id(n)}"]`);
+  await page.getByRole("button", { name: "Platform", exact: true }).click();
+  for (const expanded of [false, true]) {
+    if (expanded) await page.getByRole("button", { name: "Expand Infrastructure Topology", exact: true }).click();
+    await filters.click();
+    const initial = await checkbox("Backup").isChecked();
+    assert.equal(initial, true);
+    const audit = await panel.evaluate(panel => {
+      const inspect = element => {
+        const box = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return { box: box.toJSON(), hit: hit?.outerHTML.slice(0, 300), intended: element === hit || element.contains(hit),
+          pointerEvents: style.pointerEvents, zIndex: style.zIndex,
+          before: getComputedStyle(element, "::before").content, after: getComputedStyle(element, "::after").content };
+      };
+      return { panel: inspect(panel), options: [...panel.querySelectorAll("label")].map(label => ({
+        name: label.textContent, row: inspect(label), checkbox: inspect(label.querySelector("input")),
+        text: inspect(label.querySelector(".presentation-identity > span:last-child")), icon: inspect(label.querySelector(".presentation-icon")),
+      })) };
+    });
+    await writeFile(`${output}/filter-hit-test-${theme}-${width}-${expanded}.json`, JSON.stringify(audit, null, 2));
+    assert.equal(audit.panel.pointerEvents, "auto");
+    for (const option of audit.options) for (const part of ["row", "checkbox", "text", "icon"]) {
+      assert.ok(option[part].intended, `${option.name} ${part} must receive the pointer: ${JSON.stringify(option[part])}`);
+      assert.equal(option[part].pointerEvents, "auto");
+      assert.ok(option[part].box.width > 0 && option[part].box.height > 0);
+    }
+    const backupState = async enabled => {
+      assert.equal(await panel.isVisible(), true, "Inside interaction keeps the popover mounted");
+      assert.equal(await checkbox("Backup").isVisible(), true);
+      assert.equal(await checkbox("Backup").isChecked(), enabled);
+      assert.equal(await checkbox("Backup").evaluate(input => input.matches(":checked")), enabled, "Native visible checkmark state");
+      assert.equal(await filters.innerText(), enabled ? "Filters" : "Filters · 1");
+      await card(34).waitFor({ state: enabled ? "visible" : "detached" });
+    };
+    // Start with the label/row, the path missed by the original acceptance.
+    await row("Backup").click(); await backupState(!initial);
+    const inputIds = await panel.getByRole("checkbox").evaluateAll(inputs => inputs.map(input => input.id));
+    assert.equal(new Set(inputIds).size, data.categories.length);
+    assert.ok(inputIds.every(Boolean));
+    assert.equal(await row("Backup").getAttribute("for"), await checkbox("Backup").getAttribute("id"));
+    await page.screenshot({ path: `${output}/filter-pointer-off-${theme}-${width}-${expanded}.png` });
+    await row("Backup").click(); await backupState(initial);
+    await checkbox("Backup").click(); await backupState(false);
+    await checkbox("Backup").click(); await backupState(true);
+    const text = row("Backup").locator(".presentation-identity > span:last-child");
+    await text.click(); await backupState(false);
+    await text.click(); await backupState(true);
+    const bounds = await row("Backup").boundingBox();
+    await row("Backup").click({ position: { x: bounds.width - 2, y: bounds.height / 2 } }); await backupState(false);
+    await row("Backup").click({ position: { x: bounds.width - 2, y: bounds.height / 2 } }); await backupState(true);
+    // A second category verifies icon activation and actual projection removal.
+    await row("Compute").locator(".presentation-icon").click();
+    assert.equal(await checkbox("Compute").isChecked(), false);
+    assert.equal(await filters.innerText(), "Filters · 1");
+    await card(30).waitFor({ state: "detached" });
+    await row("Compute").locator(".presentation-icon").click();
+    assert.equal(await checkbox("Compute").isChecked(), true);
+    assert.equal(await filters.innerText(), "Filters");
+    await card(30).waitFor();
+    // Native Tab navigation focuses Workload then Uncategorized then Backup.
+    await page.keyboard.press("Tab"); await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
+    assert.equal(await checkbox("Backup").evaluate(input => input === document.activeElement), true);
+    await page.keyboard.press("Space"); await backupState(false);
+    await page.keyboard.press("Space"); await backupState(true);
+    await row("Backup").click();
+    await row("Uncategorized").locator(".presentation-identity > span:last-child").click();
+    assert.equal(await filters.innerText(), "Filters · 2");
+    await card(150).waitFor();
+    await panel.getByRole("button", { name: "Reset to defaults", exact: true }).click();
+    await backupState(true);
+    for (const category of data.categories) assert.equal(await checkbox(category.name).isChecked(), category.show_in_topology);
+    await card(150).waitFor({ state: "detached" });
+    await page.screenshot({ path: `${output}/filter-pointer-reset-${theme}-${width}-${expanded}.png` });
+    // An uncovered heading inside the expanded dialog is outside the filter.
+    await page.getByRole("heading", { name: "Infrastructure Topology", exact: true }).last().click();
+    assert.equal(await panel.count(), 0);
+    await filters.click(); await page.keyboard.press("Escape");
+    assert.equal(await panel.count(), 0);
+    assert.equal(await filters.evaluate(button => button === document.activeElement), true);
+    await filters.click();
+    await page.keyboard.press("Shift+Tab"); // First checkbox -> Filters.
+    await page.keyboard.press("Shift+Tab"); // Filters -> outside the filter root.
+    assert.equal(await panel.count(), 0, "Keyboard blur still dismisses after pointer use");
+    if (expanded) await page.getByRole("button", { name: "Close expanded Infrastructure Topology", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+}
+
 async function checkTopologyInteractions(page, data, requests, theme, width) {
   const button = name => page.getByRole("button", { name, exact: true });
   const filters = page.getByRole("button", { name: /^Filters(?: · \d+)?$/ });
@@ -156,8 +254,8 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   };
   const overrides = async () => {
     await filters.click();
-    await panel.getByLabel("Backup", { exact: true }).uncheck();
-    await panel.getByLabel("Uncategorized", { exact: true }).check();
+    await panel.getByLabel("Backup", { exact: true }).click();
+    await panel.getByLabel("Uncategorized", { exact: true }).click();
     assert.equal(await filters.innerText(), "Filters · 2");
     await page.keyboard.press("Escape");
   };
@@ -178,13 +276,13 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   assert.ok((await compute.locator(".presentation-icon").boundingBox()).width <= 24);
   await checkIdentityContrast(page, ".topology-filter-popover .presentation-icon");
   await page.screenshot({ path: `${output}/filters-${theme}-${width}.png`, fullPage: true });
-  await panel.getByLabel("Uncategorized", { exact: true }).check();
+  await panel.getByLabel("Uncategorized", { exact: true }).click();
   assert.equal(await filters.innerText(), "Filters · 1");
   assert.equal(await page.locator(`[data-platform-id="${id(150)}"]`).count(), 1, "Toggles apply immediately");
-  await panel.getByLabel("Uncategorized", { exact: true }).uncheck();
+  await panel.getByLabel("Uncategorized", { exact: true }).click();
   assert.equal(await filters.innerText(), "Filters");
-  await panel.getByLabel("Backup", { exact: true }).uncheck();
-  await panel.getByLabel("Uncategorized", { exact: true }).check();
+  await panel.getByLabel("Backup", { exact: true }).click();
+  await panel.getByLabel("Uncategorized", { exact: true }).click();
   await button("Reset to defaults").click();
   assert.equal(await panel.count(), 1);
   assert.equal(await filters.innerText(), "Filters");
@@ -439,6 +537,7 @@ try {
     await page.goto(`${base}/topology`);
     await page.getByRole("heading", { name:"Environment at a glance" }).waitFor();
     await checkTopologyHeaders(page);
+    await checkCategoryPointerInput(page, data, theme, width);
     await checkTopologyInteractions(page, data, requests, theme, width);
     assert.equal(await page.locator(".topology-metrics strong").first().innerText(), "33");
     assert.equal(await page.locator(".topology-summary-row").count(), 10);
@@ -466,12 +565,12 @@ try {
     assert.equal(await navigation.locator("span").evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); return range.getClientRects().length; }), 1, "Sidebar label stays on one line");
     assert.equal(await page.getByRole("heading", {name:"Infrastructure Topology",exact:true}).count(), 1);
     await page.getByRole("button",{name:"Filters",exact:true}).click();
-    await page.getByLabel("Uncategorized", {exact:true}).check();
+    await page.getByLabel("Uncategorized", {exact:true}).click();
     assert.equal(await page.locator(".topology-metrics strong").first().innerText(), "34");
     const smallCategory = page.locator(".topology-summary-row").filter({hasText:"Uncategorized"});
     assert.equal(await smallCategory.locator(".asset-icon").count(),1);
     assert.equal(await smallCategory.locator(".topology-preview-more").count(),0);
-    await page.getByLabel("Uncategorized", {exact:true}).uncheck();
+    await page.getByLabel("Uncategorized", {exact:true}).click();
     await page.getByRole("button",{name:"Platform",exact:true}).click();
     const pve = page.locator(`[data-platform-id="${id(30)}"]`);
     assert.equal(await pve.locator(".topology-child").count(),8);
@@ -600,9 +699,9 @@ try {
     await page.getByLabel("Focus Asset or Network",{exact:true}).selectOption(id(100));
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===5);
     await page.getByRole("button",{name:"Filters",exact:true}).click();
-    await page.getByLabel("Compute",{exact:true}).uncheck();
+    await page.getByLabel("Compute",{exact:true}).click();
     await page.locator(`[data-node-key="asset:${id(30)}"]`).waitFor({state:"detached"});
-    await page.getByLabel("Compute",{exact:true}).check();
+    await page.getByLabel("Compute",{exact:true}).click();
     await page.keyboard.press("Escape");
     await page.locator(`[data-node-key="asset:${id(30)}"]`).waitFor();
     await page.getByRole("button",{name:"1 hop",exact:true}).click();
@@ -730,5 +829,5 @@ try {
     assert.deepEqual(errors,[]);
     checks++; await context.close();
   }
-  console.log(`Passed ${checks} topology/picker browser scenarios: compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
+  console.log(`Passed ${checks} topology/picker browser scenarios: native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
 } finally { await browser.close(); }

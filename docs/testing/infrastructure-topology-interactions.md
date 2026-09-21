@@ -4,6 +4,130 @@
 disposable PostgreSQL database are used for acceptance. No live Atlas records
 are changed.
 
+## Pointer regression correction — 21 September 2026
+
+The original acceptance below was insufficient: it used checkbox `check()` and
+`uncheck()` helpers and did not click the visible category label, text or icon.
+Its passing result did not establish that the entire visible option worked.
+The following correction supersedes that interaction claim.
+
+### Reproduction and exact cause
+
+Branch `feature/infrastructure-topology-v0`, starting HEAD
+`ed4f91e081d8dcc0908da42196a7e77ffcd1ca8d`, initially clean working tree.
+The unmodified production build reproduced the failure with a normal Playwright
+`row.click()` on Backup. Read-only event instrumentation recorded:
+
+1. `pointerdown` and `mousedown` hit the label's text span inside the popover.
+2. The initially focused checkbox blurred to the enclosing embedded `dialog`.
+3. The filter root's React `onBlur` treated that temporary focus change as an
+   exit and synchronously unmounted the popover.
+4. `mouseup` landed on the underlying topology; no checkbox `click` or `change`
+   occurred. The Filters count remained unchanged.
+
+The document `pointerdown` containment check was correct. The failure was the
+blur dismissal before native label activation, not an overlay or state reset.
+Direct checkbox clicks worked in this reproduction, explaining why the former
+acceptance missed the visible-row failure.
+
+At 1440px/light before the fix, the popover bounds were approximately
+`(894.67, 267.19, 380, 289)` and Backup's row was
+`(1089.67, 341.69, 172, 30)`. Centre hit tests returned the intended input and text
+span. The panel and controls had `pointer-events: auto`; the existing panel
+`z-index` was 60, ancestor z-indices were auto, and no pseudo-element or
+transparent overlay intercepted the option. Bounding boxes and hit tests were
+recorded for every option. `account-dropdown` styling was not the cause.
+
+### Scoped correction
+
+`topology-category-filter.js` tracks whether a pointer interaction started
+inside its root. Blur dismissal waits through that interaction so native label
+activation can focus and toggle the checkbox. Pointer up/cancel and effect
+cleanup clear the guard. Outside pointerdown still dismisses, without
+preventing default events; ordinary keyboard focus departure still dismisses.
+Unique IDs and explicit `htmlFor` associations supplement the native wrapping
+labels. The entire compact row, text, icon and checkbox activate the same
+native input. Existing pointer cursors, layout, scrolling and stacking remain.
+No CSS or z-index adjustment was needed.
+
+The controlled `choices` updater, `topologyCategorySelection`, managed defaults,
+and view-entry initializer are unchanged. Checkbox changes retain local
+overrides and immediately update both topology content and the changed count.
+The existing suite continues checking active-tab retention, new-tab reset,
+Expand/Refresh preservation, and managed-default changes after Refresh.
+
+No database/migration, API, route, graph semantics, authorization or customer/site
+boundary changed. Browser fixtures only supply already-authorized UI data; no
+live Atlas records are modified. Feature-ledger classification remains valid.
+
+### Stronger acceptance
+
+The browser fixture now assigns PBS to Backup, so disabling Backup must remove
+an actual Asset. Category interactions use normal Playwright clicks. Read-only
+`evaluate` calls inspect geometry, computed styles, native checked state and
+focus; none activates or changes a control.
+
+In light/dark at 1440, 1100 and 800px, both embedded and expanded views test:
+
+- Filters pointer opening, Backup row toggle and toggle back.
+- Direct native checkbox, text, and empty row-padding clicks, each checking
+  visible native checked state, Filters count and PBS removal/restoration.
+- Compute icon clicks with PVE1 removal/restoration and count changes.
+- Native Tab navigation and Space toggling, with the same topology checks.
+- Reset after two overrides, restoring visible defaults, PBS and the count,
+  and removing the default-hidden Uncategorized Asset.
+- Outside click, Escape/focus return, and keyboard departure after pointer use.
+- Every option's row/input/text/icon centre hit tests and computed pointer events;
+  unrelated overlay interception fails the test. Unique input IDs and explicit
+  label association are also checked.
+
+The strengthened test was run against the original production build and failed
+on its first Backup row click: “Inside interaction keeps the popover mounted”.
+The previous production reproduction log is `/tmp/atlas-filter-repro.log`;
+the failing regression log is `/tmp/atlas-filter-before.log`.
+
+Validation commands run from `apps/web` unless indicated:
+
+| Check | Result |
+| --- | --- |
+| `node --test tests/infrastructure-topology.test.mjs tests/presentation.test.mjs` | 12 passed before and after the fix. |
+| `npm test` | 144 passed. |
+| `npm run build` | Passed for reproduction and for the fixed production build. |
+| `node scripts/check-infrastructure-topology-browser.mjs` | Six scenarios passed: light/dark at 1440, 1100 and 800px, with pointer/hit-test acceptance in both embedded and expanded views. |
+| `node scripts/check-expanded-graph-browser.mjs` | Eight scenarios passed, light/dark at desktop and mobile widths. |
+| `node --check scripts/check-infrastructure-topology-browser.mjs` | Passed. |
+| `git diff --check` (repository root) | Clean. |
+
+Browser commands use `ATLAS_PLAYWRIGHT_MODULE=/tmp/atlas-topology-browser/node_modules/playwright/index.mjs`,
+`ATLAS_CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'`,
+and `ATLAS_BROWSER_BASE_URL=http://127.0.0.1:3112`.
+`ATLAS_BROWSER_OUTPUT` is `/tmp/atlas-filter-browser` for topology and
+`/tmp/atlas-filter-expanded` for Knowledge Graph. Topology output includes
+per-option hit-test JSON and before-reset/after-reset screenshots. Light and
+dark screenshot review confirms native checkbox visibility and changed counts.
+Logs: `/tmp/atlas-filter-{focused,tests,build,browser,expanded}.log`.
+
+Material files for this correction only:
+
+- `apps/web/components/topology-category-filter.js`: pointer/focus lifecycle
+  correction and explicit native label associations.
+- `apps/web/scripts/check-infrastructure-topology-browser.mjs`: real pointer
+  acceptance, Backup Asset fixture, hit-test evidence and screenshots.
+- `docs/testing/infrastructure-topology-interactions.md`: correct the earlier
+  acceptance claim and record reproduction and validation.
+
+No commit, push, merge or branch change. Repository state:
+
+```text
+ M apps/web/components/topology-category-filter.js
+ M apps/web/scripts/check-infrastructure-topology-browser.mjs
+ M docs/testing/infrastructure-topology-interactions.md
+```
+
+---
+
+The remainder records the preceding implementation and its original validation.
+
 ## A–C: Repository
 
 - Branch: `feature/infrastructure-topology-v0`.
