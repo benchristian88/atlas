@@ -178,9 +178,14 @@ controls or remounting an unchanged Connectivity graph.
 Inspector focus from another view and Network detail navigation supply new
 initial context to view entry, including visibility of the requested Asset's
 category. Within Connectivity, a separate refocus handler serves the Focus
-selector, native node double-click and inspector action. It retains hops, search
-and category/relationship-class/Network filters, enabling only a requested focus's hidden category
-or Network visibility when necessary. Asset and Network single-click selection
+selector, Asset search, native node double-click and inspector action. It retains
+hops and category/relationship-class/Network filters. Search selection clears its
+text and popup; other refocus actions retain search text. A hidden focus category
+remains hidden with an explanatory message. Explicit Network refocus enables
+Network visibility when necessary. The compact focus finder matches at most ten
+Assets by name, hostname or interface IP from the existing backend-authorized
+projection, independent of presentation category filters. It issues no extra
+Asset-list request and never uses the legacy Asset IP. Asset and Network single-click selection
 never changes the query or layout input. Selection uses entity identity separately
 from focus, including Network inspectors; an already-focused selection has no
 refocus action. Node buttons retain native Enter/Space selection, with the

@@ -210,3 +210,50 @@ def test_legacy_ip_api_compatibility_and_interface_first_acceptance(client, db, 
         assert result.status_code == 200, result.text
         assert result.json()["ip_address"] == address
     assert len(client.get(f"/api/asset-interfaces?asset_id={record['id']}").json()) == 2
+
+
+@pytest.mark.parametrize("term", ["AdGuard Home", "adg", "dns.homelab.test", "dns.home", "192.168.5.3", "192.168.5"])
+def test_focus_finder_source_and_asset_search_fields(client, db, term):
+    sites, assets, _ = seed_scope(db)
+    assets[0].hostname = "dns.homelab.test"
+    assets[0].ip_address = None
+    db.add(AssetInterface(asset_id=assets[0].id, name="search-ip", ip_address="192.168.5.3"))
+    db.flush()
+    actor = make_principal("assets.view", "networks.view", "customers.view", "sites.view")
+    app.dependency_overrides[get_principal] = lambda: actor
+    headers = {"X-Atlas-Customer-ID": str(sites[0].customer_id), "X-Atlas-Site-ID": str(sites[0].id)}
+    response = client.get("/api/assets", params={"search": term, "limit": 10}, headers=headers)
+    assert response.status_code == 200, response.text
+    assert [a["id"] for a in response.json()] == [str(assets[0].id)]
+    source = client.get("/api/topology", headers=headers)
+    assert source.status_code == 200, source.text
+    assert {a["id"] for a in source.json()["assets"]} == {str(a.id) for a in assets[:2]}
+    assert any(i["ip_address"] == "192.168.5.3" for i in source.json()["asset_interfaces"])
+
+
+@pytest.mark.parametrize("scope", ["context", "grant"])
+def test_focus_finder_non_disclosure_by_name_hostname_and_ip(client, db, scope):
+    sites, assets, _ = seed_scope(db)
+    for index, asset in enumerate(assets):
+        asset.hostname = f"host-{index}.private.test"
+        db.add(AssetInterface(asset_id=asset.id, name="search", ip_address=f"192.168.5.{index + 1}"))
+    db.flush()
+    actor = make_principal("assets.view", "networks.view", "customers.view", "sites.view")
+    headers = {}
+    if scope == "grant":
+        actor = Principal(actor.user, (ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Site", scope_type="site", customer_id=sites[0].customer_id, site_id=sites[0].id, permissions=frozenset({"assets.view", "networks.view", "customers.view", "sites.view"})),))
+    else:
+        headers = {"X-Atlas-Customer-ID": str(sites[0].customer_id), "X-Atlas-Site-ID": str(sites[0].id)}
+    app.dependency_overrides[get_principal] = lambda: actor
+    for index in [2, 3]:
+        for term in [assets[index].name, assets[index].hostname, f"192.168.5.{index + 1}", "no-such-asset"]:
+            response = client.get("/api/assets", params={"search": term}, headers=headers)
+            assert response.status_code == 200, response.text
+            assert response.json() == []
+        projection = client.get("/api/topology", headers=headers)
+        assert projection.status_code == 200, projection.text
+        assert assets[index].name not in projection.text
+        assert assets[index].hostname not in projection.text
+        assert f"192.168.5.{index + 1}" not in projection.text
+        response = client.get("/api/topology/connectivity", params={"focus_asset_id": str(assets[index].id)}, headers=headers)
+        assert response.status_code == 404

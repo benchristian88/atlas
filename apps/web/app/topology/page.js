@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "../../components/access-denied";
 import { AssetIcon } from "../../components/asset-icon";
 import { useAuth } from "../../components/auth-context";
+import { ConnectivityAssetSearch } from "../../components/connectivity-asset-search";
 import { ExpandedGraphSurface } from "../../components/expanded-graph-surface";
 import { NavigationIcon } from "../../components/navigation-icon.mjs";
 import { assetListFiltersHref } from "../../lib/asset-list-filters.mjs";
@@ -51,8 +52,10 @@ function TopologyWorkbench() {
   }, [canView, workspace.reloadKey, reload]);
   const { enabled, changedCount } = useMemo(() => topologyCategorySelection(data?.categories || [], choices), [data, choices]);
   const view = useMemo(() => data ? topologyPresentation(data, enabled) : null, [data, enabled]);
+  const searchable = useMemo(() => data ? topologyPresentation(data, new Set(data.categories.map(c => c.id))) : null, [data]);
   const networkFocus = Boolean(view?.assets.length) && showNetworks && focusId.startsWith("network:") && view?.networks.some(n => `network:${n.id}` === focusId);
-  const actualFocus = networkFocus || view?.byId[focusId] ? focusId : view?.assets[0]?.id || "";
+  const actualFocus = networkFocus || searchable?.byId[focusId] ? focusId : view?.assets[0]?.id || "";
+  const focusHidden = Boolean(searchable?.byId[actualFocus] && !view?.byId[actualFocus]);
   const classSelection = useMemo(() => topologyClassSelection(classChoices), [classChoices]);
   const classKey = [...classSelection.enabled].sort().join(",");
   const categoryKey = [...enabled].sort().join(",");
@@ -84,10 +87,6 @@ function TopologyWorkbench() {
     const asset = data?.assets.find(a => a.id === id);
     const network = id.startsWith("network:") && data?.networks.find(n => `network:${n.id}` === id);
     if (!asset && !network) return;
-    if (asset) {
-      const category = data.asset_types.find(type => type.key === asset.asset_type)?.category_id;
-      if (category && !enabled.has(category)) setChoices(current => ({ ...current, [category]: true }));
-    }
     if (network && !showNetworks) setShowNetworks(true);
     setSelectedId(id);
     setFocusId(id);
@@ -130,14 +129,20 @@ function TopologyWorkbench() {
       {error && <p className="error-banner" role="alert">{error}</p>}
       {!data && !error && <p role="status">Loading infrastructure…</p>}
       {data && <>
-        {tab !== "overview" && <label className="field topology-search"><span>{tab === "networks" ? "Search Networks and connected Assets" : "Search Assets"}</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === "networks" ? "Network, VLAN or Asset name" : "Asset name, hostname or IP"} /></label>}
+        {tab !== "overview" && tab !== "connectivity" && <label className="field topology-search"><span>{tab === "networks" ? "Search Networks and connected Assets" : "Search Assets"}</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === "networks" ? "Network, VLAN or Asset name" : "Asset name, hostname or IP"} /></label>}
         {tab === "overview" ? <Overview view={view} onNetwork={openNetwork} /> :
           tab === "networks" ? <Networks view={view} network={network} search={search} onNetwork={setNetworkId} select={select} sites={data.sites} /> :
           tab === "platform" ? <Platform view={view} search={search} parentId={parentId} onParent={setParentId} expandedParents={expandedParents} onExpand={id => setExpandedParents(p => ({ ...p, [id]: !p[id] }))} select={select} /> :
           <>
-            <div className="topology-connectivity-controls"><label className="field"><span>Focus</span><select aria-label="Focus" value={actualFocus} onChange={e => refocusConnectivity(e.target.value)}>{view.assets.filter(a => a.id === actualFocus || matchesSearch(a, search)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}{showNetworks && view.networks.map(n => <option key={`network:${n.id}`} value={`network:${n.id}`}>{n.name} (Network)</option>)}</select></label><div className="row-actions" aria-label="Hops">{[1, 2].map(n => <button type="button" key={n} aria-pressed={hops === n} className={`button ${hops === n ? "button-primary" : "button-secondary"}`} onClick={() => setHops(n)}>{n} {n === 1 ? "hop" : "hops"}</button>)}</div><label><input type="checkbox" checked={showNetworks} onChange={e => setShowNetworks(e.target.checked)} /> Networks</label></div>
+            <div className="topology-connectivity-controls" role="group" aria-label="Connectivity controls">
+              <ConnectivityAssetSearch assets={searchable.assets} types={searchable.types} value={search} onChange={setSearch} onSelect={refocusConnectivity} disabled={Boolean(error)} />
+              <label className="field topology-focus-control"><span>Focus</span><select aria-label="Focus" value={actualFocus} onChange={e => refocusConnectivity(e.target.value)}>{searchable.assets.filter(a => a.id === actualFocus || view.byId[a.id]).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}{showNetworks && view.networks.map(n => <option key={`network:${n.id}`} value={`network:${n.id}`}>{n.name} (Network)</option>)}</select></label>
+              <div className="row-actions" aria-label="Hops">{[1, 2].map(n => <button type="button" key={n} aria-pressed={hops === n} className={`button ${hops === n ? "button-primary" : "button-secondary"}`} onClick={() => setHops(n)}>{n} {n === 1 ? "hop" : "hops"}</button>)}</div>
+              <label className="topology-networks-control"><input type="checkbox" checked={showNetworks} onChange={e => setShowNetworks(e.target.checked)} /> Networks</label>
+            </div>
+            {focusHidden && <p role="status">The focused Asset’s category is hidden. Enable it in Filters to show connectivity.</p>}
             {graphError && <p className="error-banner" role="alert">{graphError}</p>}
-            {!actualFocus ? <p className="empty-state">Enable a category with Assets to explore connectivity.</p> : !currentGraph && !graphError ? <p role="status">Loading recorded connectivity…</p> : currentGraph && <div className={`graph-workspace${expanded && detailsHidden ? " topology-details-hidden" : ""}`}><Connectivity childrenExpanded={Boolean(expandedConnectivityHosts[actualFocus])} onExpandChildren={() => setExpandedConnectivityHosts(current => ({ ...current, [actualFocus]: true }))} key={actualFocus} expanded={expanded} graph={currentGraph} view={view} selectedKey={selectedKey} onSelect={setSelectedId} onFocus={refocusConnectivity} />{!(expanded && detailsHidden) && (inspectedNetwork ? <NetworkInspector network={inspectedNetwork} view={view} onOpen={() => openNetwork(inspectedNetwork.id)} onFocus={actualFocus === `network:${inspectedNetwork.id}` ? null : () => refocusConnectivity(`network:${inspectedNetwork.id}`)} /> : <Inspector asset={selected} view={view} sites={data.sites} select={select} onFocus={selected?.id === actualFocus ? null : a => refocusConnectivity(a.id)} />)}</div>}
+            {!actualFocus ? <p className="empty-state">Enable a category with Assets to explore connectivity.</p> : focusHidden ? null : !currentGraph && !graphError ? <p role="status">Loading recorded connectivity…</p> : currentGraph && <div className={`graph-workspace${expanded && detailsHidden ? " topology-details-hidden" : ""}`}><Connectivity childrenExpanded={Boolean(expandedConnectivityHosts[actualFocus])} onExpandChildren={() => setExpandedConnectivityHosts(current => ({ ...current, [actualFocus]: true }))} key={actualFocus} expanded={expanded} graph={currentGraph} view={view} selectedKey={selectedKey} onSelect={setSelectedId} onFocus={refocusConnectivity} />{!(expanded && detailsHidden) && (inspectedNetwork ? <NetworkInspector network={inspectedNetwork} view={view} onOpen={() => openNetwork(inspectedNetwork.id)} onFocus={actualFocus === `network:${inspectedNetwork.id}` ? null : () => refocusConnectivity(`network:${inspectedNetwork.id}`)} /> : <Inspector asset={selected} view={view} sites={data.sites} select={select} onFocus={selected?.id === actualFocus ? null : a => refocusConnectivity(a.id)} />)}</div>}
           </>}
         {tab !== "overview" && tab !== "connectivity" && selected && <div className="topology-detail-inspector"><button type="button" className="text-button" onClick={() => setSelectedId("")}>Close details</button><Inspector asset={selected} view={view} sites={data.sites} select={select} onFocus={a => enterView("connectivity", { focusId: a.id })} /></div>}
         {view.assets.length === 0 && tab !== "connectivity" && <p className="empty-state">No Assets match the enabled categories. Use Filters to include other categories, or <Link href="/assets">open Assets</Link> to curate your infrastructure.</p>}

@@ -40,9 +40,10 @@ live monitoring or freshness estimate is implied.
   in the inspector, to explore that entity. Keyboard users can Tab to a node,
   press Enter or Space to select it, then activate the inspector action.
   The **Focus** selector displays the focused Asset or Network; selection is
-  separate. Refocusing selects the new focus, retains hops, search and filters,
-  and fits/recentres the new graph, clearing previous zoom and pan. An explicitly
-  requested focus enables only its own category if needed. The inspector action
+  separate. Refocusing selects the new focus, retains hops and filters,
+  and fits/recentres the new graph, clearing previous zoom and pan. Search-result
+  selection clears search and closes its popup. If the focused Asset’s category
+  is hidden, enable it in Filters to show its connectivity. The inspector action
   is hidden for the current focus. Network detail is available from its inspector.
   **Fit** restores fitted zoom and clears pan; zoom buttons and canvas scrolling
   support closer inspection.
@@ -118,8 +119,14 @@ it. **Focus Connectivity** from another view and **Open Network detail** navigat
 honour the requested Asset or Network as the new initial context. An explicitly
 focused Asset's category is enabled for that view if needed.
 
-Search finds Platform Assets and children, Networks and their connected Assets,
-or Assets in the Connectivity selector.
+Search finds Platform Assets and children, or Networks and their connected Assets.
+In Connectivity, **Search assets** finds an authorised Asset by name, hostname or
+interface IP and makes it the Connectivity focus. It shows up to ten matches
+from the current authorized topology after one character; typing does not filter
+the graph or the separate Focus selector. Select a result with the pointer, or
+use Arrow Up/Down and Enter. Escape closes results; Tab moves to Focus. Search,
+inline Focus, hops and Networks share one compact toolbar that wraps at narrower
+widths, including expanded mode.
 
 The inspector includes recorded status, type, category, visible Site, hostname,
 interfaces and key relationships. **Open Asset** opens its detail page; **View in

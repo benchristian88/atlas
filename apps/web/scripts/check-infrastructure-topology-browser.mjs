@@ -247,7 +247,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   const button = name => page.getByRole("button", { name, exact: true });
   const filters = page.getByRole("button", { name: /^Filters(?: · \d+)?$/ });
   const panel = page.locator(".topology-filter-popover");
-  const search = page.getByLabel("Search Assets", { exact: true });
+  const search = page.getByLabel(/^Search assets$/i, { exact: true });
   const expand = button("Expand Infrastructure Topology"), close = button("Close expanded Infrastructure Topology");
   const contextBefore = await page.locator(".context-selector").innerText();
   const originalUrl = page.url();
@@ -347,7 +347,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   await world.waitFor();
   const defaultFocus = await focus.inputValue();
   await focus.selectOption(id(31)); await button("2 hops").click();
-  await overrides(); await search.fill("PVE");
+  await overrides(); await search.fill("PVE"); await page.keyboard.press("Escape");
   await page.locator(`[data-node-key="asset:${id(36)}"]`).waitFor();
   await page.locator(`[data-node-key="asset:${id(36)}"]`).click();
   await page.getByLabel("Networks", { exact: true }).uncheck();
@@ -510,7 +510,8 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
   await page.getByLabel("Backup", { exact: true }).uncheck();
   await page.keyboard.press("Escape");
   await world.waitFor();
-  await page.getByLabel("Search Assets", { exact: true }).fill("AdGuard");
+  await page.getByLabel(/^Search assets$/i, { exact: true }).fill("AdGuard");
+  await page.keyboard.press("Escape"); // Close the focus finder before graph controls.
   await button("Zoom in").click();
   await page.locator(".topology-connectivity-viewport").evaluate(el => { el.scrollLeft += 70; el.scrollTop += 50; });
   await page.waitForTimeout(100);
@@ -518,7 +519,7 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
   assert.equal(await inspector.locator("h2").innerText(), "PVE1");
   assert.equal(await button("2 hops").getAttribute("aria-pressed"), "true");
   assert.equal(await button("Filters").innerText(), "Filters · 1");
-  assert.equal(await page.getByLabel("Search Assets", { exact: true }).inputValue(), "AdGuard");
+  assert.equal(await page.getByLabel(/^Search assets$/i, { exact: true }).inputValue(), "AdGuard");
   assert.equal(await node(`asset:${id(101)}`).count(), 1, "Explicit host focus admits hosted siblings");
   assert.equal(await node(`asset:${id(36)}`).count(), 1, "Switch path remains visible");
   await inspect(adguard, "AdGuard Home");
@@ -543,7 +544,7 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
   assert.equal(await page.locator('[data-node-key^="network:"]').count(), 0);
   // Restore initial settings for the existing presentation/geometry acceptance.
   await button("Filters").click(); await button("Reset to defaults").click(); await page.keyboard.press("Escape");
-  await page.getByLabel("Search Assets", { exact: true }).fill("");
+  await page.getByLabel(/^Search assets$/i, { exact: true }).fill("");
   await page.getByLabel("Networks", { exact: true }).check();
   await button("1 hop").click(); await focus.selectOption(id(100)); await waitFocus(adguard);
 }
@@ -805,6 +806,128 @@ async function checkManagedPositions(page, data, theme, width) {
 
 }
 
+async function checkConnectivitySearch(page, data, requests, theme, width) {
+  const originalIp = data.asset_interfaces[0].ip_address;
+  data.asset_interfaces[0].ip_address = "192.168.5.3";
+  await page.goto(`${base}/topology`);
+  const button = name => page.getByRole("button", { name, exact: true });
+  await button("Connectivity").click();
+  const search = page.getByRole("combobox", { name: "Search assets", exact: true });
+  const focus = page.getByLabel("Focus", { exact: true });
+  const graphRequests = () => requests.filter(url => url.startsWith("/api/topology/connectivity?"));
+  const focused = n => page.locator(`[data-node-key="asset:${id(n)}"].is-focus`);
+  await focused(100).waitFor();
+  const geometry = await page.locator('.topology-connectivity-controls').evaluate(el => ({
+    toolbar: el.getBoundingClientRect().toJSON(),
+    controls: [...el.querySelectorAll('input[type="search"],select,button,input[type="checkbox"]')].map(el => el.getBoundingClientRect().toJSON()),
+    overflow: document.documentElement.scrollWidth > innerWidth,
+    graphTop: document.querySelector('.topology-connectivity').getBoundingClientRect().top,
+  }));
+  assert.equal(geometry.overflow, false);
+  if (width === 1440) {
+    const centres = geometry.controls.map(box => box.y + box.height / 2);
+    assert.ok(Math.max(...centres) - Math.min(...centres) < 2, "All controls share one desktop row");
+    assert.ok(geometry.toolbar.height <= 40);
+    assert.ok(geometry.graphTop < 390, "Graph begins materially above the previous 450.7px");
+  }
+  assert.ok(geometry.controls[0].width >= 240);
+  assert.ok(geometry.controls[1].width >= 220);
+  await writeFile(`${output}/search-geometry-${theme}-${width}.json`, JSON.stringify(geometry, null, 2));
+  await button("2 hops").click(); await focused(100).waitFor();
+  await button("Filters").click();
+  await page.getByLabel("Backup", {exact:true}).click();
+  await page.getByLabel("Logical / operational", {exact:true}).click();
+  await page.keyboard.press("Escape"); await focused(100).waitFor();
+  await page.getByLabel("Networks",{exact:true}).click(); await focused(100).waitFor();
+  const settings = new URL(graphRequests().at(-1), base).searchParams;
+  const type = async query => { await search.click(); await page.keyboard.press("ControlOrMeta+A"); await page.keyboard.type(query); };
+  const selectPointer = async name => {
+    const result = page.getByRole("listbox").getByRole("option").filter({hasText:name});
+    await result.waitFor();
+    const box=await result.boundingBox();
+    const hit=await result.evaluate(el=>{ const b=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)); });
+    assert.equal(hit,true,"Pointer centre resolves to the result, not an overlay");
+    await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+    await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
+  };
+  const before = graphRequests().length;
+  await type("pve");
+  assert.equal(await page.getByRole("listbox").getByRole("option").count(),4);
+  assert.equal(await focus.inputValue(),id(100));
+  assert.equal(graphRequests().length,before,"Typing is not a graph filter or query");
+  await page.screenshot({path:`${output}/search-popup-${theme}-${width}.png`,fullPage:true});
+  await selectPointer("PVE1"); await focused(30).waitFor();
+  assert.equal(await search.inputValue(),""); assert.equal(await page.getByRole("listbox").count(),0);
+  assert.equal(await focus.inputValue(),id(30));
+  assert.equal(graphRequests().length,before+1);
+  const next=new URL(graphRequests().at(-1),base).searchParams;
+  for(const key of ["hops","show_networks","category_ids","topology_classes"]) assert.deepEqual(next.getAll(key),settings.getAll(key));
+  await type("adg"); await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter"); await focused(100).waitFor();
+  assert.equal(await focus.inputValue(),id(100)); assert.equal(await search.inputValue(),"");
+  for (const query of ["192.168.5.3", "adguard-home.home"]) {
+    await type(query); assert.equal(await page.getByRole("listbox").getByRole("option").count(),1);
+    assert.match(await page.getByRole("listbox").getByRole("option").innerText(),/AdGuard Home/);
+    await page.keyboard.press("Escape"); assert.equal(await page.getByRole("listbox").count(),0);
+  }
+  for (const query of ["192.0.2.254", "outside-authorized-scope"]) {
+    await type(query); await page.getByText("No assets found",{exact:true}).waitFor();
+    assert.equal(await focus.inputValue(),id(100));
+  }
+  await type("w"); assert.equal(await page.getByRole("listbox").getByRole("option").count(),10);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ArrowUp"); assert.equal(await page.getByRole("listbox").getByRole("option").last().getAttribute("aria-selected"),"true");
+  await page.keyboard.press("ArrowDown"); assert.equal(await page.getByRole("listbox").getByRole("option").first().getAttribute("aria-selected"),"true");
+  await page.keyboard.press("Tab"); assert.equal(await page.getByRole("listbox").count(),0);
+  assert.equal(await focus.evaluate(el=>el===document.activeElement),true);
+  // Finding a filtered category preserves both the chosen focus and filters.
+  await type("Uncategorized"); await selectPointer("Uncategorized Asset");
+  assert.equal(await focus.inputValue(),id(150));
+  await page.getByText("The focused Asset’s category is hidden.",{exact:false}).waitFor();
+  assert.equal(await button("Filters · 2").count(),1);
+  await type("adg"); await selectPointer("AdGuard Home"); await focused(100).waitFor();
+  await button("Expand Infrastructure Topology").click();
+  await button("Hide details panel").click();
+  await type("pve"); await page.keyboard.press("Escape");
+  assert.equal(await button("Close expanded Infrastructure Topology").isVisible(),true,"Escape dismisses search before expanded surface");
+  await search.click(); await selectPointer("PVE1"); await focused(30).waitFor();
+  assert.equal(await focus.inputValue(),id(30));
+  assert.equal(await button("Show details panel").isVisible(),true);
+  await button("Show details panel").click();
+  assert.equal(await page.locator('[aria-label="Topology inspector"] h2').innerText(),"PVE1");
+  await button("Fit").click();
+  await type("adg");
+  await Promise.all([page.waitForResponse(r=>r.url().includes('/api/topology/connectivity?')),button("Refresh").click()]);
+  assert.equal(await search.inputValue(),"adg"); assert.equal(await focus.inputValue(),id(30));
+  await search.click(); await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter"); await focused(100).waitFor();
+  await page.screenshot({path:`${output}/search-expanded-${theme}-${width}.png`,fullPage:true});
+  await search.click(); await page.keyboard.press("Escape");
+  assert.equal(await button("Close expanded Infrastructure Topology").count(),0,"Empty search does not swallow modal Escape");
+  const failTopology = route => route.fulfill({status:503,json:{detail:"Topology temporarily unavailable"}});
+  await page.route("**/api/topology", failTopology);
+  await button("Refresh").click();
+  await page.getByRole("alert").filter({hasText:"Topology temporarily unavailable"}).waitFor();
+  assert.equal(await search.isDisabled(),true);
+  assert.equal(await focus.inputValue(),id(100));
+  await page.unroute("**/api/topology", failTopology);
+  await Promise.all([page.waitForResponse(r=>r.url().includes('/api/topology/connectivity?')),button("Refresh").click()]);
+  assert.equal(await search.isDisabled(),false);
+  await button("Platform").click(); await button("Connectivity").click(); await focused(100).waitFor();
+  assert.equal(await search.inputValue(),""); assert.equal(await button("1 hop").getAttribute("aria-pressed"),"true");
+  assert.equal(await page.getByLabel("Networks",{exact:true}).isChecked(),true);
+  assert.equal(await button("Filters").count(),1);
+  // No categories enabled must not turn a selected hidden focus into an endless loading state.
+  await button("Filters").click();
+  const categoryOptions = page.getByRole("group", {name:"Asset categories"}).getByRole("checkbox");
+  for (const option of await categoryOptions.all()) if (await option.isChecked()) await option.click();
+  await page.keyboard.press("Escape");
+  await type("pve"); await selectPointer("PVE1");
+  assert.equal(await focus.inputValue(),id(30));
+  await page.getByText("The focused Asset’s category is hidden.",{exact:false}).waitFor();
+  assert.equal(await page.getByText("Loading recorded connectivity…",{exact:true}).count(),0);
+  await button("Platform").click(); await button("Connectivity").click(); await focused(100).waitFor();
+  data.asset_interfaces[0].ip_address = originalIp;
+}
+
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
 let checks = 0;
 try {
@@ -914,6 +1037,10 @@ try {
       else if (url.pathname === "/api/assets") body = data.assets.filter(a=> !url.searchParams.get("category_id") || data.asset_types.find(t=>t.key===a.asset_type)?.category_id === url.searchParams.get("category_id")).slice(0,31);
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
+    await checkConnectivitySearch(page, data, requests, theme, width);
+    if (process.env.ATLAS_SEARCH_ONLY) {
+      assert.deepEqual(errors, []); checks++; await context.close(); continue;
+    }
     if (process.env.ATLAS_LAYERED_ONLY) {
       await checkLayeredLayout(page, data, requests, theme, width);
     await checkManagedPositions(page, data, theme, width);
@@ -1047,11 +1174,11 @@ try {
     const platformGeometry = await page.locator(".topology-platform-card").evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,left:n.getBoundingClientRect().left})));
     assert.ok(new Set(platformGeometry.map(n=>Math.round(n.top))).size >1,"Cards wrap into multiple rows");
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"No page horizontal scroll");
-    await page.getByLabel("Search Assets",{exact:true}).fill("AdGuard");
+    await page.getByLabel(/^Search assets$/i,{exact:true}).fill("AdGuard");
     assert.equal(await page.locator(".topology-platform-card").count(),1);
-    await page.getByLabel("Search Assets",{exact:true}).fill("Workload 19");
+    await page.getByLabel(/^Search assets$/i,{exact:true}).fill("Workload 19");
     assert.match(await pve.locator(".topology-children").innerText(), /Workload 19/);
-    await page.getByLabel("Search Assets",{exact:true}).fill("");
+    await page.getByLabel(/^Search assets$/i,{exact:true}).fill("");
     const expand = page.getByRole("button",{name:"Expand Infrastructure Topology",exact:true});
     const close = page.getByRole("button",{name:"Close expanded Infrastructure Topology",exact:true});
     assert.equal(await expand.innerText(), "");
@@ -1325,6 +1452,7 @@ try {
     console.log(`Passed topology and relationship classes: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
+  if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
+  else if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
   else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
 } finally { await browser.close(); }

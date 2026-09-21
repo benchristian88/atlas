@@ -131,3 +131,24 @@ test("relationship layer registry has safe defaults, independent overrides and r
   assert.equal(topologyClassSelection({}).changedCount, 0);
   assert.equal(topologyClassSelection(Object.fromEntries(TOPOLOGY_CLASSES.map(l => [l.key, false]))).enabled.size, 0);
 });
+
+
+test("Connectivity focus finder matches authorized names, hostnames and every interface IP, bounded to ten", async () => {
+  const { connectivitySearchResults } = await import("../lib/infrastructure-topology.mjs");
+  const data = fixture();
+  data.assets[0].hostname = "pve1.home";
+  data.assets[0].ip_address = "192.0.2.254";
+  data.asset_interfaces.push({ id: "primary", asset_id: "host0", ip_address: "192.168.5.10", is_primary: true }, { id: "secondary", asset_id: "host0", ip_address: "10.20.30.40" });
+  const authorized = topologyPresentation(data, new Set(data.categories.map(c => c.id)));
+  for (const term of ["PVE1", "pve1.HOME", "ve1.h", "192.168.5.10", "192.168.5", "10.20.30.40", " pve1 "]) {
+    assert.deepEqual(connectivitySearchResults(authorized.assets, term).map(a => a.id), ["host0"]);
+  }
+  assert.deepEqual(connectivitySearchResults(authorized.assets, "AdGuard Home").map(a => a.id), ["child0"]);
+  assert.deepEqual(connectivitySearchResults(authorized.assets, "adg").map(a => a.id), ["child0"]);
+  assert.equal(connectivitySearchResults(authorized.assets, "w").length, 10);
+  assert.deepEqual(connectivitySearchResults([...authorized.assets].reverse(), "w"), connectivitySearchResults(authorized.assets, "w"));
+  for (const term of ["", "  ", "missing", "192.0.2.254"]) assert.deepEqual(connectivitySearchResults(authorized.assets, term), []);
+  // Category visibility is a presentation filter, independent of authorization.
+  assert.equal(connectivitySearchResults(authorized.assets, "Uncategorized")[0].id, "unknown");
+  assert.equal(topologyPresentation(data, new Set(["custom"])).byId.unknown, undefined);
+});

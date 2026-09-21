@@ -1302,8 +1302,20 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-network-row[aria-current="true"] { background: var(--surface-muted); box-shadow: inset 3px 0 var(--accent); }
 .topology-network-detail { min-width: 0; }
 .topology-network-detail .ops-definition { max-width: 480px; }
-.topology-connectivity-controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: end; margin-bottom: 16px; }
-.topology-connectivity-controls .field { min-width: 220px; }
+.topology-connectivity-controls { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; margin-bottom: 12px; }
+.topology-focus-control { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; font-size: 13px; }
+.topology-focus-control select { width: 240px; min-width: 0; }
+.topology-networks-control { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 13px; }
+.topology-connectivity-controls :is(input[type="search"], select, button) { height: 38px; }
+.connectivity-asset-search { position: relative; flex: 1 1 280px; max-width: 360px; min-width: 0; }
+.connectivity-asset-search input { width: 100%; }
+.connectivity-search-popup { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 100%; max-height: 320px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 15%); }
+.connectivity-search-popup p { margin: 12px; font-size: 13px; }
+.connectivity-search-result { display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; }
+.connectivity-search-result:hover, .connectivity-search-result[aria-selected="true"] { background: var(--surface-muted); outline: 1px dashed var(--focus-ring); outline-offset: -2px; }
+.connectivity-search-result > span:last-child { min-width: 0; }
+.connectivity-search-result strong, .connectivity-search-result small { display: block; overflow-wrap: anywhere; font-size: 13px; }
+.connectivity-search-result small { color: var(--muted); font-size: 12px; }
 .topology-connectivity { min-width: 0; }
 .topology-connectivity-viewport { overflow: auto; margin-top: 12px; }
 .topology-connectivity-canvas { position: relative; overflow: hidden; }

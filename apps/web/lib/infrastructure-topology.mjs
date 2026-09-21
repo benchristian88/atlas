@@ -39,6 +39,11 @@ export const byName = (a, b) => a.name.localeCompare(b.name) || a.id.localeCompa
 export const byNetwork = (a, b) => (a.vlan_id ?? Infinity) - (b.vlan_id ?? Infinity) || byName(a, b);
 export const matchesSearch = (asset, query) => !query || [asset.name, asset.hostname, ...(asset.interface_ips || [])].filter(Boolean).join(" ").toLowerCase().includes(query.toLowerCase());
 
+export function connectivitySearchResults(assets, query) {
+  const term = query.trim();
+  return term ? assets.filter(asset => matchesSearch(asset, term)).sort(byName).slice(0, 10) : [];
+}
+
 export function topologyPresentation(data, enabled) {
   const types = Object.fromEntries(data.asset_types.map(t => [t.key, t]));
   const categoryById = Object.fromEntries(data.categories.map(c => [c.id, c]));
