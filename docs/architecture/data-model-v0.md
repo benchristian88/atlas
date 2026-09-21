@@ -114,6 +114,7 @@ erDiagram
         string key UK
         string name UK
         string category
+        string topology_role
         string default_icon_url
         boolean system_defined
         boolean active
@@ -296,7 +297,8 @@ through non-null `category_id`. The compatibility `category` API field resolves
 the current managed name; its legacy database column is a frozen upgrade snapshot.
 See [managed categories and topology](infrastructure-topology.md).
 Display name, description, category assignment,
-default icon URL, active state, and sort order are editable subject to policy. A
+default icon URL, bounded presentation-only topology role (default Automatic),
+active state, and sort order are editable subject to policy. A
 system-defined or referenced type cannot be deleted; inactive types remain
 resolvable for existing assets.
 

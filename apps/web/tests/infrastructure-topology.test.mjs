@@ -52,17 +52,13 @@ test("cycles remain visible and filtering a parent does not lose its child", () 
   assert.ok(filtered.roots.some(a => a.id === "child0"));
 });
 
-test("radial layout centres focus and remains deterministic with 25 nodes", () => {
+test("neutral layered layout centres viewport on focus and is deterministic with 25 nodes", () => {
   const graph = { focus_key: "asset:focus", nodes: [{ key: "asset:focus", name: "Focus", distance: 0 }, ...Array.from({ length: 24 }, (_, i) => ({ key: `asset:${i}`, name: `Asset ${i}`, distance: i < 8 ? 1 : 2, parent_key: i < 8 ? "asset:focus" : `asset:${i % 8}` }))] };
   const layout = connectivityLayout(graph);
   assert.deepEqual({ x: layout[0].x, y: layout[0].y }, { x: 0, y: 0 });
   assert.equal(new Set(layout.map(n => `${n.x}/${n.y}`)).size, 25);
   for (const [i, a] of layout.entries()) for (const b of layout.slice(i + 1)) {
     assert.ok(Math.abs(a.x - b.x) >= CONNECTIVITY_NODE_WIDTH || Math.abs(a.y - b.y) >= CONNECTIVITY_NODE_HEIGHT, `${a.key} overlaps ${b.key}`);
-  }
-  for (const n of layout.filter(n => n.distance === 2)) {
-    const parent = layout.find(p => p.key === n.parent_key);
-    assert.ok(n.x * parent.x + n.y * parent.y > 0, "Second hop shares its parent sector");
   }
   graph.nodes.reverse();
   assert.deepEqual(connectivityLayout(graph), layout);

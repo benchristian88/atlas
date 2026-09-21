@@ -20,6 +20,7 @@ from pydantic import (
 from app.presentation import PresentationIcon, PresentationAccent
 from app.taxonomy import NETWORK_TYPES
 from app.topology_layers import TopologyLayer
+from app.topology_roles import TopologyRole
 
 
 class ORMResponse(BaseModel):
@@ -527,6 +528,7 @@ class AssetCategoryResponse(ORMResponse):
 
 
 class AssetTypeCreate(BaseModel):
+    topology_role: TopologyRole = "automatic"
     model_config = ConfigDict(extra="forbid")
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
@@ -541,6 +543,7 @@ class AssetTypeCreate(BaseModel):
 
 
 class AssetTypeUpdate(BaseModel):
+    topology_role: TopologyRole = "automatic"
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
@@ -554,6 +557,7 @@ class AssetTypeUpdate(BaseModel):
 
 
 class AssetTypeResponse(ORMResponse):
+    topology_role: TopologyRole = "automatic"
     id: uuid.UUID
     key: str
     name: str
@@ -1884,6 +1888,7 @@ class TopologyPlatformLink(BaseModel):
 
 
 class ConnectivityNode(BaseModel):
+    topology_role: TopologyRole = "automatic"
     parent_key: str | None = None
     key: str
     entity_type: Literal["asset", "network"]
@@ -1893,6 +1898,8 @@ class ConnectivityNode(BaseModel):
 
 
 class ConnectivityEdge(BaseModel):
+    topology_layer: TopologyLayer | None = None
+    platform_parent_key: str | None = None
     key: str
     source_key: str
     target_key: str

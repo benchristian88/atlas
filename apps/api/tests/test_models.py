@@ -70,7 +70,7 @@ CRITICAL_COLUMNS = {
         "show_in_topology", "icon_key", "accent_key", "created_at", "updated_at",
     },
     "asset_types": {
-        "id", "key", "name", "description", "category", "category_id", "default_icon_url",
+        "id", "key", "name", "description", "category", "category_id", "default_icon_url", "topology_role",
         "system_defined", "active", "sort_order", "created_at", "updated_at",
     },
     "relationship_types": {

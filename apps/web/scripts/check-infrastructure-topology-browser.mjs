@@ -17,12 +17,13 @@ const permissions = ["service_types.view", "service_types.manage", "assets.view"
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSawAAAAASUVORK5CYII=", "base64");
 function fixture() {
   const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: n === 0 ? "Backup" : `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
-  const types = [{ id: id(20), key: "server", name: "Server", category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
-  types.push({ id: id(23), key: "backup_appliance", name: "Backup Appliance", category_id: id(6), category: "Backup", active: true });
+  const types = [{ id: id(20), key: "server", name: "Server", topology_role: "platform", category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", topology_role: "workload", category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
+  types.push({ id: id(23), key: "backup_appliance", name: "Backup Appliance", topology_role: "infrastructure", category_id: id(6), category: "Backup", active: true });
   const asset = (n, name, type = "server") => ({ id: id(n), name, asset_type: type, customer_id: customer.id, site_id: site.id, status: "operational", hostname: `${name.toLowerCase().replaceAll(" ", "-")}.home`, cached_icon_url: `/api/assets/${id(n)}/icon?v=${"a".repeat(64)}` });
   const hosts = [asset(30, "PVE1"), asset(31, "PVE2"), asset(32, "PVE3"), asset(33, "PVE4")];
   const children = Array.from({ length: 25 }, (_, i) => asset(100+i, i === 1 ? "Atlas DNS" : i ? `Workload ${String(i).padStart(2,"0")}` : "AdGuard Home", "docker_compose"));
-  const assets = [...hosts, asset(34,"PBS","backup_appliance"), asset(35,"Synology"), asset(36,"USW-16-poe"), asset(37,"Router"), ...children, asset(150,"Uncategorized Asset","unknown")];
+  types.push({ id: id(24), key: "custom_fabric", name: "Custom Fabric", category_id: id(3), category: "Compute", topology_role: "access_network", active: true });
+  const assets = [...hosts, asset(34,"PBS","backup_appliance"), asset(35,"Synology"), asset(36,"USW-16-poe","custom_fabric"), asset(37,"Router"), ...children, asset(150,"Uncategorized Asset","unknown")];
   const relationships = children.map((a,i) => ({ id: id(200+i), source_asset_id: a.id, target_asset_id: hosts[i < 20 ? 0 : i < 24 ? 1 : i < 27 ? 2 : 3].id, relationship_type: "runs_on" }));
   const platform_links = relationships.map(r => ({ relationship_id: r.id, parent_id: r.target_asset_id, child_id: r.source_asset_id }));
   for (const [source, target] of [[30,36], [31,36], [36,34], [36,35], [36,37], [36,32], [36,110], [36,111], [36,112]]) relationships.push({ id: id(500+relationships.length), source_asset_id: id(source), target_asset_id: id(target), relationship_type: "connects_to" });
@@ -636,6 +637,85 @@ async function checkTopologyLayers(page, data, theme, width) {
   assert.equal(await page.locator("[data-node-key]").count(),1);
 }
 
+async function checkLayeredLayout(page, data, requests, theme, width) {
+  const roles = ["external", "security_edge", "aggregation_network", "access_network", "platform", "workload", "automatic"];
+  const types = roles.map((role, i) => ({ id:id(2000+i),key:`arbitrary_${i}`,name:["Custom Boundary", "Custom Edge Appliance", "Custom Fabric Device", "Custom Access Device", "Custom Compute Engine", "Custom Runtime", "Weird Appliance"][i],category_id:id(3),category:"Compute",active:true,sort_order:100,topology_role:role }));
+  const asset = (n, type) => ({...data.assets[0],id:id(n),name:`Object ${n}`,asset_type:types[type].key,cached_icon_url:null});
+  data.asset_types = types;
+  data.assets = [asset(2100,0),asset(2101,1),asset(2102,2),asset(2103,3),asset(2104,3),asset(2105,4),asset(2106,4),asset(2107,4)];
+  data.relationships = []; data.platform_links = []; data.asset_interfaces = []; data.networks = [];
+  data.relationship_types = [{key:"runs_on",topology_layer:"platform",source_label:"Runs on",directional:true}, {key:"custom_fibre",topology_layer:"physical_network",source_label:"Recorded fibre",directional:false}];
+  const connect = (a,b,platform=false) => {
+    const r={id:id(3000+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:platform?"runs_on":"custom_fibre"};
+    data.relationships.push(r);
+    if(platform)data.platform_links.push({relationship_id:r.id,parent_id:id(b),child_id:id(a)});
+  };
+  for(const [a,b] of [[2100,2101],[2101,2102],[2102,2103],[2102,2104],[2103,2105],[2103,2106],[2104,2107]]) connect(a,b);
+  for(const [host,count,start] of [[2105,18,2200],[2106,4,2300],[2107,3,2400]]) for(let i=0;i<count;i++){data.assets.push(asset(start+i,5));connect(start+i,host,true);}
+  await page.goto(`${base}/topology`);
+  const button = name => page.getByRole("button",{name,exact:true});
+  const node = n => page.locator(`[data-node-key="asset:${id(n)}"]`);
+  const focus = async n => {await page.getByLabel("Focus",{exact:true}).selectOption(id(n));await node(n).and(page.locator(".is-focus")).waitFor();};
+  const ordered = async ids => {const boxes=await Promise.all(ids.map(n=>node(n).boundingBox()));for(let i=1;i<boxes.length;i++)assert.ok(boxes[i-1].y+boxes[i-1].height<boxes[i].y,`${ids[i-1]} is above ${ids[i]}`);};
+  await button("Connectivity").click();
+  await focus(2102);await button("2 hops").click();await node(2107).waitFor();
+  await ordered([2100,2101,2102,2103,2105]);
+  const hosts=await Promise.all([2105,2106,2107].map(n=>node(n).boundingBox()));
+  assert.ok(hosts.every(box=>Math.abs(box.y-hosts[0].y)<1),"Three hosts align");
+  assert.match(await node(2105).innerText(),/18 child Assets/);
+  assert.equal(await node(2200).count(),0,"Neighbour host stays a summary");
+  await checkGeometry(page);
+  await page.screenshot({path:`${output}/layered-three-hosts-${theme}-${width}.png`,fullPage:true});
+  await node(2105).dblclick();await button("+10 more").waitFor();
+  assert.equal(await page.locator('[data-node-key]').count(),12); // host, 8 children, access, aggregation, peer host
+  await ordered([2102,2103,2105,2200]);
+  assert.equal(await page.locator(".topology-host-rail").count(),8);
+  const beforeExpand=requests.length;
+  await button("+10 more").click();await node(2217).waitFor();
+  assert.equal(requests.length,beforeExpand,"Child expansion must not request or mutate data");
+  assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),id(2105));
+  assert.equal(await page.locator(".topology-host-rail").count(),18);
+  await checkGeometry(page);
+  await page.screenshot({path:`${output}/layered-eighteen-children-${theme}-${width}.png`,fullPage:true});
+  await node(2200).dblclick();await node(2200).and(page.locator(".is-focus")).waitFor();
+  await ordered([2103,2105,2200]);
+  assert.equal(await page.locator('[data-node-key]').count(),3,"Refocus preserves anti-fan-out");
+  await button("Expand Infrastructure Topology").click();await button("Hide details panel").waitFor();
+  const beforeHide=requests.length;
+  const oldWidth=(await page.locator(".topology-connectivity-viewport").boundingBox()).width;
+  await button("Hide details panel").click();
+  await page.waitForFunction(()=>document.querySelector('.graph-workspace').classList.contains('topology-details-hidden'));
+  assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),0);
+  const newWidth=(await page.locator(".topology-connectivity-viewport").boundingBox()).width;
+  assert.ok(width<1000 ? newWidth>=oldWidth : newWidth>oldWidth,"Hidden inspector releases its width");
+  assert.equal(await node(2200).getAttribute("aria-pressed"),"true");
+  await node(2105).click();
+  await button("Fit").click();await checkGeometry(page);
+  await page.screenshot({path:`${output}/layered-hidden-details-${theme}-${width}.png`,fullPage:true});
+  await button("Show details panel").click();
+  assert.match(await page.getByLabel("Topology inspector",{exact:true}).innerText(),/Object 2105/);
+  assert.equal(requests.length,beforeHide,"Panel selection and resize do not refetch");
+  await button("Hide details panel").click();await button("Close expanded Infrastructure Topology").click();
+  assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),1,"Embedded details restored");
+  assert.equal(await button("Hide details panel").count(),0);
+  // Leaving Connectivity resets the local host preview, including prior +N expansion.
+  await button("Overview").click();await button("Connectivity").click();await focus(2105);
+  await button("+10 more").waitFor();
+  await page.screenshot({path:`${output}/layered-eight-children-${theme}-${width}.png`,fullPage:true});
+  // A custom Automatic appliance is positioned between its recorded neighbours.
+  data.assets.push(asset(2500,6));connect(2103,2500);connect(2500,2105);
+  await button("Refresh").click();await focus(2500);await ordered([2103,2500,2105]);
+  await checkGeometry(page);
+  // The dropdown writes and reloads the configured role through the normal form.
+  await page.goto(`${base}/admin/asset-types`);
+  const row=page.getByRole("row").filter({hasText:"Weird Appliance"});await row.getByRole("button",{name:"Edit",exact:true}).click();
+  assert.equal(await page.locator('select[name="topology_role"]').inputValue(),"automatic");
+  await page.locator('select[name="topology_role"]').selectOption("infrastructure");await button("Save changes").click();
+  await page.waitForFunction(()=>!document.querySelector('select[name="topology_role"]'));
+  await page.reload();await row.getByRole("button",{name:"Edit",exact:true}).click();
+  assert.equal(await page.locator('select[name="topology_role"]').inputValue(),"infrastructure");
+}
+
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
 let checks = 0;
 try {
@@ -692,6 +772,11 @@ try {
         data.asset_types.push(created);
         return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(created) });
       }
+      if (url.pathname.startsWith("/api/asset-types/") && method === "PATCH") {
+        const record = data.asset_types.find(t => t.id === url.pathname.split("/").at(-1));
+        Object.assign(record, route.request().postDataJSON());
+        return route.fulfill({ contentType: "application/json", body: JSON.stringify(record) });
+      }
       if (url.pathname.startsWith("/api/networks/") && method === "PATCH") {
         const record = data.networks.find(n => n.id === url.pathname.split("/").at(-1));
         Object.assign(record, route.request().postDataJSON());
@@ -718,6 +803,12 @@ try {
       else if (url.pathname === "/api/assets") body = data.assets.filter(a=> !url.searchParams.get("category_id") || data.asset_types.find(t=>t.key===a.asset_type)?.category_id === url.searchParams.get("category_id")).slice(0,31);
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
+    if (process.env.ATLAS_LAYERED_ONLY) {
+      await checkLayeredLayout(page, data, requests, theme, width);
+      assert.deepEqual(errors, []);
+      console.log(`Passed layered topology: ${theme} ${width}px`);
+      checks++; await context.close(); continue;
+    }
     await page.goto(`${base}/admin/service-types`);
     const serviceRow = page.getByRole("row").filter({ hasText: "Application Service" });
     await serviceRow.waitFor();
@@ -943,7 +1034,11 @@ try {
     await page.screenshot({ path:`${output}/adguard-two-hops-${theme}-${width}.png`,fullPage:true });
     await page.getByLabel("Focus",{exact:true}).selectOption(id(30));
     await page.getByRole("button",{name:"1 hop",exact:true}).click();
+    await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===10);
+    const beforeChildren = requests.length;
+    await page.getByRole("button", { name: "+12 more", exact: true }).click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===22);
+    assert.equal(requests.length, beforeChildren, "Expanding children is local presentation state");
     await checkGeometry(page);
     await checkConnectivityContrast(page);
     await page.getByLabel("Focus",{exact:true}).selectOption(`network:${id(305)}`);
@@ -1022,6 +1117,7 @@ try {
     assert.equal(await page.locator('select[name="category_id"]').inputValue(),id(4));
     assert.equal(await page.locator('input[name="category"]').count(),0);
     assert.equal(await page.locator('select[name="category_id"] option:checked').innerText(),"Workload");
+    assert.equal(await page.locator('select[name="topology_role"]').inputValue(), "workload");
     await page.goto(`${base}/assets`);
     await page.getByLabel("Asset Category",{exact:true}).selectOption(id(4));
     await page.waitForURL(/category_id=/);
@@ -1074,6 +1170,8 @@ try {
     await page.getByRole("row").filter({hasText:"Home Automation"}).waitFor();
     await page.goto(`${base}/admin/asset-types`);
     await page.getByRole("button", {name:"Add Asset type", exact:true}).click();
+    assert.equal(await page.locator('select[name="topology_role"]').inputValue(), "automatic");
+    await page.locator('select[name="topology_role"]').selectOption("endpoint");
     await page.locator('input[name="key"]').fill("home_device");
     await page.locator('input[name="name"]').fill("Home Device");
     await page.locator('select[name="category_id"]').selectOption(id(800));
@@ -1109,9 +1207,11 @@ try {
     assert.equal(await page.locator(`[data-node-key="asset:${id(851)}"]`).getAttribute("data-presentation-accent"),"teal");
     assert.equal(await page.locator(`[data-node-key="network:${id(850)}"] [data-presentation-icon="cloud"]`).getAttribute("data-presentation-accent"),"rose");
     await checkTopologyLayers(page, data, theme, width);
+    await checkLayeredLayout(page, data, requests, theme, width);
     assert.deepEqual(errors,[]);
     console.log(`Passed topology and relationship layers: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, layer defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
+  if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom roles, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, role edit/reload.`);
+  else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, layer defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; custom role hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
 } finally { await browser.close(); }

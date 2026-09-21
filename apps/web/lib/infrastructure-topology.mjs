@@ -1,3 +1,5 @@
+import topologyRoles from "./topology-roles.json" with { type: "json" };
+export const TOPOLOGY_ROLES = topologyRoles;
 import topologyLayers from "./topology-layers.json" with { type: "json" };
 export const TOPOLOGY_LAYERS = topologyLayers;
 export function topologyLayerSelection(overrides = {}) {
@@ -95,42 +97,145 @@ export function platformMatches(asset, children, query) {
   return false;
 }
 
+const nodeOrder = (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key);
+const roleRanks = Object.fromEntries(TOPOLOGY_ROLES.map(role => [role.key, role.rank]));
+const otherEnd = (edge, key) => edge.source_key === key ? edge.target_key : edge.source_key;
+
+// Only the current authorized result is eligible. No fetch, domain node, or
+// relationship is created by expanding this presentation preview.
+export function connectivityPreview(graph, expanded = false) {
+  const keys = new Set(graph.nodes.map(n => n.key));
+  const children = new Set((graph.edges || []).filter(e => e.platform_parent_key === graph.focus_key)
+    .map(e => otherEnd(e, graph.focus_key)).filter(key => key !== graph.focus_key && keys.has(key)));
+  const ordered = graph.nodes.filter(n => children.has(n.key)).sort(nodeOrder);
+  const hidden = new Set(expanded ? [] : ordered.slice(CHILD_PREVIEW_COUNT).map(n => n.key));
+  const hiddenCount = hidden.size;
+  const byKey = new Map(graph.nodes.map(n => [n.key, n]));
+  for (const edge of graph.edges || []) {
+    if (!edge.platform_parent_key || edge.platform_parent_key === graph.focus_key) continue;
+    const parent = byKey.get(edge.platform_parent_key), child = byKey.get(otherEnd(edge, edge.platform_parent_key));
+    // Preserve focus, its ancestors and genuine direct neighbours. A host seen
+    // along a technical path remains a summary rather than expanding its family.
+    if (parent && child && child.key !== graph.focus_key && child.distance > 1 && child.distance >= parent.distance) hidden.add(child.key);
+  }
+  return { ...graph, hiddenCount, childCount: ordered.length,
+    nodes: graph.nodes.filter(n => !hidden.has(n.key)),
+    edges: (graph.edges || []).filter(e => !hidden.has(e.source_key) && !hidden.has(e.target_key)) };
+}
+
 export function connectivityLayout(graph) {
-  const focus = graph.nodes.find(n => n.key === graph.focus_key);
-  if (!focus) return [];
-  const order = (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key);
-  const inner = graph.nodes.filter(n => n.distance === 1).sort(order);
-  const outer = graph.nodes.filter(n => n.distance === 2).sort(order);
-  const cellWidth = CONNECTIVITY_NODE_WIDTH + 24, cellHeight = CONNECTIVITY_NODE_HEIGHT + 24;
-  const radius = Math.max(cellWidth, inner.length * cellHeight / (2 * Math.PI));
-  const result = [{ ...focus, x: 0, y: 0 }];
-  const occupied = new Set(["0/0"]);
-  // Snap balanced radial targets onto card-sized cells. Dense branches can use
-  // adjacent rows instead of forcing every ring to expand for one crowded arc.
-  const range = graph.nodes.length + 2;
-  const cells = [];
-  for (let col = -range; col <= range; col++) for (let row = -range; row <= range; row++) {
-    cells.push({ x: col * cellWidth, y: row * cellHeight, key: `${col}/${row}` });
-  }
-  const place = (node, target, outside = 0) => {
-    let best, score = Infinity;
-    for (const cell of cells) {
-      if (occupied.has(cell.key) || Math.hypot(cell.x, cell.y) < outside) continue;
-      const candidate = (cell.x - target.x) ** 2 + (cell.y - target.y) ** 2;
-      if (candidate < score) { best = cell; score = candidate; }
+  if (!graph.nodes.some(n => n.key === graph.focus_key)) return [];
+  const nodes = [...graph.nodes].sort(nodeOrder);
+  const byKey = new Map(nodes.map(n => [n.key, n]));
+  const edges = (graph.edges || []).filter(e => byKey.has(e.source_key) && byKey.has(e.target_key));
+  const adjacent = new Map(nodes.map(n => [n.key, edges.filter(e => e.source_key === n.key || e.target_key === n.key)]));
+  const ranks = new Map(nodes.filter(n => n.entity_type !== "network" && roleRanks[n.topology_role] != null).map(n => [n.key, roleRanks[n.topology_role]]));
+  // Resolve against a snapshot each round. Cycles cannot make ranks drift, and
+  // unanchored components terminate in the neutral infrastructure band.
+  const resolveAutomatic = () => {
+    for (let round = 0; round < nodes.length; round++) {
+      const inferred = [];
+      for (const node of nodes) {
+        if (ranks.has(node.key) || node.entity_type === "network") continue;
+        const containment = [], physical = [];
+        for (const edge of adjacent.get(node.key)) {
+          const neighbour = otherEnd(edge, node.key), rank = ranks.get(neighbour);
+          if (rank == null) continue;
+          if (edge.platform_parent_key) containment.push(rank + (edge.platform_parent_key === node.key ? -10 : 10));
+          else if (edge.topology_layer === "physical_network") physical.push(rank);
+        }
+        const hints = containment.length ? containment : physical;
+        if (hints.length) inferred.push([node.key, hints.reduce((a, b) => a + b, 0) / hints.length]);
+      }
+      if (!inferred.length) break;
+      for (const [key, rank] of inferred) ranks.set(key, rank);
     }
-    occupied.add(best.key);
-    result.push({ ...node, x: best.x, y: best.y });
   };
-  inner.forEach((node, i) => {
-    const angle = -Math.PI / 2 + 2 * Math.PI * i / inner.length;
-    place(node, { x: radius * Math.cos(angle), y: radius * Math.sin(angle) });
-  });
-  const outside = Math.max(0, ...result.map(n => Math.hypot(n.x, n.y))) + CONNECTIVITY_NODE_HEIGHT / 2 + 24;
-  for (const node of outer) {
-    const parent = result.find(n => n.key === node.parent_key) || result[1] || result[0];
-    const length = Math.hypot(parent.x, parent.y) || 1;
-    place(node, { x: parent.x / length * outside, y: parent.y / length * outside }, outside);
+  resolveAutomatic();
+  // An unanchored recorded containment tree still supplies relative ordering.
+  // Closed cycles have no root and deliberately fall back to the neutral band.
+  for (const node of nodes) if (!ranks.has(node.key) && node.entity_type !== "network") {
+    const links = adjacent.get(node.key).filter(e => e.platform_parent_key);
+    if (links.some(e => e.platform_parent_key === node.key) && links.every(e => e.platform_parent_key === node.key)) ranks.set(node.key, 60);
   }
-  return result;
+  resolveAutomatic();
+  for (const node of nodes.filter(n => n.entity_type !== "network")) if (!ranks.has(node.key)) ranks.set(node.key, 60);
+  for (const node of nodes.filter(n => n.entity_type === "network")) {
+    const members = adjacent.get(node.key).filter(e => e.kind === "membership").map(e => ranks.get(otherEnd(e, node.key))).filter(r => r != null);
+    const low = Math.min(...members), high = Math.max(...members);
+    ranks.set(node.key, members.length ? low === high ? low - 5 : (low + high) / 2 : 55);
+  }
+  // Select a recorded upper neighbour as the primary horizontal anchor. Parent
+  // projections take precedence; logical overlays never invent infrastructure.
+  const parent = new Map();
+  for (const node of nodes) {
+    const candidates = adjacent.get(node.key).filter(e => ranks.get(otherEnd(e, node.key)) < ranks.get(node.key) &&
+      (e.platform_parent_key || e.topology_layer === "physical_network" || e.kind === "membership"));
+    candidates.sort((a, b) => Number(b.platform_parent_key === otherEnd(b, node.key)) - Number(a.platform_parent_key === otherEnd(a, node.key)) ||
+      ranks.get(otherEnd(b, node.key)) - ranks.get(otherEnd(a, node.key)) || otherEnd(a, node.key).localeCompare(otherEnd(b, node.key)));
+    if (candidates.length) parent.set(node.key, otherEnd(candidates[0], node.key));
+  }
+  const bands = [...new Set(ranks.values())].sort((a, b) => a - b);
+  const cellWidth = CONNECTIVITY_NODE_WIDTH + 36, cellHeight = CONNECTIVITY_NODE_HEIGHT + 48;
+  const positions = new Map();
+  let y = 0;
+  for (const rank of bands) {
+    const groups = new Map();
+    for (const node of nodes.filter(n => ranks.get(n.key) === rank)) {
+      const anchor = parent.get(node.key) || "";
+      if (!groups.has(anchor)) groups.set(anchor, []);
+      groups.get(anchor).push(node);
+    }
+    const ordered = [...groups].sort(([a], [b]) => (positions.get(a)?.x || 0) - (positions.get(b)?.x || 0) || a.localeCompare(b));
+    const columnsFor = group => Math.min(group.length > 12 ? 6 : 4, group.length);
+    const widths = ordered.map(([, group]) => columnsFor(group) * cellWidth);
+    const total = widths.reduce((a, b) => a + b, 0) + Math.max(0, ordered.length - 1) * 36;
+    let cursor = -total / 2, rows = 1;
+    ordered.forEach(([anchor, group], index) => {
+      const columns = columnsFor(group);
+      const centre = cursor + widths[index] / 2;
+      group.forEach((node, i) => positions.set(node.key, { ...node, rank, layout_parent_key: anchor || null,
+        x: centre + ((i % columns) - (columns - 1) / 2) * cellWidth,
+        y: y + Math.floor(i / columns) * cellHeight }));
+      cursor += widths[index] + 36;
+      rows = Math.max(rows, Math.ceil(group.length / columns));
+    });
+    y += rows * cellHeight + 48;
+  }
+  // Centre parents over their child groups, resolving same-band collisions with
+  // a deterministic forward pass. Group widths below already reserve space.
+  for (const rank of [...bands].reverse()) {
+    const band = nodes.filter(n => ranks.get(n.key) === rank).map(n => positions.get(n.key));
+    for (const node of band) {
+      const children = [...positions.values()].filter(n => n.layout_parent_key === node.key);
+      if (children.length) node.x = (Math.min(...children.map(n => n.x)) + Math.max(...children.map(n => n.x))) / 2;
+    }
+    const rows = new Map();
+    for (const node of band) { if (!rows.has(node.y)) rows.set(node.y, []); rows.get(node.y).push(node); }
+    for (const row of rows.values()) {
+      row.sort((a, b) => a.x - b.x || nodeOrder(a, b));
+      for (let i = 1; i < row.length; i++) row[i].x = Math.max(row[i].x, row[i - 1].x + cellWidth);
+    }
+  }
+  // Focus changes the viewport origin, never semantic band assignment.
+  const focus = positions.get(graph.focus_key), origin = { x: focus.x, y: focus.y };
+  return [focus, ...nodes.filter(n => n.key !== graph.focus_key).map(n => positions.get(n.key))]
+    .map(n => ({ ...n, x: n.x - origin.x, y: n.y - origin.y }));
+}
+
+// Orthogonal platform rails share a short trunk. Later grid rows use lanes in
+// card gutters, never long diagonals through the cards. Canonical arrow direction
+// is retained by reversing geometry only when the recorded source is the child.
+export function connectivityRail(edge, positions, edges) {
+  const parent = positions[edge.platform_parent_key];
+  if (!parent) return null;
+  const child = positions[otherEnd(edge, parent.key)];
+  const siblings = edges.filter(e => e.platform_parent_key === parent.key).map(e => positions[otherEnd(e, parent.key)]).filter(n => n && n.y > parent.y);
+  if (!child || child.y <= parent.y || siblings.length < 3) return null;
+  const firstY = Math.min(...siblings.map(n => n.y));
+  const railY = firstY - CONNECTIVITY_NODE_HEIGHT / 2 - 32;
+  const laneX = child.x - CONNECTIVITY_NODE_WIDTH / 2 - 14;
+  const entryY = child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 14;
+  const points = [[parent.x, parent.y + CONNECTIVITY_NODE_HEIGHT / 2 + 3], [parent.x, railY], [laneX, railY], [laneX, entryY], [child.x, entryY], [child.x, child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 3]];
+  return { points: edge.source_key === parent.key ? points : points.reverse(), labelX: child.x, labelY: entryY - 4 };
 }

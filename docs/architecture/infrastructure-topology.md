@@ -132,11 +132,44 @@ parent/child projection.
 
 React only groups/filters the authorized domain projection. Platform displays
 compact child previews in an auto-fitting desktop grid. Network & VLAN uses
-vertical master/detail. Connectivity positions the focus centrally with bounded
-branch sectors with fixed 180×88 cards. Radial targets snap to card-sized cells;
-dense second-hop branches occupy adjacent rows outside the first ring. Layout
-space grows with the returned nodes;
-a uniform Fit transform scales the complete layout rather than compressing node
+vertical master/detail. Connectivity uses deterministic top-to-bottom role bands with fixed 180×88 cards.
+AssetType `topology_role` is managed presentation metadata, not a traversal rule.
+The bounded registry is mirrored in `app/topology_roles.py` and
+`web/lib/topology-roles.json`, with a contract test. Roles and user-facing labels
+are documented in [Asset Types](../admin/asset-types.md). Internal ranks order
+external, security edge, routing, aggregation, access, platform/infrastructure,
+then workload/endpoint. Only occupied ranks consume space.
+
+Connectivity nodes add `topology_role`; relationship edges add `topology_layer`
+and optional `platform_parent_key` from the existing backend parent projection.
+Canonical source, target, direction, labels, IDs and traversal remain unchanged.
+The frontend never checks Asset Type keys or vendor/name strings to place nodes.
+Automatic nodes use known parent/child ranks first, then adjacent physical/network
+ranks. Snapshot-based rounds terminate within the returned node count. Unanchored
+containment roots seed neutral infrastructure; closed cycles and isolated Assets
+fall back to neutral. Network nodes use the midpoint of their members' ranks
+(or just above a single member rank), without moving multihomed Assets' ranks.
+These are layout hints, not inferred operational knowledge.
+
+Recorded upper neighbours anchor horizontal groups, preferring projected platform
+parents. Stable name/ID ordering fills grids of at most four columns (six for expanded groups larger than twelve); parents
+centre over their child groups with same-row collision resolution. Bands reserve
+space for all grid rows. The final coordinates translate around focus, so Fit
+centres the viewport without changing focus's semantic role. Pure layout output
+can later be overridden by optional positions; no positions are persisted now.
+
+A local preview limits focused-host direct children to eight, with +N expansion
+restricted to nodes already returned by the bounded API. Non-focused parents'
+second-hop child expansion is summarized, preserving direct focus neighbours and
+ancestors. No extra graph request or domain node is created. Expansion survives
+refocus/Refresh/expanded mode during a Connectivity session and resets on tab
+entry. The API limit notice remains separate from the local preview count.
+Orthogonal parent/child rails use card gutters for later rows; canonical arrow
+orientation is preserved. Child selection exposes individual relationships;
+repeated host-selected labels are suppressed. Other edges retain their labels
+and Network membership dash/accent semantics.
+
+A uniform Fit transform scales the complete layout rather than compressing node
 positions. Cards live in an HTML layer over SVG edges, so shared AssetIcon's
 positioned image layers share the card's normal HTML containing block instead
 of an SVG foreignObject. Network cards use the shared semantic Network icon. Cycles remain selectable and do not disappear. The existing
@@ -242,3 +275,37 @@ existing interface visibility. This avoids duplicate rows/pagination distortion
 and prevents interface existence leaking through search. Asset/customer/site
 scoping remains authoritative. The legacy schema/API field is retained; no
 migration is needed.
+
+
+## Asset Type topology role migration
+
+Migration `20260921_0022` follows `0021`, adding non-null `varchar(32)`
+`asset_types.topology_role`, default `automatic`, with a bounded database check.
+Create/PATCH validate registry keys and reject explicit null; omitted PATCH leaves
+the value unchanged. Existing global Asset Type management authorization and audit
+records cover edits. Topology only serializes metadata after existing scoped
+projection, introducing no new access path or counts.
+
+One-time defaults apply only to exact recognized keys with `system_defined=true`:
+
+| Role | Built-in keys |
+| --- | --- |
+| security_edge | firewall |
+| routing | router |
+| access_network | switch, network_switch, access_point, network_bridge |
+| platform | proxmox_host, hypervisor_node, node, server, physical_server, docker_host |
+| infrastructure | nas, storage_pool, backup_target |
+| workload | virtual_machine, container, lxc_container, docker_container, application, proxy, database, backup_job |
+| automatic | unknown, network, vlan, proxmox_cluster, service |
+
+The current built-in inventory has no dedicated external, aggregation or endpoint
+Type. No new Type is invented. Custom/unknown types remain Automatic, even if a
+custom row reuses a recognized key. Names, IDs, categories, icons, lifecycle state,
+Assets and relationships are preserved. Reapplying head does not overwrite admin
+choices; downgrade removes only the added field/constraint.
+
+Expanded Connectivity's inspector visibility is local workbench state. Hiding it
+removes its grid track while retaining selection and the mounted graph. Existing
+ResizeObserver updates canvas dimensions; hiding/showing does not change query
+inputs. Closing expanded mode restores the embedded inspector. Knowledge Graph
+and the shared expanded surface behavior are unchanged.

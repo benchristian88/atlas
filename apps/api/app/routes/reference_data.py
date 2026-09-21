@@ -92,6 +92,7 @@ def _asset_type_response(
             "category_id": item.category_id,
             "category_key": item.category_record.key if item.category_record else "uncategorized",
             "default_icon_url": item.default_icon_url,
+            "topology_role": item.topology_role,
             "system_defined": item.system_defined,
             "active": item.active,
             "sort_order": item.sort_order,

@@ -1332,3 +1332,8 @@ tbody tr:hover { background: var(--surface-muted); }
   .topology-network-layout { grid-template-columns: minmax(0, 1fr); }
   .topology-network-list { max-height: 240px; }
 }
+
+/* Expanded-only local inspector state; no reserved sidebar track. */
+.infrastructure-topology .graph-workspace.topology-details-hidden { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+.topology-more-children { margin-top: 10px; }
+.topology-host-rail { pointer-events: stroke; }

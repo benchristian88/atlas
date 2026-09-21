@@ -6,10 +6,13 @@ import { AssetIcon } from "../../../components/asset-icon";
 import { useAuth } from "../../../components/auth-context";
 import { CrudScreen } from "../../../components/crud-screen";
 
+import TOPOLOGY_ROLES from "../../../lib/topology-roles.json";
+
 const fields = [
   { name: "key", label: "Key", createOnly: true, required: true, placeholder: "home_assistant", help: "Lowercase letters, numbers, and underscores; cannot change later." },
   { name: "name", label: "Name", required: true },
   { name: "category_id", label: "Category", type: "select", required: true, placeholder: "Select a category", optionsKey: "categories", optionsFilter: (category, form) => category.active || category.id === form.category_id },
+  { name: "topology_role", label: "Topology role", type: "select", required: true, options: TOPOLOGY_ROLES.map(role => ({ id: role.key, name: role.label })), help: "Controls default placement in Infrastructure Topology." },
   { name: "default_icon_url", label: "Default icon URL", type: "url", help: "Absolute HTTPS image URL. Remote SVG files are not accepted." },
   { name: "sort_order", label: "Sort order", type: "number", required: true },
   { name: "active", label: "Available for new assets", type: "checkbox" },
@@ -21,6 +24,7 @@ const columns = [
   { key: "name", label: "Asset type", render: (row) => <span className="primary-cell">{row.name}</span> },
   { key: "key", label: "Key", render: (row) => <span className="mono secondary-text">{row.key}</span> },
   { key: "category", label: "Category", render: (row) => row.category || "—" },
+  { key: "topology_role", label: "Topology role", render: (row) => TOPOLOGY_ROLES.find(role => role.key === row.topology_role)?.label || "Automatic" },
   { key: "active", label: "State", render: (row) => row.active ? "Active" : "Inactive" },
   { key: "in_use_count", label: "Assets", render: (row) => row.in_use_count },
   { key: "knowledge_profile", label: "Knowledge profile", render: (row) => <Link className="text-button" href={`/admin/asset-types/${row.id}/knowledge-profile`}>Configure</Link> },
@@ -45,7 +49,7 @@ export default function AssetTypesAdminPage() {
       columns={columns}
       deleteReason={deleteReason}
       description="Define the inventory taxonomy and default icon used when an asset has no override."
-      emptyValues={{ key: "", name: "", category_id: "", default_icon_url: "", sort_order: "100", active: true, description: "" }}
+      emptyValues={{ key: "", name: "", category_id: "", topology_role: "automatic", default_icon_url: "", sort_order: "100", active: true, description: "" }}
       endpoint="/asset-types"
       dependencies={[{ key: "categories", endpoint: "/asset-categories" }]}
       eyebrow="Reference Data"
@@ -54,6 +58,7 @@ export default function AssetTypesAdminPage() {
         ...(!editingId ? { key: form.key } : {}),
         name: form.name,
         category_id: form.category_id,
+        topology_role: form.topology_role,
         default_icon_url: form.default_icon_url || null,
         sort_order: Number(form.sort_order),
         active: form.active,

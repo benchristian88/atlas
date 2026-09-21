@@ -46,8 +46,29 @@ live monitoring or freshness estimate is implied.
   is hidden for the current focus. Network detail is available from its inspector.
   **Fit** restores fitted zoom and clears pan; zoom buttons and canvas scrolling
   support closer inspection.
-  The focus stays central, with second-hop nodes outside their first-hop branch.
-  Layout space grows to avoid overlapping cards.
+  The viewport centres on focus while its Type's topology role retains its
+  top-to-bottom position. Missing layers collapse; no infrastructure is invented.
+  Recorded relationships group related cards horizontally. Focused hosts show
+  the first eight returned children in name/ID order, with **+N more** expanding
+  the remaining children locally. Expansion preserves focus, hops and filters;
+  leaving Connectivity resets it. Neighbour hosts remain summaries; double-click
+  one to explore its children. Direct focus connections and ancestors remain
+  visible. Hosted children use a grid and branching rails; select a child to
+  inspect its individual canonical relationships.
+
+  In expanded Connectivity, the compact **Hide details panel** / **Show details
+  panel** icon releases/restores the inspector's width. Selection continues while
+  hidden, and reopening shows the latest selection. This never refetches the graph.
+  Closing expanded mode restores the embedded inspector. Canvas dimensions and
+  Fit respond to the available width.
+
+[Asset Type topology roles](asset-types.md) determine presentation layers; actual
+accepted relationships determine connectivity. Automatic roles use relationship
+context and otherwise a neutral infrastructure band. Names and vendors never
+infer placement. Networks use actual interface memberships to find an intermediate
+position; multihomed Assets retain their own role. Network icon/accent and dashed
+membership semantics are unchanged. Persisted manual positioning is intentionally
+deferred; layout positions are ephemeral presentation output.
 
 Connectivity shows at most 25 nodes and 150 edges, with a truncation notice when
 necessary. Category, relationship-layer and Network filters apply before traversal,

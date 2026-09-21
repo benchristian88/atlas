@@ -49,7 +49,7 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
     assets = {key: a for key, a in assets.items() if str(types[a["asset_type"]]["category_id"]) in enabled}
     if (focus_network_id is None and focus_id not in assets) or (focus_network_id is not None and not show_networks):
         return {"nodes": [], "edges": [], "truncated": False, "focus_key": focus}
-    nodes = {f"asset:{key}": {"key": f"asset:{key}", "entity_type": "asset", "entity_id": key, "name": a["name"]} for key, a in assets.items()}
+    nodes = {f"asset:{key}": {"key": f"asset:{key}", "entity_type": "asset", "entity_id": key, "name": a["name"], "topology_role": types[a["asset_type"]].get("topology_role", "automatic")} for key, a in assets.items()}
     definitions = {t["key"]: t for t in topology["relationship_types"]}
     edges = []
     parents = {f"relationship:{link['relationship_id']}": f"asset:{link['parent_id']}" for link in platform_links(topology["relationships"])}
@@ -60,7 +60,8 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
             if definition["topology_layer"] not in layers:
                 continue
             edges.append({"key": f"relationship:{edge['id']}", "source_key": f"asset:{source}", "target_key": f"asset:{target}",
-                          "label": definition["source_label"], "kind": "relationship", "directional": definition["directional"]})
+                          "label": definition["source_label"], "kind": "relationship", "directional": definition["directional"],
+                          "topology_layer": definition["topology_layer"], "platform_parent_key": parents.get(f"relationship:{edge['id']}")})
     if show_networks:
         for key, network in networks.items():
             nodes[f"network:{key}"] = {"key": f"network:{key}", "entity_type": "network", "entity_id": key, "name": network["name"]}

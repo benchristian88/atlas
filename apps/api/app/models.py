@@ -212,7 +212,9 @@ class AssetCategory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asset_types"
+    topology_role: Mapped[str] = mapped_column(String(32), nullable=False, server_default="automatic")
     __table_args__ = (
+        CheckConstraint("topology_role IN ('external', 'security_edge', 'routing', 'aggregation_network', 'access_network', 'platform', 'infrastructure', 'workload', 'endpoint', 'automatic')", name="ck_asset_types_topology_role"),
         Index("uq_asset_types_name_lower", text("lower(name)"), unique=True),
     )
 

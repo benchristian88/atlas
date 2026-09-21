@@ -85,6 +85,7 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 
 - [Relationship Types](admin/relationship-types.md): managed labels, endpoints and Connectivity topology layers.
 - [Infrastructure Topology](admin/infrastructure-topology.md): four infrastructure views, filtering, focus and expansion.
+- [Asset Types](admin/asset-types.md): managed inventory taxonomy and topology presentation roles.
 - [Asset Categories](admin/asset-categories.md): managed taxonomy, presentation, lifecycle and default topology visibility.
 - [Networks](admin/networks.md): Network records, bounded icons/accents and topology presentation.
 

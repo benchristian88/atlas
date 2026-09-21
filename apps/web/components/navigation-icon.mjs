@@ -13,6 +13,7 @@ const paths = {
   device: "M3 3h18v14H3z M8 21h8 M12 17v4",
   home: "M2 11 12 2l10 9 M5 9v12h14V9 M9 21v-8h6v8",
   expand: "M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5 M3 3l6 6 M21 3l-6 6 M3 21l6-6 M21 21l-6-6",
+  "panel-right": "M3 4h18v16H3z M15 4v16",
   close: "M6 6l12 12 M18 6 6 18",
   dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   changes: "M3 11a9 9 0 1 1 2 7 M3 4v7h7 M12 7v5l3 2",
