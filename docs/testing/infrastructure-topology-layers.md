@@ -1,3 +1,7 @@
+> Historical acceptance record for the former fixed metadata implementation.
+> Superseded by [managed positions acceptance](infrastructure-topology-positions.md);
+> field names, source paths and test totals below describe that earlier revision.
+
 # Infrastructure Topology relationship layers — completion report
 
 ## A–C. Repository

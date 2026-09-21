@@ -5,7 +5,7 @@ import { PresentationIdentity } from "./presentation-identity.mjs";
 
 // Reuse Atlas dropdown styling and dismissal conventions, with native checkboxes
 // so multiple choices remain open and participate in the normal Tab order.
-export function TopologyCategoryFilter({ categories, enabled, changedCount, open, onOpenChange, onChange, onReset, layers = [], enabledLayers, onLayerChange }) {
+export function TopologyCategoryFilter({ categories, enabled, changedCount, open, onOpenChange, onChange, onReset, classes = [], enabledClasses, onClassChange }) {
   const id = useId();
   const root = useRef(null), trigger = useRef(null), panel = useRef(null);
   const pointerInside = useRef(false);
@@ -67,10 +67,10 @@ export function TopologyCategoryFilter({ categories, enabled, changedCount, open
           <PresentationIdentity record={category} />{!category.active && <small>(inactive)</small>}
         </label>)}
       </div></fieldset>
-      {layers.length > 0 && <fieldset><legend>Relationship layers</legend><div className="topology-filter-options">
-        {layers.map(layer => <label key={layer.key} htmlFor={`${id}-layer-${layer.key}`}>
-          <input id={`${id}-layer-${layer.key}`} type="checkbox" checked={enabledLayers.has(layer.key)} onChange={event => onLayerChange(layer.key, event.target.checked)} />
-          {layer.label}
+      {classes.length > 0 && <fieldset><legend>Relationship classes</legend><div className="topology-filter-options">
+        {classes.map(topologyClass => <label key={topologyClass.key} htmlFor={`${id}-class-${topologyClass.key}`}>
+          <input id={`${id}-class-${topologyClass.key}`} type="checkbox" checked={enabledClasses.has(topologyClass.key)} onChange={event => onClassChange(topologyClass.key, event.target.checked)} />
+          {topologyClass.label}
         </label>)}
       </div></fieldset>}
       <button type="button" className="text-button" onClick={onReset}>Reset to defaults</button>

@@ -18,7 +18,7 @@ def test_upgrade_preserves_knowledge_and_defaults_only_recognized_builtins(monke
     assert not inspect(engine).get_table_names(),'Refusing to modify nonempty database'
     monkeypatch.setenv('DATABASE_URL',url)
     config=Config(str(Path(__file__).parents[1]/'alembic.ini'))
-    assert ScriptDirectory.from_config(config).get_heads()==['20260921_0022']
+    assert ScriptDirectory.from_config(config).get_heads()==['20260921_0023']
     command.upgrade(config,'20260921_0021')
     path=Path(__file__).parents[1]/'migrations/versions/20260921_0022_asset_type_topology_roles.py'
     spec=importlib.util.spec_from_file_location('roles_migration',path)
@@ -37,14 +37,14 @@ def test_upgrade_preserves_knowledge_and_defaults_only_recognized_builtins(monke
         db.execute(text("INSERT INTO asset_relationships (customer_id,site_id,source_asset_id,target_asset_id,relationship_type) VALUES (:c,:s,:a,:b,'runs_on')"),dict(c=c,s=site,a=ids[0],b=ids[1]))
         snapshots={table:db.execute(text(f'SELECT * FROM {table} ORDER BY id')).all() for table in ('asset_types','assets','asset_categories','asset_relationships','relationship_types')}
         columns=list(snapshots['asset_types'][0]._mapping)
-    command.upgrade(config,'head')
+    command.upgrade(config,'20260921_0022')
     with engine.begin() as db:
         for table,before in snapshots.items():
             fields=','.join(columns) if table=='asset_types' else '*'
             assert db.execute(text(f'SELECT {fields} FROM {table} ORDER BY id')).all()==before
         assert dict(db.execute(text('SELECT key,topology_role FROM asset_types')).all())==expected
         db.execute(text("UPDATE asset_types SET topology_role='external' WHERE key='custom'"))
-    command.upgrade(config,'head')
+    command.upgrade(config,'20260921_0022')
     with engine.connect() as db:
         assert db.scalar(text("SELECT topology_role FROM asset_types WHERE key='custom'"))=='external'
     for value in ("'arbitrary'",'NULL'):
@@ -54,5 +54,5 @@ def test_upgrade_preserves_knowledge_and_defaults_only_recognized_builtins(monke
     with engine.connect() as db:
         for table,before in snapshots.items():
             assert db.execute(text(f'SELECT * FROM {table} ORDER BY id')).all()==before
-    command.upgrade(config,'head')
+    command.upgrade(config,'20260921_0022')
     engine.dispose()

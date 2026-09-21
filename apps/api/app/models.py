@@ -210,11 +210,28 @@ class AssetCategory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     show_in_topology: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
 
+class TopologyPosition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "topology_positions"
+    __table_args__ = (
+        UniqueConstraint("sort_order", deferrable=True, initially="DEFERRED"),
+        CheckConstraint("sort_order >= 0", name="sort_order_nonnegative"),
+        CheckConstraint("key <> 'automatic'", name="explicit_position"),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", index=True)
+
+
 class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asset_types"
-    topology_role: Mapped[str] = mapped_column(String(32), nullable=False, server_default="automatic")
+    topology_position_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("topology_positions.id", ondelete="RESTRICT"), index=True,
+    )
+    topology_position: Mapped["TopologyPosition | None"] = relationship(lazy="joined")
     __table_args__ = (
-        CheckConstraint("topology_role IN ('external', 'security_edge', 'routing', 'aggregation_network', 'access_network', 'platform', 'infrastructure', 'workload', 'endpoint', 'automatic')", name="ck_asset_types_topology_role"),
         Index("uq_asset_types_name_lower", text("lower(name)"), unique=True),
     )
 
@@ -244,11 +261,11 @@ class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class RelationshipType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "relationship_types"
-    topology_layer: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
+    topology_class: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
     __table_args__ = (
         CheckConstraint(
-            "topology_layer IN ('platform', 'physical_network', 'data_resilience', 'logical_operational', 'other')",
-            name="ck_relationship_types_topology_layer",
+            "topology_class IN ('platform', 'physical_network', 'data_resilience', 'logical_operational', 'other')",
+            name="ck_relationship_types_topology_class",
         ),
         Index(
             "uq_relationship_types_name_lower",

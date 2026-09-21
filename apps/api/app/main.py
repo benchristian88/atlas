@@ -25,6 +25,7 @@ from app.routes import (
     protected,
     reference_data,
     asset_categories,
+    topology_positions,
     roles,
     sites,
     services,
@@ -114,6 +115,7 @@ api_router.include_router(business_functions.router)
 api_router.include_router(operational_graph.router)
 api_router.include_router(dependency_analysis.router)
 api_router.include_router(asset_categories.router)
+api_router.include_router(topology_positions.router)
 api_router.include_router(reference_data.asset_types_router)
 api_router.include_router(reference_data.relationship_types_router)
 api_router.include_router(custom_fields.router)

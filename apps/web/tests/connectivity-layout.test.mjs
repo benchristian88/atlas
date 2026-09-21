@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connectivityLayout, connectivityPreview, connectivityRail, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
-const node = (key, role, distance = 1) => ({ key, entity_id: key, entity_type: "asset", name: key, topology_role: role, distance });
-const edge = (source, target, parent = null) => ({ key: `${source}/${target}`, source_key: source, target_key: target, kind: "relationship", topology_layer: parent ? "platform" : "physical_network", platform_parent_key: parent, directional: Boolean(parent) });
+const fixturePositions = Object.fromEntries(["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"].map((key, sort_order) => [key, { id: key, key, name: key, sort_order, active: true }]));
+const node = (key, position, distance = 1) => ({ key, entity_id: key, entity_type: "asset", name: key, topology_position: fixturePositions[position] || null, distance });
+const edge = (source, target, parent = null) => ({ key: `${source}/${target}`, source_key: source, target_key: target, kind: "relationship", topology_class: parent ? "platform" : "physical_network", platform_parent_key: parent, directional: Boolean(parent) });
 const layout = graph => Object.fromEntries(connectivityLayout(graph).map(n => [n.key, n]));
 function noOverlap(nodes) {
   for (const [i, a] of nodes.entries()) for (const b of nodes.slice(i + 1)) assert.ok(Math.abs(a.x-b.x) >= CONNECTIVITY_NODE_WIDTH || Math.abs(a.y-b.y) >= CONNECTIVITY_NODE_HEIGHT, `${a.key} overlaps ${b.key}`);
@@ -17,7 +18,7 @@ function homelab() {
   return { focus_key: "h1", nodes, edges };
 }
 
-test("custom persisted roles with arbitrary names determine order, independent of focus or type keys", () => {
+test("managed positions with arbitrary names determine order, independent of focus or type keys", () => {
   const graph = { focus_key: "epsilon", nodes: [node("omega","security_edge"),node("alpha","aggregation_network"),node("zeta","platform"),node("epsilon","workload")], edges: [edge("omega","alpha"),edge("alpha","zeta"),edge("epsilon","zeta","zeta")] };
   const before = structuredClone(graph), p = layout(graph);
   assert.ok(p.omega.y < p.alpha.y && p.alpha.y < p.zeta.y && p.zeta.y < p.epsilon.y);
@@ -62,19 +63,39 @@ test("eight-child preview, stable name/ID order, local expansion, neighbour summ
 
 test("Automatic uses only relationship context; neutral fallback and cycles terminate deterministically", () => {
   const graph={focus_key:"strange",nodes:[node("n","access_network"),node("strange","automatic"),node("h","platform"),node("x","automatic"),node("alone","automatic")],edges:[edge("n","strange"),edge("strange","h"),edge("x","h","h")]};
-  const p=layout(graph); assert.ok(p.n.y<p.strange.y && p.strange.y<p.h.y && p.h.y<p.x.y); assert.equal(p.alone.rank,60);
+  const p=layout(graph); assert.ok(p.n.y<p.strange.y && p.strange.y<p.h.y && p.h.y<p.x.y); assert.equal(p.alone.rank,4.5);
   const tree={focus_key:"p",nodes:[node("p","automatic"),node("c","automatic")],edges:[edge("c","p","p")]};
   assert.ok(layout(tree).p.y<layout(tree).c.y);
   tree.edges.push(edge("p","c","c"));
-  const cycle=layout(tree); assert.equal(cycle.p.rank,60); assert.equal(cycle.c.rank,60); noOverlap(Object.values(cycle));
+  const cycle=layout(tree); assert.equal(cycle.p.rank,0); assert.equal(cycle.c.rank,0); noOverlap(Object.values(cycle));
 });
 
-test("Network placement uses interface membership; multihomed Assets keep role ranks", () => {
+test("Network placement uses interface membership; multihomed Assets keep position ranks", () => {
   const graph={focus_key:"h",nodes:[node("s","access_network"),node("h","platform"),node("w","workload")],edges:[edge("s","h"),edge("w","h","h")]};
   const ranks=Object.fromEntries(Object.entries(layout(graph)).map(([k,n])=>[k,n.rank]));
-  for(const n of ["blue","red"]) {graph.nodes.push({...node(n,"automatic"),entity_type:"network"});for(const asset of ["s","h","w"]) graph.edges.push({...edge(asset,n),kind:"membership",topology_layer:null});}
+  for(const n of ["blue","red"]) {graph.nodes.push({...node(n,"automatic"),entity_type:"network"});for(const asset of ["s","h","w"]) graph.edges.push({...edge(asset,n),kind:"membership",topology_class:null});}
   const p=layout(graph); for(const k of ["s","h","w"]) assert.equal(p[k].rank,ranks[k]);
   assert.ok(p.blue.rank>p.s.rank && p.blue.rank<p.w.rank);
   assert.ok(graph.edges.filter(e=>e.kind==="membership").every(e=>connectivityRail(e,p,graph.edges)===null));
   noOverlap(Object.values(p));
+});
+
+test("arbitrary managed keys, rename and reorder control bands without type-name rules", async () => {
+  const { connectivityBands } = await import("../lib/infrastructure-topology.mjs");
+  const positions = ["Alpha", "Beta", "Gamma", "Delta"].map((name, i) => ({ id: `position-${i}`, key: `custom_${i}`, name, sort_order: i * 10, active: true }));
+  const graph = { focus_key: "thing-1", nodes: positions.map((position, i) => ({ ...node(`thing-${i}`, "automatic"), name: `Thing ${i}`, topology_position: position })), edges: [edge("thing-0", "thing-1"), edge("thing-1", "thing-2"), edge("thing-2", "thing-3")] };
+  const before = layout(graph);
+  assert.ok(before["thing-0"].y < before["thing-1"].y && before["thing-1"].y < before["thing-2"].y && before["thing-2"].y < before["thing-3"].y);
+  positions[0].sort_order = 40; positions[0].name = "Renamed"; positions[0].active = false;
+  const after = layout(graph);
+  assert.ok(after["thing-3"].y < after["thing-0"].y, "Inactive assignments still honor configured order");
+  assert.equal(connectivityBands(Object.values(after)).at(-1).positions[0].name, "Renamed");
+  const storage = { id: "storage", key: "storage_fabric", name: "Storage Fabric", sort_order: 15, active: true };
+  graph.nodes.push({ ...node("custom", "automatic"), topology_position: storage });
+  graph.edges.push(edge("thing-1", "custom"), edge("custom", "thing-2"));
+  const custom = layout(graph);
+  assert.ok(custom["thing-1"].y < custom.custom.y && custom.custom.y < custom["thing-2"].y);
+  graph.topology_positions = [...positions, storage, { id: "empty", key: "unused", name: "Empty", sort_order: 16 }];
+  assert.equal(connectivityBands(connectivityLayout(graph)).length, 5, "Unused positions consume no band");
+  noOverlap(Object.values(custom));
 });

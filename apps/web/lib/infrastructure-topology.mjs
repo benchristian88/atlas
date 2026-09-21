@@ -1,14 +1,12 @@
-import topologyRoles from "./topology-roles.json" with { type: "json" };
-export const TOPOLOGY_ROLES = topologyRoles;
-import topologyLayers from "./topology-layers.json" with { type: "json" };
-export const TOPOLOGY_LAYERS = topologyLayers;
-export function topologyLayerSelection(overrides = {}) {
+import topologyClasses from "./topology-classes.json" with { type: "json" };
+export const TOPOLOGY_CLASSES = topologyClasses;
+export function topologyClassSelection(overrides = {}) {
   const enabled = new Set();
   let changedCount = 0;
-  for (const layer of TOPOLOGY_LAYERS) {
-    const checked = overrides[layer.key] ?? layer.enabled_by_default;
-    if (checked) enabled.add(layer.key);
-    if (checked !== layer.enabled_by_default) changedCount++;
+  for (const topologyClass of TOPOLOGY_CLASSES) {
+    const checked = overrides[topologyClass.key] ?? topologyClass.enabled_by_default;
+    if (checked) enabled.add(topologyClass.key);
+    if (checked !== topologyClass.enabled_by_default) changedCount++;
   }
   return { enabled, changedCount };
 }
@@ -98,7 +96,6 @@ export function platformMatches(asset, children, query) {
 }
 
 const nodeOrder = (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key);
-const roleRanks = Object.fromEntries(TOPOLOGY_ROLES.map(role => [role.key, role.rank]));
 const otherEnd = (edge, key) => edge.source_key === key ? edge.target_key : edge.source_key;
 
 // Only the current authorized result is eligible. No fetch, domain node, or
@@ -129,9 +126,13 @@ export function connectivityLayout(graph) {
   const byKey = new Map(nodes.map(n => [n.key, n]));
   const edges = (graph.edges || []).filter(e => byKey.has(e.source_key) && byKey.has(e.target_key));
   const adjacent = new Map(nodes.map(n => [n.key, edges.filter(e => e.source_key === n.key || e.target_key === n.key)]));
-  const ranks = new Map(nodes.filter(n => n.entity_type !== "network" && roleRanks[n.topology_role] != null).map(n => [n.key, roleRanks[n.topology_role]]));
+  const ranks = new Map(nodes.filter(n => n.entity_type !== "network" && n.topology_position != null).map(n => [n.key, n.topology_position.sort_order]));
+  const configured = [...new Set(ranks.values())].sort((a, b) => a - b);
+  const gaps = configured.slice(1).map((rank, i) => rank - configured[i]);
+  const step = gaps.length ? Math.min(...gaps) / 2 : 1;
+  const neutral = configured.length ? (configured[0] + configured.at(-1)) / 2 : 0;
   // Resolve against a snapshot each round. Cycles cannot make ranks drift, and
-  // unanchored components terminate in the neutral infrastructure band.
+  // unanchored components terminate in the neutral band.
   const resolveAutomatic = () => {
     for (let round = 0; round < nodes.length; round++) {
       const inferred = [];
@@ -141,8 +142,8 @@ export function connectivityLayout(graph) {
         for (const edge of adjacent.get(node.key)) {
           const neighbour = otherEnd(edge, node.key), rank = ranks.get(neighbour);
           if (rank == null) continue;
-          if (edge.platform_parent_key) containment.push(rank + (edge.platform_parent_key === node.key ? -10 : 10));
-          else if (edge.topology_layer === "physical_network") physical.push(rank);
+          if (edge.platform_parent_key) containment.push(rank + (edge.platform_parent_key === node.key ? -step : step));
+          else if (edge.topology_class === "physical_network") physical.push(rank);
         }
         const hints = containment.length ? containment : physical;
         if (hints.length) inferred.push([node.key, hints.reduce((a, b) => a + b, 0) / hints.length]);
@@ -156,21 +157,21 @@ export function connectivityLayout(graph) {
   // Closed cycles have no root and deliberately fall back to the neutral band.
   for (const node of nodes) if (!ranks.has(node.key) && node.entity_type !== "network") {
     const links = adjacent.get(node.key).filter(e => e.platform_parent_key);
-    if (links.some(e => e.platform_parent_key === node.key) && links.every(e => e.platform_parent_key === node.key)) ranks.set(node.key, 60);
+    if (links.some(e => e.platform_parent_key === node.key) && links.every(e => e.platform_parent_key === node.key)) ranks.set(node.key, neutral);
   }
   resolveAutomatic();
-  for (const node of nodes.filter(n => n.entity_type !== "network")) if (!ranks.has(node.key)) ranks.set(node.key, 60);
+  for (const node of nodes.filter(n => n.entity_type !== "network")) if (!ranks.has(node.key)) ranks.set(node.key, neutral);
   for (const node of nodes.filter(n => n.entity_type === "network")) {
     const members = adjacent.get(node.key).filter(e => e.kind === "membership").map(e => ranks.get(otherEnd(e, node.key))).filter(r => r != null);
     const low = Math.min(...members), high = Math.max(...members);
-    ranks.set(node.key, members.length ? low === high ? low - 5 : (low + high) / 2 : 55);
+    ranks.set(node.key, members.length ? low === high ? low - step / 2 : (low + high) / 2 : neutral);
   }
   // Select a recorded upper neighbour as the primary horizontal anchor. Parent
   // projections take precedence; logical overlays never invent infrastructure.
   const parent = new Map();
   for (const node of nodes) {
     const candidates = adjacent.get(node.key).filter(e => ranks.get(otherEnd(e, node.key)) < ranks.get(node.key) &&
-      (e.platform_parent_key || e.topology_layer === "physical_network" || e.kind === "membership"));
+      (e.platform_parent_key || e.topology_class === "physical_network" || e.kind === "membership"));
     candidates.sort((a, b) => Number(b.platform_parent_key === otherEnd(b, node.key)) - Number(a.platform_parent_key === otherEnd(a, node.key)) ||
       ranks.get(otherEnd(b, node.key)) - ranks.get(otherEnd(a, node.key)) || otherEnd(a, node.key).localeCompare(otherEnd(b, node.key)));
     if (candidates.length) parent.set(node.key, otherEnd(candidates[0], node.key));
@@ -238,4 +239,19 @@ export function connectivityRail(edge, positions, edges) {
   const entryY = child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 14;
   const points = [[parent.x, parent.y + CONNECTIVITY_NODE_HEIGHT / 2 + 3], [parent.x, railY], [laneX, railY], [laneX, entryY], [child.x, entryY], [child.x, child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 3]];
   return { points: edge.source_key === parent.key ? points : points.reverse(), labelX: child.x, labelY: entryY - 4 };
+}
+
+// Only occupied bands are returned. Metadata stays attached to durable managed
+// positions, including inactive assignments, for future background rendering.
+export function connectivityBands(layout) {
+  const bands = new Map();
+  for (const node of layout) {
+    if (!bands.has(node.rank)) bands.set(node.rank, { rank: node.rank, positions: [], node_keys: [] });
+    const band = bands.get(node.rank);
+    band.node_keys.push(node.key);
+    if (node.topology_position && !band.positions.some(p => p.id === node.topology_position.id)) {
+      band.positions.push({ ...node.topology_position });
+    }
+  }
+  return [...bands.values()].sort((a, b) => a.rank - b.rank);
 }

@@ -4,6 +4,7 @@ export const SYSTEM_SECTIONS = [
   { group: "organisation", href: "/admin/customers", label: "Customers", permission: "customers.view" },
   { group: "organisation", href: "/admin/sites", label: "Sites", permission: "sites.view" },
   { group: "reference-data", href: "/admin/asset-types", label: "Asset types", permission: "asset_types.view" },
+  { group: "reference-data", href: "/admin/topology-positions", label: "Topology Positions", permission: "asset_types.view" },
   { group: "reference-data", href: "/admin/asset-categories", label: "Asset categories", permission: "asset_types.view" },
   { group: "reference-data", href: "/admin/relationship-types", label: "Relationship types", permission: "relationship_types.view" },
   { group: "reference-data", href: "/admin/service-types", label: "Service types", permission: "service_types.view" },

@@ -41,6 +41,7 @@ export function CrudScreen({
   contextReloadKey,
   onMutation,
   headingActions,
+  reorderable = false,
 }) {
   const dependencySignature = JSON.stringify(
     dependencies.map((dependency) => [dependency.key, dependency.endpoint]),
@@ -154,6 +155,22 @@ export function CrudScreen({
     }
   }
 
+  async function move(record, direction) {
+    setSaving(true);
+    setError("");
+    try {
+      const items = await apiRequest(`${endpoint}/${record.id}/move`, {
+        method: "POST", body: JSON.stringify({ direction }),
+      });
+      setRecords(items);
+      if (onMutation) await onMutation();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const showCreate = capabilityAllows(canCreate);
   const showActions = canEdit !== false || canDelete !== false;
 
@@ -238,7 +255,7 @@ export function CrudScreen({
                         size={field.type === "multiselect" ? field.size || 6 : undefined}
                         value={form[field.name] ?? (field.type === "multiselect" ? [] : "")}
                       >
-                        {field.type !== "multiselect" && !field.required && <option value="">None</option>}
+                        {field.type !== "multiselect" && !field.required && <option value="">{field.emptyLabel || "None"}</option>}
                         {field.type !== "multiselect" && field.placeholder && <option value="">{field.placeholder}</option>}
                         {field.type !== "multiselect" && form[field.name] && !options.some((option) => optionValue(option) === form[field.name]) && (
                           <option value={form[field.name]}>{form[field.name]} (existing custom value)</option>
@@ -296,14 +313,18 @@ export function CrudScreen({
                   </td>
                 </tr>
               )}
-              {records.map((record) => (
+              {records.map((record, index) => (
                 <tr key={record.id}>
                   {columns.map((column) => (
-                    <td key={column.key}>{column.render ? column.render(record, relatedById) : record[column.key] || "—"}</td>
+                    <td key={column.key}>{column.render ? column.render(record, relatedById, index) : record[column.key] || "—"}</td>
                   ))}
                   {showActions && (
                     <td>
                       <div className="row-actions">
+                        {reorderable && capabilityAllows(canEdit, record) && <>
+                          <button className="icon-button" type="button" disabled={saving || loading || index === 0} aria-label={`Move ${record.name} up`} onClick={() => move(record, "up")}><span aria-hidden="true">↑</span></button>
+                          <button className="icon-button" type="button" disabled={saving || loading || index === records.length - 1} aria-label={`Move ${record.name} down`} onClick={() => move(record, "down")}><span aria-hidden="true">↓</span></button>
+                        </> }
                         {capabilityAllows(canEdit, record) && (
                           <button className="text-button" onClick={() => openEdit(record)} type="button">
                             Edit

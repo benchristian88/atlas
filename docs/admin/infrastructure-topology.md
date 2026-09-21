@@ -46,7 +46,7 @@ live monitoring or freshness estimate is implied.
   is hidden for the current focus. Network detail is available from its inspector.
   **Fit** restores fitted zoom and clears pan; zoom buttons and canvas scrolling
   support closer inspection.
-  The viewport centres on focus while its Type's topology role retains its
+  The viewport centres on focus while its Type's topology position retains its
   top-to-bottom position. Missing layers collapse; no infrastructure is invented.
   Recorded relationships group related cards horizontally. Focused hosts show
   the first eight returned children in name/ID order, with **+N more** expanding
@@ -62,16 +62,16 @@ live monitoring or freshness estimate is implied.
   Closing expanded mode restores the embedded inspector. Canvas dimensions and
   Fit respond to the available width.
 
-[Asset Type topology roles](asset-types.md) determine presentation layers; actual
-accepted relationships determine connectivity. Automatic roles use relationship
-context and otherwise a neutral infrastructure band. Names and vendors never
+[Managed Topology Positions](topology-positions.md) determine ordered presentation bands; actual
+accepted relationships determine connectivity. Automatic assignments use relationship
+context and otherwise a neutral band. Names and vendors never
 infer placement. Networks use actual interface memberships to find an intermediate
-position; multihomed Assets retain their own role. Network icon/accent and dashed
+position; multihomed Assets retain their own position. Network icon/accent and dashed
 membership semantics are unchanged. Persisted manual positioning is intentionally
 deferred; layout positions are ephemeral presentation output.
 
 Connectivity shows at most 25 nodes and 150 edges, with a truncation notice when
-necessary. Category, relationship-layer and Network filters apply before traversal,
+necessary. Category, relationship-class and Network filters apply before traversal,
 so a disabled relationship cannot introduce a node, create a second-hop path or
 consume a node-limit slot.
 
@@ -81,12 +81,12 @@ icons and accents. Choices apply immediately; click outside or press Escape to
 close it. Tab moves through the checkboxes and back into the page. Initial choices
 follow **Show in Infrastructure Topology by default** in managed Asset Categories.
 You can enable Uncategorized or another hidden category temporarily. The button
-counts category and relationship-layer values that differ from defaults.
-**Reset to defaults** restores the managed category choices and default layers,
+counts category and relationship-class values that differ from defaults.
+**Reset to defaults** restores the managed category choices and default classes,
 keeping the selector open. These changes never edit Atlas knowledge or Reference
 Data.
 
-Connectivity adds **Relationship layers**:
+Connectivity adds **Relationship classes**:
 
 - **Platform / containment** — on by default.
 - **Physical / network** — on by default, including derived AssetInterface → Network membership.
@@ -96,12 +96,12 @@ Connectivity adds **Relationship layers**:
 
 This starts with infrastructure placement and technical connections. Application
 and logical relationships belong primarily in Knowledge Graph; enable their
-layer temporarily when needed. Disabling Physical / network also disables
+class temporarily when needed. Disabling Physical / network also disables
 interface-membership traversal; the existing Networks checkbox separately
 controls Network visibility. Disabling Physical / network and enabling Logical /
 operational counts as two changed values.
 
-[Relationship Type administration](relationship-types.md) assigns these layers.
+[Relationship Type administration](relationship-types.md) assigns these classes.
 New custom types default to Other until an administrator deliberately classifies
 them. Routes remains Other because Atlas does not yet model full L3 routing;
 enabling it does not infer routers, gateways or routing paths.

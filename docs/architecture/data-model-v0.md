@@ -21,6 +21,7 @@ erDiagram
     CUSTOMER ||--o{ ASSET : owns
     SITE ||--o{ ASSET : contains
     ASSET_TYPE ||--o{ ASSET : classifies
+    TOPOLOGY_POSITION o|--o{ ASSET_TYPE : places
     ASSET ||--o{ ASSET_RELATIONSHIP : source
     ASSET ||--o{ ASSET_RELATIONSHIP : target
     RELATIONSHIP_TYPE ||--o{ ASSET_RELATIONSHIP : classifies
@@ -114,13 +115,22 @@ erDiagram
         string key UK
         string name UK
         string category
-        string topology_role
+        uuid topology_position_id FK
         string default_icon_url
         boolean system_defined
         boolean active
         integer sort_order
     }
+    TOPOLOGY_POSITION {
+        uuid id PK
+        string key UK
+        string name UK
+        string description
+        integer sort_order UK
+        boolean active
+    }
     RELATIONSHIP_TYPE {
+        string topology_class
         uuid id PK
         string key UK
         string name UK
@@ -297,10 +307,20 @@ through non-null `category_id`. The compatibility `category` API field resolves
 the current managed name; its legacy database column is a frozen upgrade snapshot.
 See [managed categories and topology](infrastructure-topology.md).
 Display name, description, category assignment,
-default icon URL, bounded presentation-only topology role (default Automatic),
+default icon URL, nullable managed `topology_position_id` (null means Automatic),
 active state, and sort order are editable subject to policy. A
 system-defined or referenced type cannot be deleted; inactive types remain
 resolvable for existing assets.
+
+### TopologyPosition
+
+Global ordered Reference Data: UUID id, unique immutable key, unique display
+name, optional description, unique nonnegative sort_order, active, created_at and
+updated_at. AssetType references it with a nullable restrictive foreign key.
+Automatic has no row. Inactive references remain valid and authoritative for
+layout; deletion requires explicit reassignment. Reorder swaps ranks atomically
+under a PostgreSQL table lock with a deferred unique constraint. Ordering affects
+presentation only. See [Topology Positions](../admin/topology-positions.md).
 
 ### RelationshipType
 
@@ -308,10 +328,10 @@ Relationship types similarly have an internal UUID and a stable unique key.
 Labels, inverse label,
 directionality, and optional allowed source/target asset-type key lists drive
 validation and display. Used/system types follow the same delete-versus-
-deactivate lifecycle. The bounded `topology_layer` presentation field defaults to
+deactivate lifecycle. The bounded `topology_class` presentation field defaults to
 `other`; it controls Infrastructure Topology Connectivity eligibility without
 changing direction, endpoints or Knowledge Graph semantics. See
-[the registry and migration mapping](infrastructure-topology.md#managed-relationship-layers).
+[the registry and migration mapping](infrastructure-topology.md#managed-relationship-classes).
 
 ## Custom fields
 

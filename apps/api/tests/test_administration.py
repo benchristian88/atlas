@@ -529,7 +529,7 @@ def test_reference_usage_counts_are_filtered_to_the_principal_scope() -> None:
     asset_type = AssetType(
         id=uuid.uuid4(),
         key="server",
-        topology_role="platform",
+        topology_position_id=None,
         name="Server",
         system_defined=True,
         active=True,

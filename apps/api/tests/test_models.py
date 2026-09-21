@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "knowledge_completeness_summaries",
     "asset_types",
     "asset_categories",
+    "topology_positions",
     "relationship_types",
     "relationship_type_applicabilities",
     "service_types",
@@ -69,13 +70,16 @@ CRITICAL_COLUMNS = {
         "id", "key", "name", "description", "sort_order", "active",
         "show_in_topology", "icon_key", "accent_key", "created_at", "updated_at",
     },
+    "topology_positions": {
+        "id", "key", "name", "description", "sort_order", "active", "created_at", "updated_at",
+    },
     "asset_types": {
-        "id", "key", "name", "description", "category", "category_id", "default_icon_url", "topology_role",
+        "id", "key", "name", "description", "category", "category_id", "default_icon_url", "topology_position_id",
         "system_defined", "active", "sort_order", "created_at", "updated_at",
     },
     "relationship_types": {
         "id", "key", "name", "description", "source_label", "target_label",
-        "topology_layer", "inverse_label", "directional", "system_defined", "active", "sort_order",
+        "topology_class", "inverse_label", "directional", "system_defined", "active", "sort_order",
         "allowed_source_asset_type_keys", "allowed_target_asset_type_keys",
         "created_at", "updated_at",
     },

@@ -11,18 +11,23 @@ const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3108";
 const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-topology-browser-results";
 await mkdir(output, { recursive: true });
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const positionSeeds = ["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"];
+const position = key => key === "automatic" ? null : ({ id: id(5000 + positionSeeds.indexOf(key)), key, name: key, sort_order: positionSeeds.indexOf(key), active: true });
+function resolvePositions(data) {
+  for (const type of data.asset_types) type.topology_position = data.topology_positions.find(p => p.id === type.topology_position_id) || null;
+}
 const customer = { id: id(1), name: "Homelab", status: "active" };
 const site = { id: id(2), customer_id: customer.id, name: "Home", status: "active" };
 const permissions = ["service_types.view", "service_types.manage", "assets.view", "assets.create", "asset_types.view", "asset_types.manage", "customers.view", "sites.view", "networks.view", "networks.create", "networks.edit", "relationships.view", "relationship_types.view", "relationship_types.manage"];
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSawAAAAASUVORK5CYII=", "base64");
 function fixture() {
   const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: n === 0 ? "Backup" : `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
-  const types = [{ id: id(20), key: "server", name: "Server", topology_role: "platform", category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", topology_role: "workload", category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
-  types.push({ id: id(23), key: "backup_appliance", name: "Backup Appliance", topology_role: "infrastructure", category_id: id(6), category: "Backup", active: true });
+  const types = [{ id: id(20), key: "server", name: "Server", topology_position_id: position("platform")?.id || null, category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", topology_position_id: position("workload")?.id || null, category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
+  types.push({ id: id(23), key: "backup_appliance", name: "Backup Appliance", topology_position_id: position("infrastructure")?.id || null, category_id: id(6), category: "Backup", active: true });
   const asset = (n, name, type = "server") => ({ id: id(n), name, asset_type: type, customer_id: customer.id, site_id: site.id, status: "operational", hostname: `${name.toLowerCase().replaceAll(" ", "-")}.home`, cached_icon_url: `/api/assets/${id(n)}/icon?v=${"a".repeat(64)}` });
   const hosts = [asset(30, "PVE1"), asset(31, "PVE2"), asset(32, "PVE3"), asset(33, "PVE4")];
   const children = Array.from({ length: 25 }, (_, i) => asset(100+i, i === 1 ? "Atlas DNS" : i ? `Workload ${String(i).padStart(2,"0")}` : "AdGuard Home", "docker_compose"));
-  types.push({ id: id(24), key: "custom_fabric", name: "Custom Fabric", category_id: id(3), category: "Compute", topology_role: "access_network", active: true });
+  types.push({ id: id(24), key: "custom_fabric", name: "Custom Fabric", category_id: id(3), category: "Compute", topology_position_id: position("access_network")?.id || null, active: true });
   const assets = [...hosts, asset(34,"PBS","backup_appliance"), asset(35,"Synology"), asset(36,"USW-16-poe","custom_fabric"), asset(37,"Router"), ...children, asset(150,"Uncategorized Asset","unknown")];
   const relationships = children.map((a,i) => ({ id: id(200+i), source_asset_id: a.id, target_asset_id: hosts[i < 20 ? 0 : i < 24 ? 1 : i < 27 ? 2 : 3].id, relationship_type: "runs_on" }));
   const platform_links = relationships.map(r => ({ relationship_id: r.id, parent_id: r.target_asset_id, child_id: r.source_asset_id }));
@@ -32,7 +37,7 @@ function fixture() {
   asset_interfaces.push({ id: id(402), asset_id: hosts[0].id, network_id: null, name: "vmbr0", ip_address: "10.0.99.21" });
   for (let i=1; i<20; i++) asset_interfaces.push({ id: id(410+i), asset_id: children[i].id, network_id: networks[5].id, name: "eth0", ip_address: `10.0.99.${100+i}` });
   assets.forEach(a => { a.ip_address = "192.0.2.254"; });
-  return { categories, asset_types: types, assets, relationships, relationship_types: [{ key: "runs_on", topology_layer: "platform", name: "Runs on", source_label: "Runs on", directional: true }, { key: "connects_to", topology_layer: "physical_network", name: "Connects to", source_label: "Connects to", directional: false }], networks, asset_interfaces, customers: [customer], sites: [site], platform_links };
+  return { categories, asset_types: types, assets, relationships, relationship_types: [{ key: "runs_on", topology_class: "platform", name: "Runs on", source_label: "Runs on", directional: true }, { key: "connects_to", topology_class: "physical_network", name: "Connects to", source_label: "Connects to", directional: false }], networks, asset_interfaces, customers: [customer], sites: [site], platform_links };
 }
 function graphFixture(data, params) {
   // Exercise the production traversal instead of maintaining a second algorithm.
@@ -42,7 +47,7 @@ import json, sys
 from app.services.infrastructure_topology import connectivity
 payload = json.load(sys.stdin)
 print(json.dumps(connectivity(**payload)))
-`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_layers: params.has("topology_layers") ? params.get("topology_layers").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids"), limit: 25 }) }));
+`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_classes: params.has("topology_classes") ? params.get("topology_classes").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids"), limit: 25 }) }));
 }
 
 async function checkIdentityContrast(page, selector = ".infrastructure-topology .presentation-icon") {
@@ -546,7 +551,7 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
 const neutralBorders = Object.fromEntries(["Top", "Right", "Bottom", "Left"].map(side => [`border${side}Color`, "--border"]));
 
 
-async function checkTopologyLayers(page, data, theme, width) {
+async function checkTopologyClasss(page, data, theme, width) {
   const button = name => page.getByRole("button", { name, exact: true });
   const filters = page.locator(".topology-filter > button");
   const panel = page.locator(".topology-filter-popover");
@@ -557,31 +562,31 @@ async function checkTopologyLayers(page, data, theme, width) {
   for (const [key, name, classification] of [["connected_by_fibre", "Connected by fibre", "physical_network"], ["talks_to", "Talks to", "logical_operational"], ["paired_with", "Paired with", "other"]]) {
     await page.goto(`${base}/admin/relationship-types`);
     await button("Add Relationship type").click();
-    assert.equal(await page.getByLabel(/^Topology layer/).inputValue(), "other");
+    assert.equal(await page.getByLabel(/^Topology class/).inputValue(), "other");
     await page.getByLabel(/^Key/).fill(key);
     await page.getByLabel(/^Name/).fill(name);
     await page.getByLabel(/^Source label/).fill(name);
     await page.getByLabel(/^Target label/).fill(`Inverse ${name}`);
-    await page.getByLabel(/^Topology layer/).selectOption(classification);
+    await page.getByLabel(/^Topology class/).selectOption(classification);
     await button("Create").click();
     const row = page.getByRole("row").filter({has: page.getByRole("cell", {name, exact:true})});
     await row.waitFor();
     assert.match(await row.innerText(), new RegExp(classification === "physical_network" ? "Physical / network" : classification === "logical_operational" ? "Logical / operational" : "Other"));
     await row.getByRole("button", {name:"Edit", exact:true}).click();
-    assert.equal(await page.getByLabel(/^Topology layer/).inputValue(), classification);
-    await page.getByLabel(/^Topology layer/).selectOption("data_resilience");
+    assert.equal(await page.getByLabel(/^Topology class/).inputValue(), classification);
+    await page.getByLabel(/^Topology class/).selectOption("data_resilience");
     await button("Save changes").click();
     await row.waitFor();
-    assert.equal(data.relationship_types.find(r=>r.key===key).topology_layer, "data_resilience");
+    assert.equal(data.relationship_types.find(r=>r.key===key).topology_class, "data_resilience");
     await row.getByRole("button", {name:"Edit", exact:true}).click();
-    await page.getByLabel(/^Topology layer/).selectOption(classification);
+    await page.getByLabel(/^Topology class/).selectOption(classification);
     await button("Save changes").click();
     await row.waitFor();
   }
   // NPM with a host, custom physical path, logical peer, Other peer and backup.
   const first = data.assets.find(a=>a.id===id(851));
   data.assets.push(...[[1300,"NPM"],[1301,"Fibre peer"],[1302,"Logical peer"],[1303,"Other peer"],[1304,"Backup peer"]].map(([n,name])=>({...first,id:id(n),name,asset_type:"server"})));
-  data.relationship_types.push({key:"backs_up_to",source_label:"Backs up to",directional:true,topology_layer:"data_resilience"});
+  data.relationship_types.push({key:"backs_up_to",source_label:"Backs up to",directional:true,topology_class:"data_resilience"});
   for (const [n,key,target] of [[1310,"runs_on",30],[1311,"connected_by_fibre",1301],[1312,"talks_to",1302],[1313,"paired_with",1303],[1314,"backs_up_to",1304]]) {
     data.relationships.push({id:id(n),relationship_type:key,source_asset_id:id(1300),target_asset_id:id(target)});
   }
@@ -612,7 +617,7 @@ async function checkTopologyLayers(page, data, theme, width) {
   await filters.click();
   await layer("Other").uncheck(); await node(1303).waitFor({state:"detached"});
   await layer("Other").check(); await node(1303).waitFor();
-  await page.screenshot({path:`${output}/relationship-layers-${theme}-${width}.png`});
+  await page.screenshot({path:`${output}/relationship-classes-${theme}-${width}.png`});
   await page.keyboard.press("Escape");
   await button("Close expanded Infrastructure Topology").click();
   assert.equal(await filters.innerText(),"Filters · 4");
@@ -625,7 +630,7 @@ async function checkTopologyLayers(page, data, theme, width) {
   await layer("Other").check();
   await page.keyboard.press("Escape");
   await button("Platform").click();
-  await filters.click(); assert.equal(await page.getByText("Relationship layers",{exact:true}).count(),0);
+  await filters.click(); assert.equal(await page.getByText("Relationship classes",{exact:true}).count(),0);
   await page.keyboard.press("Escape");
   await button("Connectivity").click(); await filters.click();
   assert.equal(await layer("Other").isChecked(),false);
@@ -639,12 +644,13 @@ async function checkTopologyLayers(page, data, theme, width) {
 
 async function checkLayeredLayout(page, data, requests, theme, width) {
   const roles = ["external", "security_edge", "aggregation_network", "access_network", "platform", "workload", "automatic"];
-  const types = roles.map((role, i) => ({ id:id(2000+i),key:`arbitrary_${i}`,name:["Custom Boundary", "Custom Edge Appliance", "Custom Fabric Device", "Custom Access Device", "Custom Compute Engine", "Custom Runtime", "Weird Appliance"][i],category_id:id(3),category:"Compute",active:true,sort_order:100,topology_role:role }));
+  const types = roles.map((role, i) => ({ id:id(2000+i),key:`arbitrary_${i}`,name:["Custom Boundary", "Custom Edge Appliance", "Custom Fabric Device", "Custom Access Device", "Custom Compute Engine", "Custom Runtime", "Weird Appliance"][i],category_id:id(3),category:"Compute",active:true,sort_order:100,topology_position_id:position(role)?.id || null }));
   const asset = (n, type) => ({...data.assets[0],id:id(n),name:`Object ${n}`,asset_type:types[type].key,cached_icon_url:null});
   data.asset_types = types;
+  resolvePositions(data);
   data.assets = [asset(2100,0),asset(2101,1),asset(2102,2),asset(2103,3),asset(2104,3),asset(2105,4),asset(2106,4),asset(2107,4)];
   data.relationships = []; data.platform_links = []; data.asset_interfaces = []; data.networks = [];
-  data.relationship_types = [{key:"runs_on",topology_layer:"platform",source_label:"Runs on",directional:true}, {key:"custom_fibre",topology_layer:"physical_network",source_label:"Recorded fibre",directional:false}];
+  data.relationship_types = [{key:"runs_on",topology_class:"platform",source_label:"Runs on",directional:true}, {key:"custom_fibre",topology_class:"physical_network",source_label:"Recorded fibre",directional:false}];
   const connect = (a,b,platform=false) => {
     const r={id:id(3000+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:platform?"runs_on":"custom_fibre"};
     data.relationships.push(r);
@@ -706,14 +712,97 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   data.assets.push(asset(2500,6));connect(2103,2500);connect(2500,2105);
   await button("Refresh").click();await focus(2500);await ordered([2103,2500,2105]);
   await checkGeometry(page);
-  // The dropdown writes and reloads the configured role through the normal form.
+  // The dropdown writes and reloads the configured position through the normal form.
   await page.goto(`${base}/admin/asset-types`);
   const row=page.getByRole("row").filter({hasText:"Weird Appliance"});await row.getByRole("button",{name:"Edit",exact:true}).click();
-  assert.equal(await page.locator('select[name="topology_role"]').inputValue(),"automatic");
-  await page.locator('select[name="topology_role"]').selectOption("infrastructure");await button("Save changes").click();
-  await page.waitForFunction(()=>!document.querySelector('select[name="topology_role"]'));
+  assert.equal(await page.locator('select[name="topology_position_id"]').inputValue(),"");
+  await page.locator('select[name="topology_position_id"]').selectOption(position("infrastructure").id);await button("Save changes").click();
+  await page.waitForFunction(()=>!document.querySelector('select[name="topology_position_id"]'));
   await page.reload();await row.getByRole("button",{name:"Edit",exact:true}).click();
-  assert.equal(await page.locator('select[name="topology_role"]').inputValue(),"infrastructure");
+  assert.equal(await page.locator('select[name="topology_position_id"]').inputValue(),position("infrastructure").id);
+}
+
+async function checkManagedPositions(page, data, theme, width) {
+  const button = name => page.getByRole("button", {name, exact:true});
+  const row = name => page.getByRole("row").filter({has: page.getByRole("cell", {name, exact:true})});
+  await page.goto(`${base}/admin/topology-positions`);
+  await page.getByRole("heading", {name:"Topology Positions", exact:true}).waitFor();
+  assert.ok(await button(`Move ${data.topology_positions[0].name} up`).isDisabled());
+  assert.ok(await button(`Move ${data.topology_positions.at(-1).name} down`).isDisabled());
+  await button("Add Topology Position").click();
+  await page.getByLabel("Name", {exact:false}).fill("Storage Fabric");
+  await page.getByLabel("Key", {exact:false}).fill("storage_fabric");
+  await button("Create").click();
+  await row("Storage Fabric").waitFor();
+  const storage = data.topology_positions.find(p=>p.key==="storage_fabric");
+  await button("Move Storage Fabric up").focus(); await page.keyboard.press("Enter");
+  await page.waitForFunction(()=>!document.querySelector('button[aria-label="Move Storage Fabric up"]').disabled);
+  await button("Move Storage Fabric up").click();
+  await page.reload(); await row("Storage Fabric").waitFor();
+  assert.equal(data.topology_positions.at(-3).id,storage.id,"Moves persist across reload");
+  await row("Storage Fabric").getByRole("button",{name:"Edit",exact:true}).click();
+  assert.ok(await page.locator('[name="key"]').isDisabled());
+  assert.equal(await page.locator('[name="sort_order"]').count(),0);
+  await page.getByLabel("Name",{exact:false}).fill("Storage Fabric Renamed"); await button("Save changes").click(); await page.locator("form.resource-form").waitFor({state:"detached"});
+  await row("Storage Fabric Renamed").waitFor();
+  await page.goto(`${base}/admin/asset-types`);
+  await row("Weird Appliance").getByRole("button",{name:"Edit",exact:true}).click();
+  const select = page.locator('select[name="topology_position_id"]');
+  await select.waitFor();
+  assert.ok(await select.getByRole("option",{name:"Automatic",exact:true}).count());
+  await select.selectOption(storage.id); await button("Save changes").click(); await page.locator("form.resource-form").waitFor({state:"detached"});
+  await page.goto(`${base}/admin/topology-positions`);
+  await row("Storage Fabric Renamed").waitFor();
+  assert.equal(await row("Storage Fabric Renamed").getByRole("cell",{name:"1",exact:true}).count(),1);
+  assert.ok(await row("Storage Fabric Renamed").getByRole("button",{name:"Delete",exact:true}).isDisabled());
+  await row("Storage Fabric Renamed").getByRole("button",{name:"Edit",exact:true}).click();
+  await page.getByLabel("Active",{exact:true}).uncheck(); await button("Save changes").click(); await page.locator("form.resource-form").waitFor({state:"detached"});
+  await page.goto(`${base}/admin/asset-types`);
+  await row("Weird Appliance").getByRole("button",{name:"Edit",exact:true}).click();
+  assert.equal(await select.inputValue(),storage.id);
+  assert.equal(await select.getByRole("option",{name:"Storage Fabric Renamed (inactive)",exact:true}).count(),1);
+  await button("Cancel").click(); await button("Add Asset type").click();
+  assert.equal(await select.getByRole("option",{name:/Storage Fabric/}).count(),0);
+  await button("Cancel").click();
+  await row("Weird Appliance").getByRole("button",{name:"Edit",exact:true}).click();
+  await select.selectOption(""); await button("Save changes").click(); await page.locator("form.resource-form").waitFor({state:"detached"});
+  await page.goto(`${base}/admin/topology-positions`);
+  page.once("dialog",dialog=>dialog.accept());
+  await row("Storage Fabric Renamed").getByRole("button",{name:"Delete",exact:true}).click();
+  await row("Storage Fabric Renamed").waitFor({state:"detached"});
+  await page.screenshot({path:`${output}/managed-positions-${theme}-${width}.png`,fullPage:true});
+  // Add arbitrary managed positions through the actual production form, then
+  // prove that changing their stored order changes a graph with arbitrary types.
+  const custom = [];
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    await button("Add Topology Position").click();
+    await page.getByLabel("Name",{exact:false}).fill(name);
+    await page.getByLabel("Key",{exact:false}).fill(name.toLowerCase());
+    await button("Create").click(); await row(name).waitFor();
+    custom.push(data.topology_positions.find(p=>p.name===name));
+  }
+  const assetTemplate=data.assets[0];
+  data.asset_types=custom.map((p,i)=>({id:id(7000+i),key:`thing_${i}`,name:`Thing ${i}`,category_id:id(3),category:"Compute",active:true,topology_position_id:p.id}));
+  data.assets=custom.map((p,i)=>({...assetTemplate,id:id(7100+i),name:`Thing ${i}`,asset_type:`thing_${i}`}));
+  data.relationships=custom.slice(1).map((p,i)=>({id:id(7200+i),source_asset_id:id(7100+i),target_asset_id:id(7101+i),relationship_type:"custom_fibre"}));
+  data.platform_links=[];data.networks=[];data.asset_interfaces=[];
+  const inspectOrder = async expected => {
+    await page.goto(`${base}/topology`); await button("Connectivity").click();
+    await page.getByLabel("Focus",{exact:true}).selectOption(id(7101));
+    await button("2 hops").click();
+    await page.locator(`[data-node-key="asset:${id(7103)}"]`).waitFor();
+    const boxes=await Promise.all(expected.map(i=>page.locator(`[data-node-key="asset:${id(7100+i)}"]`).boundingBox()));
+    for(let i=1;i<boxes.length;i++) assert.ok(boxes[i-1].y+boxes[i-1].height<boxes[i].y,"Configured arbitrary position order is authoritative");
+  };
+  await inspectOrder([0,1,2,3]);
+  await page.goto(`${base}/admin/topology-positions`);
+  for(let i=0;i<2;i++) {
+    await button("Move Gamma up").click();
+    await page.waitForFunction(()=>!document.querySelector('button[aria-label="Move Gamma up"]').disabled);
+  }
+  await inspectOrder([2,0,1,3]);
+  await page.screenshot({path:`${output}/custom-order-${theme}-${width}.png`,fullPage:true});
+
 }
 
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
@@ -721,6 +810,8 @@ let checks = 0;
 try {
   for (const theme of ["light", "dark"]) for (const width of [1440, 1100, 800]) {
     const data = fixture();
+    data.topology_positions = positionSeeds.map(position);
+    resolvePositions(data);
     const serviceType = { id: id(880), key: "application_service", name: "Application Service", active: true, requires_asset_dependency: true, sort_order: 10, in_use_count: 1, system_defined: true };
     data.categories.slice(0,2).forEach(c=>{ c.icon_key="infrastructure"; c.accent_key="slate"; });
     data.networks.slice(0,6).forEach(n=>{ n.accent_key="blue"; });
@@ -732,6 +823,23 @@ try {
       const url = new URL(route.request().url()); requests.push(url.pathname+url.search);
       if (url.pathname.endsWith("/icon")) return url.pathname.includes(id(31)) ? route.fulfill({ status: 404, body: "" }) : route.fulfill({ contentType: "image/png", body: png });
       const method = route.request().method();
+      if (url.pathname === "/api/topology-positions" && method === "POST") {
+        const record = {...route.request().postDataJSON(), id:id(5900+data.topology_positions.length), sort_order:data.topology_positions.length, asset_types_count:0};
+        data.topology_positions.push(record);
+        return route.fulfill({status:201, json:record});
+      }
+      if (url.pathname.startsWith("/api/topology-positions/")) {
+        const positionId = url.pathname.split("/")[3];
+        const record = data.topology_positions.find(p=>p.id===positionId);
+        if (url.pathname.endsWith("/move")) {
+          const index=data.topology_positions.indexOf(record), target=index+(route.request().postDataJSON().direction==="up"?-1:1);
+          if(target>=0 && target<data.topology_positions.length) [data.topology_positions[index],data.topology_positions[target]]=[data.topology_positions[target],data.topology_positions[index]];
+          data.topology_positions.forEach((p,i)=>p.sort_order=i);
+          return route.fulfill({json:data.topology_positions});
+        }
+        if(method==="PATCH") {Object.assign(record,route.request().postDataJSON());return route.fulfill({json:record});}
+        if(method==="DELETE") {data.topology_positions=data.topology_positions.filter(p=>p.id!==positionId);return route.fulfill({status:204});}
+      }
       if (url.pathname === "/api/relationship-types" && method === "POST") {
         const record = { ...route.request().postDataJSON(), id: id(1200 + data.relationship_types.length), system_defined: false, in_use_count: 0 };
         data.relationship_types.push(record);
@@ -787,6 +895,8 @@ try {
         data.networks.push(record);
         return route.fulfill({status:201, contentType:"application/json", body:JSON.stringify(record)});
       }
+      data.topology_positions.forEach(p=>p.asset_types_count=data.asset_types.filter(t=>t.topology_position_id===p.id).length);
+      resolvePositions(data);
       let body = [];
       if (url.pathname === "/api/auth/me") body = { id: id(999), display_name: "Topology fixture", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
       else if (url.pathname === "/api/context") body = { customers: [customer], sites: [site], global_access: true, selected_customer_id: customer.id, selected_site_id: site.id };
@@ -798,6 +908,7 @@ try {
       else if (url.pathname === "/api/customers") body = [customer];
       else if (url.pathname === "/api/sites") body = [site];
       else if (url.pathname === "/api/asset-categories") body = data.categories;
+      else if (url.pathname === "/api/topology-positions") body = data.topology_positions;
       else if (url.pathname === "/api/asset-types") body = data.asset_types;
       else if (url.pathname === "/api/assets/summary") body = { total: data.assets.length, by_asset_type: data.asset_types.map(t=>({ asset_type_id:t.id, asset_type_name:t.name, count:data.assets.filter(a=>a.asset_type===t.key).length })) };
       else if (url.pathname === "/api/assets") body = data.assets.filter(a=> !url.searchParams.get("category_id") || data.asset_types.find(t=>t.key===a.asset_type)?.category_id === url.searchParams.get("category_id")).slice(0,31);
@@ -805,6 +916,7 @@ try {
     });
     if (process.env.ATLAS_LAYERED_ONLY) {
       await checkLayeredLayout(page, data, requests, theme, width);
+    await checkManagedPositions(page, data, theme, width);
       assert.deepEqual(errors, []);
       console.log(`Passed layered topology: ${theme} ${width}px`);
       checks++; await context.close(); continue;
@@ -1117,7 +1229,7 @@ try {
     assert.equal(await page.locator('select[name="category_id"]').inputValue(),id(4));
     assert.equal(await page.locator('input[name="category"]').count(),0);
     assert.equal(await page.locator('select[name="category_id"] option:checked').innerText(),"Workload");
-    assert.equal(await page.locator('select[name="topology_role"]').inputValue(), "workload");
+    assert.equal(await page.locator('select[name="topology_position_id"]').inputValue(), position("workload").id);
     await page.goto(`${base}/assets`);
     await page.getByLabel("Asset Category",{exact:true}).selectOption(id(4));
     await page.waitForURL(/category_id=/);
@@ -1170,8 +1282,8 @@ try {
     await page.getByRole("row").filter({hasText:"Home Automation"}).waitFor();
     await page.goto(`${base}/admin/asset-types`);
     await page.getByRole("button", {name:"Add Asset type", exact:true}).click();
-    assert.equal(await page.locator('select[name="topology_role"]').inputValue(), "automatic");
-    await page.locator('select[name="topology_role"]').selectOption("endpoint");
+    assert.equal(await page.locator('select[name="topology_position_id"]').inputValue(), "");
+    await page.locator('select[name="topology_position_id"]').selectOption(position("endpoint").id);
     await page.locator('input[name="key"]').fill("home_device");
     await page.locator('input[name="name"]').fill("Home Device");
     await page.locator('select[name="category_id"]').selectOption(id(800));
@@ -1206,12 +1318,13 @@ try {
     await page.locator(`[data-node-key="network:${id(850)}"]`).waitFor();
     assert.equal(await page.locator(`[data-node-key="asset:${id(851)}"]`).getAttribute("data-presentation-accent"),"teal");
     assert.equal(await page.locator(`[data-node-key="network:${id(850)}"] [data-presentation-icon="cloud"]`).getAttribute("data-presentation-accent"),"rose");
-    await checkTopologyLayers(page, data, theme, width);
+    await checkTopologyClasss(page, data, theme, width);
     await checkLayeredLayout(page, data, requests, theme, width);
+    await checkManagedPositions(page, data, theme, width);
     assert.deepEqual(errors,[]);
-    console.log(`Passed topology and relationship layers: ${theme} ${width}px`);
+    console.log(`Passed topology and relationship classes: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom roles, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, role edit/reload.`);
-  else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, layer defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; custom role hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
+  if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
+  else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
 } finally { await browser.close(); }

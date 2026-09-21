@@ -53,13 +53,13 @@ and Site records retain their own permission checks. Counts are derived only
 from these authorized collections.
 
 `GET /api/topology/connectivity` accepts exactly one of `focus_asset_id` or `focus_network_id`, `hops=1|2`,
-optional repeated `category_ids`, comma-separated `topology_layers`, `show_networks` and `limit` (default 25, maximum
+optional repeated `category_ids`, comma-separated `topology_classes`, `show_networks` and `limit` (default 25, maximum
 60). An inaccessible or nonexistent focus returns the same 404. Omitted category
 IDs use managed visibility defaults. The domain service performs deterministic,
 cycle-safe breadth-first traversal after authorization and presentation filtering.
 Traversal tracks arrival state: child→parent arrival suppresses parent→child
 containment expansion; Asset→Network membership arrival suppresses membership
-expansion back to peer Assets. Other enabled relationship layers remain eligible.
+expansion back to peer Assets. Other enabled relationship classes remain eligible.
 An explicit host/Network focus has no arrival restriction. Parallel eligible
 technical paths are considered separately. This is presentation connectivity,
 not a claim of physical connection or failure impact. Each node adds nullable
@@ -74,43 +74,26 @@ AssetRelationship has no temporal validity fields in the current schema. The
 projection uses its recorded rows; it does not read temporal Service links or
 reinterpret observations/assertions as accepted connectivity.
 
-## Managed relationship layers
+## Managed relationship classes
 
-Migration `20260921_0021` adds non-null `RelationshipType.topology_layer` with
-server default `other` and a database check constraint. Create/PATCH API schemas
-accept only the five keys below, rejecting arbitrary strings and explicit null.
-Omitted PATCH fields leave the layer unchanged. The existing globally authorized
-Relationship Type administration and audited writes carry this additive field.
-Inactive records retain their layer.
+`RelationshipType.topology_class` is a bounded non-null classification, default
+`other`. Platform and physical/network are enabled by default; data/resilience,
+logical/operational and other require explicit inclusion. The original `0021`
+migration seeded exact recognized built-in keys; `0023` renames the column while
+preserving every value. Unknown/custom types remain Other until explicitly edited.
 
-The one-time backfill uses exact stable keys **and `system_defined=true`**:
-
-| Key | Label | Built-in relationship keys |
-| --- | --- | --- |
-| `platform` | Platform / containment | `contains`, `hosts`, `hosted_on`, `runs_on`, `runs`, `member_of` |
-| `physical_network` | Physical / network | `connects_to`, `connected_to`, `belongs_to_network`, `uplinks_to`, `connected_via` |
-| `data_resilience` | Data / resilience | `uses_storage`, `backs_up_to`, `backed_up_by`, `replicates_to`, `syncs_to` |
-| `logical_operational` | Logical / operational | `protects`, `protected_by`, `depends_on`, `monitors`, `proxies`, `authenticates`, `exposes`, `served_by`, `provides_service_to`, `managed_by` |
-| `other` | Other | `related_to`, `routes` |
-
-All 28 currently seeded built-ins are accounted for. `provided_by` is not a
-current built-in. Unknown keys and custom rows, even with a recognized key, keep
-`other`; no names are interpreted. IDs, keys, labels, direction, applicability,
-relationships and lifecycle state remain unchanged. Downgrade removes only the
-new constraint and column.
-
-Omitted `topology_layers` uses `platform,physical_network`; an explicit empty
+Omitted `topology_classes` uses `platform,physical_network`; an explicit empty
 string enables none. Unsupported values return 422. The service filters edges
 before building adjacency, so disabled paths cannot affect reachability, limits
 or second hops. AssetInterface membership participates only with
 `physical_network` and `show_networks=true`; it remains derived structured data.
-An explicitly focused Network may remain as a standalone node when that layer
+An explicitly focused Network may remain as a standalone node when that class
 is off. Category filters and all existing authorization boundaries still apply.
 
-`app/topology_layers.py` and `web/lib/topology-layers.json` define the bounded
-registry/default contract, compared by a test. Filters render registry layers,
+`app/topology_classes.py` and `web/lib/topology-classes.json` define the bounded
+registry/default contract, compared by a test. Filters render registry classes,
 not individual Relationship Types. Their difference count includes category and
-layer overrides; reset restores both. Tab entry resets layers, while in-view
+class overrides; reset restores both. Tab entry resets classes, while in-view
 refocus, expansion and refresh retain them. Reference Data is never changed by
 these temporary controls.
 
@@ -126,36 +109,38 @@ Migration 0004 establishes stable built-in relationship keys and directions:
 `runs` point from parent to child. The topology domain service projects these
 explicitly. It never derives parenthood from category labels, Asset Type labels,
 names, IPs, or vendor metadata. Custom relationship keys participate in Connectivity
-when their managed layer is enabled, without acquiring containment meaning.
-`hosted_on` receives the platform layer but does not change the existing Platform
+when their managed class is enabled, without acquiring containment meaning.
+`hosted_on` receives the platform class but does not change the existing Platform
 parent/child projection.
 
 React only groups/filters the authorized domain projection. Platform displays
 compact child previews in an auto-fitting desktop grid. Network & VLAN uses
-vertical master/detail. Connectivity uses deterministic top-to-bottom role bands with fixed 180×88 cards.
-AssetType `topology_role` is managed presentation metadata, not a traversal rule.
-The bounded registry is mirrored in `app/topology_roles.py` and
-`web/lib/topology-roles.json`, with a contract test. Roles and user-facing labels
-are documented in [Asset Types](../admin/asset-types.md). Internal ranks order
-external, security edge, routing, aggregation, access, platform/infrastructure,
-then workload/endpoint. Only occupied ranks consume space.
+vertical master/detail. Connectivity uses deterministic top-to-bottom managed
+position bands with fixed 180×88 cards. AssetType has nullable
+`topology_position_id` referencing `TopologyPosition`; its joined relationship is
+serialized as `topology_position` with id, immutable key, name, sort_order and
+active state. Connectivity copies this summary only onto already-authorized nodes.
+Relationship edges expose `topology_class` and optional `platform_parent_key`.
 
-Connectivity nodes add `topology_role`; relationship edges add `topology_layer`
-and optional `platform_parent_key` from the existing backend parent projection.
-Canonical source, target, direction, labels, IDs and traversal remain unchanged.
-The frontend never checks Asset Type keys or vendor/name strings to place nodes.
-Automatic nodes use known parent/child ranks first, then adjacent physical/network
-ranks. Snapshot-based rounds terminate within the returned node count. Unanchored
-containment roots seed neutral infrastructure; closed cycles and isolated Assets
-fall back to neutral. Network nodes use the midpoint of their members' ranks
-(or just above a single member rank), without moving multihomed Assets' ranks.
-These are layout hints, not inferred operational knowledge.
+Configured sort_order is authoritative, even for inactive positions and unusual
+ordering. There is no runtime position registry or built-in key ranking. Only
+occupied ranks consume space. `connectivityBands` exposes each occupied band's
+position metadata and node keys for future background rendering.
+
+Automatic nodes have no position assignment. Snapshot-based rounds infer rank
+from recorded parent/child neighbours first, then adjacent physical/network
+neighbours. The relative step comes from visible configured order gaps; no
+business-specific rank or name matching exists. Rounds terminate within the
+returned node count. Unanchored containment roots seed a neutral rank (the
+midpoint of configured visible ranks, or zero); closed cycles and isolated Assets
+use that fallback. Networks use membership rank midpoints, or just above a single
+member rank, without moving multihomed Assets. These are ephemeral layout hints.
 
 Recorded upper neighbours anchor horizontal groups, preferring projected platform
 parents. Stable name/ID ordering fills grids of at most four columns (six for expanded groups larger than twelve); parents
 centre over their child groups with same-row collision resolution. Bands reserve
 space for all grid rows. The final coordinates translate around focus, so Fit
-centres the viewport without changing focus's semantic role. Pure layout output
+centres the viewport without changing focus's configured position. Pure layout output
 can later be overridden by optional positions; no positions are persisted now.
 
 A local preview limits focused-host direct children to eight, with +N expansion
@@ -179,7 +164,7 @@ preserves cached Asset → type default → generic precedence. Existing Atlas
 branding and theme tokens remain authoritative.
 
 The topology workbench has one explicit view-entry initializer. Ordinary clicks
-on a different tab clear category and relationship-layer overrides, search, inspector/parent/Network
+on a different tab clear category and relationship-class overrides, search, inspector/parent/Network
 selection, child expansions and Connectivity focus/hops/Network-toggle state.
 The destination graph mounts at Fit; Network and Asset fallback ordering remains
 deterministic. A shared category-selection helper resolves temporary overrides
@@ -194,7 +179,7 @@ Inspector focus from another view and Network detail navigation supply new
 initial context to view entry, including visibility of the requested Asset's
 category. Within Connectivity, a separate refocus handler serves the Focus
 selector, native node double-click and inspector action. It retains hops, search
-and category/relationship-layer/Network filters, enabling only a requested focus's hidden category
+and category/relationship-class/Network filters, enabling only a requested focus's hidden category
 or Network visibility when necessary. Asset and Network single-click selection
 never changes the query or layout input. Selection uses entity identity separately
 from focus, including Network inspectors; an already-focused selection has no
@@ -277,32 +262,37 @@ scoping remains authoritative. The legacy schema/API field is retained; no
 migration is needed.
 
 
-## Asset Type topology role migration
+## Managed position migration and lifecycle
 
-Migration `20260921_0022` follows `0021`, adding non-null `varchar(32)`
-`asset_types.topology_role`, default `automatic`, with a bounded database check.
-Create/PATCH validate registry keys and reject explicit null; omitted PATCH leaves
-the value unchanged. Existing global Asset Type management authorization and audit
-records cover edits. Topology only serializes metadata after existing scoped
-projection, introducing no new access path or counts.
+Migration `20260921_0023` follows `0022`. It creates TopologyPosition with timestamps,
+seeds nine explicit former registry entries, then backfills a nullable restrictive
+AssetType FK directly from the former `topology_role`. Automatic becomes null.
+Distinct unexpected legacy values become additional positions; no assignment is
+silently discarded. It removes the old role column and renames RelationshipType's
+`topology_layer` to `topology_class`, preserving classification values. These old
+names exist only in migration history and migration regression tests.
 
-One-time defaults apply only to exact recognized keys with `system_defined=true`:
+Seed labels and registry sequence are frozen in the migration. The former shared
+Platform/Infrastructure and Workload/Endpoint ranks become unique adjacent ranks
+in registry order, resolving the conflicting exact-layout/unique-rank requirements.
+All other ordering is retained; administrators can reorder every position.
 
-| Role | Built-in keys |
-| --- | --- |
-| security_edge | firewall |
-| routing | router |
-| access_network | switch, network_switch, access_point, network_bridge |
-| platform | proxmox_host, hypervisor_node, node, server, physical_server, docker_host |
-| infrastructure | nas, storage_pool, backup_target |
-| workload | virtual_machine, container, lxc_container, docker_container, application, proxy, database, backup_job |
-| automatic | unknown, network, vlan, proxmox_cluster, service |
+The Reference Data API uses existing asset_types.view/global asset_types.manage
+permissions and audit events. Create appends; move swaps adjacent ranks under a
+PostgreSQL table lock and deferred unique constraint. Key and numeric rank are
+not editable through PATCH. Inactive positions remain readable and retain all
+assignments. New assignments must be active. Deletion is restricted by both API
+validation and the FK. Counts concern global Asset Types, never scoped Assets.
 
-The current built-in inventory has no dedicated external, aggregation or endpoint
-Type. No new Type is invented. Custom/unknown types remain Automatic, even if a
-custom row reuses a recognized key. Names, IDs, categories, icons, lifecycle state,
-Assets and relationships are preserved. Reapplying head does not overwrite admin
-choices; downgrade removes only the added field/constraint.
+Downgrade reconstructs the old role from each assigned key, null as Automatic.
+The rollback check includes actually-used custom keys; the older application's
+bounded API may not recognize those custom keys even though the database retains
+them. Assigned keys longer than
+the former varchar(32) capacity block downgrade before any changes, requiring
+explicit reassignment rather than truncation. A re-upgrade preserves those keys;
+managed-only names/order/lifecycle customizations are not representable in the
+old schema. Application and API field/query renames deploy together; there is
+no parallel writable compatibility field. Exactly one Alembic head remains.
 
 Expanded Connectivity's inspector visibility is local workbench state. Hiding it
 removes its grid track while retaining selection and the mounted graph. Existing

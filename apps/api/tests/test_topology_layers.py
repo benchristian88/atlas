@@ -6,25 +6,25 @@ from pydantic import ValidationError
 import pytest
 
 from app.schemas import RelationshipTypeCreate, RelationshipTypeUpdate
-from app.topology_layers import DEFAULT_TOPOLOGY_LAYERS, TOPOLOGY_LAYERS
+from app.topology_classes import DEFAULT_TOPOLOGY_CLASSES, TOPOLOGY_CLASSES
 from app.services.infrastructure_topology import connectivity
 from tests.test_infrastructure_topology import fixture_topology
 
 
 def test_bounded_registry_defaults_and_partial_patch():
-    registry = json.loads((Path(__file__).parents[2] / 'web/lib/topology-layers.json').read_text())
-    assert {r['key'] for r in registry} == TOPOLOGY_LAYERS
-    assert {r['key'] for r in registry if r['enabled_by_default']} == DEFAULT_TOPOLOGY_LAYERS
+    registry = json.loads((Path(__file__).parents[2] / 'web/lib/topology-classes.json').read_text())
+    assert {r['key'] for r in registry} == TOPOLOGY_CLASSES
+    assert {r['key'] for r in registry if r['enabled_by_default']} == DEFAULT_TOPOLOGY_CLASSES
     payload = dict(key='paired_with', name='Paired with', source_label='Pairs with', target_label='Paired with')
-    assert RelationshipTypeCreate(**payload).topology_layer == 'other'
-    assert 'topology_layer' not in RelationshipTypeUpdate(name='Renamed').model_dump(exclude_unset=True)
-    for layer in TOPOLOGY_LAYERS:
-        assert RelationshipTypeCreate(**payload, topology_layer=layer).topology_layer == layer
+    assert RelationshipTypeCreate(**payload).topology_class == 'other'
+    assert 'topology_class' not in RelationshipTypeUpdate(name='Renamed').model_dump(exclude_unset=True)
+    for layer in TOPOLOGY_CLASSES:
+        assert RelationshipTypeCreate(**payload, topology_class=layer).topology_class == layer
     for invalid in ('unknown', 'Physical / network', '', None, ['platform']):
         with pytest.raises(ValidationError):
-            RelationshipTypeCreate(**payload, topology_layer=invalid)
+            RelationshipTypeCreate(**payload, topology_class=invalid)
         with pytest.raises(ValidationError):
-            RelationshipTypeUpdate(topology_layer=invalid)
+            RelationshipTypeUpdate(topology_class=invalid)
 
 
 def layered_topology():
@@ -44,7 +44,7 @@ def layered_topology():
         ('talks_to', 'logical_operational', 'NPM', 'Talks'),
         ('paired_with', 'other', 'NPM', 'Paired'),
     ):
-        t['relationship_types'].append(dict(key=key, topology_layer=layer, source_label=f'Configured {key}', directional=True))
+        t['relationship_types'].append(dict(key=key, topology_class=layer, source_label=f'Configured {key}', directional=True))
         t['relationships'].append(dict(id=key, relationship_type=key, source_asset_id=source, target_asset_id=target))
     return t
 
@@ -72,7 +72,7 @@ def test_default_paths_and_custom_physical_keep_labels_direction_and_hops():
 def test_optional_overlays_constrain_traversal(layer, expected):
     t = layered_topology()
     defaults = names(connectivity(t, 'NPM', hops=2, show_networks=False))
-    graph = connectivity(t, 'NPM', hops=2, show_networks=False, topology_layers=[*DEFAULT_TOPOLOGY_LAYERS, layer])
+    graph = connectivity(t, 'NPM', hops=2, show_networks=False, topology_classes=[*DEFAULT_TOPOLOGY_CLASSES, layer])
     assert names(graph) - defaults == expected
     assert len(graph['nodes']) == len(defaults | expected)  # No inferred routing nodes.
 
@@ -80,12 +80,12 @@ def test_optional_overlays_constrain_traversal(layer, expected):
 def test_interface_membership_and_explicit_empty_selection():
     t = layered_topology()
     assert 'Management' in names(connectivity(t, 'NPM'))
-    assert names(connectivity(t, 'NPM', topology_layers=['platform'])) == {'NPM', 'PVE1'}
-    assert names(connectivity(t, None, focus_network_id='n1', topology_layers=[])) == {'Management'}
-    assert names(connectivity(t, 'NPM', topology_layers=[])) == {'NPM'}
+    assert names(connectivity(t, 'NPM', topology_classes=['platform'])) == {'NPM', 'PVE1'}
+    assert names(connectivity(t, None, focus_network_id='n1', topology_classes=[])) == {'Management'}
+    assert names(connectivity(t, 'NPM', topology_classes=[])) == {'NPM'}
     assert names(connectivity(t, None, focus_network_id='n1')) == {'Management', 'NPM'}
     with pytest.raises(HTTPException) as exc:
-        connectivity(t, 'NPM', topology_layers=['arbitrary'])
+        connectivity(t, 'NPM', topology_classes=['arbitrary'])
     assert exc.value.status_code == 422
 
 
@@ -93,7 +93,7 @@ def test_classification_is_metadata_not_english_name_or_key():
     t = layered_topology()
     for definition in t['relationship_types']:
         if definition['key'] == 'proxies':
-            definition['topology_layer'] = 'physical_network'
+            definition['topology_class'] = 'physical_network'
         if definition['key'] == 'runs_on':
-            definition['topology_layer'] = 'other'
+            definition['topology_class'] = 'other'
     assert names(connectivity(t, 'NPM', show_networks=False)) == {'NPM', 'App'}

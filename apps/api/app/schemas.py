@@ -19,8 +19,7 @@ from pydantic import (
 
 from app.presentation import PresentationIcon, PresentationAccent
 from app.taxonomy import NETWORK_TYPES
-from app.topology_layers import TopologyLayer
-from app.topology_roles import TopologyRole
+from app.topology_classes import TopologyClass
 
 
 class ORMResponse(BaseModel):
@@ -527,8 +526,47 @@ class AssetCategoryResponse(ORMResponse):
     updated_at: datetime
 
 
+class TopologyPositionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    active: bool = True
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class TopologyPositionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    active: bool | None = None
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class TopologyPositionMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    direction: Literal["up", "down"]
+
+
+class TopologyPositionSummary(ORMResponse):
+    id: uuid.UUID
+    key: str
+    name: str
+    sort_order: int
+    active: bool
+
+
+class TopologyPositionResponse(TopologyPositionSummary):
+    description: str | None
+    asset_types_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
 class AssetTypeCreate(BaseModel):
-    topology_role: TopologyRole = "automatic"
+    topology_position_id: uuid.UUID | None = None
     model_config = ConfigDict(extra="forbid")
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
@@ -543,7 +581,7 @@ class AssetTypeCreate(BaseModel):
 
 
 class AssetTypeUpdate(BaseModel):
-    topology_role: TopologyRole = "automatic"
+    topology_position_id: uuid.UUID | None = None
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
@@ -557,7 +595,8 @@ class AssetTypeUpdate(BaseModel):
 
 
 class AssetTypeResponse(ORMResponse):
-    topology_role: TopologyRole = "automatic"
+    topology_position: TopologyPositionSummary | None = None
+    topology_position_id: uuid.UUID | None = None
     id: uuid.UUID
     key: str
     name: str
@@ -591,7 +630,7 @@ class RelationshipTypeApplicabilityResponse(ORMResponse):
 
 
 class RelationshipTypeCreate(BaseModel):
-    topology_layer: TopologyLayer = "other"
+    topology_class: TopologyClass = "other"
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
@@ -610,7 +649,7 @@ class RelationshipTypeCreate(BaseModel):
 
 
 class RelationshipTypeUpdate(BaseModel):
-    topology_layer: TopologyLayer = "other"
+    topology_class: TopologyClass = "other"
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
     source_label: str | None = Field(default=None, min_length=1, max_length=100)
@@ -628,7 +667,7 @@ class RelationshipTypeUpdate(BaseModel):
 
 
 class RelationshipTypeResponse(ORMResponse):
-    topology_layer: TopologyLayer
+    topology_class: TopologyClass
     id: uuid.UUID
     key: str
     name: str
@@ -1888,7 +1927,7 @@ class TopologyPlatformLink(BaseModel):
 
 
 class ConnectivityNode(BaseModel):
-    topology_role: TopologyRole = "automatic"
+    topology_position: TopologyPositionSummary | None = None
     parent_key: str | None = None
     key: str
     entity_type: Literal["asset", "network"]
@@ -1898,7 +1937,7 @@ class ConnectivityNode(BaseModel):
 
 
 class ConnectivityEdge(BaseModel):
-    topology_layer: TopologyLayer | None = None
+    topology_class: TopologyClass | None = None
     platform_parent_key: str | None = None
     key: str
     source_key: str

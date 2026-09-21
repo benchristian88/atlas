@@ -1,13 +1,13 @@
 """Read-only projections of already-authorized infrastructure records.
 
 Relationship keys below are the canonical built-in taxonomy (migration 0004),
-not display labels or Asset categories. Managed layers control Connectivity
+not display labels or Asset categories. Managed classes control Connectivity
 eligibility without granting new containment semantics.
 """
 from collections import defaultdict, deque
 
 from fastapi import HTTPException
-from app.topology_layers import DEFAULT_TOPOLOGY_LAYERS, TOPOLOGY_LAYERS
+from app.topology_classes import DEFAULT_TOPOLOGY_CLASSES, TOPOLOGY_CLASSES
 
 PLATFORM_PARENT_ENDPOINT = {
     "runs_on": "target", "member_of": "target",
@@ -26,13 +26,13 @@ def platform_links(relationships):
     return links
 
 
-def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=25, focus_network_id=None, topology_layers=None):
+def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=25, focus_network_id=None, topology_classes=None):
     """Bounded, path-aware neighbourhood over authorized records only."""
     if hops not in (1, 2) or not 1 <= limit <= 60:
         raise HTTPException(422, "Connectivity requires 1 or 2 hops and a limit of 1–60")
-    layers = DEFAULT_TOPOLOGY_LAYERS if topology_layers is None else set(topology_layers)
-    if not layers <= TOPOLOGY_LAYERS:
-        raise HTTPException(422, "Unsupported topology layer")
+    classes = DEFAULT_TOPOLOGY_CLASSES if topology_classes is None else set(topology_classes)
+    if not classes <= TOPOLOGY_CLASSES:
+        raise HTTPException(422, "Unsupported topology class")
     focus_id = str(focus_id)
     assets = {str(a["id"]): a for a in topology["assets"]}
     networks = {str(n["id"]): n for n in topology["networks"]}
@@ -49,7 +49,7 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
     assets = {key: a for key, a in assets.items() if str(types[a["asset_type"]]["category_id"]) in enabled}
     if (focus_network_id is None and focus_id not in assets) or (focus_network_id is not None and not show_networks):
         return {"nodes": [], "edges": [], "truncated": False, "focus_key": focus}
-    nodes = {f"asset:{key}": {"key": f"asset:{key}", "entity_type": "asset", "entity_id": key, "name": a["name"], "topology_role": types[a["asset_type"]].get("topology_role", "automatic")} for key, a in assets.items()}
+    nodes = {f"asset:{key}": {"key": f"asset:{key}", "entity_type": "asset", "entity_id": key, "name": a["name"], "topology_position": types[a["asset_type"]].get("topology_position")} for key, a in assets.items()}
     definitions = {t["key"]: t for t in topology["relationship_types"]}
     edges = []
     parents = {f"relationship:{link['relationship_id']}": f"asset:{link['parent_id']}" for link in platform_links(topology["relationships"])}
@@ -57,15 +57,15 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
         source, target = str(edge["source_asset_id"]), str(edge["target_asset_id"])
         if source in assets and target in assets:
             definition = definitions[edge["relationship_type"]]
-            if definition["topology_layer"] not in layers:
+            if definition["topology_class"] not in classes:
                 continue
             edges.append({"key": f"relationship:{edge['id']}", "source_key": f"asset:{source}", "target_key": f"asset:{target}",
                           "label": definition["source_label"], "kind": "relationship", "directional": definition["directional"],
-                          "topology_layer": definition["topology_layer"], "platform_parent_key": parents.get(f"relationship:{edge['id']}")})
+                          "topology_class": definition["topology_class"], "platform_parent_key": parents.get(f"relationship:{edge['id']}")})
     if show_networks:
         for key, network in networks.items():
             nodes[f"network:{key}"] = {"key": f"network:{key}", "entity_type": "network", "entity_id": key, "name": network["name"]}
-        for interface in topology["asset_interfaces"] if "physical_network" in layers else []:
+        for interface in topology["asset_interfaces"] if "physical_network" in classes else []:
             asset_id, network_id = str(interface["asset_id"]), str(interface["network_id"])
             if asset_id not in assets or network_id not in networks:
                 continue

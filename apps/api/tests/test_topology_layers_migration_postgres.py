@@ -19,7 +19,7 @@ def test_empty_chain_upgrade_backfill_preservation_and_downgrade(monkeypatch):
     assert not inspect(engine).get_table_names(), 'Refusing to modify nonempty database'
     monkeypatch.setenv('DATABASE_URL', url)
     config = Config(str(Path(__file__).parents[1] / 'alembic.ini'))
-    assert ScriptDirectory.from_config(config).get_heads() == ['20260921_0022']
+    assert ScriptDirectory.from_config(config).get_heads() == ['20260921_0023']
     command.upgrade(config, '20260921_0020')
     path = Path(__file__).parents[1] / 'migrations/versions/20260921_0021_relationship_topology_layers.py'
     spec = importlib.util.spec_from_file_location('layers_migration', path)
@@ -41,7 +41,7 @@ def test_empty_chain_upgrade_backfill_preservation_and_downgrade(monkeypatch):
         columns = list(before[0]._mapping)
         relationships = db.execute(text('SELECT * FROM asset_relationships ORDER BY id')).all()
         applicability = db.execute(text('SELECT * FROM relationship_type_applicabilities ORDER BY id')).all()
-    command.upgrade(config, 'head')
+    command.upgrade(config, '20260921_0021')
     with engine.begin() as db:
         assert db.execute(text(f"SELECT {','.join(columns)} FROM relationship_types ORDER BY id")).all() == before
         assert db.execute(text('SELECT * FROM asset_relationships ORDER BY id')).all() == relationships
@@ -50,7 +50,7 @@ def test_empty_chain_upgrade_backfill_preservation_and_downgrade(monkeypatch):
         assert actual == {**expected, 'custom_fibre':'other', 'provided_by':'other', 'future_builtin':'other'}
         assert actual['routes'] == actual['related_to'] == 'other'
         db.execute(text("UPDATE relationship_types SET topology_layer='physical_network' WHERE key='custom_fibre'"))
-    command.upgrade(config, 'head')
+    command.upgrade(config, '20260921_0021')
     with engine.connect() as db:
         assert db.scalar(text("SELECT topology_layer FROM relationship_types WHERE key='custom_fibre'")) == 'physical_network'
     with pytest.raises(IntegrityError), engine.begin() as db:
@@ -61,7 +61,7 @@ def test_empty_chain_upgrade_backfill_preservation_and_downgrade(monkeypatch):
         assert db.execute(text('SELECT * FROM asset_relationships ORDER BY id')).all() == relationships
         # Even a recognized key marked custom must stay safe, not silently classified.
         db.execute(text("UPDATE relationship_types SET system_defined=false WHERE key='connects_to'"))
-    command.upgrade(config, 'head')
+    command.upgrade(config, '20260921_0021')
     with engine.connect() as db:
         assert db.scalar(text("SELECT topology_layer FROM relationship_types WHERE key='connects_to'")) == 'other'
     engine.dispose()

@@ -126,7 +126,7 @@ def get_connectivity(
     focus_network_id: uuid.UUID | None = None,
     hops: int = Query(1, ge=1, le=2),
     category_ids: list[uuid.UUID] | None = Query(None),
-    topology_layers: str | None = Query(None, description="Comma-separated topology layers; omitted uses defaults, empty enables none"),
+    topology_classes: str | None = Query(None, description="Comma-separated topology classes; omitted uses defaults, empty enables none"),
     show_networks: bool = True,
     limit: int = Query(25, ge=1, le=60),
     principal: Principal = Depends(require_permission("assets.view")),
@@ -135,8 +135,8 @@ def get_connectivity(
     if (focus_asset_id is None) == (focus_network_id is None):
         raise HTTPException(422, "Choose exactly one Asset or Network focus")
     topology = get_topology(context, principal, db)
-    layers = None if topology_layers is None else topology_layers.split(",") if topology_layers else []
+    classes = None if topology_classes is None else topology_classes.split(",") if topology_classes else []
     return connectivity(
         topology, focus_asset_id, hops, category_ids, show_networks, limit, focus_network_id,
-        topology_layers=layers,
+        topology_classes=classes,
     )
