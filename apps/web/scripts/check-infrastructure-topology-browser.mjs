@@ -47,7 +47,7 @@ import json, sys
 from app.services.infrastructure_topology import connectivity
 payload = json.load(sys.stdin)
 print(json.dumps(connectivity(**payload)))
-`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_classes: params.has("topology_classes") ? params.get("topology_classes").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids"), limit: 25 }) }));
+`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_classes: params.has("topology_classes") ? params.get("topology_classes").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids") }) }));
 }
 
 async function checkIdentityContrast(page, selector = ".infrastructure-topology .presentation-icon") {
@@ -643,6 +643,75 @@ async function checkTopologyClasss(page, data, theme, width) {
   assert.equal(await page.locator("[data-node-key]").count(),1);
 }
 
+async function checkBranchDisclosure(page, data, requests, theme, width) {
+  const template = data.assets[0];
+  const asset = (n, name, type = "server") => ({...template, id:id(n), name, asset_type:type, cached_icon_url:null});
+  data.assets = [asset(6000,"Primary"), asset(6001,"Neighbour four"), asset(6002,"Neighbour eighteen"), asset(6003,"Switch", "custom_fabric"), asset(6004,"Empty")];
+  data.relationships = []; data.platform_links = []; data.asset_interfaces = [];
+  const connect = (a,b,type) => {const r={id:id(7000+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:type};data.relationships.push(r);if(type==="runs_on")data.platform_links.push({relationship_id:r.id,parent_id:id(b),child_id:id(a)});};
+  for(const [parent,count,start] of [[6000,18,6100],[6001,4,6200],[6002,18,6300]])for(let i=0;i<count;i++){data.assets.push(asset(start+i,`Workload ${start+i}`,"docker_compose"));connect(start+i,parent,"runs_on");}
+  for(const n of [6001,6002,6003,6004])connect(6000,n,"connects_to");
+  for(let i=0;i<5;i++){data.assets.push(asset(6400+i,`Infrastructure ${i}`));connect(6000,6400+i,"connects_to");}
+  data.asset_interfaces.push({id:id(7500),asset_id:id(6000),network_id:data.networks[0].id,name:"eth0",ip_address:"192.0.2.1"},{id:id(7501),asset_id:id(6003),network_id:null,name:"eth0"});
+  await page.goto(`${base}/topology`);
+  const button = name => page.getByRole("button",{name,exact:true});
+  await button("Platform").click();
+  const card = n => page.locator(`[data-platform-id="${id(n)}"]`);
+  assert.equal(await card(6000).locator(".topology-platform-facts").innerText(),"18 child Assets · 1 interface");
+  assert.equal(await card(6003).locator(".topology-platform-facts").innerText(),"1 interface");
+  assert.equal(await card(6004).locator(".topology-platform-facts").count(),0);
+  await button("Connectivity").click();
+  await page.getByLabel("Focus",{exact:true}).selectOption(id(6000));
+  await button("2 hops").click();
+  const more = button("Show 10 more child Assets for Primary");
+  await more.waitFor();
+  await button("Show 4 child Assets for Neighbour four").waitFor();
+  assert.equal(await page.locator('[data-node-key^="asset:"]').count(),18); // Focus, nine neighbours, eight workloads.
+  assert.equal(await page.getByRole("status").count(),0);
+  const focusBefore = await page.getByLabel("Focus",{exact:true}).inputValue();
+  const before = requests.length;
+  const neighbour = page.locator(`[data-node-key="asset:${id(6001)}"]`);
+  await neighbour.focus(); await page.keyboard.press("Tab");
+  assert.equal(await button("Show 4 child Assets for Neighbour four").evaluate(el=>el===document.activeElement),true,"Tab reaches the sibling badge");
+  await page.locator("[data-node-key]").last().focus(); await page.keyboard.press("Tab");
+  assert.equal(await more.evaluate(el=>el===document.activeElement),true,"Tab reaches the connected more node");
+  await page.screenshot({path:`${output}/branches-initial-${theme}-${width}.png`,fullPage:true});
+  await neighbour.click();
+  assert.equal(await neighbour.getAttribute("aria-pressed"),"true");
+  await button("Show 4 child Assets for Neighbour four").click();
+  assert.equal(await page.locator(`[data-node-key="asset:${id(6203)}"]`).count(),1);
+  assert.equal(await neighbour.getAttribute("aria-pressed"),"true");
+  const large = button("Show 18 child Assets for Neighbour eighteen");
+  await large.focus(); await page.keyboard.press("Space");
+  const neighbourMore=button("Show 10 more child Assets for Neighbour eighteen");
+  await neighbourMore.waitFor();
+  await neighbourMore.focus();await page.keyboard.press("Enter");
+  assert.equal(await page.locator(`[data-node-key="asset:${id(6317)}"]`).count(),1);
+  await more.click();
+  assert.equal(await page.locator(`[data-node-key="asset:${id(6117)}"]`).count(),1);
+  assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),focusBefore);
+  assert.equal(await neighbour.getAttribute("aria-pressed"),"true");
+  assert.equal(requests.length,before,"Expansion and inspection never refetch");
+  assert.equal(await page.locator(".topology-disclosure-more,.topology-disclosure-badge").count(),0);
+  await button("Fit").click();await checkGeometry(page);
+  await page.screenshot({path:`${output}/branches-expanded-${theme}-${width}.png`,fullPage:true});
+  await page.locator(`[data-node-key="asset:${id(6000)}"]`).dblclick();
+  // Refocus a neighbour and return to reset ephemeral branch state.
+  await neighbour.dblclick();await page.getByLabel("Focus",{exact:true}).selectOption(id(6000));
+  await more.waitFor();
+  await button("Expand Infrastructure Topology").click();
+  await button("Hide details panel").click();
+  await more.focus();await page.keyboard.press("Space");
+  await button("Show 18 child Assets for Neighbour eighteen").focus();await page.keyboard.press("Enter");
+  await neighbourMore.click();
+  await button("Show details panel").click();
+  assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),focusBefore);
+  assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),1);
+  assert.ok(await page.locator('line[stroke-dasharray="6 5"]').count()>0);
+  await page.screenshot({path:`${output}/branches-fullscreen-${theme}-${width}.png`,fullPage:true});
+  await button("Close expanded Infrastructure Topology").click();
+}
+
 async function checkLayeredLayout(page, data, requests, theme, width) {
   const roles = ["external", "security_edge", "aggregation_network", "access_network", "platform", "workload", "automatic"];
   const types = roles.map((role, i) => ({ id:id(2000+i),key:`arbitrary_${i}`,name:["Custom Boundary", "Custom Edge Appliance", "Custom Fabric Device", "Custom Access Device", "Custom Compute Engine", "Custom Runtime", "Weird Appliance"][i],category_id:id(3),category:"Compute",active:true,sort_order:100,topology_position_id:position(role)?.id || null }));
@@ -673,12 +742,12 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   assert.equal(await node(2200).count(),0,"Neighbour host stays a summary");
   await checkGeometry(page);
   await page.screenshot({path:`${output}/layered-three-hosts-${theme}-${width}.png`,fullPage:true});
-  await node(2105).dblclick();await button("+10 more").waitFor();
+  await node(2105).dblclick();await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).waitFor();
   assert.equal(await page.locator('[data-node-key]').count(),12); // host, 8 children, access, aggregation, peer host
   await ordered([2102,2103,2105,2200]);
   assert.equal(await page.locator(".topology-host-rail").count(),8);
   const beforeExpand=requests.length;
-  await button("+10 more").click();await node(2217).waitFor();
+  await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).click();await node(2217).waitFor();
   assert.equal(requests.length,beforeExpand,"Child expansion must not request or mutate data");
   assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),id(2105));
   assert.equal(await page.locator(".topology-host-rail").count(),18);
@@ -707,7 +776,7 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   assert.equal(await button("Hide details panel").count(),0);
   // Leaving Connectivity resets the local host preview, including prior +N expansion.
   await button("Overview").click();await button("Connectivity").click();await focus(2105);
-  await button("+10 more").waitFor();
+  await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).waitFor();
   await page.screenshot({path:`${output}/layered-eight-children-${theme}-${width}.png`,fullPage:true});
   // A custom Automatic appliance is positioned between its recorded neighbours.
   data.assets.push(asset(2500,6));connect(2103,2500);connect(2500,2105);
@@ -1038,6 +1107,11 @@ try {
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
     await checkConnectivitySearch(page, data, requests, theme, width);
+    if (process.env.ATLAS_DISCLOSURE_ONLY) {
+      await checkBranchDisclosure(page, data, requests, theme, width);
+      assert.deepEqual(errors,[]); checks++; await context.close();
+      console.log(`Passed branch disclosure: ${theme} ${width}px`); continue;
+    }
     if (process.env.ATLAS_SEARCH_ONLY) {
       assert.deepEqual(errors, []); checks++; await context.close(); continue;
     }
@@ -1275,7 +1349,7 @@ try {
     await page.getByRole("button",{name:"1 hop",exact:true}).click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===10);
     const beforeChildren = requests.length;
-    await page.getByRole("button", { name: "+12 more", exact: true }).click();
+    await page.getByRole("button", { name: "Show 12 more child Assets for PVE1", exact: true }).click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===22);
     assert.equal(requests.length, beforeChildren, "Expanding children is local presentation state");
     await checkGeometry(page);
@@ -1336,15 +1410,19 @@ try {
     await close.click();
     assert.deepEqual(errors,[]);
     // Dense recorded results communicate the safety cap without shrinking it.
-    for (let n=0; n<10; n++) {
+    for (let n=0; n<110; n++) {
       const asset = { ...data.assets[0], id:id(900+n), name:`Extra child ${n}`, cached_icon_url:null };
       data.assets.push(asset);
       data.relationships.push({ id:id(950+n), source_asset_id:asset.id, target_asset_id:id(30), relationship_type:"runs_on" });
     }
     await page.getByRole("button", { name:"Refresh",exact:true }).click();
     await page.getByLabel("Focus",{exact:true}).selectOption(id(30));
-    await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===25);
-    assert.match(await page.getByRole("status").innerText(), /Result limited/);
+    await page.getByRole("status").filter({hasText:"Topology safety limit reached"}).waitFor();
+    assert.match(await page.getByRole("status").innerText(), /100 nodes \/ 500 edges/);
+    assert.ok(await page.locator("[data-node-key]").count() < 20, "Technical cap is not initial display density");
+    await page.locator(".topology-disclosure-more").click();
+    assert.equal(await page.locator("[data-node-key]").count(),100);
+    assert.equal(await page.locator(".topology-disclosure-more").count(),0);
     await page.getByRole("button", { name:"Overview",exact:true }).click();
     assert.equal(await page.locator(".topology-detail-inspector").count(),0);
     assert.equal(await page.getByRole("button", { name:"Close details",exact:true }).count(),0);
@@ -1448,11 +1526,15 @@ try {
     await checkTopologyClasss(page, data, theme, width);
     await checkLayeredLayout(page, data, requests, theme, width);
     await checkManagedPositions(page, data, theme, width);
+    Object.assign(data, fixture(), {topology_positions:positionSeeds.map(position)});
+    resolvePositions(data);
+    await checkBranchDisclosure(page, data, requests, theme, width);
     assert.deepEqual(errors,[]);
     console.log(`Passed topology and relationship classes: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
+  if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
+  else if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
   else if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
   else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
 } finally { await browser.close(); }

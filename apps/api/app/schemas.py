@@ -1927,6 +1927,8 @@ class TopologyPlatformLink(BaseModel):
 
 
 class ConnectivityNode(BaseModel):
+    eligible_child_count: int = 0
+    returned_child_count: int = 0
     topology_position: TopologyPositionSummary | None = None
     parent_key: str | None = None
     key: str
@@ -1948,6 +1950,8 @@ class ConnectivityEdge(BaseModel):
 
 
 class ConnectivityResponse(BaseModel):
+    node_limit: int
+    edge_limit: int
     focus_key: str
     nodes: list[ConnectivityNode]
     edges: list[ConnectivityEdge]

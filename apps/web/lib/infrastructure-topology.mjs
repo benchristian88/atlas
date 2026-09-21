@@ -35,6 +35,10 @@ export function compactInterfaceIp(interfaces) {
   const ips = [...new Set(ordered.map(i => i.ip_address))];
   return ips.length ? `${ips[0]}${ips.length > 1 ? ` +${ips.length - 1}` : ""}` : "";
 }
+export function platformCardFacts(childCount, interfaceCount) {
+  return [childCount > 0 ? `${childCount} child Asset${childCount === 1 ? "" : "s"}` : "",
+    interfaceCount > 0 ? `${interfaceCount} interface${interfaceCount === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+}
 export const byName = (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 export const byNetwork = (a, b) => (a.vlan_id ?? Infinity) - (b.vlan_id ?? Infinity) || byName(a, b);
 export const matchesSearch = (asset, query) => !query || [asset.name, asset.hostname, ...(asset.interface_ips || [])].filter(Boolean).join(" ").toLowerCase().includes(query.toLowerCase());
@@ -100,29 +104,56 @@ export function platformMatches(asset, children, query) {
   return false;
 }
 
-const nodeOrder = (a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key);
+const nodeOrder = (a, b) => Number(a.entity_type === "disclosure") - Number(b.entity_type === "disclosure") || a.name.localeCompare(b.name) || a.key.localeCompare(b.key);
 const otherEnd = (edge, key) => edge.source_key === key ? edge.target_key : edge.source_key;
 
 // Only the current authorized result is eligible. No fetch, domain node, or
 // relationship is created by expanding this presentation preview.
-export function connectivityPreview(graph, expanded = false) {
-  const keys = new Set(graph.nodes.map(n => n.key));
-  const children = new Set((graph.edges || []).filter(e => e.platform_parent_key === graph.focus_key)
-    .map(e => otherEnd(e, graph.focus_key)).filter(key => key !== graph.focus_key && keys.has(key)));
-  const ordered = graph.nodes.filter(n => children.has(n.key)).sort(nodeOrder);
-  const hidden = new Set(expanded ? [] : ordered.slice(CHILD_PREVIEW_COUNT).map(n => n.key));
-  const hiddenCount = hidden.size;
+export function connectivityPreview(graph, branches = {}) {
   const byKey = new Map(graph.nodes.map(n => [n.key, n]));
+  const children = new Map();
   for (const edge of graph.edges || []) {
-    if (!edge.platform_parent_key || edge.platform_parent_key === graph.focus_key) continue;
-    const parent = byKey.get(edge.platform_parent_key), child = byKey.get(otherEnd(edge, edge.platform_parent_key));
-    // Preserve focus, its ancestors and genuine direct neighbours. A host seen
-    // along a technical path remains a summary rather than expanding its family.
-    if (parent && child && child.key !== graph.focus_key && child.distance > 1 && child.distance >= parent.distance) hidden.add(child.key);
+    const parent = edge.platform_parent_key, child = otherEnd(edge, parent);
+    if (!parent || !byKey.has(parent) || !byKey.has(child) || child === parent || byKey.get(child).entity_type !== "asset") continue;
+    if (!children.has(parent)) children.set(parent, new Set());
+    children.get(parent).add(child);
   }
-  return { ...graph, hiddenCount, childCount: ordered.length,
-    nodes: graph.nodes.filter(n => !hidden.has(n.key)),
-    edges: (graph.edges || []).filter(e => !hidden.has(e.source_key) && !hidden.has(e.target_key)) };
+  const ordered = new Map([...children].map(([parent, keys]) => [parent, [...keys].map(key => byKey.get(key)).sort(nodeOrder)]));
+  const collapsible = new Set();
+  for (const [parent, group] of ordered) for (const child of group) {
+    // Preserve focus, ancestors and independently reached direct neighbours.
+    if (child.key !== graph.focus_key && (parent === graph.focus_key ||
+      (child.distance > 1 && child.distance >= byKey.get(parent).distance))) collapsible.add(child.key);
+  }
+  const visible = new Set(graph.nodes.filter(n => !collapsible.has(n.key)).map(n => n.key));
+  // Reveal only branches with visible parents. A shared child is visible if any
+  // expanded parent reveals it; cycles terminate at the bounded returned set.
+  for (let round = 0; round < graph.nodes.length; round++) {
+    const before = visible.size;
+    for (const [parent, group] of ordered) {
+      if (!visible.has(parent)) continue;
+      const budget = branches[parent] === "all" ? group.length : parent === graph.focus_key || branches[parent] === "preview" ? CHILD_PREVIEW_COUNT : 0;
+      group.slice(0, budget).forEach(child => visible.add(child.key));
+    }
+    if (visible.size === before) break;
+  }
+  const disclosures = {}, moreNodes = [], moreEdges = [];
+  for (const [parent, group] of ordered) {
+    if (!visible.has(parent)) continue;
+    const hidden = group.filter(child => !visible.has(child.key));
+    if (!hidden.length) continue;
+    const shown = group.filter(child => visible.has(child.key));
+    disclosures[parent] = { hiddenCount: hidden.length, shownCount: shown.length };
+    if (!shown.length) continue;
+    const key = `disclosure:${parent}`;
+    moreNodes.push({ key, entity_type: "disclosure", name: "more", parent_key: parent,
+      hiddenCount: hidden.length, topology_position: (shown.at(-1) || hidden[0]).topology_position });
+    moreEdges.push({ key: `disclosure-edge:${parent}`, source_key: parent, target_key: key,
+      platform_parent_key: parent, kind: "disclosure", directional: false });
+  }
+  return { ...graph, disclosures, moreNodes, moreEdges,
+    nodes: graph.nodes.filter(n => visible.has(n.key)),
+    edges: (graph.edges || []).filter(e => visible.has(e.source_key) && visible.has(e.target_key)) };
 }
 
 export function connectivityLayout(graph) {
@@ -242,7 +273,7 @@ export function connectivityRail(edge, positions, edges) {
   const railY = firstY - CONNECTIVITY_NODE_HEIGHT / 2 - 32;
   const laneX = child.x - CONNECTIVITY_NODE_WIDTH / 2 - 14;
   const entryY = child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 14;
-  const points = [[parent.x, parent.y + CONNECTIVITY_NODE_HEIGHT / 2 + 3], [parent.x, railY], [laneX, railY], [laneX, entryY], [child.x, entryY], [child.x, child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 3]];
+  const points = [[parent.x, parent.y + CONNECTIVITY_NODE_HEIGHT / 2 + 3], [parent.x, railY], [laneX, railY], [laneX, entryY], [child.x, entryY], [child.x, child.y - (child.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_HEIGHT / 2) - 3]];
   return { points: edge.source_key === parent.key ? points : points.reverse(), labelX: child.x, labelY: entryY - 4 };
 }
 

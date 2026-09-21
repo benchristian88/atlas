@@ -1347,5 +1347,10 @@ tbody tr:hover { background: var(--surface-muted); }
 
 /* Expanded-only local inspector state; no reserved sidebar track. */
 .infrastructure-topology .graph-workspace.topology-details-hidden { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
-.topology-more-children { margin-top: 10px; }
+.topology-disclosure-badge, .topology-disclosure-more { position: absolute; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.topology-disclosure-badge { width: 36px; height: 36px; font-size: 12px; }
+.topology-disclosure-more { width: 60px; height: 60px; }
+.topology-disclosure-more small { color: var(--muted); font-size: 11px; }
+.topology-disclosure-badge:hover, .topology-disclosure-more:hover { border-color: var(--accent); background: var(--surface-muted); }
+.topology-disclosure-badge:focus-visible, .topology-disclosure-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .topology-host-rail { pointer-events: stroke; }

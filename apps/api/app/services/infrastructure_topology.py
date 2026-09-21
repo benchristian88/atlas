@@ -9,6 +9,9 @@ from collections import defaultdict, deque
 from fastapi import HTTPException
 from app.topology_classes import DEFAULT_TOPOLOGY_CLASSES, TOPOLOGY_CLASSES
 
+MAX_CONNECTIVITY_NODES = 100
+MAX_CONNECTIVITY_EDGES = 500
+
 PLATFORM_PARENT_ENDPOINT = {
     "runs_on": "target", "member_of": "target",
     "hosts": "source", "contains": "source", "runs": "source",
@@ -26,13 +29,14 @@ def platform_links(relationships):
     return links
 
 
-def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=25, focus_network_id=None, topology_classes=None):
+def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=MAX_CONNECTIVITY_NODES, focus_network_id=None, topology_classes=None):
     """Bounded, path-aware neighbourhood over authorized records only."""
-    if hops not in (1, 2) or not 1 <= limit <= 60:
-        raise HTTPException(422, "Connectivity requires 1 or 2 hops and a limit of 1–60")
+    if hops not in (1, 2) or not 1 <= limit <= MAX_CONNECTIVITY_NODES:
+        raise HTTPException(422, f"Connectivity requires 1 or 2 hops and a limit of 1–{MAX_CONNECTIVITY_NODES}")
     classes = DEFAULT_TOPOLOGY_CLASSES if topology_classes is None else set(topology_classes)
     if not classes <= TOPOLOGY_CLASSES:
         raise HTTPException(422, "Unsupported topology class")
+    limits = {"node_limit": limit, "edge_limit": MAX_CONNECTIVITY_EDGES}
     focus_id = str(focus_id)
     assets = {str(a["id"]): a for a in topology["assets"]}
     networks = {str(n["id"]): n for n in topology["networks"]}
@@ -48,7 +52,7 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
     enabled = {str(c["id"]) for c in topology["categories"] if c["show_in_topology"]} if category_ids is None else set(map(str, category_ids))
     assets = {key: a for key, a in assets.items() if str(types[a["asset_type"]]["category_id"]) in enabled}
     if (focus_network_id is None and focus_id not in assets) or (focus_network_id is not None and not show_networks):
-        return {"nodes": [], "edges": [], "truncated": False, "focus_key": focus}
+        return {"nodes": [], "edges": [], "truncated": False, "focus_key": focus, **limits}
     nodes = {f"asset:{key}": {"key": f"asset:{key}", "entity_type": "asset", "entity_id": key, "name": a["name"], "topology_position": types[a["asset_type"]].get("topology_position")} for key, a in assets.items()}
     definitions = {t["key"]: t for t in topology["relationship_types"]}
     edges = []
@@ -74,6 +78,11 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
             label = " · ".join(filter(None, (interface["name"], interface["ip_address"])))
             edges.append({"key": f"interface:{interface['id']}", "source_key": f"asset:{asset_id}", "target_key": key,
                           "label": label, "kind": "membership", "directional": False})
+    eligible_children = defaultdict(set)
+    for edge in edges:
+        parent = edge.get("platform_parent_key")
+        if parent:
+            eligible_children[parent].add(edge["target_key"] if edge["source_key"] == parent else edge["source_key"])
     adjacency = defaultdict(list)
     for edge in edges:
         adjacency[edge["source_key"]].append((edge["target_key"], edge))
@@ -119,6 +128,14 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
         else:
             other_edges.append(edge)
     # Dense/multi-interface neighbourhoods also have an explicit edge bound.
-    truncated = truncated or len(selected_edges) > 150
-    return {"focus_key": focus, "nodes": [{**nodes[k], "distance": depth, "parent_key": branches[k]} for k, depth in distances.items()],
-            "edges": sorted((tree_edges + other_edges)[:150], key=lambda e: e["key"]), "truncated": truncated}
+    truncated = truncated or len(selected_edges) > MAX_CONNECTIVITY_EDGES
+    returned_edges = sorted((tree_edges + other_edges)[:MAX_CONNECTIVITY_EDGES], key=lambda e: e["key"])
+    returned_children = defaultdict(set)
+    for edge in returned_edges:
+        parent = edge.get("platform_parent_key")
+        if parent:
+            returned_children[parent].add(edge["target_key"] if edge["source_key"] == parent else edge["source_key"])
+    return {"focus_key": focus, "nodes": [{**nodes[k], "distance": depth, "parent_key": branches[k],
+                "eligible_child_count": len(eligible_children[k]), "returned_child_count": len(returned_children[k])}
+                for k, depth in distances.items()],
+            "edges": returned_edges, "truncated": truncated, **limits}

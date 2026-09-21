@@ -10,7 +10,7 @@ from app.models import Asset, AssetInterface, AssetRelationship, Customer, Netwo
 from app.presenters import topology_asset_responses
 from app.routes.asset_relationships import relationship_response
 from app.schemas import TopologyResponse, AssetCategoryResponse, AssetTypeResponse, AssetInterfaceResponse, NetworkResponse, RelationshipTypeResponse, ConnectivityResponse
-from app.services.infrastructure_topology import connectivity, platform_links
+from app.services.infrastructure_topology import MAX_CONNECTIVITY_NODES, connectivity, platform_links
 
 router = APIRouter(prefix="/topology", tags=["topology"])
 
@@ -128,7 +128,7 @@ def get_connectivity(
     category_ids: list[uuid.UUID] | None = Query(None),
     topology_classes: str | None = Query(None, description="Comma-separated topology classes; omitted uses defaults, empty enables none"),
     show_networks: bool = True,
-    limit: int = Query(25, ge=1, le=60),
+    limit: int = Query(MAX_CONNECTIVITY_NODES, ge=1, le=MAX_CONNECTIVITY_NODES),
     principal: Principal = Depends(require_permission("assets.view")),
     db: Session = Depends(get_db),
 ):

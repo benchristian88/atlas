@@ -152,3 +152,12 @@ test("Connectivity focus finder matches authorized names, hostnames and every in
   assert.equal(connectivitySearchResults(authorized.assets, "Uncategorized")[0].id, "unknown");
   assert.equal(topologyPresentation(data, new Set(["custom"])).byId.unknown, undefined);
 });
+
+
+test("Platform facts omit zeros and use singular/plural without type rules", async () => {
+  const { platformCardFacts } = await import("../lib/infrastructure-topology.mjs");
+  assert.equal(platformCardFacts(18,1),"18 child Assets · 1 interface");
+  assert.equal(platformCardFacts(0,1),"1 interface");
+  assert.equal(platformCardFacts(0,0),"");
+  assert.equal(platformCardFacts(1,2),"1 child Asset · 2 interfaces");
+});

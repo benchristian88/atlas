@@ -24,6 +24,8 @@ live monitoring or freshness estimate is implied.
   recorded interfaces only. A primary interface is preferred; otherwise the first
   interface in name/ID order is used. **+N** counts additional distinct addresses,
   including when a primary exists. Assets without interface IPs omit that line.
+  Child Asset and interface facts appear only for positive recorded counts, with
+  singular/plural wording; cards with neither omit the metadata line.
 - **Network & VLAN** has a vertically scrollable Network list and selected
   Network detail. Membership comes only from explicit Asset interface records.
   A multihomed Asset can appear in several Networks, with each interface's IP
@@ -50,11 +52,14 @@ live monitoring or freshness estimate is implied.
   The viewport centres on focus while its Type's topology position retains its
   top-to-bottom position. Missing layers collapse; no infrastructure is invented.
   Recorded relationships group related cards horizontally. Focused hosts show
-  the first eight returned children in name/ID order, with **+N more** expanding
-  the remaining children locally. Expansion preserves focus, hops and filters;
-  leaving Connectivity resets it. Neighbour hosts remain summaries; double-click
-  one to explore its children. Direct focus connections and ancestors remain
-  visible. Hosted children use a grid and branching rails; select a child to
+  the first eight returned children in name/ID order, followed by a connected
+  circular **+N more** control for the remainder. A collapsed neighbour's **+N**
+  badge opens its first eight children; any remainder gets its own **+N more**
+  control. Both support Enter/Space. Expansion preserves focus, selection, hops,
+  filters and Networks, including in full screen; changing focus or leaving
+  Connectivity resets it. These controls and their connectors are presentation
+  only, never Assets or recorded Relationships. Direct focus connections and
+  ancestors remain visible. Hosted children use a grid and branching rails; select a child to
   inspect its individual canonical relationships.
 
   In expanded Connectivity, the compact **Hide details panel** / **Show details
@@ -71,8 +76,11 @@ position; multihomed Assets retain their own position. Network icon/accent and d
 membership semantics are unchanged. Persisted manual positioning is intentionally
 deferred; layout positions are ephemeral presentation output.
 
-Connectivity shows at most 25 nodes and 150 edges, with a truncation notice when
-necessary. Category, relationship-class and Network filters apply before traversal,
+Connectivity retrieves at most 100 nodes and 500 edges while keeping initial
+child presentation compact. A safety warning appears only when that technical
+limit is reached; intentionally collapsed branches are not truncation. **+N**
+counts only returned children that can actually be revealed, never unavailable
+children beyond the safety or hop limits. Category, relationship-class and Network filters apply before traversal,
 so a disabled relationship cannot introduce a node, create a second-hop path or
 consume a node-limit slot.
 

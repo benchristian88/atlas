@@ -99,9 +99,9 @@ def test_connectivity_bounded_deterministic_cycle_safe():
 def test_dense_edge_limit_retains_paths_to_every_returned_node():
     t = fixture_topology()
     # Preserve connections to Assets even with many parallel membership edges.
-    t["asset_interfaces"] = [{"id": f"i{i}", "asset_id": "AdGuard", "network_id": "n1", "name": f"eth{i}", "ip_address": None} for i in range(170)]
+    t["asset_interfaces"] = [{"id": f"i{i}", "asset_id": "AdGuard", "network_id": "n1", "name": f"eth{i}", "ip_address": None} for i in range(520)]
     graph = connectivity(t, "AdGuard", hops=2)
-    assert len(graph["edges"]) == 150 and graph["truncated"]
+    assert len(graph["edges"]) == 500 and graph["truncated"]
     reached = {graph["focus_key"]}
     for _ in graph["nodes"]:
         for edge in graph["edges"]:
@@ -155,3 +155,51 @@ def test_parallel_technical_path_can_reach_peer_even_if_containment_path_cannot(
     t, _ = homelab_topology()
     t["relationships"].append({"id": "parallel", "source_asset_id": "AdGuard", "target_asset_id": "PVE1", "relationship_type": "connects_to"})
     assert "asset:Grafana" in {n["key"] for n in connectivity(t, "AdGuard", hops=2, limit=60)["nodes"]}
+
+
+def capacity_topology(child_count=18):
+    t = fixture_topology()
+    names = ["parent"] + [f"A infrastructure {i}" for i in range(8)] + [f"Workload {i:03}" for i in range(child_count)]
+    t["assets"] = [{"id": name, "name": name, "asset_type": "custom"} for name in names]
+    t["relationships"] = [{"id": name, "source_asset_id": name, "target_asset_id": "parent",
+        "relationship_type": "runs_on" if name.startswith("Workload") else "custom_link"} for name in names[1:]]
+    t["asset_interfaces"] = []
+    return t
+
+
+def test_homelab_capacity_reproduces_old_loss_and_returns_all_eighteen_children():
+    t = capacity_topology()
+    old = connectivity(t, "parent", hops=2, limit=25)
+    assert old["truncated"] and sum(n["name"].startswith("Workload") for n in old["nodes"]) == 16
+    graph = connectivity(t, "parent", hops=2)
+    assert len(graph["nodes"]) == 27 and not graph["truncated"]
+    assert graph["node_limit"] == 100 and graph["edge_limit"] == 500
+    parent = next(n for n in graph["nodes"] if n["name"] == "parent")
+    assert parent["eligible_child_count"] == parent["returned_child_count"] == 18
+
+
+def test_large_branch_is_bounded_and_counts_only_returned_children_as_expandable():
+    t = capacity_topology(120)
+    graph = connectivity(t, "parent", hops=2)
+    assert len(graph["nodes"]) == 100 and graph["truncated"]
+    parent = next(n for n in graph["nodes"] if n["name"] == "parent")
+    assert parent["eligible_child_count"] == 120 and parent["returned_child_count"] == 91
+    t["assets"].reverse(); t["relationships"].reverse()
+    assert connectivity(t, "parent", hops=2) == graph
+    with pytest.raises(HTTPException):
+        connectivity(t, "parent", limit=101)
+    filtered = connectivity(t, "parent", topology_classes=["physical_network"])
+    assert all(n["eligible_child_count"] == n["returned_child_count"] == 0 for n in filtered["nodes"])
+    assert not filtered["truncated"]
+
+
+def test_child_metadata_respects_categories_classes_and_deduplicates_canonical_links():
+    t = capacity_topology()
+    t["assets"][9]["asset_type"] = "other"
+    t["relationships"].append({**t["relationships"][9], "id": "parallel"})
+    parent = next(n for n in connectivity(t, "parent")["nodes"] if n["key"] == "asset:parent")
+    assert parent["eligible_child_count"] == parent["returned_child_count"] == 17
+    parent = next(n for n in connectivity(t, "parent", category_ids=["custom", "uncategorized"])["nodes"] if n["key"] == "asset:parent")
+    assert parent["eligible_child_count"] == parent["returned_child_count"] == 18
+    graph = connectivity(t, "parent", topology_classes=["physical_network"])
+    assert all(n["eligible_child_count"] == n["returned_child_count"] == 0 for n in graph["nodes"])

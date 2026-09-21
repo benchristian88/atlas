@@ -53,8 +53,8 @@ and Site records retain their own permission checks. Counts are derived only
 from these authorized collections.
 
 `GET /api/topology/connectivity` accepts exactly one of `focus_asset_id` or `focus_network_id`, `hops=1|2`,
-optional repeated `category_ids`, comma-separated `topology_classes`, `show_networks` and `limit` (default 25, maximum
-60). An inaccessible or nonexistent focus returns the same 404. Omitted category
+optional repeated `category_ids`, comma-separated `topology_classes`, `show_networks` and `limit` (default and maximum
+100). An inaccessible or nonexistent focus returns the same 404. Omitted category
 IDs use managed visibility defaults. The domain service performs deterministic,
 cycle-safe breadth-first traversal after authorization and presentation filtering.
 Traversal tracks arrival state: child→parent arrival suppresses parent→child
@@ -68,7 +68,14 @@ only reference an authorized returned node.
 Edges retain recorded direction even when traversed backwards. Nodes use
 `asset:<UUID>` / `network:<UUID>` identity; edges use `relationship:<UUID>` or
 `interface:<UUID>`. Network membership comes only from `AssetInterface.network_id`.
-The edge limit is 150; the UI requests 25 nodes and reports truncation.
+The server owns the 100-node / 500-edge safety policy; the UI uses its default.
+The response reports `node_limit`, `edge_limit` and truthful `truncated` status.
+Asset nodes include deduplicated `eligible_child_count` after authorization and
+category/class filtering, and `returned_child_count` from returned edges. Eligible
+children can be outside the hop/arrival policy or safety budget; only returned
+children can be expanded. Counts never include inaccessible endpoints. The
+existing scoped topology loader still loads its authorized collections before
+bounded traversal; these are traversal/output limits, not SQL row limits.
 
 AssetRelationship has no temporal validity fields in the current schema. The
 projection uses its recorded rows; it does not read temporal Service links or
@@ -114,7 +121,8 @@ when their managed class is enabled, without acquiring containment meaning.
 parent/child projection.
 
 React only groups/filters the authorized domain projection. Platform displays
-compact child previews in an auto-fitting desktop grid. Network & VLAN uses
+compact child previews in an auto-fitting desktop grid. Card facts show only
+positive child/interface counts, with singular/plural wording and no empty line. Network & VLAN uses
 vertical master/detail. Connectivity uses deterministic top-to-bottom managed
 position bands with fixed 180×88 cards. AssetType has nullable
 `topology_position_id` referencing `TopologyPosition`; its joined relationship is
@@ -143,12 +151,21 @@ space for all grid rows. The final coordinates translate around focus, so Fit
 centres the viewport without changing focus's configured position. Pure layout output
 can later be overridden by optional positions; no positions are persisted now.
 
-A local preview limits focused-host direct children to eight, with +N expansion
-restricted to nodes already returned by the bounded API. Non-focused parents'
-second-hop child expansion is summarized, preserving direct focus neighbours and
-ancestors. No extra graph request or domain node is created. Expansion survives
-refocus/Refresh/expanded mode during a Connectivity session and resets on tab
-entry. The API limit notice remains separate from the local preview count.
+A local preview limits focused-parent direct children to eight in name/ID order.
+A collapsed neighbour has a circular +N badge when returned eligible children
+are hidden; it opens the first eight. Once children are visible, a connected
+circular +N more control reveals the remainder. Only one control exists per
+parent, and its count includes only children actually available in the response.
+Direct focus neighbours and ancestors remain visible. Shared children are counted
+once per parent and remain visible if another expanded branch reveals them.
+Disclosure nodes/edges are separate presentation collections merged only for
+layout/rendering; they never enter API, inspector, traversal or accepted knowledge.
+Children retain their managed bands, and the more control follows its visible
+child group. Native sibling buttons isolate expansion from card inspection and
+refocus; Enter/Space work for both controls. Expansion preserves selection,
+hops, filters and Networks, survives Refresh/fullscreen, and resets on focus
+change or leaving Connectivity. No extra request or write occurs. Intentional
+collapse does not set truncation; the server safety warning remains separate.
 Orthogonal parent/child rails use card gutters for later rows; canonical arrow
 orientation is preserved. Child selection exposes individual relationships;
 repeated host-selected labels are suppressed. Other edges retain their labels

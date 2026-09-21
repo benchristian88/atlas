@@ -257,3 +257,38 @@ def test_focus_finder_non_disclosure_by_name_hostname_and_ip(client, db, scope):
         assert f"192.168.5.{index + 1}" not in projection.text
         response = client.get("/api/topology/connectivity", params={"focus_asset_id": str(assets[index].id)}, headers=headers)
         assert response.status_code == 404
+
+
+@pytest.mark.parametrize("child_count", [18, 120])
+def test_connectivity_api_capacity_and_child_counts_respect_scope(client, db, child_count):
+    sites, assets, _ = seed_scope(db)
+    parent = assets[1]
+    children = [Asset(workspace_id=parent.workspace_id, customer_id=parent.customer_id,
+        site_id=parent.site_id, asset_type="server", name=f"Workload {i:03}") for i in range(child_count - 1)]
+    db.add_all(children); db.flush()
+    # Even global relationship permission cannot disclose hidden child endpoints.
+    db.add_all([AssetRelationship(customer_id=parent.customer_id, site_id=parent.site_id,
+        source_asset_id=child.id, target_asset_id=parent.id, relationship_type="runs_on")
+        for child in children + assets[2:]])
+    db.flush()
+    actor = make_principal("relationships.view")
+    scoped = ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Site",
+        scope_type="site", customer_id=parent.customer_id, site_id=parent.site_id,
+        permissions=frozenset({"assets.view", "networks.view"}))
+    app.dependency_overrides[get_principal] = lambda: Principal(actor.user, (*actor.grants, scoped))
+    url = f"/api/topology/connectivity?focus_asset_id={parent.id}&hops=2"
+    response = client.get(url)
+    assert response.status_code == 200, response.text
+    graph = response.json()
+    assert graph["node_limit"] == 100 and graph["edge_limit"] == 500
+    focus = next(n for n in graph["nodes"] if n["key"] == graph["focus_key"])
+    assert focus["eligible_child_count"] == child_count
+    assert focus["returned_child_count"] == min(child_count, 99)
+    assert graph["truncated"] == (child_count > 99)
+    assert len(graph["nodes"]) <= 100 and len(graph["edges"]) <= 500
+    assert all(str(a.id) not in str(graph) for a in assets[2:])
+    filtered = client.get(url + "&topology_classes=physical_network").json()
+    assert filtered["nodes"][0]["eligible_child_count"] == 0
+    assert client.get(url + "&limit=101").status_code == 422
+    assert client.get(url + "&limit=25").json()["node_limit"] == 25
+    assert client.get(f"/api/topology/connectivity?focus_asset_id={assets[2].id}").status_code == 404

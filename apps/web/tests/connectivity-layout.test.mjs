@@ -43,11 +43,12 @@ test("missing bands collapse, no objects are invented, and multi-host grouping f
 
 test("eight-child preview, stable name/ID order, local expansion, neighbour summaries, and canonical rail direction", () => {
   const graph=homelab(), before=structuredClone(graph), preview=connectivityPreview(graph);
-  assert.equal(preview.hiddenCount,10); assert.equal(preview.childCount,18);
+  assert.deepEqual(preview.disclosures.h1, {hiddenCount:10, shownCount:8});
+  assert.equal(preview.moreNodes.length,1);
   assert.equal(preview.nodes.filter(n=>n.key.startsWith("child1")).length,8);
   assert.equal(preview.nodes.filter(n=>n.key.startsWith("child2") || n.key.startsWith("child3")).length,0);
   assert.deepEqual(preview.nodes.filter(n=>n.key.startsWith("child1")).map(n=>n.key),Array.from({length:8},(_,i)=>`child1-0${i}`));
-  const expanded=connectivityPreview(graph,true);
+  const expanded=connectivityPreview(graph,{h1:"all"});
   assert.equal(expanded.nodes.filter(n=>n.key.startsWith("child1")).length,18);
   assert.equal(expanded.focus_key,graph.focus_key); assert.deepEqual(graph,before);
   const positions=layout(preview);
@@ -98,4 +99,54 @@ test("arbitrary managed keys, rename and reorder control bands without type-name
   graph.topology_positions = [...positions, storage, { id: "empty", key: "unused", name: "Empty", sort_order: 16 }];
   assert.equal(connectivityBands(connectivityLayout(graph)).length, 5, "Unused positions consume no band");
   noOverlap(Object.values(custom));
+});
+
+
+test("neighbour badges expand four children and eighteen children in two local stages", () => {
+  const graph = homelab(); graph.focus_key = "s1";
+  const initial = connectivityPreview(graph);
+  assert.deepEqual(initial.disclosures.h1, {hiddenCount:18, shownCount:0});
+  assert.deepEqual(initial.disclosures.h2, {hiddenCount:4, shownCount:0});
+  assert.equal(initial.moreNodes.length, 0);
+  const preview = connectivityPreview(graph, {h1:"preview", h2:"preview"});
+  assert.equal(preview.nodes.filter(n=>n.key.startsWith("child1")).length,8);
+  assert.equal(preview.nodes.filter(n=>n.key.startsWith("child2")).length,4);
+  assert.equal(preview.disclosures.h2, undefined);
+  assert.equal(preview.moreNodes[0].hiddenCount,10);
+  assert.equal(preview.moreNodes[0].parent_key,"h1");
+  const placed = layout({...preview, nodes:[...preview.nodes,...preview.moreNodes], edges:[...preview.edges,...preview.moreEdges]});
+  assert.equal(placed[preview.moreNodes[0].key].rank, fixturePositions.workload.sort_order);
+  assert.ok(placed[preview.moreNodes[0].key].y >= placed["child1-07"].y);
+  noOverlap(Object.values(placed));
+  const expanded = connectivityPreview(graph, {h1:"all", h2:"preview"});
+  assert.equal(expanded.nodes.filter(n=>n.key.startsWith("child1")).length,18);
+  assert.equal(expanded.moreNodes.length,0);
+  assert.equal(expanded.focus_key,"s1");
+});
+
+test("disclosure respects returned edges, duplicates, Network membership and server clipping", () => {
+  const graph = homelab();
+  graph.truncated = true;
+  graph.nodes = graph.nodes.filter(n=>!n.key.startsWith("child1-1")); // Ten available children.
+  graph.nodes.push({...node("network","automatic"),entity_type:"network"});
+  graph.edges.push({...edge("h1","network"),kind:"membership"});
+  graph.edges.push({...graph.edges.find(e=>e.platform_parent_key==="h1"),key:"parallel"});
+  let preview = connectivityPreview(graph);
+  assert.equal(preview.moreNodes[0].hiddenCount,2);
+  assert.equal(preview.truncated,true);
+  assert.ok(preview.nodes.some(n=>n.key==="network"));
+  graph.edges = graph.edges.filter(e=>e.platform_parent_key!=="h1");
+  preview = connectivityPreview(graph);
+  assert.equal(preview.disclosures.h1,undefined);
+  assert.equal(preview.moreNodes.length,0);
+});
+
+test("shared children and cycles cannot hide focus or promise already visible children", () => {
+  const graph = homelab();
+  graph.edges.push(edge("h1","child1-00","child1-00"),edge("child1-00","h2","h2"));
+  const preview = connectivityPreview(graph);
+  assert.ok(preview.nodes.some(n=>n.key===graph.focus_key));
+  assert.deepEqual(preview.disclosures.h2,{hiddenCount:4,shownCount:1});
+  assert.equal(preview.moreNodes.find(n=>n.parent_key==="h2").hiddenCount,4);
+  assert.deepEqual(connectivityPreview({...graph,nodes:[...graph.nodes].reverse(),edges:[...graph.edges].reverse()}).moreNodes.sort((a,b)=>a.key.localeCompare(b.key)), [...preview.moreNodes].sort((a,b)=>a.key.localeCompare(b.key)));
 });
