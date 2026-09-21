@@ -110,9 +110,19 @@ Expand retains the mounted tree and viewport state. Refresh retains current data
 while refetching and replaces the authorized projection without clearing valid
 controls or remounting an unchanged Connectivity graph.
 
-Explicit inspector focus and Network navigation supply new initial context to
-view entry, including visibility of the requested Asset's category. The topology
-route currently has no URL/query-state or Asset-detail deep-link contract; this
+Inspector focus from another view and Network detail navigation supply new
+initial context to view entry, including visibility of the requested Asset's
+category. Within Connectivity, a separate refocus handler serves the Focus
+selector, native node double-click and inspector action. It retains hops, search
+and category/Network filters, enabling only a requested focus's hidden category
+or Network visibility when necessary. Asset and Network single-click selection
+never changes the query or layout input. Selection uses entity identity separately
+from focus, including Network inspectors; an already-focused selection has no
+refocus action. Node buttons retain native Enter/Space selection, with the
+inspector action providing keyboard refocus. Connectivity is keyed by focus so
+navigation fits a fresh viewport, while selection and expand retain the canvas.
+
+The topology route currently has no URL/query-state or Asset-detail deep-link contract; this
 polish does not add one. Existing `/knowledge-graph?focus=…&depth=1` inspector links
 are unchanged. Temporary controls and ordinary topology tabs do not write history.
 

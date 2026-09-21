@@ -34,11 +34,18 @@ live monitoring or freshness estimate is implied.
   dashed lines show interface membership. A workload → host → sibling path is
   suppressed, as is Asset → Network → peer membership. Other recorded paths,
   such as workload → host → switch, can still continue. Focus the host itself
-  to see its directly hosted Assets, or select/focus a Network to see its recorded
-  members. Network detail is available from its inspector. Select an Asset to
-  inspect it.
-  **Focus Connectivity** explores the selected Asset. **Fit** restores the
-  fitted zoom, and the zoom buttons and canvas scrolling support closer inspection.
+  to see its directly hosted Assets, or focus a Network to see its recorded
+  members. Single-click an Asset or Network to inspect it without changing focus
+  or rearranging the graph. Double-click its card, or choose **Focus Connectivity**
+  in the inspector, to explore that entity. Keyboard users can Tab to a node,
+  press Enter or Space to select it, then activate the inspector action.
+  The **Focus** selector displays the focused Asset or Network; selection is
+  separate. Refocusing selects the new focus, retains hops, search and filters,
+  and fits/recentres the new graph, clearing previous zoom and pan. An explicitly
+  requested focus enables only its own category if needed. The inspector action
+  is hidden for the current focus. Network detail is available from its inspector.
+  **Fit** restores fitted zoom and clears pan; zoom buttons and canvas scrolling
+  support closer inspection.
   The focus stays central, with second-hop nodes outside their first-hop branch.
   Layout space grows to avoid overlapping cards.
 
@@ -62,9 +69,9 @@ Platform returns to its child previews and normal ordering. Network & VLAN selec
 the first Network in VLAN/name/ID order. Connectivity returns to one hop, Networks
 enabled, its first visible Asset in name/ID order, and a fitted viewport.
 Customer, Site and theme stay unchanged. Clicking the current view does not reset
-it. Explicit **Focus Connectivity** and **Open Network detail** navigation honour
-the requested Asset or Network as the new initial context. An explicitly focused
-Asset's category is enabled for that view if needed.
+it. **Focus Connectivity** from another view and **Open Network detail** navigation
+honour the requested Asset or Network as the new initial context. An explicitly
+focused Asset's category is enabled for that view if needed.
 
 Search finds Platform Assets and children, Networks and their connected Assets,
 or Assets in the Connectivity selector.
