@@ -82,7 +82,6 @@ function TopologyWorkbench() {
       {error && <p className="error-banner" role="alert">{error}</p>}
       {!data && !error && <p role="status">Loading infrastructure…</p>}
       {data && <>
-        <div className="topology-context ops-meta">{workspace.customers.find(c => c.id === workspace.customerId)?.name || "Authorized customers"} · {workspace.sites.find(s => s.id === workspace.siteId)?.name || "Authorized sites"} · Recorded knowledge</div>
         {tab !== "overview" && <label className="field topology-search"><span>{tab === "networks" ? "Search Networks and connected Assets" : "Search Assets"}</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === "networks" ? "Network, VLAN or Asset name" : "Asset name, hostname or IP"} /></label>}
         {tab === "overview" ? <Overview view={view} onNetwork={openNetwork} /> :
           tab === "networks" ? <Networks view={view} network={network} search={search} onNetwork={setNetworkId} select={select} sites={data.sites} /> :

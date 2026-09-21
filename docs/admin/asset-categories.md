@@ -10,8 +10,12 @@ Add a name, stable key, optional description, sort order, active state and
 numbers and underscores, starting with a letter; they cannot change after
 creation. Categories sort by sort order, then name.
 
-Choose an **Icon** and **Accent** from the Atlas presets. The icon identifies
-the category in summaries, section headings and filters. The accent adds a pale
+Under **Presentation**, open the compact **Icon** or **Accent** dropdown to
+choose an Atlas preset. The selected values remain visible when closed, and the
+small preview updates immediately with the category name. Arrow keys browse
+choices; Enter or Space selects, and Escape closes without changing the value.
+Selection returns focus to the control. Save to persist your choices. The icon
+identifies the category in summaries, section headings and filters. The accent adds a pale
 tint or subtle border to those areas and to the category's Asset cards. Individual
 Assets retain their own artwork: cached Asset icon, then Asset Type default,
 then the generic Asset icon. Category icons never replace that artwork.

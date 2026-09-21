@@ -1259,7 +1259,6 @@ tbody tr:hover { background: var(--surface-muted); }
 /* Infrastructure Topology: read-only infrastructure projections. */
 .topology-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
 .topology-toolbar .lens-selector { margin: 0; flex-wrap: wrap; }
-.topology-context { margin: 8px 0 16px; }
 .topology-search { max-width: 440px; margin-bottom: 16px; }
 .topology-category-filters { display: flex; flex-wrap: wrap; gap: 12px 20px; border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 0 0 16px; }
 .topology-category-filters label { display: flex; align-items: center; gap: 6px; }
@@ -1311,7 +1310,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-detail-inspector { margin-top: 20px; }
 .topology-detail-inspector .graph-inspector { position: static; max-height: none; }
 .infrastructure-topology .is-expanded .topology-network-list { max-height: 75vh; }
-.infrastructure-topology .is-expanded :is(.topology-toolbar, .topology-category-filters, .topology-context, .topology-search, .topology-connectivity-controls) { margin-top: 0; margin-bottom: 0; flex-shrink: 0; }
+.infrastructure-topology .is-expanded :is(.topology-toolbar, .topology-category-filters, .topology-search, .topology-connectivity-controls) { margin-top: 0; margin-bottom: 0; flex-shrink: 0; }
 
 .infrastructure-topology .is-expanded .graph-inspector { max-height: 75vh; }
 @media (max-width: 1000px) {

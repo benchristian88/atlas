@@ -124,8 +124,10 @@ Asset presentation resolves through its type's category once during projection.
 AssetIcon's cached/type/generic precedence remains intact. Membership edges
 resolve the target Network's accent; relationship edges retain their styling.
 Neither this metadata nor its colour affects graph traversal, scope, status,
-membership or dependency semantics. Native labelled radio controls, checkboxes,
-text labels, heavier focus borders and selection rings keep colour secondary.
+membership or dependency semantics. Both admin forms use the shared compact
+PresentationPicker with labelled menu buttons, checked menu choices, keyboard
+navigation and a live preview. Text labels, checkmarks, checkboxes, heavier focus
+borders and selection rings keep colour secondary.
 
 ## Source audit and deliberate omissions
 

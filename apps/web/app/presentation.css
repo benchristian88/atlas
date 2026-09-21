@@ -73,17 +73,24 @@
 .presentation-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: 7px; background: var(--identity-tile); color: var(--identity-foreground); }
 .presentation-icon .nav-icon { width: 19px; height: 19px; flex-basis: 19px; }
 .presentation-identity { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
-.presentation-picker { display: grid; gap: 14px; }
+.presentation-picker { display: grid; gap: 12px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.presentation-picker legend { font-size: 13px; font-weight: 650; padding: 0; margin-bottom: 12px; }
 .presentation-picker p { margin: 0; }
-.presentation-picker fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 0; min-width: 0; }
-.presentation-picker legend { font-size: 13px; font-weight: 600; }
-.presentation-options { display: flex; flex-wrap: wrap; gap: 8px; }
-.presentation-options label { display: flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; background: var(--surface); }
-.presentation-options label:has(input:checked) { outline: 2px solid var(--text); outline-offset: -2px; }
-.presentation-options input { width: auto; margin: 0; accent-color: var(--text); }
-.presentation-options input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
-.presentation-options .presentation-icon { width: 24px; height: 24px; flex-basis: 24px; }
-.presentation-options .nav-icon { width: 16px; height: 16px; flex-basis: 16px; }
+.presentation-choice { position: relative; min-width: 0; }
+.presentation-choice-trigger { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 42px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.presentation-choice-trigger:hover, .presentation-choice-trigger[aria-expanded="true"] { background: var(--surface-muted); }
+.presentation-choice-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.presentation-choice-trigger:disabled { color: var(--muted); background: var(--surface-muted); cursor: default; }
+.presentation-choice-chevron { margin-left: auto; }
+.presentation-choice .presentation-choice-menu { left: 0; right: auto; width: min(440px, calc(100vw - 80px)); min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; overflow-y: auto; }
+.presentation-choice:last-child .presentation-choice-menu { left: auto; right: 0; width: min(340px, calc(100vw - 80px)); }
+.presentation-choice .presentation-choice-option { display: flex; align-items: center; gap: 8px; padding: 8px; font-weight: 400; }
+.presentation-choice .presentation-choice-option[aria-checked="true"] { background: var(--surface-muted); box-shadow: inset 0 0 0 1px var(--border); }
+.presentation-choice .presentation-choice-option:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+.presentation-choice-check { margin-left: auto; min-width: 12px; font-weight: 650; }
+.presentation-choice .presentation-icon { width: 24px; height: 24px; flex-basis: 24px; }
+.presentation-choice .nav-icon { width: 16px; height: 16px; flex-basis: 16px; }
+.presentation-swatch { display: inline-block; width: 14px; height: 14px; flex: 0 0 14px; margin: 5px; border-radius: 50%; background: var(--identity-foreground); }
 
 /* Specific selectors keep identity separate from global branding and status. */
 .infrastructure-topology .topology-summary-row { border-color: var(--identity-border); padding: 12px; margin-top: 6px; border-radius: 7px; background: var(--identity-tint); }

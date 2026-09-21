@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { mkdir } from "node:fs/promises";
+import { PRESENTATION_ICONS, PRESENTATION_ACCENTS } from "../lib/presentation.mjs";
 import { contrastRatio } from "../lib/accent-theme.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3108";
@@ -42,14 +43,107 @@ print(json.dumps(connectivity(**payload)))
 `], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids"), limit: 25 }) }));
 }
 
-async function checkIdentityContrast(page) {
-  const colours = await page.locator(".infrastructure-topology .presentation-icon").evaluateAll(els=>els.map(el=>{
+async function checkIdentityContrast(page, selector = ".infrastructure-topology .presentation-icon") {
+  const colours = await page.locator(selector).evaluateAll(els=>els.map(el=>{
     const style=getComputedStyle(el);
     return {foreground:style.color,background:style.backgroundColor};
   }));
   const hex = rgb=>"#" + rgb.match(/[\d.]+/g).slice(0,3).map(n=>Math.round(Number(n)).toString(16).padStart(2,"0")).join("");
   assert.ok(colours.length);
   for (const colour of colours) assert.ok(contrastRatio(hex(colour.foreground),hex(colour.background))>=4.5,JSON.stringify(colour));
+}
+
+const accentLabel = key => key[0].toUpperCase() + key.slice(1);
+const pickerTrigger = (page, label) => page.locator(".presentation-picker").getByRole("button", { name: new RegExp(`^${label} `) });
+async function choosePresentation(page, label, key) {
+  await pickerTrigger(page, label).click();
+  const name = label === "Icon" ? PRESENTATION_ICONS.find(icon => icon.key === key).label : accentLabel(key);
+  await page.getByRole("menuitemradio", { name, exact: true }).click();
+  assert.equal(await page.getByRole("menu").count(), 0);
+  assert.equal(await pickerTrigger(page, label).evaluate(el => el === document.activeElement), true);
+}
+async function checkPreview(page, icon, accent, name) {
+  const preview = page.getByLabel("Presentation preview", { exact: true });
+  assert.equal(await preview.locator("[data-presentation-icon]").getAttribute("data-presentation-icon"), icon);
+  assert.equal(await preview.locator("[data-presentation-accent]").getAttribute("data-presentation-accent"), accent);
+  assert.equal(await preview.innerText(), name);
+}
+async function checkCompactPicker(page, theme, width, surface) {
+  assert.equal(await page.locator('.presentation-picker input[type="radio"]').count(), 0);
+  assert.equal(await page.getByRole("menu").count(), 0);
+  assert.equal(await page.getByText("Used for topology presentation only.", { exact: true }).count(), 1);
+  const triggers = page.locator(".presentation-choice-trigger");
+  const boxes = await triggers.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON()));
+  assert.equal(boxes[0].top, boxes[1].top, "Selectors share the existing desktop form grid");
+  assert.ok((await page.locator(".presentation-picker").boundingBox()).height < 190, "Compact collapsed presentation section");
+  await page.locator(".presentation-picker").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${output}/${surface}-picker-edit-${theme}-${width}.png`, fullPage: true });
+  for (const [label, names] of [["Icon", PRESENTATION_ICONS.map(icon => icon.label)], ["Accent", PRESENTATION_ACCENTS.map(accentLabel)]]) {
+    const trigger = pickerTrigger(page, label);
+    assert.equal(await trigger.getAttribute("aria-expanded"), "false");
+    await trigger.focus();
+    await page.keyboard.press("ArrowDown");
+    const menu = page.getByRole("menu", { name: `Choose ${label.toLowerCase()}`, exact: true });
+    await menu.waitFor();
+    assert.deepEqual(await menu.getByRole("menuitemradio").allTextContents().then(values => values.map(value => value.replace("✓", "").trim())), names);
+    assert.equal(await menu.locator('[aria-checked="true"]').count(), 1);
+    assert.equal(await menu.locator('[aria-checked="true"]').evaluate(el => el === document.activeElement), true);
+    assert.equal(await trigger.getAttribute("aria-expanded"), "true");
+    assert.equal(await menu.getByRole("menuitemradio").first().evaluate(el => getComputedStyle(el).display), "flex", "Option icon, label and checkmark retain their layout");
+    if (label === "Icon") await checkIdentityContrast(page, ".presentation-choice-menu .presentation-icon");
+    const box = await menu.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height <= 1000, "Menu fits viewport");
+    await page.keyboard.press("End");
+    assert.equal(await menu.getByRole("menuitemradio").last().evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await menu.getByRole("menuitemradio").first().evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await menu.getByRole("menuitemradio").nth(1).evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowUp");
+    assert.equal(await menu.getByRole("menuitemradio").last().evaluate(el => el === document.activeElement), true);
+    await page.screenshot({ path: `${output}/${surface}-${label.toLowerCase()}-menu-${theme}-${width}.png`, fullPage: true });
+    await page.keyboard.press("Escape");
+    assert.equal(await menu.count(), 0);
+    assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
+    await trigger.click();
+    await page.keyboard.press("Tab");
+    assert.equal(await menu.count(), 0);
+    assert.equal(await page.locator(".resource-form").evaluate(el => el.contains(document.activeElement)), true);
+    if (label === "Icon") assert.equal(await pickerTrigger(page, "Accent").evaluate(el => el === document.activeElement), true);
+    if (label === "Accent") {
+      await trigger.click();
+      await page.keyboard.press("Shift+Tab");
+      assert.equal(await pickerTrigger(page, "Icon").evaluate(el => el === document.activeElement), true);
+    }
+    await trigger.click();
+    await page.locator('input[name="name"]').click();
+    assert.equal(await menu.count(), 0, "Outside click dismisses menu");
+  }
+  // Select with the keyboard and verify the actual controlled form preview.
+  await pickerTrigger(page, "Icon").focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await pickerTrigger(page, "Accent").focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Space");
+  await checkPreview(page, "application", "rose", await page.locator('input[name="name"]').inputValue());
+}
+async function checkTopologyHeaders(page) {
+  for (const view of ["Overview", "Platform", "Network & VLAN", "Connectivity"]) {
+    await page.getByRole("button", { name: view, exact: true }).click();
+    for (const expanded of [false, true]) {
+      if (expanded) await page.getByRole("button", { name: "Expand Infrastructure Topology", exact: true }).click();
+      assert.equal(await page.getByText(/Recorded knowledge/).count(), 0, `${view}, expanded=${expanded}`);
+      assert.equal(await page.locator(".topology-context").count(), 0);
+      if (expanded) await page.getByRole("button", { name: "Close expanded Infrastructure Topology", exact: true }).click();
+    }
+  }
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  assert.equal(await page.getByRole("heading", { name: "Infrastructure Topology", exact: true }).count(), 1);
+  assert.match(await page.locator(".context-selector").innerText(), /Customer.*Site/is);
 }
 
 async function checkGeometry(page) {
@@ -132,8 +226,19 @@ try {
     for (const [name, icon, accent] of [["Compute", "server", "blue"], ["Workload", "cube", "green"]]) {
       const row = page.getByRole("row").filter({ has: page.getByRole("cell", {name, exact:true}) });
       await row.getByRole("button", {name:"Edit", exact:true}).click();
-      await page.locator(`input[name="icon_key"][value="${icon}"]`).check();
-      await page.locator(`input[name="accent_key"][value="${accent}"]`).check();
+      if (name === "Compute") {
+        await checkCompactPicker(page, theme, width, "category");
+        await page.getByRole("button", {name:"Save changes", exact:true}).click();
+        await page.locator(".resource-form").waitFor({state:"detached"});
+        await page.reload();
+        await row.getByRole("button", {name:"Edit", exact:true}).click();
+        await checkPreview(page, "application", "rose", name);
+        assert.equal(await pickerTrigger(page, "Icon").innerText(), "Application\n⌄");
+        assert.equal(await pickerTrigger(page, "Accent").innerText(), "Rose\n⌄");
+      }
+      await choosePresentation(page, "Icon", icon);
+      await choosePresentation(page, "Accent", accent);
+      await checkPreview(page, icon, accent, name);
       await page.getByRole("button", {name:"Save changes", exact:true}).click();
       await page.locator(".resource-form").waitFor({state:"detached"});
     }
@@ -141,13 +246,23 @@ try {
     for (const [name, accent] of [["Management", "blue"], ["IoT", "purple"], ["Apps", "orange"], ["Infra", "red"]]) {
       const row = page.getByRole("row").filter({ has: page.getByRole("cell", {name, exact:true}) });
       await row.getByRole("button", {name:"Edit", exact:true}).click();
-      await page.locator('input[name="icon_key"][value="network"]').check();
-      await page.locator(`input[name="accent_key"][value="${accent}"]`).check();
+      if (name === "Management") {
+        await checkCompactPicker(page, theme, width, "network");
+        await page.getByRole("button", {name:"Save changes", exact:true}).click();
+        await page.locator(".resource-form").waitFor({state:"detached"});
+        await page.reload();
+        await row.getByRole("button", {name:"Edit", exact:true}).click();
+        await checkPreview(page, "application", "rose", name);
+      }
+      await choosePresentation(page, "Icon", "network");
+      await choosePresentation(page, "Accent", accent);
+      await checkPreview(page, "network", accent, name);
       await page.getByRole("button", {name:"Save changes", exact:true}).click();
       await page.locator(".resource-form").waitFor({state:"detached"});
     }
     await page.goto(`${base}/topology`);
     await page.getByRole("heading", { name:"Environment at a glance" }).waitFor();
+    await checkTopologyHeaders(page);
     assert.equal(await page.locator(".topology-metrics strong").first().innerText(), "33");
     assert.equal(await page.locator(".topology-summary-row").count(), 10);
     const workloadSummary = page.locator(".topology-summary-row").filter({ has: page.getByRole("link", {name:"View all Workload Assets", exact:true}) });
@@ -391,8 +506,9 @@ try {
     await page.getByRole("button", {name:"Add Asset category", exact:true}).click();
     await page.locator('input[name="key"]').fill("home_automation");
     await page.locator('input[name="name"]').fill("Home Automation");
-    await page.locator('input[name="icon_key"][value="home"]').check();
-    await page.locator('input[name="accent_key"][value="teal"]').check();
+    await choosePresentation(page, "Icon", "home");
+    await choosePresentation(page, "Accent", "teal");
+    await checkPreview(page, "home", "teal", "Home Automation");
     await page.screenshot({path:`${output}/category-picker-${theme}-${width}.png`,fullPage:true});
     await page.getByRole("button", {name:"Create", exact:true}).click();
     await page.getByRole("row").filter({hasText:"Home Automation"}).waitFor();
@@ -406,11 +522,11 @@ try {
     data.assets.push({...data.assets[0], id:id(851), name:"Home Assistant", asset_type:"home_device"});
     await page.goto(`${base}/networks`);
     await page.getByRole("button", {name:"Add Network", exact:true}).click();
-    assert.equal(await page.locator('input[name="icon_key"][value="network"]').isChecked(),true);
-    assert.equal(await page.locator('input[name="accent_key"][value="blue"]').isChecked(),true);
+    await checkPreview(page, "network", "blue", "Preview");
     await page.locator('input[name="name"]').fill("Custom Network");
-    await page.locator('input[name="icon_key"][value="cloud"]').check();
-    await page.locator('input[name="accent_key"][value="rose"]').check();
+    await choosePresentation(page, "Icon", "cloud");
+    await choosePresentation(page, "Accent", "rose");
+    await checkPreview(page, "cloud", "rose", "Custom Network");
     await page.getByRole("button", {name:"Create", exact:true}).click();
     const customNetwork = page.getByRole("row").filter({hasText:"Custom Network"});
     await customNetwork.waitFor();
@@ -435,5 +551,5 @@ try {
     assert.deepEqual(errors,[]);
     checks++; await context.close();
   }
-  console.log(`Passed ${checks} topology identity browser scenarios: category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
+  console.log(`Passed ${checks} topology/picker browser scenarios: compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
 } finally { await browser.close(); }

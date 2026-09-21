@@ -6,7 +6,10 @@ notes keep their existing meanings. A VLAN ID belongs to the Network record;
 there is no separate VLAN entity.
 
 **Icon** and **Accent** are optional presentation choices with Network / Blue
-defaults. Select a named icon and an accent swatch to preview the combination.
+defaults. Under **Presentation**, open either compact dropdown to choose a named
+icon or accent swatch. The small Network-name preview updates immediately.
+Arrow keys browse choices; Enter or Space selects and closes the menu, and
+Escape closes without changing the value. Save to persist the combination.
 Atlas supplies a bounded infrastructure icon set and ten accents: Blue, Green,
 Purple, Orange, Red, Teal, Cyan, Amber, Slate and Rose. Arbitrary colours, uploads
 and icon URLs are not supported by these fields.

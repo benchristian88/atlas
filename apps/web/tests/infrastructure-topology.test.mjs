@@ -101,3 +101,11 @@ test("Assets table excludes legacy IP and both graphs use the same expand icon",
     assert.match(page, /NavigationIcon name="expand"/);
   }
 });
+
+
+test("shared topology header omits redundant context in normal and expanded views", async () => {
+  const page = await readFile(new URL("../app/topology/page.js", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /Recorded knowledge|topology-context/);
+  assert.match(page, /Infrastructure Topology/);
+  assert.match(page, /ExpandedGraphSurface/);
+});
