@@ -20,7 +20,7 @@ def fixture_topology():
             {"id": "r2", "source_asset_id": "PVE1", "target_asset_id": "PVE2", "relationship_type": "custom_link"},
             {"id": "r3", "source_asset_id": "PVE2", "target_asset_id": "hidden", "relationship_type": "custom_link"},
         ],
-        "relationship_types": [{"key": "runs_on", "source_label": "Runs on", "directional": True}, {"key": "custom_link", "source_label": "Recorded custom connection", "directional": False}],
+        "relationship_types": [{"key": "runs_on", "topology_layer": "platform", "source_label": "Runs on", "directional": True}, {"key": "custom_link", "topology_layer": "physical_network", "source_label": "Recorded custom connection", "directional": False}],
         "networks": [{"id": "n1", "name": "Management", "gateway": "10.0.99.1"}, {"id": "n2", "name": "Apps"}],
         "asset_interfaces": [{"id": "i1", "asset_id": "AdGuard", "network_id": "n1", "name": "eth0", "ip_address": "10.0.99.5"}, {"id": "i2", "asset_id": "AdGuard", "network_id": "n2", "name": "eth1", "ip_address": None}],
     }
@@ -121,7 +121,7 @@ def homelab_topology():
         t["asset_interfaces"].append({"id": f"peer{i}", "asset_id": name, "network_id": "n1", "name": "eth0", "ip_address": None})
     t["relationships"].append({"id": "switch", "source_asset_id": "PVE1", "target_asset_id": "USW-16-poe", "relationship_type": "connects_to"})
     for key in ("member_of", "hosts", "contains", "runs", "connects_to"):
-        t["relationship_types"].append({"key": key, "source_label": key, "directional": True})
+        t["relationship_types"].append({"key": key, "topology_layer": "physical_network" if key == "connects_to" else "platform", "source_label": key, "directional": True})
     return t, siblings
 
 

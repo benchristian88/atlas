@@ -306,7 +306,10 @@ Relationship types similarly have an internal UUID and a stable unique key.
 Labels, inverse label,
 directionality, and optional allowed source/target asset-type key lists drive
 validation and display. Used/system types follow the same delete-versus-
-deactivate lifecycle.
+deactivate lifecycle. The bounded `topology_layer` presentation field defaults to
+`other`; it controls Infrastructure Topology Connectivity eligibility without
+changing direction, endpoints or Knowledge Graph semantics. See
+[the registry and migration mapping](infrastructure-topology.md#managed-relationship-layers).
 
 ## Custom fields
 

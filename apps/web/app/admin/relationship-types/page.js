@@ -4,6 +4,8 @@ import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
 import { CrudScreen } from "../../../components/crud-screen";
 
+import { TOPOLOGY_LAYERS } from "../../../lib/infrastructure-topology.mjs";
+
 const dependencies = [{ key: "assetTypes", endpoint: "/asset-types" }];
 const endpointOptions = [
   { id: "asset:asset", name: "Asset → Asset" },
@@ -17,6 +19,7 @@ const fields = [
   { name: "source_label", label: "Source label", required: true, placeholder: "manages" },
   { name: "target_label", label: "Target label", required: true, placeholder: "managed by" },
   { name: "inverse_label", label: "Inverse label", placeholder: "Optional inverse wording" },
+  { name: "topology_layer", label: "Topology layer", type: "select", required: true, options: TOPOLOGY_LAYERS.map(layer => ({ id: layer.key, name: layer.label })), help: "Controls how this relationship appears in Infrastructure Topology. Other is hidden from Connectivity by default." },
   { name: "sort_order", label: "Sort order", type: "number", required: true },
   { name: "directional", label: "Directional relationship", type: "checkbox" },
   { name: "active", label: "Available for new relationships", type: "checkbox" },
@@ -29,6 +32,7 @@ const columns = [
   { key: "name", label: "Relationship", render: (row) => <span className="primary-cell">{row.name}</span> },
   { key: "key", label: "Key", render: (row) => <span className="mono secondary-text">{row.key}</span> },
   { key: "labels", label: "Direction", render: (row) => `${row.source_label} → ${row.target_label}` },
+  { key: "topology_layer", label: "Topology layer", render: row => TOPOLOGY_LAYERS.find(layer => layer.key === row.topology_layer)?.label || "Other" },
   { key: "directional", label: "Mode", render: (row) => row.directional ? "Directional" : "Bidirectional" },
   { key: "active", label: "State", render: (row) => row.active ? "Active" : "Inactive" },
   { key: "in_use_count", label: "Uses", render: (row) => row.in_use_count },
@@ -55,12 +59,13 @@ export default function RelationshipTypesAdminPage() {
       deleteReason={deleteReason}
       dependencies={hasPermission("asset_types.view") ? dependencies : []}
       description="Define the vocabulary and permitted endpoint types used by Atlas topology relationships."
-      emptyValues={{ key: "", name: "", source_label: "", target_label: "", inverse_label: "", sort_order: "100", directional: true, active: true, allowed_source_asset_type_keys: [], allowed_target_asset_type_keys: [], applicability_pairs: [], description: "" }}
+      emptyValues={{ topology_layer: "other", key: "", name: "", source_label: "", target_label: "", inverse_label: "", sort_order: "100", directional: true, active: true, allowed_source_asset_type_keys: [], allowed_target_asset_type_keys: [], applicability_pairs: [], description: "" }}
       endpoint="/relationship-types"
       eyebrow="Reference Data"
       fields={fields}
       preparePayload={(form, editingId) => ({
         ...(!editingId ? { key: form.key } : {}),
+        topology_layer: form.topology_layer,
         name: form.name,
         source_label: form.source_label,
         target_label: form.target_label,

@@ -53,13 +53,13 @@ and Site records retain their own permission checks. Counts are derived only
 from these authorized collections.
 
 `GET /api/topology/connectivity` accepts exactly one of `focus_asset_id` or `focus_network_id`, `hops=1|2`,
-optional repeated `category_ids`, `show_networks` and `limit` (default 25, maximum
+optional repeated `category_ids`, comma-separated `topology_layers`, `show_networks` and `limit` (default 25, maximum
 60). An inaccessible or nonexistent focus returns the same 404. Omitted category
 IDs use managed visibility defaults. The domain service performs deterministic,
 cycle-safe breadth-first traversal after authorization and presentation filtering.
 Traversal tracks arrival state: child→parent arrival suppresses parent→child
 containment expansion; Asset→Network membership arrival suppresses membership
-expansion back to peer Assets. Other relationship families remain eligible.
+expansion back to peer Assets. Other enabled relationship layers remain eligible.
 An explicit host/Network focus has no arrival restriction. Parallel eligible
 technical paths are considered separately. This is presentation connectivity,
 not a claim of physical connection or failure impact. Each node adds nullable
@@ -74,14 +74,61 @@ AssetRelationship has no temporal validity fields in the current schema. The
 projection uses its recorded rows; it does not read temporal Service links or
 reinterpret observations/assertions as accepted connectivity.
 
+## Managed relationship layers
+
+Migration `20260921_0021` adds non-null `RelationshipType.topology_layer` with
+server default `other` and a database check constraint. Create/PATCH API schemas
+accept only the five keys below, rejecting arbitrary strings and explicit null.
+Omitted PATCH fields leave the layer unchanged. The existing globally authorized
+Relationship Type administration and audited writes carry this additive field.
+Inactive records retain their layer.
+
+The one-time backfill uses exact stable keys **and `system_defined=true`**:
+
+| Key | Label | Built-in relationship keys |
+| --- | --- | --- |
+| `platform` | Platform / containment | `contains`, `hosts`, `hosted_on`, `runs_on`, `runs`, `member_of` |
+| `physical_network` | Physical / network | `connects_to`, `connected_to`, `belongs_to_network`, `uplinks_to`, `connected_via` |
+| `data_resilience` | Data / resilience | `uses_storage`, `backs_up_to`, `backed_up_by`, `replicates_to`, `syncs_to` |
+| `logical_operational` | Logical / operational | `protects`, `protected_by`, `depends_on`, `monitors`, `proxies`, `authenticates`, `exposes`, `served_by`, `provides_service_to`, `managed_by` |
+| `other` | Other | `related_to`, `routes` |
+
+All 28 currently seeded built-ins are accounted for. `provided_by` is not a
+current built-in. Unknown keys and custom rows, even with a recognized key, keep
+`other`; no names are interpreted. IDs, keys, labels, direction, applicability,
+relationships and lifecycle state remain unchanged. Downgrade removes only the
+new constraint and column.
+
+Omitted `topology_layers` uses `platform,physical_network`; an explicit empty
+string enables none. Unsupported values return 422. The service filters edges
+before building adjacency, so disabled paths cannot affect reachability, limits
+or second hops. AssetInterface membership participates only with
+`physical_network` and `show_networks=true`; it remains derived structured data.
+An explicitly focused Network may remain as a standalone node when that layer
+is off. Category filters and all existing authorization boundaries still apply.
+
+`app/topology_layers.py` and `web/lib/topology-layers.json` define the bounded
+registry/default contract, compared by a test. Filters render registry layers,
+not individual Relationship Types. Their difference count includes category and
+layer overrides; reset restores both. Tab entry resets layers, while in-view
+refocus, expansion and refresh retain them. Reference Data is never changed by
+these temporary controls.
+
+Knowledge Graph does not consult this field. Endpoint eligibility, recorded
+labels/direction, Platform containment and dependency-analysis semantics remain
+independent. Routes is `other`, deliberately outside default Connectivity until
+Atlas has a developed L3 model; no routing inference is added.
+
 ## Platform semantics and presentation
 
 Migration 0004 establishes stable built-in relationship keys and directions:
 `runs_on` and `member_of` point from child to parent; `hosts`, `contains` and
 `runs` point from parent to child. The topology domain service projects these
 explicitly. It never derives parenthood from category labels, Asset Type labels,
-names, IPs, or vendor metadata. Other custom relationship keys remain visible in
-Connectivity without acquiring invented containment meaning.
+names, IPs, or vendor metadata. Custom relationship keys participate in Connectivity
+when their managed layer is enabled, without acquiring containment meaning.
+`hosted_on` receives the platform layer but does not change the existing Platform
+parent/child projection.
 
 React only groups/filters the authorized domain projection. Platform displays
 compact child previews in an auto-fitting desktop grid. Network & VLAN uses
@@ -99,7 +146,7 @@ preserves cached Asset → type default → generic precedence. Existing Atlas
 branding and theme tokens remain authoritative.
 
 The topology workbench has one explicit view-entry initializer. Ordinary clicks
-on a different tab clear category overrides, search, inspector/parent/Network
+on a different tab clear category and relationship-layer overrides, search, inspector/parent/Network
 selection, child expansions and Connectivity focus/hops/Network-toggle state.
 The destination graph mounts at Fit; Network and Asset fallback ordering remains
 deterministic. A shared category-selection helper resolves temporary overrides
@@ -114,7 +161,7 @@ Inspector focus from another view and Network detail navigation supply new
 initial context to view entry, including visibility of the requested Asset's
 category. Within Connectivity, a separate refocus handler serves the Focus
 selector, native node double-click and inspector action. It retains hops, search
-and category/Network filters, enabling only a requested focus's hidden category
+and category/relationship-layer/Network filters, enabling only a requested focus's hidden category
 or Network visibility when necessary. Asset and Network single-click selection
 never changes the query or layout input. Selection uses entity identity separately
 from focus, including Network inspectors; an already-focused selection has no

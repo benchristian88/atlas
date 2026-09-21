@@ -1,3 +1,16 @@
+import topologyLayers from "./topology-layers.json" with { type: "json" };
+export const TOPOLOGY_LAYERS = topologyLayers;
+export function topologyLayerSelection(overrides = {}) {
+  const enabled = new Set();
+  let changedCount = 0;
+  for (const layer of TOPOLOGY_LAYERS) {
+    const checked = overrides[layer.key] ?? layer.enabled_by_default;
+    if (checked) enabled.add(layer.key);
+    if (checked !== layer.enabled_by_default) changedCount++;
+  }
+  return { enabled, changedCount };
+}
+
 // Presentation over authorized domain projections. No relationship semantics live here.
 export const CHILD_PREVIEW_COUNT = 8;
 export const CATEGORY_PREVIEW_COUNT = 6;

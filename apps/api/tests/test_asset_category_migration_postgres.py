@@ -41,7 +41,7 @@ def test_legacy_category_upgrade_preserves_all_types_and_assets(monkeypatch):
                 assert row[2:6] == ("Uncategorized", "uncategorized", False, True)
             else:
                 assert row[2] == original and row[4] is True
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20260921_0020"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20260921_0021"
     # Downgrade remains a usable rollback path, retaining current managed names.
     command.downgrade(config, "20260912_0018")
     command.upgrade(config, "head")

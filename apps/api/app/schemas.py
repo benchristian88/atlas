@@ -19,6 +19,7 @@ from pydantic import (
 
 from app.presentation import PresentationIcon, PresentationAccent
 from app.taxonomy import NETWORK_TYPES
+from app.topology_layers import TopologyLayer
 
 
 class ORMResponse(BaseModel):
@@ -586,6 +587,7 @@ class RelationshipTypeApplicabilityResponse(ORMResponse):
 
 
 class RelationshipTypeCreate(BaseModel):
+    topology_layer: TopologyLayer = "other"
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
@@ -604,6 +606,7 @@ class RelationshipTypeCreate(BaseModel):
 
 
 class RelationshipTypeUpdate(BaseModel):
+    topology_layer: TopologyLayer = "other"
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
     source_label: str | None = Field(default=None, min_length=1, max_length=100)
@@ -621,6 +624,7 @@ class RelationshipTypeUpdate(BaseModel):
 
 
 class RelationshipTypeResponse(ORMResponse):
+    topology_layer: TopologyLayer
     id: uuid.UUID
     key: str
     name: str

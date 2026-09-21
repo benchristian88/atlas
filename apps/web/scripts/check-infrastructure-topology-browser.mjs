@@ -13,7 +13,7 @@ await mkdir(output, { recursive: true });
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const customer = { id: id(1), name: "Homelab", status: "active" };
 const site = { id: id(2), customer_id: customer.id, name: "Home", status: "active" };
-const permissions = ["service_types.view", "service_types.manage", "assets.view", "assets.create", "asset_types.view", "asset_types.manage", "customers.view", "sites.view", "networks.view", "networks.create", "networks.edit", "relationships.view"];
+const permissions = ["service_types.view", "service_types.manage", "assets.view", "assets.create", "asset_types.view", "asset_types.manage", "customers.view", "sites.view", "networks.view", "networks.create", "networks.edit", "relationships.view", "relationship_types.view", "relationship_types.manage"];
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSawAAAAASUVORK5CYII=", "base64");
 function fixture() {
   const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: n === 0 ? "Backup" : `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
@@ -31,7 +31,7 @@ function fixture() {
   asset_interfaces.push({ id: id(402), asset_id: hosts[0].id, network_id: null, name: "vmbr0", ip_address: "10.0.99.21" });
   for (let i=1; i<20; i++) asset_interfaces.push({ id: id(410+i), asset_id: children[i].id, network_id: networks[5].id, name: "eth0", ip_address: `10.0.99.${100+i}` });
   assets.forEach(a => { a.ip_address = "192.0.2.254"; });
-  return { categories, asset_types: types, assets, relationships, relationship_types: [{ key: "runs_on", name: "Runs on", source_label: "Runs on", directional: true }, { key: "connects_to", name: "Connects to", source_label: "Connects to", directional: false }], networks, asset_interfaces, customers: [customer], sites: [site], platform_links };
+  return { categories, asset_types: types, assets, relationships, relationship_types: [{ key: "runs_on", topology_layer: "platform", name: "Runs on", source_label: "Runs on", directional: true }, { key: "connects_to", topology_layer: "physical_network", name: "Connects to", source_label: "Connects to", directional: false }], networks, asset_interfaces, customers: [customer], sites: [site], platform_links };
 }
 function graphFixture(data, params) {
   // Exercise the production traversal instead of maintaining a second algorithm.
@@ -41,7 +41,7 @@ import json, sys
 from app.services.infrastructure_topology import connectivity
 payload = json.load(sys.stdin)
 print(json.dumps(connectivity(**payload)))
-`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids"), limit: 25 }) }));
+`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_layers: params.has("topology_layers") ? params.get("topology_layers").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids"), limit: 25 }) }));
 }
 
 async function checkIdentityContrast(page, selector = ".infrastructure-topology .presentation-icon") {
@@ -544,6 +544,98 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
 
 const neutralBorders = Object.fromEntries(["Top", "Right", "Bottom", "Left"].map(side => [`border${side}Color`, "--border"]));
 
+
+async function checkTopologyLayers(page, data, theme, width) {
+  const button = name => page.getByRole("button", { name, exact: true });
+  const filters = page.locator(".topology-filter > button");
+  const panel = page.locator(".topology-filter-popover");
+  const layer = name => panel.getByRole("checkbox", { name, exact: true });
+  const node = n => page.locator(`[data-node-key="asset:${id(n)}"]`);
+  const waitGraph = async () => { await page.locator(".topology-connectivity-world").waitFor(); };
+  // Real admin forms on the production bundle, with isolated persistence fixtures.
+  for (const [key, name, classification] of [["connected_by_fibre", "Connected by fibre", "physical_network"], ["talks_to", "Talks to", "logical_operational"], ["paired_with", "Paired with", "other"]]) {
+    await page.goto(`${base}/admin/relationship-types`);
+    await button("Add Relationship type").click();
+    assert.equal(await page.getByLabel(/^Topology layer/).inputValue(), "other");
+    await page.getByLabel(/^Key/).fill(key);
+    await page.getByLabel(/^Name/).fill(name);
+    await page.getByLabel(/^Source label/).fill(name);
+    await page.getByLabel(/^Target label/).fill(`Inverse ${name}`);
+    await page.getByLabel(/^Topology layer/).selectOption(classification);
+    await button("Create").click();
+    const row = page.getByRole("row").filter({has: page.getByRole("cell", {name, exact:true})});
+    await row.waitFor();
+    assert.match(await row.innerText(), new RegExp(classification === "physical_network" ? "Physical / network" : classification === "logical_operational" ? "Logical / operational" : "Other"));
+    await row.getByRole("button", {name:"Edit", exact:true}).click();
+    assert.equal(await page.getByLabel(/^Topology layer/).inputValue(), classification);
+    await page.getByLabel(/^Topology layer/).selectOption("data_resilience");
+    await button("Save changes").click();
+    await row.waitFor();
+    assert.equal(data.relationship_types.find(r=>r.key===key).topology_layer, "data_resilience");
+    await row.getByRole("button", {name:"Edit", exact:true}).click();
+    await page.getByLabel(/^Topology layer/).selectOption(classification);
+    await button("Save changes").click();
+    await row.waitFor();
+  }
+  // NPM with a host, custom physical path, logical peer, Other peer and backup.
+  const first = data.assets.find(a=>a.id===id(851));
+  data.assets.push(...[[1300,"NPM"],[1301,"Fibre peer"],[1302,"Logical peer"],[1303,"Other peer"],[1304,"Backup peer"]].map(([n,name])=>({...first,id:id(n),name,asset_type:"server"})));
+  data.relationship_types.push({key:"backs_up_to",source_label:"Backs up to",directional:true,topology_layer:"data_resilience"});
+  for (const [n,key,target] of [[1310,"runs_on",30],[1311,"connected_by_fibre",1301],[1312,"talks_to",1302],[1313,"paired_with",1303],[1314,"backs_up_to",1304]]) {
+    data.relationships.push({id:id(n),relationship_type:key,source_asset_id:id(1300),target_asset_id:id(target)});
+  }
+  data.asset_interfaces.push({id:id(1315),asset_id:id(1300),network_id:id(300),name:"eth0",ip_address:null});
+  await page.goto(`${base}/topology`);
+  await button("Connectivity").click();
+  await page.getByLabel("Focus",{exact:true}).selectOption(id(1300));
+  await node(1301).waitFor();
+  assert.equal(await node(1302).count(),0);
+  assert.equal(await node(1303).count(),0);
+  assert.equal(await node(1304).count(),0);
+  await filters.click();
+  for (const [name,checked] of [["Platform / containment",true],["Physical / network",true],["Data / resilience",false],["Logical / operational",false],["Other",false]]) assert.equal(await layer(name).isChecked(),checked);
+  await layer("Logical / operational").check();
+  await node(1302).waitFor();
+  await layer("Physical / network").uncheck();
+  await node(1301).waitFor({state:"detached"});
+  assert.equal(await page.locator('[data-node-key^="network:"]').count(),0);
+  assert.equal(await filters.innerText(),"Filters · 2");
+  await layer("Other").check(); await node(1303).waitFor();
+  await layer("Data / resilience").check(); await node(1304).waitFor();
+  assert.equal(await filters.innerText(),"Filters · 4");
+  await page.keyboard.press("Escape");
+  await button("Refresh").click(); await waitGraph();
+  assert.equal(await filters.innerText(),"Filters · 4");
+  await button("Expand Infrastructure Topology").click();
+  assert.equal(await filters.innerText(),"Filters · 4");
+  await filters.click();
+  await layer("Other").uncheck(); await node(1303).waitFor({state:"detached"});
+  await layer("Other").check(); await node(1303).waitFor();
+  await page.screenshot({path:`${output}/relationship-layers-${theme}-${width}.png`});
+  await page.keyboard.press("Escape");
+  await button("Close expanded Infrastructure Topology").click();
+  assert.equal(await filters.innerText(),"Filters · 4");
+  await node(1302).dblclick(); await waitGraph();
+  assert.equal(await filters.innerText(),"Filters · 4");
+  await filters.click(); await button("Reset to defaults").click();
+  assert.equal(await filters.innerText(),"Filters");
+  assert.equal(await layer("Physical / network").isChecked(),true);
+  assert.equal(await layer("Other").isChecked(),false);
+  await layer("Other").check();
+  await page.keyboard.press("Escape");
+  await button("Platform").click();
+  await filters.click(); assert.equal(await page.getByText("Relationship layers",{exact:true}).count(),0);
+  await page.keyboard.press("Escape");
+  await button("Connectivity").click(); await filters.click();
+  assert.equal(await layer("Other").isChecked(),false);
+  assert.equal(await filters.innerText(),"Filters");
+  // Empty enabled layers must reach the API explicitly, not fall back to defaults.
+  await layer("Platform / containment").uncheck();
+  await layer("Physical / network").uncheck();
+  await page.keyboard.press("Escape"); await waitGraph();
+  assert.equal(await page.locator("[data-node-key]").count(),1);
+}
+
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
 let checks = 0;
 try {
@@ -560,6 +652,16 @@ try {
       const url = new URL(route.request().url()); requests.push(url.pathname+url.search);
       if (url.pathname.endsWith("/icon")) return url.pathname.includes(id(31)) ? route.fulfill({ status: 404, body: "" }) : route.fulfill({ contentType: "image/png", body: png });
       const method = route.request().method();
+      if (url.pathname === "/api/relationship-types" && method === "POST") {
+        const record = { ...route.request().postDataJSON(), id: id(1200 + data.relationship_types.length), system_defined: false, in_use_count: 0 };
+        data.relationship_types.push(record);
+        return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(record) });
+      }
+      if (url.pathname.startsWith("/api/relationship-types/") && method === "PATCH") {
+        const record = data.relationship_types.find(r => r.id === url.pathname.split("/").at(-1));
+        Object.assign(record, route.request().postDataJSON());
+        return route.fulfill({ contentType: "application/json", body: JSON.stringify(record) });
+      }
       if (url.pathname === `/api/service-types/${serviceType.id}` && method === "PATCH") {
         const payload = route.request().postDataJSON();
         assert.ok(!("key" in payload));
@@ -603,6 +705,7 @@ try {
       let body = [];
       if (url.pathname === "/api/auth/me") body = { id: id(999), display_name: "Topology fixture", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
       else if (url.pathname === "/api/context") body = { customers: [customer], sites: [site], global_access: true, selected_customer_id: customer.id, selected_site_id: site.id };
+      else if (url.pathname === "/api/relationship-types") body = data.relationship_types;
       else if (url.pathname === "/api/service-types") body = [serviceType];
       else if (url.pathname === "/api/topology") body = data;
       else if (url.pathname === "/api/topology/connectivity") body = graphFixture(data,url.searchParams);
@@ -1005,8 +1108,10 @@ try {
     await page.locator(`[data-node-key="network:${id(850)}"]`).waitFor();
     assert.equal(await page.locator(`[data-node-key="asset:${id(851)}"]`).getAttribute("data-presentation-accent"),"teal");
     assert.equal(await page.locator(`[data-node-key="network:${id(850)}"] [data-presentation-icon="cloud"]`).getAttribute("data-presentation-accent"),"rose");
+    await checkTopologyLayers(page, data, theme, width);
     assert.deepEqual(errors,[]);
+    console.log(`Passed topology and relationship layers: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  console.log(`Passed ${checks} topology/picker browser scenarios: Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
+  console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, layer defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, 14-node collision checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation.`);
 } finally { await browser.close(); }

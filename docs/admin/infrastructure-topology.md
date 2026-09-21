@@ -50,25 +50,49 @@ live monitoring or freshness estimate is implied.
   Layout space grows to avoid overlapping cards.
 
 Connectivity shows at most 25 nodes and 150 edges, with a truncation notice when
-necessary. Category and Network filters apply before traversal, so a hidden node
-cannot connect two otherwise disconnected visible nodes.
+necessary. Category, relationship-layer and Network filters apply before traversal,
+so a disabled relationship cannot introduce a node, create a second-hop path or
+consume a node-limit slot.
 
-**Filters** opens a compact temporary category selector beside the button,
-including administrator-created and inactive categories with their configured
+**Filters** opens a compact temporary selector beside the button. Asset categories
+appear in every view, including administrator-created and inactive categories with their configured
 icons and accents. Choices apply immediately; click outside or press Escape to
 close it. Tab moves through the checkboxes and back into the page. Initial choices
 follow **Show in Infrastructure Topology by default** in managed Asset Categories.
 You can enable Uncategorized or another hidden category temporarily. The button
-counts only choices changed from those defaults. **Reset to defaults** restores
-the managed choices and keeps the selector open. These changes never edit Atlas
-knowledge or Reference Data.
+counts category and relationship-layer values that differ from defaults.
+**Reset to defaults** restores the managed category choices and default layers,
+keeping the selector open. These changes never edit Atlas knowledge or Reference
+Data.
+
+Connectivity adds **Relationship layers**:
+
+- **Platform / containment** — on by default.
+- **Physical / network** — on by default, including derived AssetInterface → Network membership.
+- **Data / resilience** — off by default.
+- **Logical / operational** — off by default.
+- **Other** — off by default.
+
+This starts with infrastructure placement and technical connections. Application
+and logical relationships belong primarily in Knowledge Graph; enable their
+layer temporarily when needed. Disabling Physical / network also disables
+interface-membership traversal; the existing Networks checkbox separately
+controls Network visibility. Disabling Physical / network and enabling Logical /
+operational counts as two changed values.
+
+[Relationship Type administration](relationship-types.md) assigns these layers.
+New custom types default to Other until an administrator deliberately classifies
+them. Routes remains Other because Atlas does not yet model full L3 routing;
+enabling it does not infer routers, gateways or routing paths.
 
 Clicking a different topology view starts it with fresh defaults: blank search,
 managed category choices, closed Filters and no previous inspector selection.
 Platform returns to its child previews and normal ordering. Network & VLAN selects
 the first Network in VLAN/name/ID order. Connectivity returns to one hop, Networks
-enabled, its first visible Asset in name/ID order, and a fitted viewport.
-Customer, Site and theme stay unchanged. Clicking the current view does not reset
+enabled, default relationship layers, its first visible Asset in name/ID order,
+and a fitted viewport.
+Explicit refocusing inside Connectivity, Expand/close and Refresh preserve layer
+choices. Customer, Site and theme stay unchanged. Clicking the current view does not reset
 it. **Focus Connectivity** from another view and **Open Network detail** navigation
 honour the requested Asset or Network as the new initial context. An explicitly
 focused Asset's category is enabled for that view if needed.

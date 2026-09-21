@@ -165,6 +165,7 @@ def _relationship_type_response(
             "target_label": item.target_label,
             "inverse_label": item.inverse_label,
             "directional": item.directional,
+            "topology_layer": item.topology_layer,
             "system_defined": item.system_defined,
             "active": item.active,
             "sort_order": item.sort_order,

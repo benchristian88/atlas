@@ -1,12 +1,13 @@
 """Read-only projections of already-authorized infrastructure records.
 
 Relationship keys below are the canonical built-in taxonomy (migration 0004),
-not display labels or Asset categories. Unknown/custom relationships still
-appear in Connectivity, but do not acquire invented containment semantics.
+not display labels or Asset categories. Managed layers control Connectivity
+eligibility without granting new containment semantics.
 """
 from collections import defaultdict, deque
 
 from fastapi import HTTPException
+from app.topology_layers import DEFAULT_TOPOLOGY_LAYERS, TOPOLOGY_LAYERS
 
 PLATFORM_PARENT_ENDPOINT = {
     "runs_on": "target", "member_of": "target",
@@ -25,10 +26,13 @@ def platform_links(relationships):
     return links
 
 
-def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=25, focus_network_id=None):
+def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=25, focus_network_id=None, topology_layers=None):
     """Bounded, path-aware neighbourhood over authorized records only."""
     if hops not in (1, 2) or not 1 <= limit <= 60:
         raise HTTPException(422, "Connectivity requires 1 or 2 hops and a limit of 1–60")
+    layers = DEFAULT_TOPOLOGY_LAYERS if topology_layers is None else set(topology_layers)
+    if not layers <= TOPOLOGY_LAYERS:
+        raise HTTPException(422, "Unsupported topology layer")
     focus_id = str(focus_id)
     assets = {str(a["id"]): a for a in topology["assets"]}
     networks = {str(n["id"]): n for n in topology["networks"]}
@@ -53,12 +57,14 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
         source, target = str(edge["source_asset_id"]), str(edge["target_asset_id"])
         if source in assets and target in assets:
             definition = definitions[edge["relationship_type"]]
+            if definition["topology_layer"] not in layers:
+                continue
             edges.append({"key": f"relationship:{edge['id']}", "source_key": f"asset:{source}", "target_key": f"asset:{target}",
                           "label": definition["source_label"], "kind": "relationship", "directional": definition["directional"]})
     if show_networks:
         for key, network in networks.items():
             nodes[f"network:{key}"] = {"key": f"network:{key}", "entity_type": "network", "entity_id": key, "name": network["name"]}
-        for interface in topology["asset_interfaces"]:
+        for interface in topology["asset_interfaces"] if "physical_network" in layers else []:
             asset_id, network_id = str(interface["asset_id"]), str(interface["network_id"])
             if asset_id not in assets or network_id not in networks:
                 continue

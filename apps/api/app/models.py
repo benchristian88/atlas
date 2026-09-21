@@ -242,7 +242,12 @@ class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class RelationshipType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "relationship_types"
+    topology_layer: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
     __table_args__ = (
+        CheckConstraint(
+            "topology_layer IN ('platform', 'physical_network', 'data_resilience', 'logical_operational', 'other')",
+            name="ck_relationship_types_topology_layer",
+        ),
         Index(
             "uq_relationship_types_name_lower",
             text("lower(name)"),

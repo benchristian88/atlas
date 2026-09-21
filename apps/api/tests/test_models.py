@@ -75,7 +75,7 @@ CRITICAL_COLUMNS = {
     },
     "relationship_types": {
         "id", "key", "name", "description", "source_label", "target_label",
-        "inverse_label", "directional", "system_defined", "active", "sort_order",
+        "topology_layer", "inverse_label", "directional", "system_defined", "active", "sort_order",
         "allowed_source_asset_type_keys", "allowed_target_asset_type_keys",
         "created_at", "updated_at",
     },

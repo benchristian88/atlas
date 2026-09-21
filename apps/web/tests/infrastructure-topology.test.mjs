@@ -122,3 +122,16 @@ test("shared topology header omits redundant context in normal and expanded view
   assert.match(page, /Infrastructure Topology/);
   assert.match(page, /ExpandedGraphSurface/);
 });
+
+test("relationship layer registry has safe defaults, independent overrides and reset", async () => {
+  const { TOPOLOGY_LAYERS, topologyLayerSelection } = await import("../lib/infrastructure-topology.mjs");
+  assert.equal(TOPOLOGY_LAYERS.length, 5);
+  assert.deepEqual([...topologyLayerSelection().enabled], ["platform", "physical_network"]);
+  const layers = topologyLayerSelection({ physical_network: false, logical_operational: true });
+  assert.equal(layers.changedCount, 2);
+  assert.deepEqual([...layers.enabled], ["platform", "logical_operational"]);
+  assert.equal(layers.changedCount + topologyCategorySelection(fixture().categories, { uncategorized: true }).changedCount, 3);
+  assert.equal(topologyLayerSelection({ platform: true, other: false }).changedCount, 0);
+  assert.equal(topologyLayerSelection({}).changedCount, 0);
+  assert.equal(topologyLayerSelection(Object.fromEntries(TOPOLOGY_LAYERS.map(l => [l.key, false]))).enabled.size, 0);
+});
