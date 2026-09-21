@@ -24,9 +24,10 @@ test("group tabs and sidebar choose the same authorized destination without rest
   for (const section of SYSTEM_SECTIONS) {
     const scoped = access([section.permission || section.globalPermission]);
     const tabs = visibleSystemSections(scoped);
-    assert.deepEqual(tabs.map((tab) => tab.href), [section.href]);
+    const allowed = SYSTEM_SECTIONS.filter(candidate => (candidate.permission || candidate.globalPermission) === (section.permission || section.globalPermission));
+    assert.deepEqual(tabs.map((tab) => tab.href), allowed.map(candidate => candidate.href));
     const sidebar = visibleNavigationGroups(scoped).find((group) => group.id === "system");
-    assert.deepEqual(sidebar.items.map((item) => item.href), [section.href]);
+    assert.deepEqual(sidebar.items.map((item) => item.href), [allowed[0].href]);
   }
   assert.deepEqual(visibleSystemSections(access([])), []);
   const scopedUser = { ...access(["users.view", "system_settings.manage"]), hasGlobalPermission: () => false };

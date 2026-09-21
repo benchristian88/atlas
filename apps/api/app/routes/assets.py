@@ -94,6 +94,7 @@ def list_assets(
     has_open_knowledge_gaps: bool | None = None,
     not_evaluated: bool | None = None,
     asset_type_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
     search: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -136,13 +137,19 @@ def list_assets(
         if asset_type_key is None:
             return []
         query = query.where(Asset.asset_type == asset_type_key)
+    if category_id is not None:
+        query = query.where(Asset.asset_type.in_(select(AssetType.key).where(AssetType.category_id == category_id)))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
         query = query.where(
             or_(
                 Asset.name.ilike(pattern),
                 Asset.hostname.ilike(pattern),
-                Asset.ip_address.ilike(pattern),
+                select(AssetInterface.id).where(
+                    AssetInterface.asset_id == Asset.id,
+                    AssetInterface.ip_address.ilike(pattern),
+                    scope_condition(principal, "networks.view", Asset.customer_id, Asset.site_id),
+                ).exists(),
                 Asset.vendor.ilike(pattern),
                 Asset.model.ilike(pattern),
             )

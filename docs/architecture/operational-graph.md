@@ -15,7 +15,8 @@ extension boundaries for later graph and analysis releases.
 
 Atlas currently has several graph-shaped product surfaces:
 
-- the Knowledge Graph topology lenses over Assets and Asset relationships;
+- [Infrastructure Topology](infrastructure-topology.md) over Assets, recorded
+  relationships and interface/Network membership;
 - a focused Service graph;
 - a focused Business Function graph; and
 - summary and completeness views that depend on related operational records.

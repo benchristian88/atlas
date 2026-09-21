@@ -30,17 +30,14 @@ export default function ServiceTypesAdminPage() {
   const visibleColumns = hasGlobalPermission("knowledge_requirements.view")
     ? [...columns, { key: "knowledge_profile", label: "Knowledge profile", render: (row) => <Link className="text-button" href={`/admin/service-types/${row.id}/knowledge-profile`}>Configure</Link> }]
     : columns;
-  return <>
-    <div className="warning-banner"><strong>Naming note:</strong> first-class Services are distinct from Assets. If the existing Asset Type named “Service” represents daemons or runtime processes, consider renaming that Asset Type to System Service, Runtime Service, or Daemon. Existing Assets are not migrated automatically.</div>
-    <CrudScreen
-      canCreate={manage} canDelete={false} canEdit={manage}
-      columns={visibleColumns}
-      description="Define stable operational Service categories. Referenced types can be renamed or deactivated without breaking Services."
-      emptyValues={{ key: "", name: "", icon_key: "", sort_order: "100", active: true, requires_asset_dependency: true, description: "" }}
-      endpoint="/service-types" eyebrow="Reference Data" fields={fields}
-      preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, icon_key: form.icon_key || null, sort_order: Number(form.sort_order), active: form.active, requires_asset_dependency: form.requires_asset_dependency, description: form.description || null })}
-      headingActions={hasGlobalPermission("knowledge_requirements.view") && hasGlobalPermission("knowledge_requirements.manage") && <Link className="button button-secondary" href="/admin/service-types/requirements/global">Manage global requirements</Link>}
-      title="Service types"
-    />
-  </>;
+  return <CrudScreen
+    canCreate={manage} canDelete={false} canEdit={manage}
+    columns={visibleColumns}
+    description="Define stable operational Service categories. Referenced types can be renamed or deactivated without breaking Services."
+    emptyValues={{ key: "", name: "", icon_key: "", sort_order: "100", active: true, requires_asset_dependency: true, description: "" }}
+    endpoint="/service-types" eyebrow="Reference Data" fields={fields}
+    preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, icon_key: form.icon_key || null, sort_order: Number(form.sort_order), active: form.active, requires_asset_dependency: form.requires_asset_dependency, description: form.description || null })}
+    headingActions={hasGlobalPermission("knowledge_requirements.view") && hasGlobalPermission("knowledge_requirements.manage") && <Link className="button button-secondary" href="/admin/service-types/requirements/global">Manage global requirements</Link>}
+    title="Service types"
+  />;
 }

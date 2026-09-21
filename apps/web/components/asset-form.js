@@ -21,7 +21,6 @@ function initialForm(asset, assetTypes, customers, sites, context) {
     vendor: asset?.vendor || "",
     model: asset?.model || "",
     hostname: asset?.hostname || "",
-    ip_address: asset?.ip_address || "",
     management_url: managementUrl,
     tags,
     status: asset?.status || "active",
@@ -109,7 +108,6 @@ export function AssetForm({
       vendor: form.vendor || null,
       model: form.model || null,
       hostname: form.hostname || null,
-      ip_address: form.ip_address || null,
       status: form.status,
       description: form.description || null,
       metadata: {
@@ -128,6 +126,7 @@ export function AssetForm({
         <AssetIcon asset={form.icon_url === asset?.icon_url ? asset : null} assetType={selectedType} alt="Asset icon preview" size={54} />
         <div><strong>Icon preview</strong><span>Asset override, then type default, then Atlas fallback.</span></div>
       </div>
+      <p className="secondary-text">Manage IP addresses through Interfaces on the Asset detail page after saving.</p>
       <div className="form-grid">
         <label className="field"><span>Customer *</span><select disabled={Boolean(context.customerId)} required value={form.customer_id} onChange={(event) => {
           const customerId = event.target.value;
@@ -141,7 +140,6 @@ export function AssetForm({
         <label className="field"><span>Vendor</span><input value={form.vendor} onChange={(event) => change("vendor", event.target.value)} /></label>
         <label className="field"><span>Model</span><input value={form.model} onChange={(event) => change("model", event.target.value)} /></label>
         <label className="field"><span>Hostname</span><input value={form.hostname} onChange={(event) => change("hostname", event.target.value)} /></label>
-        <label className="field"><span>Primary IP address</span><input placeholder="192.168.1.10" value={form.ip_address} onChange={(event) => change("ip_address", event.target.value)} /></label>
         <label className="field"><span>Management URL</span><input type="url" value={form.management_url} onChange={(event) => change("management_url", event.target.value)} /></label>
         <label className="field"><span>Tags</span><input placeholder="production, critical" value={form.tags} onChange={(event) => change("tags", event.target.value)} /></label>
         <label className="field"><span>Status *</span><select required value={form.status} onChange={(event) => change("status", event.target.value)}><option value="active">Active</option><option value="stale">Stale</option><option value="unknown">Unknown</option></select></label>

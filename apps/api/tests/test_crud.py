@@ -378,3 +378,19 @@ def test_openapi_exposes_administration_and_reference_endpoints() -> None:
     assert all(path.startswith("/api/") for path in paths)
     for old_path in ("/customers", "/sites", "/assets", "/topology"):
         assert old_path not in paths
+
+
+def test_legacy_asset_ip_is_deprecated_without_changing_schema_acceptance():
+    from app.schemas import ManualAssetResponse, ManualAssetUpdate
+
+    payload = ManualAssetCreate(
+        customer_id=uuid.uuid4(), site_id=uuid.uuid4(),
+        name="AdGuard Home", asset_type="server", ip_address="192.0.2.254",
+    )
+    assert payload.model_dump()["ip_address"] == "192.0.2.254"
+    assert ManualAssetUpdate(ip_address=None).model_dump(exclude_unset=True) == {"ip_address": None}
+    assert "ip_address" not in ManualAssetUpdate(name="AdGuard Home").model_dump(exclude_unset=True)
+    for schema in (ManualAssetCreate, ManualAssetUpdate, ManualAssetResponse):
+        field = schema.model_json_schema()["properties"]["ip_address"]
+        assert field["deprecated"] is True
+        assert "Asset Interfaces" in field["description"]

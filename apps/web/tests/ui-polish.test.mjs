@@ -57,6 +57,7 @@ test("Asset Type counts are ordered deterministically and filters compose in the
   assert.equal(href, `/assets?asset_type_id=${typeId}&completeness=incomplete&search=docker&offset=30`);
   assert.deepEqual(parseAssetListFilters(new URL(href, "http://atlas.test").searchParams, 30), {
     assetTypeId: typeId,
+    categoryId: "",
     completeness: "incomplete",
     search: "docker",
     offset: 30,

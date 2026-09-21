@@ -6,6 +6,9 @@ import { CrudScreen } from "../../components/crud-screen";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { NETWORK_TYPES, taxonomyLabel } from "../../lib/taxonomy";
 
+import { presentationField } from "../../components/presentation-picker";
+import { PresentationIdentity } from "../../components/presentation-identity.mjs";
+
 const dependencies = [
   { key: "customers", endpoint: "/customers" },
   { key: "sites", endpoint: "/sites" },
@@ -22,10 +25,11 @@ const fields = [
   { name: "purpose", label: "Purpose" },
   { name: "zone", label: "Zone", placeholder: "trusted, guest, dmz…" },
   { name: "notes", label: "Notes", type: "textarea", wide: true },
+  presentationField("network"),
 ];
 
 const columns = [
-  { key: "name", label: "Network", render: (row) => <span className="primary-cell">{row.name}</span> },
+  { key: "name", label: "Network", render: (row) => <PresentationIdentity record={row} fallback="network" /> },
   { key: "network_type", label: "Type", render: (row) => taxonomyLabel(row.network_type) },
   { key: "vlan_id", label: "VLAN", render: (row) => row.vlan_id ?? "—" },
   { key: "cidr", label: "CIDR", render: (row) => <span className="mono">{row.cidr || "—"}</span> },
@@ -55,7 +59,7 @@ export default function NetworksPage() {
     contextReloadKey={reloadKey}
     dependencies={availableDependencies}
     description="Define LANs, VLANs, routed zones, overlays, and other network segments."
-    emptyValues={{ customer_id: customerId || "", site_id: siteId || "", name: "", network_type: "vlan", vlan_id: "", cidr: "", gateway: "", purpose: "", zone: "", notes: "" }}
+    emptyValues={{ icon_key: "network", accent_key: "blue", customer_id: customerId || "", site_id: siteId || "", name: "", network_type: "vlan", vlan_id: "", cidr: "", gateway: "", purpose: "", zone: "", notes: "" }}
     endpoint="/networks"
     eyebrow="Connectivity"
     fields={fields.map((field) => (

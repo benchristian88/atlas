@@ -18,7 +18,8 @@ export const NAVIGATION_GROUPS = [
     id: "knowledge",
     label: "Knowledge",
     items: [
-      { id: "knowledge-graph", href: "/knowledge-graph", activeRoutes: ["/knowledge-graph", "/topology"], label: "Knowledge Graph", anyPermission: ["assets.view", "services.view", "business_functions.view"] },
+      { id: "knowledge-graph", href: "/knowledge-graph", activeRoutes: ["/knowledge-graph"], label: "Knowledge Graph", anyPermission: ["assets.view", "services.view", "business_functions.view"] },
+      { id: "topology", href: "/topology", label: "Topology", permission: "assets.view" },
       { id: "assets", href: "/assets", label: "Assets", permission: "assets.view" },
       { id: "services", href: "/services", label: "Services", permission: "services.view" },
       { id: "business-functions", href: "/business-functions", label: "Business Functions", permission: "business_functions.view" },

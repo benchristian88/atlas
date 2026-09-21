@@ -121,7 +121,8 @@ expands the backend-bounded neighbourhood. `analysis=unavailable` temporarily
 layers the existing C2.3 scenario onto Focus. Exiting analysis retains focus,
 depth, and filters. Next-integrated native history updates the query state without server navigation,
 preserving refresh, copied URLs, and browser back/forward.
-The existing `/topology` lenses and focused detail graph contracts remain
+The `/topology` route now provides [Infrastructure Topology](infrastructure-topology.md);
+its old lenses are superseded. The focused detail graph contracts remain
 reachable for compatibility. Main Knowledge Graph navigation uses the new route.
 
 One click or Enter/Space selects an entity and updates the persistent inspector.
@@ -214,10 +215,11 @@ See [C2.5 validation and manual acceptance](../testing/release-c2-entity-detail-
 C2.5 Entity Detail UX Polish is implemented before F1-lite. Its live/manual
 acceptance remains pending; it adds no major domain semantics.
 
-A post-C2.4 Homelab Ready modeling cleanup should make IP addresses authoritative
-on interfaces, with Asset management/primary IP referencing or deriving from an
-interface address. Preserve/migrate existing data and update discovery/importers.
-C2.4 reads interface IP; it does not use or migrate the duplicated Asset IP field.
+IP addresses are authoritative on Interfaces in current product UI. Asset
+create/edit omit the legacy field, and Asset detail shows addresses only in its
+Interfaces section. The deprecated Asset database/API field and reconciliation
+compatibility writers remain; migrating those is separate work. See the
+[Interface-first IP audit](../testing/interface-first-ip-transition.md).
 
 Deferred: enterprise graph scale, minimap, alternate layouts, saved perspectives,
 automatic Workloads(N) clustering, dashboard customization/drag-drop, named

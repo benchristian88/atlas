@@ -83,9 +83,18 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 
 ## User and administrator guides
 
+- [Topology Positions](admin/topology-positions.md): managed vertical order, Automatic, lifecycle and reordering.
+- [Relationship Types](admin/relationship-types.md): managed labels, endpoints and Connectivity topology classes.
+- [Infrastructure Topology](admin/infrastructure-topology.md): four infrastructure views, filtering, focus and expansion.
+- [Asset Types](admin/asset-types.md): managed inventory taxonomy and topology presentation roles.
+- [Asset Categories](admin/asset-categories.md): managed taxonomy, presentation, lifecycle and default topology visibility.
+- [Networks](admin/networks.md): Network records, bounded icons/accents and topology presentation.
+
 - [Exploring the Knowledge Graph](admin/knowledge-graph.md): expanded view, Focus depth, filters and inspector.
 
 ## Architecture documents
+
+- [Infrastructure Topology and managed categories](architecture/infrastructure-topology.md): contracts, migration, scoping and projection semantics.
 
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) — current
   baseline through C1.

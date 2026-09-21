@@ -54,7 +54,7 @@ test("viewer navigation includes only authorized System pages", () => {
 
   assert.deepEqual(groupMap(groups), {
     Overview: ["Dashboard", "Changes"],
-    Knowledge: ["Knowledge Graph", "Assets", "Services", "Business Functions", "Networks"],
+    Knowledge: ["Knowledge Graph", "Topology", "Assets", "Services", "Business Functions", "Networks"],
     Operations: ["Discovery", "Reconciliation", "Knowledge Gaps"],
     Connections: ["Integrations"],
     System: ["Organisation", "Reference Data"],
@@ -89,8 +89,8 @@ test("active matching covers renamed pages, child routes, and admin domains", ()
     global: ["users.view", "asset_types.view", "system_settings.manage", "audit.view"],
   }));
   const cases = [
-    ["knowledge-graph", "/topology"],
-    ["knowledge-graph", "/topology/focus/asset-1"],
+    ["topology", "/topology"],
+    ["topology", "/topology/focus/asset-1"],
     ["discovery", "/discovery-runs/run-1"],
     ["discovery", "/discovery/simulate"],
     ["reconciliation", "/reconciliation"],
@@ -155,6 +155,6 @@ test("shell regression keeps workspace context, profile access, and logout intac
   assert.match(navigation, /siteId/);
   assert.match(navigation, /aria-current/);
   assert.doesNotMatch(navigation, /PROFILE_NAVIGATION_ITEM|nav-profile/);
-  assert.match(topologyPage, /title="Knowledge Graph"/);
+  assert.match(topologyPage, /title="Infrastructure Topology"/);
   assert.match(discoveryPage, /title="Discovery"/);
 });
