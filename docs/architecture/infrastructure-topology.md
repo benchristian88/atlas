@@ -159,8 +159,13 @@ and can use additional viewport width up to eight columns.
 `connectivityPositionGroups` derives containers from visible Assets sharing a
 primary upstream anchor and durable position ID, splitting distant peers and
 boxes that would enclose unrelated cards. Disconnected roots are not combined.
-Groups wrap actual members with compact padding and a label header. Singletons,
-Automatic nodes, Networks and disclosure controls have no position container.
+Groups wrap actual members with compact top padding below incoming rails and a
+bottom-left label footer. Matching +N more controls extend the visual bounds of
+the nearest existing group with the same upstream anchor and position ID, using
+the control’s actual dimensions. They never enter Asset membership or counts.
+Singletons, Automatic nodes and Networks retain their existing unboxed behavior.
+Decoration bounds are separate from the established packing envelope, so this
+presentation refinement does not change node placement or cluster membership.
 The managed position name labels the group; a stable hash of its ID selects a
 subtle existing Atlas palette tint, independent of Category and label/order edits.
 Borders and text identify groups without colour. Containers are ephemeral and
@@ -176,7 +181,7 @@ once per parent and remain visible if another expanded branch reveals them.
 Disclosure nodes/edges are separate presentation collections merged only for
 layout/rendering; they never enter API, inspector, traversal or accepted knowledge.
 Children retain their managed position identity and local order; the more
-control follows outside its visible child container. Native sibling buttons isolate expansion from card inspection and
+control follows the child grid inside its matching container’s visual bounds. Native sibling buttons isolate expansion from card inspection and
 refocus; Enter/Space work for both controls. Expansion preserves selection,
 hops, filters and Networks, survives Refresh/fullscreen, and resets on focus
 change or leaving Connectivity. No extra request or write occurs. Intentional

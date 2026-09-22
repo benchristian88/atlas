@@ -780,11 +780,14 @@ async function checkLocalPositions(page, data, requests, theme, width) {
     await button("Fit").click();await checkOrthogonalGeometry(page);await checkTopBiasedFit(page);
     const groups=await page.locator(".topology-position-group").evaluateAll(elements=>elements.map(el=>{
       const rgb=value=>{const canvas=document.createElement("canvas");canvas.width=canvas.height=1;const ctx=canvas.getContext("2d");ctx.fillStyle=value;ctx.fillRect(0,0,1,1);return "#"+[...ctx.getImageData(0,0,1,1).data].slice(0,3).map(n=>n.toString(16).padStart(2,"0")).join("");};
-      return {box:el.getBoundingClientRect().toJSON(),background:rgb(getComputedStyle(el).backgroundColor),text:rgb(getComputedStyle(el.firstElementChild).color),border:getComputedStyle(el).borderWidth};
+      return {box:el.getBoundingClientRect().toJSON(),label:el.firstElementChild.getBoundingClientRect().toJSON(),background:rgb(getComputedStyle(el).backgroundColor),text:rgb(getComputedStyle(el.firstElementChild).color),border:getComputedStyle(el).borderWidth};
     }));
     for(const [i,g] of groups.entries()) {
       assert.ok(contrastRatio(g.text,g.background)>=4.5,"Position labels retain text contrast in both themes");
       assert.equal(g.border,"1px");
+      const scale=await page.locator(".topology-connectivity-world").evaluate(el=>el.getBoundingClientRect().width/el.offsetWidth);
+      assert.ok(Math.abs((g.box.bottom-g.label.bottom)/scale-8)<1,"Label is inset at the bottom");
+      assert.ok(Math.abs((g.label.left-g.box.left)/scale-12)<1,"Label is inset at the left");
       for(const other of groups.slice(i+1))assert.ok(g.box.right<=other.box.left || other.box.right<=g.box.left || g.box.bottom<=other.box.top || other.box.bottom<=g.box.top,"Local containers do not overlap");
     }
     await page.screenshot({path:`${output}/positions-${name}-${theme}-${width}.png`,fullPage:true});
@@ -802,6 +805,21 @@ async function checkLocalPositions(page, data, requests, theme, width) {
   for(let i=1;i<chain.length;i++)assert.ok(chain[i].y>chain[i-1].y+chain[i-1].height);
   assert.equal(await page.locator(`[data-position-id="${id(8804)}"]`).getAttribute("aria-label"),"Workload: 8 Assets");
   await capture("first-eight");
+  const group=await page.locator(`[data-position-id="${id(8804)}"]`).boundingBox();
+  const more=await button("Show 10 more child Assets for Runtime A").boundingBox();
+  const first=await node(8920).boundingBox();
+  const scale=first.height/88;
+  assert.ok(more.x-group.x>=16*scale-.5 && group.x+group.width-more.x-more.width>=16*scale-.5);
+  assert.ok(more.y-group.y>=20*scale-.5 && group.y+group.height-more.y-more.height>=48*scale-.5,"Disclosure is padded inside its existing group");
+  assert.ok(Math.abs((first.y-group.y)/scale-20)<1,"Container top keeps compact card padding");
+  const rail=await page.locator(".topology-connectivity-world").evaluate(world=>{
+    const first=world.querySelector('[data-node-key="asset:00000000-0000-4000-8000-000000008920"]');
+    const points=[...world.querySelectorAll('path[data-edge-key]')].flatMap(p=>[...p.getAttribute('d').matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]));
+    return Math.max(...points.filter(([x,y])=>x===first.offsetLeft+90 && y<first.offsetTop-20).map(p=>p[1]));
+  });
+  const world=await page.locator(".topology-connectivity-world").boundingBox();
+  assert.ok(Number.isFinite(rail),"Incoming rail is present");
+  assert.ok((group.y-world.y)/scale-rail>=24,"Container starts clear of the incoming rail");
   await button("Show 10 more child Assets for Runtime A").click();await node(8937).waitFor();
   assert.equal(requests.length,before);
   assert.equal(await page.locator(`[data-position-id="${id(8804)}"]`).getAttribute("aria-label"),"Workload: 18 Assets");

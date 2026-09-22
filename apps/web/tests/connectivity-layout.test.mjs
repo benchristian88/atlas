@@ -248,10 +248,10 @@ function assertGroups(nodes, routes) {
   const overlaps=(a,b)=>a.left<b.left+b.width && a.left+a.width>b.left && a.top<b.top+b.height && a.top+a.height>b.top;
   for(const [i,g] of groups.entries()) {
     for(const other of groups.slice(i+1)) assert.ok(!overlaps(g,other),`${g.key} overlaps ${other.key}`);
-    for(const n of nodes.filter(n=>!g.node_keys.includes(n.key))) assert.ok(!overlaps(g,{left:n.x-90,top:n.y-44,width:180,height:88}),`${g.key} encloses unrelated ${n.key}`);
+    for(const n of nodes.filter(n=>!g.node_keys.includes(n.key) && !g.disclosure_keys.includes(n.key))) assert.ok(!overlaps(g,{left:n.x-90,top:n.y-44,width:180,height:88}),`${g.key} encloses unrelated ${n.key}`);
     for(const route of Object.values(routes)) for(let i=1;i<route.points.length;i++) {
       const [x,y]=route.points[i], [px,py]=route.points[i-1];
-      const r={left:g.left+12,right:g.left+12+g.labelWidth,top:g.top+8,bottom:g.top+28};
+      const r={left:g.left+12,right:g.left+12+g.labelWidth,top:g.top+g.labelTop,bottom:g.top+g.labelTop+20};
       const hit=x===px ? x>r.left&&x<r.right&&Math.max(y,py)>r.top&&Math.min(y,py)<r.bottom : y>r.top&&y<r.bottom&&Math.max(x,px)>r.left&&Math.min(x,px)<r.right;
       assert.ok(!hit,`Route crosses ${g.name} label`);
     }
@@ -330,4 +330,33 @@ test("mixed leaf/subtree siblings retain compact columns and readable desktop Fi
   const p=Object.fromEntries(nodes.map(n=>[n.key,n]));
   assert.ok(peers.every((k,i)=>i===0 || p[k].x>p[peers[i-1]].x),"Leaf runs keep stable ordering around subtree siblings");
   assert.ok(connectivityFit(connectivityBounds(nodes,routes),750,600).scale*CONNECTIVITY_NODE_WIDTH>=85);
+});
+
+test("group decorations wrap matching disclosure geometry below or beside cards with a clear footer", () => {
+  const members=[0,228].map((x,i)=>({...arbitrary(`member-${i}`,60),x,y:168,layout_parent_key:"parent"}));
+  for(const [x,y] of [[0,336],[456,168],[-228,168]]) {
+    const more={key:"more",entity_type:"disclosure",name:"more",parent_key:"parent",topology_position:members[0].topology_position,x,y};
+    const input=[...members,more],before=structuredClone(input);
+    const [group]=connectivityPositionGroups(input);
+    assert.deepEqual(group.node_keys,members.map(n=>n.key));
+    assert.deepEqual(group.disclosure_keys,[more.key]);
+    for(const n of input){
+      const hw=n===more?30:90,hh=n===more?30:44;
+      assert.ok(n.x-hw-group.left>=16 && group.left+group.width-n.x-hw>=16);
+      assert.ok(n.y-hh-group.top>=20);
+      assert.ok(group.top+group.labelTop-(n.y+hh)>=20,"Footer stays below every card/control");
+    }
+    assert.equal(group.height-group.labelTop-20,8,"Comfortable bottom label padding");
+    assert.deepEqual(input,before,"Decoration does not move nodes");
+  }
+});
+
+test("disclosure attachment preserves local clusters, position IDs, counts and singleton policy", () => {
+  const members=[0,228,1000,1228].map((x,i)=>({...arbitrary(`member-${i}`,60),x,y:168,layout_parent_key:"parent"}));
+  const control=(key,parent,rank,x)=>({...arbitrary(key,rank),entity_type:"disclosure",parent_key:parent,x,y:336});
+  const controls=[control("nearby","parent",60,1228),control("wrong-parent","other",60,0),control("wrong-position","parent",70,0)];
+  const original=connectivityPositionGroups(members),decorated=connectivityPositionGroups([...members,...controls]);
+  assert.deepEqual(decorated.map(g=>g.node_keys),original.map(g=>g.node_keys));
+  assert.deepEqual(decorated.map(g=>g.disclosure_keys),[[],["nearby"]]);
+  assert.deepEqual(connectivityPositionGroups([members[0],controls[0]]),[],"One card keeps the existing unboxed behavior");
 });

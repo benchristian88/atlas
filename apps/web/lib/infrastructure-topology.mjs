@@ -236,7 +236,7 @@ export function connectivityLayout(graph, { width = 900 } = {}) {
     const leavesOnly = cluster.every(n => !children.get(n.key).length);
     const columns = Math.max(cluster.length > 12 ? 6 : 4, Math.min(8, Math.floor(width / cellWidth)));
     cluster.forEach((node, i) => {
-      // A remainder control sits beyond the real child grid, outside its box.
+      // A remainder control follows the real child grid; expansion is unchanged.
       const index = node.entity_type === "disclosure" ? Math.ceil(i / columns) * columns : i;
       const row = leavesOnly ? Math.floor(index / columns) : 0;
       vertical.set(node.key, { y: base + row * cellHeight, row, column: leavesOnly ? index % columns : i });
@@ -245,7 +245,7 @@ export function connectivityLayout(graph, { width = 900 } = {}) {
   const positioned = node => ({ ...node, ...vertical.get(node.key), rank: ranks.get(node.key), layout_parent_key: parent.get(node.key) || null });
   const footprint = placed => [
     ...placed.map(n => ({ left: n.x - cellWidth / 2, right: n.x + cellWidth / 2, top: n.y - 90, bottom: n.y + 64 })),
-    ...connectivityPositionGroups(placed).map(g => ({ left: g.left - 8, right: g.left + g.width + 8, top: g.top, bottom: g.top + g.height })),
+    ...connectivityPositionGroups(placed, { decoration: false }).map(g => ({ left: g.left - 8, right: g.left + g.width + 8, top: g.top, bottom: g.top + g.height })),
   ];
   // Pack actual occupied geometry, including local containers, before centring
   // ancestors. Compatible subtree contours can share columns at different Y.
@@ -291,7 +291,7 @@ export function connectivityLayout(graph, { width = 900 } = {}) {
 
 // Containers describe local siblings, never every occurrence of a position.
 // Split disconnected roots, distant peers and any box enclosing unrelated cards.
-export function connectivityPositionGroups(nodes) {
+export function connectivityPositionGroups(nodes, { decoration = true } = {}) {
   const candidates = new Map();
   for (const node of [...nodes].sort((a, b) => a.y - b.y || a.x - b.x || nodeOrder(a, b))) {
     if (node.entity_type !== "asset" || !node.topology_position || !node.layout_parent_key) continue;
@@ -300,6 +300,7 @@ export function connectivityPositionGroups(nodes) {
     candidates.get(key).push(node);
   }
   const groups = [];
+  // Keep the existing clustering envelope independent of visual padding.
   const wrap = members => {
     const left = Math.min(...members.map(n => n.x)) - CONNECTIVITY_NODE_WIDTH / 2 - 16;
     const top = Math.min(...members.map(n => n.y)) - CONNECTIVITY_NODE_HEIGHT / 2 - 44;
@@ -321,12 +322,35 @@ export function connectivityPositionGroups(nodes) {
       let hash = 0;
       for (const char of position.id) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
       const accents = ["blue", "teal", "purple", "amber", "cyan", "rose", "green", "slate"];
-      groups.push({ ...box, key: `${key}:${members[0].key}`, position_id: position.id, name: position.name,
+      groups.push({ ...box, key: `${key}:${members[0].key}`, parent_key: members[0].layout_parent_key, position_id: position.id, name: position.name,
         accent_key: accents[hash % accents.length], node_keys: members.map(n => n.key),
         labelWidth: Math.min(box.width - 24, 240, Math.max(80, position.name.length * 8 + 8)) });
     }
   }
-  return groups;
+  // Packing retains its established envelope; decoration never moves cards.
+  if (!decoration) return groups;
+  // Attach controls to an already computed local group, without adding Assets
+  // to its membership/count or merging separate clusters with the same position.
+  const disclosures = new Map(groups.map(group => [group.key, []]));
+  for (const node of nodes.filter(n => n.entity_type === "disclosure")) {
+    const eligible = groups.filter(g => g.parent_key === node.parent_key && g.position_id === node.topology_position?.id);
+    const distance = group => Math.min(...nodes.filter(n => group.node_keys.includes(n.key)).map(n => Math.hypot(n.x - node.x, n.y - node.y)));
+    eligible.sort((a, b) => distance(a) - distance(b) || a.key.localeCompare(b.key));
+    if (eligible.length) disclosures.get(eligible[0].key).push(node);
+  }
+  return groups.map(group => {
+    const controls = disclosures.get(group.key);
+    const members = [...nodes.filter(n => group.node_keys.includes(n.key)), ...controls];
+    const halfWidth = n => n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2;
+    const left = Math.min(...members.map(n => n.x - halfWidth(n))) - 16;
+    // Twenty pixels above the cards keeps the border below the source rail;
+    // the footer reserves label space below cards, attached badges and controls.
+    const top = Math.min(...members.map(n => n.y - nodeHalfHeight(n))) - 20;
+    const width = Math.max(...members.map(n => n.x + halfWidth(n))) + 16 - left;
+    const height = Math.max(...members.map(n => n.y + nodeHalfHeight(n))) + 48 - top;
+    return { ...group, left, top, width, height, labelTop: height - 28,
+      disclosure_keys: controls.map(n => n.key), labelWidth: Math.min(width - 24, group.labelWidth) };
+  });
 }
 
 // All coordinates remain in layout space. Routes are reversed only at the end
@@ -339,7 +363,7 @@ export function connectivityRoutes(nodes, edges, groups = connectivityPositionGr
     right: n.x + (n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2) + 6,
     top: n.y - nodeHalfHeight(n) - 6, bottom: n.y + nodeHalfHeight(n) + 6 }));
   obstacles.push(...groups.map(g => ({ key: g.key, left: g.left + 10, right: g.left + 14 + g.labelWidth,
-    top: g.top + 6, bottom: g.top + 30 })));
+    top: g.top + g.labelTop - 2, bottom: g.top + g.labelTop + 22 })));
   const clear = points => points.slice(1).every(([x, y], i) => {
     const [px, py] = points[i];
     return obstacles.every(r => x === px
@@ -358,7 +382,7 @@ export function connectivityRoutes(nodes, edges, groups = connectivityPositionGr
     const start = [upper.x, upper.y + (sameRow ? -1 : 1) * (nodeHalfHeight(upper) + 8)];
     const end = [lower.x, lower.y - nodeHalfHeight(lower) - 8];
     // Rail heights are shared by each row, outside cards and attached +N badges.
-    const exitY = upper.y + (sameRow ? -1 : 1) * (CONNECTIVITY_NODE_HEIGHT / 2 + 32);
+    const exitY = upper.y + (sameRow ? -1 : 1) * (nodeHalfHeight(upper) + 12);
     const entryY = lower.y - CONNECTIVITY_NODE_HEIGHT / 2 - 12;
     const simple = sameRow
       ? [start, [upper.x, entryY], [lower.x, entryY], end]

@@ -87,7 +87,10 @@ Separate clusters can repeat the same position label; single Assets normally
 have no container. Labels use the managed name and stable presentation tints
 work in both themes. Containers are derived presentation only: position records,
 Type assignments and accepted relationships are unchanged. Networks and +N
-controls are not position-group members. Groups and rails reflow on expansion
+controls are not position-group members. A matching +N more control is visually
+contained in its existing group without affecting its Asset count. Group labels
+sit at the bottom-left, with the top border inset below incoming rails. Groups
+and rails reflow on expansion
 and when additional fullscreen width is available.
 
 Connectivity retrieves at most 100 nodes and 500 edges while keeping initial

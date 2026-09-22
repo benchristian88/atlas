@@ -1321,7 +1321,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-connectivity-canvas { position: relative; overflow: hidden; }
 .topology-connectivity-world { position: absolute; transform-origin: top left; }
 .topology-position-group { position: absolute; pointer-events: none; border: 1px solid color-mix(in srgb, var(--identity-border) 65%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--identity-tint) 55%, var(--surface)); }
-.topology-position-label { position: absolute; left: 11px; top: 7px; height: 20px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 500; }
+.topology-position-label { position: absolute; left: 11px; bottom: 7px; height: 20px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 500; }
 .topology-connectivity-world > svg { position: absolute; inset: 0; pointer-events: none; }
 .topology-network-icon { display: flex; flex: 0 0 28px; justify-content: center; }
 .topology-graph-node { position: absolute; overflow: hidden; display: flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
