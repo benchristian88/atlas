@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectivityLayout, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
+import { connectivityLayout, connectivityPositionGroups, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
 const fixturePositions = Object.fromEntries(["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"].map((key, sort_order) => [key, { id: key, key, name: key, sort_order, active: true }]));
 const node = (key, position, distance = 1) => ({ key, entity_id: key, entity_type: "asset", name: key, topology_position: fixturePositions[position] || null, distance });
 const edge = (source, target, parent = null) => ({ key: `${source}/${target}`, source_key: source, target_key: target, kind: "relationship", topology_class: parent ? "platform" : "physical_network", platform_parent_key: parent, directional: Boolean(parent) });
@@ -89,7 +89,7 @@ test("arbitrary managed keys, rename and reorder control bands without type-name
   assert.ok(before["thing-0"].y < before["thing-1"].y && before["thing-1"].y < before["thing-2"].y && before["thing-2"].y < before["thing-3"].y);
   positions[0].sort_order = 40; positions[0].name = "Renamed"; positions[0].active = false;
   const after = layout(graph);
-  assert.ok(after["thing-3"].y < after["thing-0"].y, "Inactive assignments still honor configured order");
+  assert.ok(after["thing-1"].y < after["thing-0"].y, "Inactive assignments still honor configured order");
   assert.equal(connectivityBands(Object.values(after)).at(-1).positions[0].name, "Renamed");
   const storage = { id: "storage", key: "storage_fabric", name: "Storage Fabric", sort_order: 15, active: true };
   graph.nodes.push({ ...node("custom", "automatic"), topology_position: storage });
@@ -170,6 +170,7 @@ function assertRoutes(graph) {
     }
   }
   assert.deepEqual(connectivityRoutes([...nodes].reverse(), [...graph.edges].reverse()), routes);
+  assertGroups(nodes, routes);
   return { nodes, routes };
 }
 const arbitrary = (key, sort_order) => ({ ...node(key, "automatic"),
@@ -191,8 +192,8 @@ test("physical fan-out shares a horizontal rail and skipped positions retain sep
   graph.nodes.push(arbitrary("c1",7),arbitrary("c2",7));graph.edges.push(edge("origin","c1"),edge("origin","c2"));
   result=assertRoutes(graph);
   const p=Object.fromEntries(result.nodes.map(n=>[n.key,n]));
-  assert.ok(p.b1.y===p.b2.y && p.b2.y===p.b3.y && p.c1.y===p.c2.y && p.c1.y>p.b1.y);
-  const tracks=Object.values(result.routes).slice(-2).map(r=>r.points.filter((point,i,ps)=>i && point[0]===ps[i-1][0] && Math.abs(point[1]-ps[i-1][1])>100).map(p=>p[0]));
+  assert.ok(p.b1.y===p.b2.y && p.b2.y===p.b3.y && p.c1.y===p.c2.y && p.c1.y===p.b1.y);
+  const tracks=Object.values(result.routes).slice(-2).map(r=>r.points.filter((point,i,ps)=>i && point[0]===ps[i-1][0] && Math.abs(point[1]-ps[i-1][1])>30).map(p=>p[0]));
   assert.ok(tracks[0].some(x=>!tracks[1].includes(x)),"Deep targets have separate vertical drops");
 });
 
@@ -236,4 +237,97 @@ test("Fit uses actual route bounds, horizontal centring and fixed screen-space t
   assert.equal(small.scale,1);assert.equal(small.top,16);assert.equal(small.canvasWidth,1000);
   const zoom=connectivityFit(bounds,800,600,4);
   assert.ok(zoom.canvasWidth>=800 && zoom.canvasHeight>=600);assert.equal(zoom.top,16);
+});
+
+function localBranches() {
+  return { focus_key: "a", nodes: [arbitrary("a",50), ...["b1","b2","b3"].map(k=>arbitrary(k,60)), arbitrary("c1",65), arbitrary("c2",65), arbitrary("d1",70), arbitrary("d2",70), arbitrary("e1",80), arbitrary("e2",80)],
+    edges: ["b1","b2","b3","d1","d2"].map(k=>edge("a",k)).concat([edge("c1","b1","b1"),edge("c2","b1","b1"),edge("e1","c1","c1"),edge("e2","c1","c1")]) };
+}
+function assertGroups(nodes, routes) {
+  const groups=connectivityPositionGroups(nodes);
+  const overlaps=(a,b)=>a.left<b.left+b.width && a.left+a.width>b.left && a.top<b.top+b.height && a.top+a.height>b.top;
+  for(const [i,g] of groups.entries()) {
+    for(const other of groups.slice(i+1)) assert.ok(!overlaps(g,other),`${g.key} overlaps ${other.key}`);
+    for(const n of nodes.filter(n=>!g.node_keys.includes(n.key))) assert.ok(!overlaps(g,{left:n.x-90,top:n.y-44,width:180,height:88}),`${g.key} encloses unrelated ${n.key}`);
+    for(const route of Object.values(routes)) for(let i=1;i<route.points.length;i++) {
+      const [x,y]=route.points[i], [px,py]=route.points[i-1];
+      const r={left:g.left+12,right:g.left+12+g.labelWidth,top:g.top+8,bottom:g.top+28};
+      const hit=x===px ? x>r.left&&x<r.right&&Math.max(y,py)>r.top&&Math.min(y,py)<r.bottom : y>r.top&&y<r.bottom&&Math.max(x,px)>r.left&&Math.min(x,px)<r.right;
+      assert.ok(!hit,`Route crosses ${g.name} label`);
+    }
+  }
+  return groups;
+}
+
+test("short sibling position adds no vertical distance to the longer branch", () => {
+  const graph=localBranches(), original=structuredClone(graph), p=layout(graph);
+  const without={...graph,nodes:graph.nodes.filter(n=>!n.key.startsWith("d")),edges:graph.edges.filter(e=>!e.target_key.startsWith("d"))};
+  const q=layout(without);
+  assert.equal(p.e1.y,q.e1.y);
+  assert.ok(p.a.y<p.b1.y && p.b1.y<p.c1.y && p.c1.y<p.e1.y);
+  assert.equal(p.b1.y,p.d1.y);
+  assert.equal(p.d1.topology_position.sort_order,70);
+  const {nodes,routes}=assertRoutes(graph), groups=assertGroups(nodes,routes);
+  assert.deepEqual(groups.map(g=>g.node_keys.length).sort(),[2,2,2,3]);
+  assert.deepEqual(graph,original);
+  assert.deepEqual(connectivityPositionGroups([...nodes].reverse()),groups);
+});
+
+test("same position in unrelated local clusters creates separate containers; isolated nodes and Networks do not", () => {
+  const graph=localBranches();
+  graph.nodes.push(arbitrary("remote",50),arbitrary("r1",60),arbitrary("r2",60),arbitrary("solo",60),{...arbitrary("network",60),entity_type:"network"});
+  graph.edges.push(edge("remote","r1"),edge("remote","r2"));
+  const {nodes,routes}=assertRoutes(graph), groups=assertGroups(nodes,routes);
+  const platforms=groups.filter(g=>g.position_id==="rank-60");
+  assert.equal(platforms.length,2);
+  assert.deepEqual(platforms.map(g=>g.node_keys.length).sort(),[2,3]);
+  assert.equal(platforms[0].accent_key,platforms[1].accent_key);
+  assert.ok(groups.every(g=>!g.node_keys.includes("solo") && !g.node_keys.includes("network")));
+});
+
+test("position containers reflow with disclosure and width; controls are never group members", () => {
+  const graph=homelab();
+  for(const width of [700,1440]) for(const branches of [{},{h1:"all",h2:"all",h3:"all"}]) {
+    const preview=connectivityPreview(graph,branches);
+    const shown={...preview,nodes:[...preview.nodes,...preview.moreNodes],edges:[...preview.edges,...preview.moreEdges]};
+    const nodes=connectivityLayout(shown,{width}),routes=connectivityRoutes(nodes,shown.edges);
+    const groups=assertGroups(nodes,routes), group=groups.find(g=>g.node_keys.includes("child1-00"));
+    assert.equal(group.node_keys.length,branches.h1?18:8);
+    assert.ok(groups.every(g=>g.node_keys.every(k=>!k.startsWith("disclosure:"))));
+    const bounds=connectivityBounds(nodes,routes);
+    for(const g of groups) assert.ok(g.left>=bounds.minX && g.top>=bounds.minY && g.left+g.width<=bounds.minX+bounds.width && g.top+g.height<=bounds.minY+bounds.height);
+  }
+  const preview=connectivityPreview(graph);
+  const narrow=connectivityLayout(preview,{width:700}),wide=connectivityLayout(preview,{width:1440});
+  const height=nodes=>Math.max(...nodes.map(n=>n.y))-Math.min(...nodes.map(n=>n.y));
+  assert.ok(height(wide)<=height(narrow));
+  const columns=nodes=>new Set(nodes.filter(n=>n.key.startsWith("child1-")).map(n=>n.x)).size;
+  assert.ok(columns(wide)>columns(narrow));
+});
+
+test("secondary upper neighbours constrain order, and container tint survives rename/reorder", () => {
+  const graph=localBranches();graph.edges.push(edge("c2","d1"));
+  const {nodes,routes}=assertRoutes(graph);assertGroups(nodes,routes);
+  const p=Object.fromEntries(nodes.map(n=>[n.key,n]));
+  assert.ok(p.d1.y>p.c2.y && p.d1.y>p.a.y);
+  const before=connectivityPositionGroups(nodes).find(g=>g.position_id==="rank-70");
+  for(const n of graph.nodes.filter(n=>n.topology_position.id==="rank-70")) {n.topology_position.name="Renamed managed position";n.topology_position.sort_order=75;}
+  const after=connectivityPositionGroups(connectivityLayout(graph)).find(g=>g.position_id==="rank-70");
+  // Different primary upstream structure deliberately splits these peers.
+  assert.equal(before,undefined);assert.equal(after,undefined);
+  const stable=localBranches(), old=connectivityPositionGroups(connectivityLayout(stable));
+  stable.nodes.forEach(n=>n.topology_position.name="Renamed");
+  const renamed=connectivityPositionGroups(connectivityLayout(stable));
+  assert.deepEqual(renamed.map(g=>g.accent_key),old.map(g=>g.accent_key));
+  assert.ok(renamed.every(g=>g.name==="Renamed"));
+});
+
+test("mixed leaf/subtree siblings retain compact columns and readable desktop Fit", () => {
+  const peers=["h1","h2","h3","router","storage"];
+  const graph={focus_key:"h2",nodes:[arbitrary("upstream",1),...peers.map(k=>arbitrary(k,2)),arbitrary("appliance",3),...[0,1,2,3].map(i=>arbitrary(`child${i}`,4))],
+    edges:[...peers,"appliance"].map(k=>edge("upstream",k)).concat([0,1,2,3].map(i=>edge(`child${i}`,"h2","h2")))};
+  const {nodes,routes}=assertRoutes(graph);assertGroups(nodes,routes);
+  const p=Object.fromEntries(nodes.map(n=>[n.key,n]));
+  assert.ok(peers.every((k,i)=>i===0 || p[k].x>p[peers[i-1]].x),"Leaf runs keep stable ordering around subtree siblings");
+  assert.ok(connectivityFit(connectivityBounds(nodes,routes),750,600).scale*CONNECTIVITY_NODE_WIDTH>=85);
 });

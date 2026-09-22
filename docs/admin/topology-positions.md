@@ -6,7 +6,7 @@ moving and deleting require global `asset_types.manage`, like Asset Categories.
 
 - **Category** is broad Asset taxonomy, filtering and visual identity.
 - **Topology Position** is managed ordered Reference Data controlling where Assets
-  of an Asset Type normally sit vertically in Infrastructure Topology.
+  of an Asset Type sit relative to connected upstream/downstream branches.
 - **Topology Class** is bounded Relationship Type classification controlling how
   relationship edges participate in Connectivity.
 - **Relationships** determine actual connectivity.
@@ -30,12 +30,15 @@ The usage count counts global Asset Types, not customer/site operational records
 
 Changing order changes presentation only: it does not modify accepted Asset or
 relationship knowledge, dependency semantics, traversal or impact conclusions.
-Only positions represented by visible nodes consume graph space; empty positions
-produce no empty bands. Background band decoration is not implemented.
+Ordering applies within connected branches, rather than compulsory graph-wide
+rows. Independent sibling positions may share vertical space. Local containers
+identify nearby related Assets with the same position using its managed name;
+separate branches can have separate containers with the same label. These
+containers are derived presentation only. Empty positions consume no space.
 
 The initial positions preserve the former registry's labels and sequence:
 External / Internet, Security / edge, Routing, Core / aggregation network,
 Access network, Platform / host, Infrastructure appliance, Workload,
 Endpoint / device. The former Platform/Infrastructure and Workload/Endpoint
-rank ties are resolved in that sequence into independently ordered bands.
+rank ties are resolved in that sequence into independently ordered positions.
 Administrators control all subsequent ordering, including unusual arrangements.

@@ -13,7 +13,7 @@ import { TopologyCategoryFilter } from "../../components/topology-category-filte
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
-import { TOPOLOGY_CLASSES, topologyClassSelection, topologyCategorySelection, topologyPresentation, platformMatches, platformCardFacts, matchesSearch, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, connectivityLayout, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit } from "../../lib/infrastructure-topology.mjs";
+import { TOPOLOGY_CLASSES, topologyClassSelection, topologyCategorySelection, topologyPresentation, platformMatches, platformCardFacts, matchesSearch, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, connectivityLayout, connectivityPositionGroups, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit } from "../../lib/infrastructure-topology.mjs";
 
 import { PresentationIdentity, PresentationIcon } from "../../components/presentation-identity.mjs";
 import { presentationAttributes } from "../../lib/presentation.mjs";
@@ -202,10 +202,11 @@ function Connectivity({ graph, view, selectedKey, onSelect, onFocus, expanded, b
   const [zoom, setZoom] = useState(1);
   const preview = useMemo(() => connectivityPreview(graph, branches), [graph, branches]);
   const presentationEdges = useMemo(() => [...preview.edges, ...preview.moreEdges], [preview]);
-  const nodes = useMemo(() => connectivityLayout({ ...preview, nodes: [...preview.nodes, ...preview.moreNodes], edges: presentationEdges }), [preview, presentationEdges]);
+  const nodes = useMemo(() => connectivityLayout({ ...preview, nodes: [...preview.nodes, ...preview.moreNodes], edges: presentationEdges }, { width }), [preview, presentationEdges, width]);
+  const groups = useMemo(() => connectivityPositionGroups(nodes), [nodes]);
   const positions = Object.fromEntries(nodes.map(n => [n.key, n]));
-  const routes = useMemo(() => connectivityRoutes(nodes, presentationEdges), [nodes, presentationEdges]);
-  const bounds = useMemo(() => connectivityBounds(nodes, routes), [nodes, routes]);
+  const routes = useMemo(() => connectivityRoutes(nodes, presentationEdges, groups), [nodes, presentationEdges, groups]);
+  const bounds = useMemo(() => connectivityBounds(nodes, routes, groups), [nodes, routes, groups]);
   const extentX = -bounds.minX, extentY = -bounds.minY;
   const layoutWidth = bounds.width, layoutHeight = bounds.height;
   const { scale, canvasWidth, canvasHeight, top } = connectivityFit(bounds, width, height, zoom);
@@ -227,6 +228,10 @@ function Connectivity({ graph, view, selectedKey, onSelect, onFocus, expanded, b
       pan.current = { x: (left - (canvasWidth - width) / 2) / scale, y: top / scale };
     }
   }} className="topology-connectivity-viewport" style={{ height }}><div className="topology-connectivity-canvas" style={{ width: canvasWidth, height: canvasHeight }}><div className="topology-connectivity-world" role="group" aria-label="Recorded connectivity" style={{ width: layoutWidth, height: layoutHeight, left: (canvasWidth - layoutWidth * scale) / 2, top, transform: `scale(${scale})` }}>
+    {groups.map(group => <div key={group.key} className="topology-position-group" data-position-id={group.position_id} {...presentationAttributes(group)} role="group" aria-label={`${group.name}: ${group.node_keys.length} Assets`}
+      style={{ left: group.left + extentX, top: group.top + extentY, width: group.width, height: group.height }}>
+      <span className="topology-position-label" title={group.name} style={{ width: group.labelWidth }}>{group.name}</span>
+    </div>)}
     <svg width={layoutWidth} height={layoutHeight} aria-hidden="true">
       <defs><marker id="topology-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--muted)" /></marker></defs>
       {presentationEdges.map(edge => {

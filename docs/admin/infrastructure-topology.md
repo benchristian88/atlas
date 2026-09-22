@@ -50,8 +50,9 @@ live monitoring or freshness estimate is implied.
   **Fit** restores fitted zoom and clears pan, centring the graph horizontally
   near the top with roughly 28px below the internal toolbar. Automatic Fit uses
   the same placement. Zoom buttons and canvas scrolling support closer inspection.
-  Each Type's Topology Position remains authoritative for vertical placement.
-  Empty positions collapse; no infrastructure is invented.
+  Each Type's Topology Position defines relative ordering within connected
+  branches. Independent sibling branches may share vertical space; sort order
+  defines sequence, not distance. No infrastructure is invented.
   Recorded relationships group related cards horizontally, with parents centred
   over visible branch footprints. Connections use vertical trunks, shared horizontal
   rails and vertical drops. Long connections use clear tracks around intervening
@@ -74,14 +75,20 @@ live monitoring or freshness estimate is implied.
   Closing expanded mode restores the embedded inspector. Canvas dimensions and
   Fit respond to the available width.
 
-[Managed Topology Positions](topology-positions.md) determine ordered presentation bands; actual
+[Managed Topology Positions](topology-positions.md) determine branch-local ordering; actual
 accepted relationships determine connectivity. Automatic assignments use relationship
-context and otherwise a neutral band. Names and vendors never
+context and otherwise a neutral ordering hint. Names and vendors never
 infer placement. Networks use actual interface memberships to find an intermediate
 position; multihomed Assets retain their own position. Network icon/accent and dashed
 membership semantics are unchanged. Persisted manual positioning is intentionally
-deferred; layout positions are ephemeral presentation output. Background position
-containers are also deferred.
+deferred; layout positions are ephemeral presentation output. Subtle local
+containers label nearby related Assets sharing a managed Topology Position.
+Separate clusters can repeat the same position label; single Assets normally
+have no container. Labels use the managed name and stable presentation tints
+work in both themes. Containers are derived presentation only: position records,
+Type assignments and accepted relationships are unchanged. Networks and +N
+controls are not position-group members. Groups and rails reflow on expansion
+and when additional fullscreen width is available.
 
 Connectivity retrieves at most 100 nodes and 500 edges while keeping initial
 child presentation compact. A safety warning appears only when that technical

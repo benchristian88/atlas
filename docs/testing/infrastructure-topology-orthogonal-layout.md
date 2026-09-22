@@ -1,5 +1,9 @@
 # Connectivity orthogonal layout experiment
 
+This records the initial orthogonal renderer. The subsequent
+[branch-local positions refinement](infrastructure-topology-local-positions.md)
+supersedes its global-band layout and deferred-container details.
+
 ## A–D. Repository and scope
 
 Base `dev` and the already-current `feature/topology-orthogonal-layout` both

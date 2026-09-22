@@ -124,16 +124,18 @@ React only groups/filters the authorized domain projection. Platform displays
 compact child previews in an auto-fitting desktop grid. Card facts show only
 positive child/interface counts, with singular/plural wording and no empty line. Network & VLAN uses
 vertical master/detail. Connectivity uses deterministic top-to-bottom managed
-position bands with fixed 180×88 cards. AssetType has nullable
+branch-local position ordering with fixed 180×88 cards. AssetType has nullable
 `topology_position_id` referencing `TopologyPosition`; its joined relationship is
 serialized as `topology_position` with id, immutable key, name, sort_order and
 active state. Connectivity copies this summary only onto already-authorized nodes.
 Relationship edges expose `topology_class` and optional `platform_parent_key`.
 
 Configured sort_order is authoritative, even for inactive positions and unusual
-ordering. There is no runtime position registry or built-in key ranking. Only
-occupied ranks consume space. `connectivityBands` exposes each occupied band's
-position metadata and node keys for future background rendering.
+ordering. There is no runtime position registry or built-in key ranking. Rank
+is ordinal, not distance: only connected upper neighbours constrain a node's Y.
+All eligible upper neighbours constrain placement, including secondary anchors.
+Independent sibling positions can share Y. `connectivityBands` retains semantic
+rank metadata for compatibility; it does not describe absolute horizontal rows.
 
 Automatic nodes have no position assignment. Snapshot-based rounds infer rank
 from recorded parent/child neighbours first, then adjacent physical/network
@@ -145,13 +147,24 @@ use that fallback. Networks use membership rank midpoints, or just above a singl
 member rank, without moving multihomed Assets. These are ephemeral layout hints.
 
 Recorded upper neighbours anchor horizontal groups, preferring projected platform
-parents. The renderer reserves complete visible subtree footprints before placing
-ancestors, centring parents over those footprints. Occupied-row contours let
-compatible branches share columns without card overlap. Stable name/ID ordering fills
-leaf grids of at most four columns (six for expanded groups larger than twelve).
-Different configured positions retain separate bands even when they share an
-upstream neighbour. Bands reserve card height, all grid rows and routing space;
-empty positions reserve nothing. Coordinates and routes are ephemeral.
+parents. Strictly increasing rank makes this presentation forest cycle-safe.
+Local siblings with the same position share a baseline after their upper
+neighbours; leaf grids reserve only actual rows. The renderer packs occupied
+subtree/card/container contours before centring parents over descendants.
+Different sibling positions reserve separate horizontal space but may share Y.
+Cards, labels, badges and orthogonal routing tracks determine the 168px row
+spacing. Leaf grids start at four columns (six for more than twelve children)
+and can use additional viewport width up to eight columns.
+
+`connectivityPositionGroups` derives containers from visible Assets sharing a
+primary upstream anchor and durable position ID, splitting distant peers and
+boxes that would enclose unrelated cards. Disconnected roots are not combined.
+Groups wrap actual members with compact padding and a label header. Singletons,
+Automatic nodes, Networks and disclosure controls have no position container.
+The managed position name labels the group; a stable hash of its ID selects a
+subtle existing Atlas palette tint, independent of Category and label/order edits.
+Borders and text identify groups without colour. Containers are ephemeral and
+never enter persistence, accepted knowledge, traversal or API responses.
 
 A local preview limits focused-parent direct children to eight in name/ID order.
 A collapsed neighbour has a circular +N badge when returned eligible children
@@ -162,22 +175,23 @@ Direct focus neighbours and ancestors remain visible. Shared children are counte
 once per parent and remain visible if another expanded branch reveals them.
 Disclosure nodes/edges are separate presentation collections merged only for
 layout/rendering; they never enter API, inspector, traversal or accepted knowledge.
-Children retain their managed bands, and the more control follows its visible
-child group. Native sibling buttons isolate expansion from card inspection and
+Children retain their managed position identity and local order; the more
+control follows outside its visible child container. Native sibling buttons isolate expansion from card inspection and
 refocus; Enter/Space work for both controls. Expansion preserves selection,
 hops, filters and Networks, survives Refresh/fullscreen, and resets on focus
 change or leaving Connectivity. No extra request or write occurs. Intentional
 collapse does not set truncation; the server safety warning remains separate.
 All Connectivity edges use orthogonal trunks, horizontal distribution rails and
 vertical drops, including physical relationships and dashed Network membership.
-Routes check every segment against padded card rectangles. Later grid rows and
+Routes check every segment against padded card rectangles and position labels.
+Container borders/backgrounds do not clip edges. Later grid rows and
 skipped positions use deterministic gutter or exterior tracks, preferring short
 routes and separate long tracks for distinct targets. Shared fan-out rails retain
 individual records and canonical arrow direction. No diagonal fallback exists.
-Graph bounds include routes, cards and disclosure controls. Relationship text is
+Graph bounds include routes, cards, local containers and disclosure controls. Relationship text is
 shown in the details inspector, not on the canvas. Other graph renderers are
-unchanged. Position metadata remains available for future background containers;
-those containers are deferred.
+unchanged. Expansion and available viewport width recompute geometry while
+preserving semantic selection and disclosure state.
 
 Automatic and manual Fit centre the complete graph horizontally and align its
 upper bound near the toolbar (16px viewport inset plus the 12px toolbar gap).

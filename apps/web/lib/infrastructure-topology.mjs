@@ -156,7 +156,7 @@ export function connectivityPreview(graph, branches = {}) {
     edges: (graph.edges || []).filter(e => visible.has(e.source_key) && visible.has(e.target_key)) };
 }
 
-export function connectivityLayout(graph) {
+export function connectivityLayout(graph, { width = 900 } = {}) {
   if (!graph.nodes.some(n => n.key === graph.focus_key)) return [];
   const nodes = [...graph.nodes].sort(nodeOrder);
   const byKey = new Map(nodes.map(n => [n.key, n]));
@@ -212,80 +212,134 @@ export function connectivityLayout(graph) {
       ranks.get(otherEnd(b, node.key)) - ranks.get(otherEnd(a, node.key)) || otherEnd(a, node.key).localeCompare(otherEnd(b, node.key)));
     if (candidates.length) parent.set(node.key, otherEnd(candidates[0], node.key));
   }
-  const bands = [...new Set(ranks.values())].sort((a, b) => a - b);
-  const cellWidth = CONNECTIVITY_NODE_WIDTH + 48, cellHeight = CONNECTIVITY_NODE_HEIGHT + 64;
+  const cellWidth = CONNECTIVITY_NODE_WIDTH + 48, cellHeight = 168;
   const positions = new Map();
   const children = new Map(nodes.map(n => [n.key, []]));
   for (const node of nodes) if (parent.has(node.key)) children.get(parent.get(node.key)).push(node);
-  // Reserve complete subtree footprints before placing ancestors. Primary anchors
-  // always have a lower rank, so this presentation forest cannot contain cycles.
-  // Leaf siblings retain compact grids; separate ranks reserve separate columns,
-  // giving long connections whitespace beside intervening branches.
-  const pack = (group, separateRanks = true) => {
+  const clusterKey = node => JSON.stringify([parent.get(node.key) || node.key, node.topology_position?.id || ranks.get(node.key)]);
+  const clusters = new Map();
+  for (const node of nodes) {
+    const key = clusterKey(node);
+    if (!clusters.has(key)) clusters.set(key, []);
+    clusters.get(key).push(node);
+  }
+  const vertical = new Map();
+  // Rank is ordinal. Only recorded upper neighbours impose vertical distance;
+  // independent siblings never reserve empty rows in one another's branches.
+  // Check every eligible upper neighbour, not just the primary horizontal anchor.
+  const orderedClusters = [...clusters.values()].sort((a, b) => ranks.get(a[0].key) - ranks.get(b[0].key) || nodeOrder(a[0], b[0]));
+  for (const cluster of orderedClusters) {
+    const upper = cluster.flatMap(node => adjacent.get(node.key).filter(e =>
+      (e.platform_parent_key || e.topology_class === "physical_network" || e.kind === "membership") &&
+      ranks.get(otherEnd(e, node.key)) < ranks.get(node.key)).map(e => otherEnd(e, node.key)));
+    const base = Math.max(0, ...upper.map(key => vertical.get(key).y + cellHeight));
+    const leavesOnly = cluster.every(n => !children.get(n.key).length);
+    const columns = Math.max(cluster.length > 12 ? 6 : 4, Math.min(8, Math.floor(width / cellWidth)));
+    cluster.forEach((node, i) => {
+      // A remainder control sits beyond the real child grid, outside its box.
+      const index = node.entity_type === "disclosure" ? Math.ceil(i / columns) * columns : i;
+      const row = leavesOnly ? Math.floor(index / columns) : 0;
+      vertical.set(node.key, { y: base + row * cellHeight, row, column: leavesOnly ? index % columns : i });
+    });
+  }
+  const positioned = node => ({ ...node, ...vertical.get(node.key), rank: ranks.get(node.key), layout_parent_key: parent.get(node.key) || null });
+  const footprint = placed => [
+    ...placed.map(n => ({ left: n.x - cellWidth / 2, right: n.x + cellWidth / 2, top: n.y - 90, bottom: n.y + 64 })),
+    ...connectivityPositionGroups(placed).map(g => ({ left: g.left - 8, right: g.left + g.width + 8, top: g.top, bottom: g.top + g.height })),
+  ];
+  // Pack actual occupied geometry, including local containers, before centring
+  // ancestors. Compatible subtree contours can share columns at different Y.
+  const pack = (group, separatePositions = true) => {
     const blocks = [];
     for (let i = 0; i < group.length;) {
       const current = group[i];
-      if (children.get(current.key).length) {
-        blocks.push(branch(current)); i++; continue;
-      }
+      if (children.get(current.key).length) { blocks.push(branch(current)); i++; continue; }
       const leaves = [];
-      while (i < group.length && !children.get(group[i].key).length && ranks.get(group[i].key) === ranks.get(current.key)) leaves.push(group[i++]);
-      const columns = Math.min(leaves.length > 12 ? 6 : 4, leaves.length);
-      blocks.push({ width: columns * cellWidth, nodes: leaves.map((node, index) => ({ ...node,
-        x: (index % columns + .5) * cellWidth, row: Math.floor(index / columns) })) });
+      while (i < group.length && !children.get(group[i].key).length && clusterKey(group[i]) === clusterKey(current)) leaves.push(group[i++]);
+      const firstColumn = Math.min(...leaves.map(n => vertical.get(n.key).column));
+      const columns = Math.max(...leaves.map(n => vertical.get(n.key).column)) - firstColumn + 1;
+      blocks.push({ width: columns * cellWidth, nodes: leaves.map(node => ({ ...positioned(node), x: (vertical.get(node.key).column - firstColumn + .5) * cellWidth })) });
     }
-    let width = 0, previousRank;
-    const placed = [], rightByRow = new Map();
+    let width = 0, previousPosition;
+    const placed = [], occupied = [];
     for (const block of blocks) {
-      const rank = ranks.get(block.nodes[0].key);
-      let offset = separateRanks && previousRank != null && rank !== previousRank ? width + 48 : 0;
-      // Sibling subtrees may share columns where their occupied rows do not
-      // overlap. This avoids reserving a workload-sized gap beside a leaf host,
-      // and lets independent Network roots use otherwise empty bands.
-      for (const node of block.nodes) {
-        const rowKey = `${ranks.get(node.key)}:${node.row}`;
-        if (rightByRow.has(rowKey)) offset = Math.max(offset, rightByRow.get(rowKey) + cellWidth - node.x);
+      const position = clusterKey(block.nodes[0]);
+      let offset = separatePositions && previousPosition != null && position !== previousPosition ? width + 24 : 0;
+      const rectangles = footprint(block.nodes);
+      for (const a of rectangles) for (const b of occupied) {
+        if (a.top < b.bottom && a.bottom > b.top) offset = Math.max(offset, b.right - a.left);
       }
-      for (const node of block.nodes) {
-        const moved = { ...node, x: node.x + offset };
-        placed.push(moved);
-        const rowKey = `${ranks.get(node.key)}:${node.row}`;
-        rightByRow.set(rowKey, Math.max(rightByRow.get(rowKey) ?? -Infinity, moved.x));
-      }
+      placed.push(...block.nodes.map(n => ({ ...n, x: n.x + offset })));
+      occupied.push(...rectangles.map(r => ({ ...r, left: r.left + offset, right: r.right + offset })));
       width = Math.max(width, offset + block.width);
-      previousRank = rank;
+      previousPosition = position;
     }
     return { width: Math.max(cellWidth, width), nodes: placed };
   };
   const branch = node => {
     const ordered = [...children.get(node.key)].sort((a, b) => ranks.get(a.key) - ranks.get(b.key) || nodeOrder(a, b));
     const block = pack(ordered);
-    return { width: block.width, nodes: [{ ...node, x: block.width / 2, row: 0 }, ...block.nodes] };
+    return { width: block.width, nodes: [{ ...positioned(node), x: block.width / 2 }, ...block.nodes] };
   };
   const roots = nodes.filter(n => !parent.has(n.key)).sort((a, b) => ranks.get(a.key) - ranks.get(b.key) || nodeOrder(a, b));
-  const packed = pack(roots, false);
-  let y = 0;
-  for (const rank of bands) {
-    const band = packed.nodes.filter(n => ranks.get(n.key) === rank);
-    for (const node of band) positions.set(node.key, { ...node, rank,
-      layout_parent_key: parent.get(node.key) || null, y: y + node.row * cellHeight });
-    y += Math.max(...band.map(n => n.row)) * cellHeight + CONNECTIVITY_NODE_HEIGHT + 88;
-  }
-  // Focus changes the viewport origin, never semantic band assignment.
+  for (const node of pack(roots, false).nodes) positions.set(node.key, node);
+  // Focus changes the viewport origin, never the branch ordering.
   const focus = positions.get(graph.focus_key), origin = { x: focus.x, y: focus.y };
   return [focus, ...nodes.filter(n => n.key !== graph.focus_key).map(n => positions.get(n.key))]
     .map(n => ({ ...n, x: n.x - origin.x, y: n.y - origin.y }));
 }
 
+// Containers describe local siblings, never every occurrence of a position.
+// Split disconnected roots, distant peers and any box enclosing unrelated cards.
+export function connectivityPositionGroups(nodes) {
+  const candidates = new Map();
+  for (const node of [...nodes].sort((a, b) => a.y - b.y || a.x - b.x || nodeOrder(a, b))) {
+    if (node.entity_type !== "asset" || !node.topology_position || !node.layout_parent_key) continue;
+    const key = JSON.stringify([node.layout_parent_key, node.topology_position.id]);
+    if (!candidates.has(key)) candidates.set(key, []);
+    candidates.get(key).push(node);
+  }
+  const groups = [];
+  const wrap = members => {
+    const left = Math.min(...members.map(n => n.x)) - CONNECTIVITY_NODE_WIDTH / 2 - 16;
+    const top = Math.min(...members.map(n => n.y)) - CONNECTIVITY_NODE_HEIGHT / 2 - 44;
+    return { left, top, width: Math.max(...members.map(n => n.x)) + CONNECTIVITY_NODE_WIDTH / 2 + 16 - left,
+      height: Math.max(...members.map(n => n.y)) + CONNECTIVITY_NODE_HEIGHT / 2 + 18 - top };
+  };
+  for (const [key, peers] of candidates) {
+    const local = [];
+    for (const node of peers) {
+      const last = local.at(-1);
+      const box = last && wrap([...last, node]);
+      const nearby = last?.some(n => Math.abs(n.x - node.x) <= CONNECTIVITY_NODE_WIDTH + 72 && Math.abs(n.y - node.y) <= 168);
+      const foreign = box && nodes.some(n => !peers.includes(n) && n.x + CONNECTIVITY_NODE_WIDTH / 2 > box.left && n.x - CONNECTIVITY_NODE_WIDTH / 2 < box.left + box.width && n.y + 44 > box.top && n.y - 44 < box.top + box.height);
+      if (last && nearby && !foreign) last.push(node); else local.push([node]);
+    }
+    for (const members of local) {
+      if (members.length < 2) continue;
+      const box = wrap(members), position = members[0].topology_position;
+      let hash = 0;
+      for (const char of position.id) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
+      const accents = ["blue", "teal", "purple", "amber", "cyan", "rose", "green", "slate"];
+      groups.push({ ...box, key: `${key}:${members[0].key}`, position_id: position.id, name: position.name,
+        accent_key: accents[hash % accents.length], node_keys: members.map(n => n.key),
+        labelWidth: Math.min(box.width - 24, 240, Math.max(80, position.name.length * 8 + 8)) });
+    }
+  }
+  return groups;
+}
+
 // All coordinates remain in layout space. Routes are reversed only at the end
 // to retain canonical arrows, independently of vertical presentation direction.
 const nodeHalfHeight = node => node.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_HEIGHT / 2;
-export function connectivityRoutes(nodes, edges) {
+export function connectivityRoutes(nodes, edges, groups = connectivityPositionGroups(nodes)) {
   const positions = Object.fromEntries(nodes.map(n => [n.key, n]));
   const obstacles = nodes.map(n => ({ key: n.key,
     left: n.x - (n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2) - 6,
     right: n.x + (n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2) + 6,
     top: n.y - nodeHalfHeight(n) - 6, bottom: n.y + nodeHalfHeight(n) + 6 }));
+  obstacles.push(...groups.map(g => ({ key: g.key, left: g.left + 10, right: g.left + 14 + g.labelWidth,
+    top: g.top + 6, bottom: g.top + 30 })));
   const clear = points => points.slice(1).every(([x, y], i) => {
     const [px, py] = points[i];
     return obstacles.every(r => x === px
@@ -305,7 +359,7 @@ export function connectivityRoutes(nodes, edges) {
     const end = [lower.x, lower.y - nodeHalfHeight(lower) - 8];
     // Rail heights are shared by each row, outside cards and attached +N badges.
     const exitY = upper.y + (sameRow ? -1 : 1) * (CONNECTIVITY_NODE_HEIGHT / 2 + 32);
-    const entryY = lower.y - CONNECTIVITY_NODE_HEIGHT / 2 - 24;
+    const entryY = lower.y - CONNECTIVITY_NODE_HEIGHT / 2 - 12;
     const simple = sameRow
       ? [start, [upper.x, entryY], [lower.x, entryY], end]
       : [start, [upper.x, exitY], [lower.x, exitY], end];
@@ -328,7 +382,7 @@ export function connectivityRoutes(nodes, edges) {
       options.sort((a, b) => cost(a.x) - cost(b.x) || a.x - b.x);
       // Common row spacing guarantees clear horizontal exits and entries; the
       // exterior candidates therefore always provide a route for this layout.
-      if (!options.length) throw new Error("Connectivity layout has no clear orthogonal track");
+      if (!options.length) throw new Error(`Connectivity layout has no clear orthogonal track: ${edge.key}`);
       points = options[0].points;
       tracks.push({ x: options[0].x, low: Math.min(exitY, entryY), high: Math.max(exitY, entryY), target: lower.key, source: upper.key, column: lower.x });
     }
@@ -338,8 +392,8 @@ export function connectivityRoutes(nodes, edges) {
   return routes;
 }
 
-export function connectivityBounds(nodes, routes = {}) {
-  const points = Object.values(routes).flatMap(route => route.points);
+export function connectivityBounds(nodes, routes = {}, groups = connectivityPositionGroups(nodes)) {
+  const points = [...Object.values(routes).flatMap(route => route.points), ...groups.flatMap(g => [[g.left, g.top], [g.left + g.width, g.top + g.height]])];
   const minX = Math.min(0, ...nodes.map(n => n.x - CONNECTIVITY_NODE_WIDTH / 2 - 18), ...points.map(p => p[0]));
   const maxX = Math.max(0, ...nodes.map(n => n.x + CONNECTIVITY_NODE_WIDTH / 2 + 18), ...points.map(p => p[0]));
   const minY = Math.min(0, ...nodes.map(n => n.y - nodeHalfHeight(n)), ...points.map(p => p[1]));
@@ -355,8 +409,7 @@ export function connectivityFit(bounds, width, height, zoom = 1) {
     canvasHeight: Math.max(height, bounds.height * scale + margin * 2), top: margin };
 }
 
-// Only occupied bands are returned. Metadata stays attached to durable managed
-// positions, including inactive assignments, for future background rendering.
+// Compatibility metadata: ranks describe semantic order, not shared Y coordinates.
 export function connectivityBands(layout) {
   const bands = new Map();
   for (const node of layout) {
