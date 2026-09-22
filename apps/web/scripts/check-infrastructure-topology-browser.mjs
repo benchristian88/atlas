@@ -494,9 +494,7 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
     assert.equal(queryRequests().length, before + 1, "Exactly one request per refocus gesture/action");
     const next = new URL(queryRequests().at(-1), base).searchParams;
     for (const parameter of ["hops", "show_networks", "category_ids"]) assert.deepEqual(next.getAll(parameter), prior.getAll(parameter), `${parameter} survives refocus`);
-    const box = await node(key).boundingBox(), viewport = await page.locator(".topology-connectivity-viewport").boundingBox();
-    assert.ok(Math.abs(box.x + box.width / 2 - viewport.x - viewport.width / 2) < 5, "New focus is horizontally centred");
-    assert.ok(Math.abs(box.y + box.height / 2 - viewport.y - viewport.height / 2) < 5, "New focus is vertically centred");
+    await checkTopBiasedFit(page);
     const fitted = await snapshot();
     await button("Fit").click();
     assert.deepEqual(await snapshot(), fitted, "Refocus already reset zoom/pan to Fit");
@@ -707,9 +705,194 @@ async function checkBranchDisclosure(page, data, requests, theme, width) {
   await button("Show details panel").click();
   assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),focusBefore);
   assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),1);
-  assert.ok(await page.locator('line[stroke-dasharray="6 5"]').count()>0);
+  assert.ok(await page.locator('path[stroke-dasharray="6 5"]').count()>0);
   await page.screenshot({path:`${output}/branches-fullscreen-${theme}-${width}.png`,fullPage:true});
   await button("Close expanded Infrastructure Topology").click();
+}
+
+async function checkOrthogonalLayout(page, data, requests, theme, width) {
+  Object.assign(data, fixture(), {topology_positions:positionSeeds.map(position)});
+  const types = ["security_edge","aggregation_network","access_network","platform","infrastructure","workload"].map((role,i)=>({id:id(8100+i),key:`arbitrary_${i}`,name:`Custom type ${i}`,category_id:id(3),active:true,topology_position_id:position(role).id}));
+  data.asset_types=types;resolvePositions(data);
+  const asset=(n,name,type)=>({id:id(n),name,asset_type:types[type].key,customer_id:customer.id,site_id:site.id,status:"operational"});
+  data.assets=[asset(8200,"Edge device",0),asset(8201,"Aggregation",1),asset(8202,"Access fabric",2),...[1,2,3].map(i=>asset(8210+i,`PVE${i}`,3))];
+  data.relationships=[];data.platform_links=[];data.asset_interfaces=[];data.networks=[];
+  const connect=(a,b,platform=false)=>{const r={id:id(8600+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:platform?"runs_on":"connects_to"};data.relationships.push(r);if(platform)data.platform_links.push({relationship_id:r.id,parent_id:id(b),child_id:id(a)});};
+  connect(8200,8201);connect(8201,8202);
+  for(const host of [8211,8212,8213])connect(8202,host);
+  for(const [host,count,start] of [[8211,18,8300],[8212,2,8400],[8213,1,8500]])for(let i=0;i<count;i++){data.assets.push(asset(start+i,`Workload ${start+i}`,5));connect(start+i,host,true);}
+  const button=name=>page.getByRole("button",{name,exact:true});
+  const node=n=>page.locator(`[data-node-key="asset:${id(n)}"]`);
+  const focus=async n=>{await page.getByLabel("Focus",{exact:true}).selectOption(id(n));await node(n).and(page.locator(".is-focus")).waitFor();};
+  const capture=async name=>{
+    await button("Fit").click();
+    await checkOrthogonalGeometry(page);
+    await checkTopBiasedFit(page);
+    const group=page.locator(`[data-position-id="${position("platform").id}"]`);
+    if(await node(8211).count() && await node(8212).count() && await node(8213).count()) {
+      assert.equal(await group.count(),1);
+      assert.match(await group.getAttribute("aria-label"),/3 Assets$/);
+      assert.equal(await group.getAttribute("data-group-key"),JSON.stringify([`asset:${id(8202)}`,position("platform").id]));
+    }
+    const cards=await page.locator('[data-node-key]').evaluateAll(elements=>elements.filter(e=>Number(e.dataset.nodeKey.slice(-12))>=8300 && Number(e.dataset.nodeKey.slice(-12))<8318).map(e=>({x:e.offsetLeft,y:e.offsetTop})));
+    if(cards.length>=8) {
+      const rows=[...new Set(cards.map(c=>c.y))].sort((a,b)=>a-b);
+      assert.deepEqual(rows.map(y=>cards.filter(c=>c.y===y).length),cards.length===18?[4,4,4,4,2]:[4,4]);
+      assert.equal(new Set(cards.map(c=>c.x)).size,4);
+    }
+    await page.screenshot({path:`${output}/orthogonal-${name}-${theme}-${width}.png`,fullPage:true});
+  };
+  await page.goto(`${base}/topology`);await button("Connectivity").click();await focus(8300);
+  {
+    const viewport=await page.locator(".topology-connectivity-viewport").boundingBox();
+    const boxes=await page.locator("[data-node-key]").evaluateAll(ns=>ns.map(n=>n.getBoundingClientRect().toJSON()));
+    assert.ok(Math.min(...boxes.map(b=>b.top))-viewport.y>=15 && Math.min(...boxes.map(b=>b.top))-viewport.y<=24,"Small graph starts near top");
+    assert.ok(Math.abs((Math.min(...boxes.map(b=>b.left))+Math.max(...boxes.map(b=>b.right)))/2-(viewport.x+viewport.width/2))<2,"Small graph horizontally centred");
+  }
+  await capture("small");
+  await focus(8201);await button("1 hop").click();await node(8200).waitFor();await capture("chain");
+  await focus(8202);await node(8213).waitFor();await capture("three-hosts");
+  data.assets.push(asset(8220,"Backup appliance",4),asset(8221,"Storage appliance",4));connect(8202,8220);connect(8202,8221);
+  await button("Refresh").click();await node(8221).waitFor();
+  const hostBox=await node(8211).boundingBox(),applianceBox=await node(8220).boundingBox();
+  assert.ok(Math.abs(hostBox.y-applianceBox.y)<1,"Independent appliance and host branches compact side by side");
+  await capture("cross-position");
+  await focus(8211);await button("2 hops").click();await button("Show 10 more child Assets for PVE1").waitFor();
+  await capture("first-eight");
+  await button("Show 10 more child Assets for PVE1").click();await node(8317).waitFor();await capture("eighteen");
+  await focus(8202);await button("Show 18 child Assets for PVE1").waitFor();
+  const before=requests.length;
+  await capture("collapsed");
+  await button("Show 1 child Assets for PVE3").click();await node(8500).waitFor();await capture("one-child");
+  await button("Show 2 child Assets for PVE2").click();await node(8401).waitFor();await capture("two-children");
+  await button("Show 18 child Assets for PVE1").click();
+  await button("Show 10 more child Assets for PVE1").click();await node(8317).waitFor();
+  assert.equal(requests.length,before,"All-branch expansion remains presentation-only");
+  await capture("all-expanded");
+  await button("Expand Infrastructure Topology").click();await button("Hide details panel").click();await capture("fullscreen");
+  await button("Show details panel").click();await node(8211).click();
+  assert.match(await page.getByLabel("Topology inspector",{exact:true}).innerText(),/Runs on →/);
+  await capture("fullscreen-details");await button("Close expanded Infrastructure Topology").click();
+}
+
+async function checkLocalPositions(page, data, requests, theme, width) {
+  Object.assign(data, fixture(), {topology_positions:positionSeeds.map(position)});
+  const positions = ["Access network", "Platform / host", "Container host", "Infrastructure appliance", "Workload"].map((name,i)=>({id:id(8800+i),key:`custom_position_${i}`,name,sort_order:[50,60,65,70,80][i],active:true}));
+  data.topology_positions=positions;
+  data.asset_types=positions.map((p,i)=>({id:id(8810+i),key:`arbitrary_${i}`,name:`Custom type ${i}`,category_id:id(3),active:true,topology_position_id:p.id}));
+  resolvePositions(data);
+  const asset=(n,name,type)=>({id:id(n),name,asset_type:`arbitrary_${type}`,customer_id:customer.id,site_id:site.id,status:"operational"});
+  data.assets=[asset(8900,"Access fabric",0),...[1,2,3].map(i=>asset(8900+i,`Host ${i}`,1)),asset(8904,"Runtime A",2),asset(8905,"Runtime B",2),asset(8906,"Archive device",3),asset(8907,"Storage device",3),...Array.from({length:18},(_,i)=>asset(8920+i,`Application ${String(i).padStart(2,"0")}`,4))];
+  data.relationships=[];data.platform_links=[];data.asset_interfaces=[];data.networks=[];
+  const connect=(a,b,platform=false)=>{const r={id:id(9000+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:platform?"runs_on":"connects_to"};data.relationships.push(r);if(platform)data.platform_links.push({relationship_id:r.id,parent_id:id(b),child_id:id(a)});};
+  for(const n of [8901,8902,8903,8906,8907])connect(8900,n);
+  connect(8904,8901,true);connect(8905,8901,true);
+  for(let i=0;i<18;i++)connect(8920+i,8904,true);
+  const button=name=>page.getByRole("button",{name,exact:true});
+  const node=n=>page.locator(`[data-node-key="asset:${id(n)}"]`);
+  await page.goto(`${base}/topology`);await button("Connectivity").click();
+  await page.getByLabel("Focus",{exact:true}).selectOption(id(8901));await button("2 hops").click();
+  await node(8907).waitFor();await node(8905).waitFor();
+  const capture=async name=>{
+    await button("Fit").click();await checkOrthogonalGeometry(page);await checkTopBiasedFit(page);
+    const groups=await page.locator(".topology-position-group").evaluateAll(elements=>elements.map(el=>{
+      const rgb=value=>{const canvas=document.createElement("canvas");canvas.width=canvas.height=1;const ctx=canvas.getContext("2d");ctx.fillStyle=value;ctx.fillRect(0,0,1,1);return "#"+[...ctx.getImageData(0,0,1,1).data].slice(0,3).map(n=>n.toString(16).padStart(2,"0")).join("");};
+      return {box:el.getBoundingClientRect().toJSON(),label:el.firstElementChild.getBoundingClientRect().toJSON(),background:rgb(getComputedStyle(el).backgroundColor),text:rgb(getComputedStyle(el.firstElementChild).color),border:getComputedStyle(el).borderWidth};
+    }));
+    for(const [i,g] of groups.entries()) {
+      assert.ok(contrastRatio(g.text,g.background)>=4.5,"Position labels retain text contrast in both themes");
+      assert.equal(g.border,"1px");
+      const scale=await page.locator(".topology-connectivity-world").evaluate(el=>el.getBoundingClientRect().width/el.offsetWidth);
+      assert.ok(Math.abs((g.box.bottom-g.label.bottom)/scale-8)<1,"Label is inset at the bottom");
+      assert.ok(Math.abs((g.label.left-g.box.left)/scale-12)<1,"Label is inset at the left");
+      for(const other of groups.slice(i+1))assert.ok(g.box.right<=other.box.left || other.box.right<=g.box.left || g.box.bottom<=other.box.top || other.box.bottom<=g.box.top,"Local containers do not overlap");
+    }
+    await page.screenshot({path:`${output}/positions-${name}-${theme}-${width}.png`,fullPage:true});
+  };
+  const host=await node(8901).boundingBox(),appliance=await node(8906).boundingBox();
+  assert.ok(Math.abs(host.y-appliance.y)<1,"Independent positions share Y");
+  assert.equal(await page.locator(`[data-position-id="${id(8801)}"]`).count(),1);
+  assert.equal(await page.locator(`[data-position-id="${id(8801)}"]`).getAttribute("aria-label"),"Platform / host: 3 Assets");
+  assert.equal(await page.locator(`[data-position-id="${id(8803)}"]`).count(),1);
+  assert.equal(await page.locator(`[data-position-id="${id(8802)}"]`).count(),1);
+  const semanticBefore=JSON.stringify({positions:data.topology_positions,types:data.asset_types,relationships:data.relationships});
+  await capture("siblings");
+  const before=requests.length;
+  await button("Show 18 child Assets for Runtime A").click();await button("Show 10 more child Assets for Runtime A").waitFor();
+  const chain=await Promise.all([8900,8901,8904,8920].map(n=>node(n).boundingBox()));
+  for(let i=1;i<chain.length;i++)assert.ok(chain[i].y>chain[i-1].y+chain[i-1].height);
+  assert.equal(await page.locator(`[data-position-id="${id(8804)}"]`).getAttribute("aria-label"),"Workload: 8 Assets");
+  await capture("first-eight");
+  const group=await page.locator(`[data-position-id="${id(8804)}"]`).boundingBox();
+  const more=await button("Show 10 more child Assets for Runtime A").boundingBox();
+  const first=await node(8920).boundingBox();
+  const scale=first.height/88;
+  assert.ok(more.x-group.x>=16*scale-.5 && group.x+group.width-more.x-more.width>=16*scale-.5);
+  assert.ok(more.y-group.y>=20*scale-.5 && group.y+group.height-more.y-more.height>=48*scale-.5,"Disclosure is padded inside its existing group");
+  assert.ok(Math.abs((first.y-group.y)/scale-20)<1,"Container top keeps compact card padding");
+  const rail=await page.locator(".topology-connectivity-world").evaluate(world=>{
+    const group=[...world.querySelectorAll('.topology-position-group')].find(g=>g.getAttribute('aria-label')==='Workload: 8 Assets');
+    const path=[...world.querySelectorAll('path[data-group-connection]')].find(p=>p.dataset.groupConnection===group.dataset.groupKey);
+    const points=[...path.getAttribute('d').matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]);
+    return Math.max(...points.filter(p=>p[1]<parseFloat(group.style.top)).map(p=>p[1]));
+  });
+  const world=await page.locator(".topology-connectivity-world").boundingBox();
+  assert.ok(Number.isFinite(rail),"Incoming rail is present");
+  assert.ok((group.y-world.y)/scale-rail>=15.5,"Container starts at least 16 layout pixels below the rail");
+  const parentGroup=await page.locator(`[data-position-id="${id(8802)}"]`).boundingBox();
+  assert.ok(rail-(parentGroup.y+parentGroup.height-world.y)/scale>=15.5,"Rail clears the complete parent group and footer");
+  await button("Show 10 more child Assets for Runtime A").click();await node(8937).waitFor();
+  assert.equal(requests.length,before);
+  assert.equal(await page.locator(`[data-position-id="${id(8804)}"]`).getAttribute("aria-label"),"Workload: 18 Assets");
+  assert.equal(JSON.stringify({positions:data.topology_positions,types:data.asset_types,relationships:data.relationships}),semanticBefore);
+  await capture("all-expanded");
+  await button("Expand Infrastructure Topology").click();await button("Hide details panel").click();await capture("fullscreen");
+  await button("Show details panel").click();await node(8904).click();await capture("fullscreen-details");
+  await button("Close expanded Infrastructure Topology").click();
+}
+
+async function checkTopBiasedFit(page) {
+  const world=await page.locator(".topology-connectivity-world").boundingBox();
+  const viewport=await page.locator(".topology-connectivity-viewport").boundingBox();
+  assert.ok(Math.abs(world.x+world.width/2-viewport.x-viewport.width/2)<2,"Complete graph is horizontally centred");
+  assert.ok(Math.abs(world.y-viewport.y-16)<1,"Complete graph is top-biased");
+  assert.ok(world.width<=viewport.width-31 && world.height<=viewport.height-31,"Fit includes complete graph bounds");
+}
+
+async function checkOrthogonalGeometry(page) {
+  await checkGeometry(page);
+  const geometry=await page.locator(".topology-connectivity-world").evaluate(world=>({
+    labels:world.querySelectorAll("svg text").length,
+    lines:world.querySelectorAll("svg line").length,
+    boxes:[...world.querySelectorAll("[data-node-key],.topology-disclosure-more,.topology-disclosure-badge,.topology-position-label")].map(n=>({key:n.dataset.nodeKey||n.className,x:n.offsetLeft+(n.classList.contains("topology-position-label")?n.parentElement.offsetLeft+1:0),y:n.offsetTop+(n.classList.contains("topology-position-label")?n.parentElement.offsetTop+1:0),width:n.offsetWidth,height:n.offsetHeight})),
+    groups:[...world.querySelectorAll(".topology-position-group")].map(g=>({key:g.dataset.positionId,x:parseFloat(g.style.left),y:parseFloat(g.style.top),width:parseFloat(g.style.width),height:parseFloat(g.style.height)})),
+    paths:[...world.querySelectorAll("path[data-edge-key]")].map(p=>({key:p.dataset.edgeKey,d:p.getAttribute("d"),internal:p.dataset.internalRouting==="true"}))
+  }));
+  assert.equal(geometry.labels,0);assert.equal(geometry.lines,0);
+  assert.ok(geometry.paths.length,"Relationship paths are rendered");
+  for(const path of geometry.paths){
+    assert.doesNotMatch(path.d,/[ACHQSTVZ]/i,"Only explicit M/L orthogonal segments");
+    const points=[...path.d.matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]);
+    for(let i=1;i<points.length;i++){
+      const [x,y]=points[i],[px,py]=points[i-1];
+      assert.ok(x===px||y===py,`${path.key} diagonal`);
+      for(const g of geometry.groups) {
+        const inside=([x,y])=>x>g.x&&x<g.x+g.width&&y>g.y&&y<g.y+g.height;
+        if((inside(points[0])&&inside(points.at(-1))) || (path.internal && (inside(points[0]) || inside(points.at(-1)))))continue; // Same local group only.
+        const horizontal=x!==px && y===py && y>=g.y && y<=g.y+g.height && Math.max(x,px)>g.x && Math.min(x,px)<g.x+g.width;
+        assert.ok(!horizontal,`${path.key} horizontal segment enters or touches container ${g.key}`);
+        if(!inside(points[0])&&!inside(points.at(-1))) {
+          const vertical=x===px&&x>g.x&&x<g.x+g.width&&Math.max(y,py)>g.y&&Math.min(y,py)<g.y+g.height;
+          assert.ok(!vertical,`${path.key} enters unrelated container ${g.key}`);
+        }
+      }
+      for(const box of geometry.boxes){
+        const hit=x===px ? x>box.x+.5&&x<box.x+box.width-.5&&Math.max(y,py)>box.y+.5&&Math.min(y,py)<box.y+box.height-.5
+          : y>box.y+.5&&y<box.y+box.height-.5&&Math.max(x,px)>box.x+.5&&Math.min(x,px)<box.x+box.width-.5;
+        assert.ok(!hit,`${path.key} intersects ${box.key}`);
+      }
+    }
+  }
 }
 
 async function checkLayeredLayout(page, data, requests, theme, width) {
@@ -737,7 +920,8 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   await focus(2102);await button("2 hops").click();await node(2107).waitFor();
   await ordered([2100,2101,2102,2103,2105]);
   const hosts=await Promise.all([2105,2106,2107].map(n=>node(n).boundingBox()));
-  assert.ok(hosts.every(box=>Math.abs(box.y-hosts[0].y)<1),"Three hosts align");
+  assert.ok(Math.abs(hosts[1].y-hosts[0].y)<1,"Hosts in the same local group align");
+  await ordered([2104,2107]); // This sibling branch reserves its own group clearance.
   assert.match(await node(2105).innerText(),/18 child Assets/);
   assert.equal(await node(2200).count(),0,"Neighbour host stays a summary");
   await checkGeometry(page);
@@ -745,12 +929,12 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   await node(2105).dblclick();await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).waitFor();
   assert.equal(await page.locator('[data-node-key]').count(),12); // host, 8 children, access, aggregation, peer host
   await ordered([2102,2103,2105,2200]);
-  assert.equal(await page.locator(".topology-host-rail").count(),8);
+  assert.equal(await page.locator("path[data-group-connection]").count(),1);
   const beforeExpand=requests.length;
   await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).click();await node(2217).waitFor();
   assert.equal(requests.length,beforeExpand,"Child expansion must not request or mutate data");
   assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),id(2105));
-  assert.equal(await page.locator(".topology-host-rail").count(),18);
+  assert.equal(await page.locator("path[data-group-connection]").count(),1);
   await checkGeometry(page);
   await page.screenshot({path:`${output}/layered-eighteen-children-${theme}-${width}.png`,fullPage:true});
   await node(2200).dblclick();await node(2200).and(page.locator(".is-focus")).waitFor();
@@ -862,7 +1046,12 @@ async function checkManagedPositions(page, data, theme, width) {
     await button("2 hops").click();
     await page.locator(`[data-node-key="asset:${id(7103)}"]`).waitFor();
     const boxes=await Promise.all(expected.map(i=>page.locator(`[data-node-key="asset:${id(7100+i)}"]`).boundingBox()));
-    for(let i=1;i<boxes.length;i++) assert.ok(boxes[i-1].y+boxes[i-1].height<boxes[i].y,"Configured arbitrary position order is authoritative");
+    for(const relationship of data.relationships) {
+      const a=data.assets.findIndex(n=>n.id===relationship.source_asset_id), b=data.assets.findIndex(n=>n.id===relationship.target_asset_id);
+      const [upper,lower]=custom[a].sort_order<custom[b].sort_order?[a,b]:[b,a];
+      const up=boxes[expected.indexOf(upper)],down=boxes[expected.indexOf(lower)];
+      assert.ok(up.y+up.height<down.y,"Configured order is authoritative on each connected branch");
+    }
   };
   await inspectOrder([0,1,2,3]);
   await page.goto(`${base}/admin/topology-positions`);
@@ -1106,6 +1295,17 @@ try {
       else if (url.pathname === "/api/assets") body = data.assets.filter(a=> !url.searchParams.get("category_id") || data.asset_types.find(t=>t.key===a.asset_type)?.category_id === url.searchParams.get("category_id")).slice(0,31);
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
+    if (process.env.ATLAS_POSITIONS_ONLY) {
+      await checkLocalPositions(page, data, requests, theme, width);
+      assert.deepEqual(errors,[]);
+      console.log(`Passed local positions: ${theme} ${width}px`);
+      checks++; await context.close(); continue;
+    }
+    if (process.env.ATLAS_ORTHOGONAL_ONLY) {
+      await checkOrthogonalLayout(page, data, requests, theme, width);
+      assert.deepEqual(errors,[]); checks++; await context.close();
+      console.log(`Passed orthogonal geometry: ${theme} ${width}px`); continue;
+    }
     await checkConnectivitySearch(page, data, requests, theme, width);
     if (process.env.ATLAS_DISCLOSURE_ONLY) {
       await checkBranchDisclosure(page, data, requests, theme, width);
@@ -1322,8 +1522,8 @@ try {
     assert.equal(await page.locator(`[data-node-key="network:${id(305)}"]`).getAttribute("data-presentation-accent"),"blue");
     assert.equal(await page.locator(`[data-node-key="network:${id(303)}"]`).getAttribute("data-presentation-accent"),"orange");
     assert.match(await page.locator(`[data-node-key="network:${id(305)}"]`).innerText(),/VLAN 99.*10.0.99.0\/24/s);
-    assert.equal(await page.locator('.topology-connectivity-world line[stroke-dasharray="6 5"]').count(),2);
-    assert.equal(await page.locator('.topology-connectivity-world line[stroke="var(--muted)"]').count(),1);
+    assert.equal(await page.locator('.topology-connectivity-world path[stroke-dasharray="6 5"]').count(),2);
+    assert.equal(await page.locator('.topology-connectivity-world path[stroke="var(--muted)"]').count(),1);
     assert.equal(await adguardNode.evaluate(el=>getComputedStyle(el).borderWidth),"2px");
     assert.notEqual(await adguardNode.evaluate(el=>getComputedStyle(el).boxShadow),"none");
     await checkStyleTokens(page.locator('.topology-graph-node:not(.is-focus)'), { borderTopColor: "--identity-border", backgroundColor: "--identity-tint" });
@@ -1332,7 +1532,7 @@ try {
     await page.getByRole("button",{name:"Refresh",exact:true}).click();
     await page.locator(`[data-node-key="network:${id(305)}"][data-presentation-accent="purple"]`).waitFor();
     assert.equal(await adguardNode.getAttribute("data-presentation-accent"),"green");
-    assert.equal(await page.locator('.topology-connectivity-world g[data-presentation-accent="purple"] line[stroke-dasharray]').count(),1);
+    assert.equal(await page.locator('.topology-connectivity-world g[data-presentation-accent="purple"] path[stroke-dasharray]').count(),1);
     await page.locator(`[data-node-key="asset:${id(30)}"]`).click();
     assert.equal(await page.locator('[aria-label="Topology inspector"] h2').innerText(),"PVE1");
     assert.equal(await page.getByRole("link",{name:"Open Asset",exact:true}).getAttribute("href"),`/assets/${id(30)}`);
@@ -1374,8 +1574,8 @@ try {
       await checkGeometry(page);
     await checkConnectivityContrast(page);
     }
-    if (width === 1440) assert.ok((await page.locator("[data-node-key]").first().boundingBox()).width >= 85, "Fit keeps 14-node cards readable on desktop");
     await page.screenshot({ path:`${output}/useful-two-hops-${theme}-${width}.png`,fullPage:true });
+    if (width === 1440) assert.ok((await page.locator("[data-node-key]").first().boundingBox()).width >= 85, "Fit keeps 14-node cards readable on desktop");
     await expand.click(); await close.waitFor();
     await checkGeometry(page);
     await checkConnectivityContrast(page);
@@ -1401,10 +1601,8 @@ try {
     assert.equal(requests.filter(r => !r.includes("/icon?")).length,beforeGraphExpand);
     assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),id(100));
     const focusBox = await page.locator(`[data-node-key="asset:${id(100)}"]`).boundingBox();
-    const canvasBox = await page.locator(".topology-connectivity-viewport").boundingBox();
     assert.ok(focusBox.y + focusBox.height < 1000, "Focused Asset stays in the viewport");
-    assert.ok(Math.abs(focusBox.x + focusBox.width / 2 - (canvasBox.x + canvasBox.width / 2)) < 5, "Focus remains horizontally centred");
-    assert.ok(Math.abs(focusBox.y + focusBox.height / 2 - (canvasBox.y + canvasBox.height / 2)) < 5, "Focus remains vertically centred");
+    await checkTopBiasedFit(page);
     assert.ok(requests.some(r => r.includes("/icon?v=")), "Shared cached icons are requested");
     await page.screenshot({ path:`${output}/connectivity-${theme}-${width}.png`,fullPage:true });
     await close.click();
@@ -1529,11 +1727,15 @@ try {
     Object.assign(data, fixture(), {topology_positions:positionSeeds.map(position)});
     resolvePositions(data);
     await checkBranchDisclosure(page, data, requests, theme, width);
+    await checkOrthogonalLayout(page, data, requests, theme, width);
+    await checkLocalPositions(page, data, requests, theme, width);
     assert.deepEqual(errors,[]);
     console.log(`Passed topology and relationship classes: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
+  if (process.env.ATLAS_ORTHOGONAL_ONLY) console.log(`Passed ${checks} orthogonal scenarios.`);
+  else if (process.env.ATLAS_POSITIONS_ONLY) console.log(`Passed ${checks} local position scenarios.`);
+  else if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
   else if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
   else if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
   else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
