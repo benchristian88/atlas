@@ -213,46 +213,63 @@ export function connectivityLayout(graph) {
     if (candidates.length) parent.set(node.key, otherEnd(candidates[0], node.key));
   }
   const bands = [...new Set(ranks.values())].sort((a, b) => a - b);
-  const cellWidth = CONNECTIVITY_NODE_WIDTH + 36, cellHeight = CONNECTIVITY_NODE_HEIGHT + 48;
+  const cellWidth = CONNECTIVITY_NODE_WIDTH + 48, cellHeight = CONNECTIVITY_NODE_HEIGHT + 64;
   const positions = new Map();
+  const children = new Map(nodes.map(n => [n.key, []]));
+  for (const node of nodes) if (parent.has(node.key)) children.get(parent.get(node.key)).push(node);
+  // Reserve complete subtree footprints before placing ancestors. Primary anchors
+  // always have a lower rank, so this presentation forest cannot contain cycles.
+  // Leaf siblings retain compact grids; separate ranks reserve separate columns,
+  // giving long connections whitespace beside intervening branches.
+  const pack = (group, separateRanks = true) => {
+    const blocks = [];
+    for (let i = 0; i < group.length;) {
+      const current = group[i];
+      if (children.get(current.key).length) {
+        blocks.push(branch(current)); i++; continue;
+      }
+      const leaves = [];
+      while (i < group.length && !children.get(group[i].key).length && ranks.get(group[i].key) === ranks.get(current.key)) leaves.push(group[i++]);
+      const columns = Math.min(leaves.length > 12 ? 6 : 4, leaves.length);
+      blocks.push({ width: columns * cellWidth, nodes: leaves.map((node, index) => ({ ...node,
+        x: (index % columns + .5) * cellWidth, row: Math.floor(index / columns) })) });
+    }
+    let width = 0, previousRank;
+    const placed = [], rightByRow = new Map();
+    for (const block of blocks) {
+      const rank = ranks.get(block.nodes[0].key);
+      let offset = separateRanks && previousRank != null && rank !== previousRank ? width + 48 : 0;
+      // Sibling subtrees may share columns where their occupied rows do not
+      // overlap. This avoids reserving a workload-sized gap beside a leaf host,
+      // and lets independent Network roots use otherwise empty bands.
+      for (const node of block.nodes) {
+        const rowKey = `${ranks.get(node.key)}:${node.row}`;
+        if (rightByRow.has(rowKey)) offset = Math.max(offset, rightByRow.get(rowKey) + cellWidth - node.x);
+      }
+      for (const node of block.nodes) {
+        const moved = { ...node, x: node.x + offset };
+        placed.push(moved);
+        const rowKey = `${ranks.get(node.key)}:${node.row}`;
+        rightByRow.set(rowKey, Math.max(rightByRow.get(rowKey) ?? -Infinity, moved.x));
+      }
+      width = Math.max(width, offset + block.width);
+      previousRank = rank;
+    }
+    return { width: Math.max(cellWidth, width), nodes: placed };
+  };
+  const branch = node => {
+    const ordered = [...children.get(node.key)].sort((a, b) => ranks.get(a.key) - ranks.get(b.key) || nodeOrder(a, b));
+    const block = pack(ordered);
+    return { width: block.width, nodes: [{ ...node, x: block.width / 2, row: 0 }, ...block.nodes] };
+  };
+  const roots = nodes.filter(n => !parent.has(n.key)).sort((a, b) => ranks.get(a.key) - ranks.get(b.key) || nodeOrder(a, b));
+  const packed = pack(roots, false);
   let y = 0;
   for (const rank of bands) {
-    const groups = new Map();
-    for (const node of nodes.filter(n => ranks.get(n.key) === rank)) {
-      const anchor = parent.get(node.key) || "";
-      if (!groups.has(anchor)) groups.set(anchor, []);
-      groups.get(anchor).push(node);
-    }
-    const ordered = [...groups].sort(([a], [b]) => (positions.get(a)?.x || 0) - (positions.get(b)?.x || 0) || a.localeCompare(b));
-    const columnsFor = group => Math.min(group.length > 12 ? 6 : 4, group.length);
-    const widths = ordered.map(([, group]) => columnsFor(group) * cellWidth);
-    const total = widths.reduce((a, b) => a + b, 0) + Math.max(0, ordered.length - 1) * 36;
-    let cursor = -total / 2, rows = 1;
-    ordered.forEach(([anchor, group], index) => {
-      const columns = columnsFor(group);
-      const centre = cursor + widths[index] / 2;
-      group.forEach((node, i) => positions.set(node.key, { ...node, rank, layout_parent_key: anchor || null,
-        x: centre + ((i % columns) - (columns - 1) / 2) * cellWidth,
-        y: y + Math.floor(i / columns) * cellHeight }));
-      cursor += widths[index] + 36;
-      rows = Math.max(rows, Math.ceil(group.length / columns));
-    });
-    y += rows * cellHeight + 48;
-  }
-  // Centre parents over their child groups, resolving same-band collisions with
-  // a deterministic forward pass. Group widths below already reserve space.
-  for (const rank of [...bands].reverse()) {
-    const band = nodes.filter(n => ranks.get(n.key) === rank).map(n => positions.get(n.key));
-    for (const node of band) {
-      const children = [...positions.values()].filter(n => n.layout_parent_key === node.key);
-      if (children.length) node.x = (Math.min(...children.map(n => n.x)) + Math.max(...children.map(n => n.x))) / 2;
-    }
-    const rows = new Map();
-    for (const node of band) { if (!rows.has(node.y)) rows.set(node.y, []); rows.get(node.y).push(node); }
-    for (const row of rows.values()) {
-      row.sort((a, b) => a.x - b.x || nodeOrder(a, b));
-      for (let i = 1; i < row.length; i++) row[i].x = Math.max(row[i].x, row[i - 1].x + cellWidth);
-    }
+    const band = packed.nodes.filter(n => ranks.get(n.key) === rank);
+    for (const node of band) positions.set(node.key, { ...node, rank,
+      layout_parent_key: parent.get(node.key) || null, y: y + node.row * cellHeight });
+    y += Math.max(...band.map(n => n.row)) * cellHeight + CONNECTIVITY_NODE_HEIGHT + 88;
   }
   // Focus changes the viewport origin, never semantic band assignment.
   const focus = positions.get(graph.focus_key), origin = { x: focus.x, y: focus.y };
@@ -260,21 +277,82 @@ export function connectivityLayout(graph) {
     .map(n => ({ ...n, x: n.x - origin.x, y: n.y - origin.y }));
 }
 
-// Orthogonal platform rails share a short trunk. Later grid rows use lanes in
-// card gutters, never long diagonals through the cards. Canonical arrow direction
-// is retained by reversing geometry only when the recorded source is the child.
-export function connectivityRail(edge, positions, edges) {
-  const parent = positions[edge.platform_parent_key];
-  if (!parent) return null;
-  const child = positions[otherEnd(edge, parent.key)];
-  const siblings = edges.filter(e => e.platform_parent_key === parent.key).map(e => positions[otherEnd(e, parent.key)]).filter(n => n && n.y > parent.y);
-  if (!child || child.y <= parent.y || siblings.length < 3) return null;
-  const firstY = Math.min(...siblings.map(n => n.y));
-  const railY = firstY - CONNECTIVITY_NODE_HEIGHT / 2 - 32;
-  const laneX = child.x - CONNECTIVITY_NODE_WIDTH / 2 - 14;
-  const entryY = child.y - CONNECTIVITY_NODE_HEIGHT / 2 - 14;
-  const points = [[parent.x, parent.y + CONNECTIVITY_NODE_HEIGHT / 2 + 3], [parent.x, railY], [laneX, railY], [laneX, entryY], [child.x, entryY], [child.x, child.y - (child.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_HEIGHT / 2) - 3]];
-  return { points: edge.source_key === parent.key ? points : points.reverse(), labelX: child.x, labelY: entryY - 4 };
+// All coordinates remain in layout space. Routes are reversed only at the end
+// to retain canonical arrows, independently of vertical presentation direction.
+const nodeHalfHeight = node => node.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_HEIGHT / 2;
+export function connectivityRoutes(nodes, edges) {
+  const positions = Object.fromEntries(nodes.map(n => [n.key, n]));
+  const obstacles = nodes.map(n => ({ key: n.key,
+    left: n.x - (n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2) - 6,
+    right: n.x + (n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2) + 6,
+    top: n.y - nodeHalfHeight(n) - 6, bottom: n.y + nodeHalfHeight(n) + 6 }));
+  const clear = points => points.slice(1).every(([x, y], i) => {
+    const [px, py] = points[i];
+    return obstacles.every(r => x === px
+      ? x <= r.left || x >= r.right || Math.max(y, py) <= r.top || Math.min(y, py) >= r.bottom
+      : y <= r.top || y >= r.bottom || Math.max(x, px) <= r.left || Math.min(x, px) >= r.right);
+  });
+  const tracks = [];
+  const routes = {};
+  const ordered = [...edges].sort((a, b) => a.key.localeCompare(b.key));
+  for (const edge of ordered) {
+    const source = positions[edge.source_key], target = positions[edge.target_key];
+    if (!source || !target) continue;
+    const reverse = source.y > target.y || (source.y === target.y && source.key > target.key);
+    const [upper, lower] = reverse ? [target, source] : [source, target];
+    const sameRow = upper.y === lower.y && upper.key !== lower.key;
+    const start = [upper.x, upper.y + (sameRow ? -1 : 1) * (nodeHalfHeight(upper) + 8)];
+    const end = [lower.x, lower.y - nodeHalfHeight(lower) - 8];
+    // Rail heights are shared by each row, outside cards and attached +N badges.
+    const exitY = upper.y + (sameRow ? -1 : 1) * (CONNECTIVITY_NODE_HEIGHT / 2 + 32);
+    const entryY = lower.y - CONNECTIVITY_NODE_HEIGHT / 2 - 24;
+    const simple = sameRow
+      ? [start, [upper.x, entryY], [lower.x, entryY], end]
+      : [start, [upper.x, exitY], [lower.x, exitY], end];
+    // A direct drop is preferred for the first row, including a shared parent
+    // trunk/rail. A later row or skipped band must first pass obstacle checks.
+    let points = simple;
+    if (!clear(simple)) {
+      const candidates = [...new Set([lower.x, upper.x,
+        ...obstacles.flatMap(r => [r.left - 12, r.right + 12]),
+        Math.min(...obstacles.map(r => r.left)) - 32,
+        Math.max(...obstacles.map(r => r.right)) + 32])];
+      const options = candidates.map(x => ({ x, points: [start, [upper.x, exitY], [x, exitY], [x, entryY], [lower.x, entryY], end] }))
+        .filter(option => clear(option.points));
+      // Prefer short tracks; avoid coincident long tracks for distinct targets.
+      // Grid rows in the same parent/column share a gutter trunk; parallel
+      // records for the same endpoints can also share geometry.
+      const cost = x => Math.abs(x - upper.x) + 2 * Math.abs(x - lower.x) + tracks.filter(t => t.x === x && t.target !== lower.key &&
+        !(t.source === upper.key && t.column === lower.x) &&
+        Math.max(t.low, Math.min(exitY, entryY)) < Math.min(t.high, Math.max(exitY, entryY))).length * 1000;
+      options.sort((a, b) => cost(a.x) - cost(b.x) || a.x - b.x);
+      // Common row spacing guarantees clear horizontal exits and entries; the
+      // exterior candidates therefore always provide a route for this layout.
+      if (!options.length) throw new Error("Connectivity layout has no clear orthogonal track");
+      points = options[0].points;
+      tracks.push({ x: options[0].x, low: Math.min(exitY, entryY), high: Math.max(exitY, entryY), target: lower.key, source: upper.key, column: lower.x });
+    }
+    points = points.filter((point, i) => !i || point[0] !== points[i - 1][0] || point[1] !== points[i - 1][1]);
+    routes[edge.key] = { points: reverse ? points.reverse() : points };
+  }
+  return routes;
+}
+
+export function connectivityBounds(nodes, routes = {}) {
+  const points = Object.values(routes).flatMap(route => route.points);
+  const minX = Math.min(0, ...nodes.map(n => n.x - CONNECTIVITY_NODE_WIDTH / 2 - 18), ...points.map(p => p[0]));
+  const maxX = Math.max(0, ...nodes.map(n => n.x + CONNECTIVITY_NODE_WIDTH / 2 + 18), ...points.map(p => p[0]));
+  const minY = Math.min(0, ...nodes.map(n => n.y - nodeHalfHeight(n)), ...points.map(p => p[1]));
+  const maxY = Math.max(0, ...nodes.map(n => n.y + nodeHalfHeight(n) + 18), ...points.map(p => p[1]));
+  return { minX, minY, width: maxX - minX, height: maxY - minY };
+}
+
+export function connectivityFit(bounds, width, height, zoom = 1) {
+  const margin = 16; // Plus the existing 12px toolbar gap: 28px visually.
+  const scale = Math.min(1, Math.max(1, width - margin * 2) / Math.max(1, bounds.width),
+    Math.max(1, height - margin * 2) / Math.max(1, bounds.height)) * zoom;
+  return { scale, canvasWidth: Math.max(width, bounds.width * scale + margin * 2),
+    canvasHeight: Math.max(height, bounds.height * scale + margin * 2), top: margin };
 }
 
 // Only occupied bands are returned. Metadata stays attached to durable managed

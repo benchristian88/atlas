@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectivityLayout, connectivityPreview, connectivityRail, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
+import { connectivityLayout, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
 const fixturePositions = Object.fromEntries(["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"].map((key, sort_order) => [key, { id: key, key, name: key, sort_order, active: true }]));
 const node = (key, position, distance = 1) => ({ key, entity_id: key, entity_type: "asset", name: key, topology_position: fixturePositions[position] || null, distance });
 const edge = (source, target, parent = null) => ({ key: `${source}/${target}`, source_key: source, target_key: target, kind: "relationship", topology_class: parent ? "platform" : "physical_network", platform_parent_key: parent, directional: Boolean(parent) });
@@ -37,7 +37,7 @@ test("missing bands collapse, no objects are invented, and multi-host grouping f
   assert.ok(q.e.y<q.f.y && q.f.y<q.a.y && q.a.y<q.s1.y && q.s1.y<q.h1.y);
   assert.ok(q.h1.x<q.h2.x && q.h2.x<q.h3.x);
   assert.ok(Math.abs(q.h1.x-q.s1.x)<Math.abs(q.h1.x-q.s2.x));
-  assert.equal(q.a.x,(q.s1.x+q.s2.x)/2);
+  assert.ok(q.a.x > q.s1.x && q.a.x < q.s2.x, "Upstream parent centres over the combined subtree footprint");
   noOverlap(Object.values(q));
 });
 
@@ -54,7 +54,7 @@ test("eight-child preview, stable name/ID order, local expansion, neighbour summ
   const positions=layout(preview);
   assert.equal(new Set(Object.values(positions).filter(n=>n.key.startsWith("child1")).map(n=>n.y)).size,2);
   for(const e of preview.edges.filter(e=>e.platform_parent_key==="h1")) {
-    const rail=connectivityRail(e,positions,preview.edges);
+    const rail=connectivityRoutes(Object.values(positions),preview.edges)[e.key];
     assert.ok(rail); assert.ok(rail.points[0][1]>rail.points.at(-1)[1],"runs_on arrow ends at host above child");
   }
   noOverlap(Object.values(positions));
@@ -77,7 +77,7 @@ test("Network placement uses interface membership; multihomed Assets keep positi
   for(const n of ["blue","red"]) {graph.nodes.push({...node(n,"automatic"),entity_type:"network"});for(const asset of ["s","h","w"]) graph.edges.push({...edge(asset,n),kind:"membership",topology_class:null});}
   const p=layout(graph); for(const k of ["s","h","w"]) assert.equal(p[k].rank,ranks[k]);
   assert.ok(p.blue.rank>p.s.rank && p.blue.rank<p.w.rank);
-  assert.ok(graph.edges.filter(e=>e.kind==="membership").every(e=>connectivityRail(e,p,graph.edges)===null));
+  assert.ok(graph.edges.filter(e=>e.kind==="membership").every(e=>connectivityRoutes(Object.values(p),graph.edges)[e.key]));
   noOverlap(Object.values(p));
 });
 
@@ -149,4 +149,91 @@ test("shared children and cycles cannot hide focus or promise already visible ch
   assert.deepEqual(preview.disclosures.h2,{hiddenCount:4,shownCount:1});
   assert.equal(preview.moreNodes.find(n=>n.parent_key==="h2").hiddenCount,4);
   assert.deepEqual(connectivityPreview({...graph,nodes:[...graph.nodes].reverse(),edges:[...graph.edges].reverse()}).moreNodes.sort((a,b)=>a.key.localeCompare(b.key)), [...preview.moreNodes].sort((a,b)=>a.key.localeCompare(b.key)));
+});
+
+function assertRoutes(graph) {
+  const nodes = connectivityLayout(graph), routes = connectivityRoutes(nodes, graph.edges);
+  noOverlap(nodes);
+  for (const edge of graph.edges) {
+    const points = routes[edge.key].points;
+    for (let i = 1; i < points.length; i++) {
+      const [x, y] = points[i], [px, py] = points[i - 1];
+      assert.ok(x === px || y === py, `${edge.key} has a diagonal`);
+      for (const n of nodes) {
+        const halfWidth = n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2;
+        const halfHeight = n.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_HEIGHT / 2;
+        const intersects = x === px
+          ? x > n.x - halfWidth && x < n.x + halfWidth && Math.max(y, py) > n.y - halfHeight && Math.min(y, py) < n.y + halfHeight
+          : y > n.y - halfHeight && y < n.y + halfHeight && Math.max(x, px) > n.x - halfWidth && Math.min(x, px) < n.x + halfWidth;
+        assert.ok(!intersects, `${edge.key} intersects ${n.key}`);
+      }
+    }
+  }
+  assert.deepEqual(connectivityRoutes([...nodes].reverse(), [...graph.edges].reverse()), routes);
+  return { nodes, routes };
+}
+const arbitrary = (key, sort_order) => ({ ...node(key, "automatic"),
+  topology_position: {id:`rank-${sort_order}`, key:`rank-${sort_order}`, name:`Position ${sort_order}`, sort_order} });
+
+test("arbitrary three-position chain is vertical, empty ranks consume no space", () => {
+  const graph = { focus_key:"two", nodes:[arbitrary("one",1), arbitrary("two",20), arbitrary("three",90)], edges:[edge("one","two"),edge("two","three")] };
+  const {nodes,routes} = assertRoutes(graph);
+  assert.equal(new Set(nodes.map(n=>n.x)).size,1);
+  for(const route of Object.values(routes)) assert.equal(new Set(route.points.map(p=>p[0])).size,1);
+  const p=Object.fromEntries(nodes.map(n=>[n.key,n]));
+  assert.equal(p.two.y-p.one.y,p.three.y-p.two.y);
+});
+
+test("physical fan-out shares a horizontal rail and skipped positions retain separate clear drops", () => {
+  const graph={focus_key:"origin",nodes:[arbitrary("origin",5),...["b1","b2","b3"].map(k=>arbitrary(k,6))],edges:["b1","b2","b3"].map(k=>edge("origin",k))};
+  let result=assertRoutes(graph);
+  assert.equal(new Set(Object.values(result.routes).map(r=>r.points[1][1])).size,1);
+  graph.nodes.push(arbitrary("c1",7),arbitrary("c2",7));graph.edges.push(edge("origin","c1"),edge("origin","c2"));
+  result=assertRoutes(graph);
+  const p=Object.fromEntries(result.nodes.map(n=>[n.key,n]));
+  assert.ok(p.b1.y===p.b2.y && p.b2.y===p.b3.y && p.c1.y===p.c2.y && p.c1.y>p.b1.y);
+  const tracks=Object.values(result.routes).slice(-2).map(r=>r.points.filter((point,i,ps)=>i && point[0]===ps[i-1][0] && Math.abs(point[1]-ps[i-1][1])>100).map(p=>p[0]));
+  assert.ok(tracks[0].some(x=>!tracks[1].includes(x)),"Deep targets have separate vertical drops");
+});
+
+test("first eight, connected more, and all branches expanded avoid cards and centre parents", () => {
+  const graph=homelab();
+  graph.nodes.push(arbitrary("appliance-a",6),arbitrary("appliance-b",6));
+  graph.edges.push(edge("s1","appliance-a"),edge("s1","appliance-b"));
+  for(const branches of [{}, {h1:"all",h2:"all",h3:"all"}]) {
+    const preview=connectivityPreview(graph,branches);
+    const {nodes}=assertRoutes({...preview,nodes:[...preview.nodes,...preview.moreNodes],edges:[...preview.edges,...preview.moreEdges]});
+    const host=nodes.find(n=>n.key==="h1"), children=nodes.filter(n=>n.layout_parent_key==="h1");
+    assert.equal(host.x,(Math.min(...children.map(n=>n.x))+Math.max(...children.map(n=>n.x)))/2);
+  }
+});
+
+test("orthogonal tracks avoid intermediate grid cards, support reverse, same-band, cycles and membership", () => {
+  const graph=homelab();
+  graph.edges.push(edge("child1-00","child1-17"),edge("h1","h1"),edge("h3","s1"));
+  graph.nodes.push({...node("network","automatic"),entity_type:"network"});
+  for(const key of ["s1","h1","h3","child1-17"])graph.edges.push({...edge(key,"network"),kind:"membership",platform_parent_key:null});
+  assertRoutes(graph);
+});
+
+test("bounded dense fixture routes deterministically without card collisions", () => {
+  const nodes=Array.from({length:100},(_,i)=>arbitrary(`object-${String(i).padStart(3,"0")}`,i%5));
+  const edges=[];
+  for(let i=0;i<100;i++) for(let offset=1;offset<=5;offset++) edges.push(edge(nodes[i].key,nodes[(i+offset*13)%100].key));
+  assertRoutes({focus_key:nodes[0].key,nodes,edges});
+});
+
+test("Fit uses actual route bounds, horizontal centring and fixed screen-space top padding", () => {
+  const graph=homelab(), {nodes,routes}=assertRoutes(graph);
+  const bounds=connectivityBounds(nodes,routes), fit=connectivityFit(bounds,800,600);
+  assert.ok(bounds.width*fit.scale<=768+1e-9 && bounds.height*fit.scale<=568+1e-9);
+  assert.equal(fit.top,16);
+  for(const route of Object.values(routes))for(const [x,y] of route.points) {
+    assert.ok(x>=bounds.minX && x<=bounds.minX+bounds.width);
+    assert.ok(y>=bounds.minY && y<=bounds.minY+bounds.height);
+  }
+  const small=connectivityFit({width:200,height:100},1000,800);
+  assert.equal(small.scale,1);assert.equal(small.top,16);assert.equal(small.canvasWidth,1000);
+  const zoom=connectivityFit(bounds,800,600,4);
+  assert.ok(zoom.canvasWidth>=800 && zoom.canvasHeight>=600);assert.equal(zoom.top,16);
 });

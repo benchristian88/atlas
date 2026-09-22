@@ -145,11 +145,13 @@ use that fallback. Networks use membership rank midpoints, or just above a singl
 member rank, without moving multihomed Assets. These are ephemeral layout hints.
 
 Recorded upper neighbours anchor horizontal groups, preferring projected platform
-parents. Stable name/ID ordering fills grids of at most four columns (six for expanded groups larger than twelve); parents
-centre over their child groups with same-row collision resolution. Bands reserve
-space for all grid rows. The final coordinates translate around focus, so Fit
-centres the viewport without changing focus's configured position. Pure layout output
-can later be overridden by optional positions; no positions are persisted now.
+parents. The renderer reserves complete visible subtree footprints before placing
+ancestors, centring parents over those footprints. Occupied-row contours let
+compatible branches share columns without card overlap. Stable name/ID ordering fills
+leaf grids of at most four columns (six for expanded groups larger than twelve).
+Different configured positions retain separate bands even when they share an
+upstream neighbour. Bands reserve card height, all grid rows and routing space;
+empty positions reserve nothing. Coordinates and routes are ephemeral.
 
 A local preview limits focused-parent direct children to eight in name/ID order.
 A collapsed neighbour has a circular +N badge when returned eligible children
@@ -166,10 +168,22 @@ refocus; Enter/Space work for both controls. Expansion preserves selection,
 hops, filters and Networks, survives Refresh/fullscreen, and resets on focus
 change or leaving Connectivity. No extra request or write occurs. Intentional
 collapse does not set truncation; the server safety warning remains separate.
-Orthogonal parent/child rails use card gutters for later rows; canonical arrow
-orientation is preserved. Child selection exposes individual relationships;
-repeated host-selected labels are suppressed. Other edges retain their labels
-and Network membership dash/accent semantics.
+All Connectivity edges use orthogonal trunks, horizontal distribution rails and
+vertical drops, including physical relationships and dashed Network membership.
+Routes check every segment against padded card rectangles. Later grid rows and
+skipped positions use deterministic gutter or exterior tracks, preferring short
+routes and separate long tracks for distinct targets. Shared fan-out rails retain
+individual records and canonical arrow direction. No diagonal fallback exists.
+Graph bounds include routes, cards and disclosure controls. Relationship text is
+shown in the details inspector, not on the canvas. Other graph renderers are
+unchanged. Position metadata remains available for future background containers;
+those containers are deferred.
+
+Automatic and manual Fit centre the complete graph horizontally and align its
+upper bound near the toolbar (16px viewport inset plus the 12px toolbar gap).
+Scale accounts for both dimensions and padding; large graphs retain scroll/pan
+and zoom. Refocus and disclosure size changes reset Fit; resizing the fullscreen
+inspector preserves layout coordinates and follows existing zoom/pan rules.
 
 A uniform Fit transform scales the complete layout rather than compressing node
 positions. Cards live in an HTML layer over SVG edges, so shared AssetIcon's

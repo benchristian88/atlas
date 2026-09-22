@@ -31,8 +31,8 @@ live monitoring or freshness estimate is implied.
   A multihomed Asset can appear in several Networks, with each interface's IP
   and MAC where recorded. Gateway is a stored value, never a synthesized device.
 - **Connectivity** starts with one focused Asset. Search and choose another,
-  then select **1 hop** or **2 hops**. The Asset remains centred in a bounded
-  graph. Solid lines show recorded Asset relationships with canonical labels;
+  then select **1 hop** or **2 hops** to explore a bounded graph.
+  Solid lines show recorded Asset relationships;
   dashed lines show interface membership. A workload → host → sibling path is
   suppressed, as is Asset → Network → peer membership. Other recorded paths,
   such as workload → host → switch, can still continue. Focus the host itself
@@ -47,11 +47,17 @@ live monitoring or freshness estimate is implied.
   selection clears search and closes its popup. If the focused Asset’s category
   is hidden, enable it in Filters to show its connectivity. The inspector action
   is hidden for the current focus. Network detail is available from its inspector.
-  **Fit** restores fitted zoom and clears pan; zoom buttons and canvas scrolling
-  support closer inspection.
-  The viewport centres on focus while its Type's topology position retains its
-  top-to-bottom position. Missing layers collapse; no infrastructure is invented.
-  Recorded relationships group related cards horizontally. Focused hosts show
+  **Fit** restores fitted zoom and clears pan, centring the graph horizontally
+  near the top with roughly 28px below the internal toolbar. Automatic Fit uses
+  the same placement. Zoom buttons and canvas scrolling support closer inspection.
+  Each Type's Topology Position remains authoritative for vertical placement.
+  Empty positions collapse; no infrastructure is invented.
+  Recorded relationships group related cards horizontally, with parents centred
+  over visible branch footprints. Connections use vertical trunks, shared horizontal
+  rails and vertical drops. Long connections use clear tracks around intervening
+  cards; sharing an upstream neighbour never moves an Asset into another position.
+  Relationship labels are shown in the details panel, which also retains canonical
+  direction and related Assets. Focused hosts show
   the first eight returned children in name/ID order, followed by a connected
   circular **+N more** control for the remainder. A collapsed neighbour's **+N**
   badge opens its first eight children; any remainder gets its own **+N more**
@@ -74,7 +80,8 @@ context and otherwise a neutral band. Names and vendors never
 infer placement. Networks use actual interface memberships to find an intermediate
 position; multihomed Assets retain their own position. Network icon/accent and dashed
 membership semantics are unchanged. Persisted manual positioning is intentionally
-deferred; layout positions are ephemeral presentation output.
+deferred; layout positions are ephemeral presentation output. Background position
+containers are also deferred.
 
 Connectivity retrieves at most 100 nodes and 500 edges while keeping initial
 child presentation compact. A safety warning appears only when that technical

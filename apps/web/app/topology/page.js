@@ -13,7 +13,7 @@ import { TopologyCategoryFilter } from "../../components/topology-category-filte
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
-import { TOPOLOGY_CLASSES, topologyClassSelection, topologyCategorySelection, topologyPresentation, platformMatches, platformCardFacts, matchesSearch, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, connectivityLayout, connectivityPreview, connectivityRail } from "../../lib/infrastructure-topology.mjs";
+import { TOPOLOGY_CLASSES, topologyClassSelection, topologyCategorySelection, topologyPresentation, platformMatches, platformCardFacts, matchesSearch, CHILD_PREVIEW_COUNT, CATEGORY_PREVIEW_COUNT, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, connectivityLayout, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit } from "../../lib/infrastructure-topology.mjs";
 
 import { PresentationIdentity, PresentationIcon } from "../../components/presentation-identity.mjs";
 import { presentationAttributes } from "../../lib/presentation.mjs";
@@ -204,39 +204,42 @@ function Connectivity({ graph, view, selectedKey, onSelect, onFocus, expanded, b
   const presentationEdges = useMemo(() => [...preview.edges, ...preview.moreEdges], [preview]);
   const nodes = useMemo(() => connectivityLayout({ ...preview, nodes: [...preview.nodes, ...preview.moreNodes], edges: presentationEdges }), [preview, presentationEdges]);
   const positions = Object.fromEntries(nodes.map(n => [n.key, n]));
-  const extentX = Math.max(130, ...nodes.map(n => Math.abs(n.x) + CONNECTIVITY_NODE_WIDTH / 2)) + 24;
-  const extentY = Math.max(130, ...nodes.map(n => Math.abs(n.y) + CONNECTIVITY_NODE_HEIGHT / 2)) + 24;
-  const layoutWidth = extentX * 2, layoutHeight = extentY * 2;
-  const scale = Math.min(1, width / layoutWidth, height / layoutHeight) * zoom;
-  const canvasWidth = Math.max(width, layoutWidth * scale), canvasHeight = Math.max(height, layoutHeight * scale);
+  const routes = useMemo(() => connectivityRoutes(nodes, presentationEdges), [nodes, presentationEdges]);
+  const bounds = useMemo(() => connectivityBounds(nodes, routes), [nodes, routes]);
+  const extentX = -bounds.minX, extentY = -bounds.minY;
+  const layoutWidth = bounds.width, layoutHeight = bounds.height;
+  const { scale, canvasWidth, canvasHeight, top } = connectivityFit(bounds, width, height, zoom);
   useLayoutEffect(() => { setZoom(1); pan.current = { x: 0, y: 0 }; }, [graph.focus_key, nodes.length]);
   useLayoutEffect(() => {
     viewport.current.scrollLeft = (canvasWidth - width) / 2 + pan.current.x * scale;
-    viewport.current.scrollTop = (canvasHeight - height) / 2 + pan.current.y * scale;
+    viewport.current.scrollTop = pan.current.y * scale;
     placedScroll.current = { left: viewport.current.scrollLeft, top: viewport.current.scrollTop };
   }, [canvasWidth, canvasHeight, width, height, scale]);
   const fit = () => {
     pan.current = { x: 0, y: 0 }; setZoom(1);
     viewport.current.scrollLeft = (canvasWidth - width) / 2;
-    viewport.current.scrollTop = (canvasHeight - height) / 2;
+    viewport.current.scrollTop = 0;
     placedScroll.current = { left: viewport.current.scrollLeft, top: viewport.current.scrollTop };
   };
   return <section className="ops-card topology-connectivity"><div className="row-actions"><button type="button" className="button button-secondary" onClick={fit}>Fit</button><button type="button" className="button button-secondary" aria-label="Zoom in" onClick={() => setZoom(z => Math.min(z + .25, 4))}>+</button><button type="button" className="button button-secondary" aria-label="Zoom out" onClick={() => setZoom(z => Math.max(z - .25, .5))}>−</button><span className="ops-meta">{preview.nodes.length} visible nodes · Dashed lines: interface membership</span></div>{graph.truncated && <p role="status">Topology safety limit reached ({graph.node_limit} nodes / {graph.edge_limit} edges). Refine the focus or filters.</p>}<div ref={viewport} onScroll={event => {
     const { scrollLeft: left, scrollTop: top } = event.currentTarget;
     if (left !== placedScroll.current.left || top !== placedScroll.current.top) {
-      pan.current = { x: (left - (canvasWidth - width) / 2) / scale, y: (top - (canvasHeight - height) / 2) / scale };
+      pan.current = { x: (left - (canvasWidth - width) / 2) / scale, y: top / scale };
     }
-  }} className="topology-connectivity-viewport" style={{ height }}><div className="topology-connectivity-canvas" style={{ width: canvasWidth, height: canvasHeight }}><div className="topology-connectivity-world" role="group" aria-label="Recorded connectivity" style={{ width: layoutWidth, height: layoutHeight, left: (canvasWidth - layoutWidth * scale) / 2, top: (canvasHeight - layoutHeight * scale) / 2, transform: `scale(${scale})` }}>
+  }} className="topology-connectivity-viewport" style={{ height }}><div className="topology-connectivity-canvas" style={{ width: canvasWidth, height: canvasHeight }}><div className="topology-connectivity-world" role="group" aria-label="Recorded connectivity" style={{ width: layoutWidth, height: layoutHeight, left: (canvasWidth - layoutWidth * scale) / 2, top, transform: `scale(${scale})` }}>
     <svg width={layoutWidth} height={layoutHeight} aria-hidden="true">
       <defs><marker id="topology-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--muted)" /></marker></defs>
       {presentationEdges.map(edge => {
-        const a = positions[edge.source_key], b = positions[edge.target_key]; if (!a || !b) return null;
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const inset = Math.min(((b.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_WIDTH / 2) + 3) / (Math.abs(dx) || Number.EPSILON), ((b.entity_type === "disclosure" ? 30 : CONNECTIVITY_NODE_HEIGHT / 2) + 3) / (Math.abs(dy) || Number.EPSILON));
-        const rail = connectivityRail(edge, positions, presentationEdges);
+        const route = routes[edge.key]; if (!route) return null;
         const relevant = edge.source_key === selectedKey || edge.target_key === selectedKey;
         const membershipNetwork = edge.kind === "membership" ? view.networkById[edge.target_key.slice(8)] : null;
-        return <g key={edge.key} {...(membershipNetwork ? presentationAttributes(membershipNetwork) : {})}><>{rail ? <path className={edge.kind === "disclosure" ? "topology-disclosure-edge" : "topology-host-rail"} d={rail.points.map(([x, y], index) => `${index ? "L" : "M"}${x + extentX},${y + extentY}`).join(" ")} fill="none" stroke="var(--muted)" strokeWidth={relevant ? 2 : 1} markerEnd={edge.directional ? "url(#topology-arrow)" : undefined}><title>{edge.label}</title></path> : <line x1={a.x + extentX} y1={a.y + extentY} x2={b.x + extentX - dx * inset} y2={b.y + extentY - dy * inset} stroke={membershipNetwork ? "var(--identity-emphasis)" : "var(--muted)"} strokeWidth={relevant ? 2 : 1} strokeDasharray={edge.kind === "membership" ? "6 5" : undefined} markerEnd={edge.directional ? "url(#topology-arrow)" : undefined}><title>{edge.label}</title></line>}</>{edge.kind !== "disclosure" && relevant && (!rail || selectedKey !== edge.platform_parent_key) && <text className="topology-edge-label" x={(rail ? rail.labelX : (a.x + b.x) / 2) + extentX} y={(rail ? rail.labelY : (a.y + b.y) / 2 - 8) + extentY} textAnchor="middle">{edge.label}</text>}</g>;
+        return <g key={edge.key} {...(membershipNetwork ? presentationAttributes(membershipNetwork) : {})}><path
+          data-edge-key={edge.key} data-source-key={edge.source_key} data-target-key={edge.target_key}
+          className={edge.kind === "disclosure" ? "topology-disclosure-edge" : edge.platform_parent_key ? "topology-host-rail" : "topology-relationship-edge"}
+          d={route.points.map(([x, y], index) => `${index ? "L" : "M"}${x + extentX},${y + extentY}`).join(" ")}
+          fill="none" stroke={membershipNetwork ? "var(--identity-emphasis)" : "var(--muted)"} strokeWidth={relevant ? 2 : 1}
+          strokeDasharray={edge.kind === "membership" ? "6 5" : undefined}
+          markerEnd={edge.directional ? "url(#topology-arrow)" : undefined} /></g>;
       })}
     </svg>
     {nodes.map(node => {

@@ -494,9 +494,7 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
     assert.equal(queryRequests().length, before + 1, "Exactly one request per refocus gesture/action");
     const next = new URL(queryRequests().at(-1), base).searchParams;
     for (const parameter of ["hops", "show_networks", "category_ids"]) assert.deepEqual(next.getAll(parameter), prior.getAll(parameter), `${parameter} survives refocus`);
-    const box = await node(key).boundingBox(), viewport = await page.locator(".topology-connectivity-viewport").boundingBox();
-    assert.ok(Math.abs(box.x + box.width / 2 - viewport.x - viewport.width / 2) < 5, "New focus is horizontally centred");
-    assert.ok(Math.abs(box.y + box.height / 2 - viewport.y - viewport.height / 2) < 5, "New focus is vertically centred");
+    await checkTopBiasedFit(page);
     const fitted = await snapshot();
     await button("Fit").click();
     assert.deepEqual(await snapshot(), fitted, "Refocus already reset zoom/pan to Fit");
@@ -707,9 +705,90 @@ async function checkBranchDisclosure(page, data, requests, theme, width) {
   await button("Show details panel").click();
   assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),focusBefore);
   assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),1);
-  assert.ok(await page.locator('line[stroke-dasharray="6 5"]').count()>0);
+  assert.ok(await page.locator('path[stroke-dasharray="6 5"]').count()>0);
   await page.screenshot({path:`${output}/branches-fullscreen-${theme}-${width}.png`,fullPage:true});
   await button("Close expanded Infrastructure Topology").click();
+}
+
+async function checkOrthogonalLayout(page, data, requests, theme, width) {
+  Object.assign(data, fixture(), {topology_positions:positionSeeds.map(position)});
+  const types = ["security_edge","aggregation_network","access_network","platform","infrastructure","workload"].map((role,i)=>({id:id(8100+i),key:`arbitrary_${i}`,name:`Custom type ${i}`,category_id:id(3),active:true,topology_position_id:position(role).id}));
+  data.asset_types=types;resolvePositions(data);
+  const asset=(n,name,type)=>({id:id(n),name,asset_type:types[type].key,customer_id:customer.id,site_id:site.id,status:"operational"});
+  data.assets=[asset(8200,"Edge device",0),asset(8201,"Aggregation",1),asset(8202,"Access fabric",2),...[1,2,3].map(i=>asset(8210+i,`Host ${i}`,3))];
+  data.relationships=[];data.platform_links=[];data.asset_interfaces=[];data.networks=[];
+  const connect=(a,b,platform=false)=>{const r={id:id(8600+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:platform?"runs_on":"connects_to"};data.relationships.push(r);if(platform)data.platform_links.push({relationship_id:r.id,parent_id:id(b),child_id:id(a)});};
+  connect(8200,8201);connect(8201,8202);
+  for(const host of [8211,8212,8213])connect(8202,host);
+  for(const [host,count,start] of [[8211,18,8300],[8212,4,8400],[8213,3,8500]])for(let i=0;i<count;i++){data.assets.push(asset(start+i,`Workload ${start+i}`,5));connect(start+i,host,true);}
+  const button=name=>page.getByRole("button",{name,exact:true});
+  const node=n=>page.locator(`[data-node-key="asset:${id(n)}"]`);
+  const focus=async n=>{await page.getByLabel("Focus",{exact:true}).selectOption(id(n));await node(n).and(page.locator(".is-focus")).waitFor();};
+  const capture=async name=>{
+    await button("Fit").click();
+    await checkOrthogonalGeometry(page);
+    await page.screenshot({path:`${output}/orthogonal-${name}-${theme}-${width}.png`,fullPage:true});
+  };
+  await page.goto(`${base}/topology`);await button("Connectivity").click();await focus(8300);
+  {
+    const viewport=await page.locator(".topology-connectivity-viewport").boundingBox();
+    const boxes=await page.locator("[data-node-key]").evaluateAll(ns=>ns.map(n=>n.getBoundingClientRect().toJSON()));
+    assert.ok(Math.min(...boxes.map(b=>b.top))-viewport.y>=15 && Math.min(...boxes.map(b=>b.top))-viewport.y<=24,"Small graph starts near top");
+    assert.ok(Math.abs((Math.min(...boxes.map(b=>b.left))+Math.max(...boxes.map(b=>b.right)))/2-(viewport.x+viewport.width/2))<2,"Small graph horizontally centred");
+  }
+  await capture("small");
+  await focus(8201);await button("1 hop").click();await node(8200).waitFor();await capture("chain");
+  await focus(8202);await node(8213).waitFor();await capture("three-hosts");
+  data.assets.push(asset(8220,"Backup appliance",4),asset(8221,"Storage appliance",4));connect(8202,8220);connect(8202,8221);
+  await button("Refresh").click();await node(8221).waitFor();
+  const hostBox=await node(8211).boundingBox(),applianceBox=await node(8220).boundingBox();
+  assert.ok(hostBox.y+hostBox.height<applianceBox.y,"Appliances retain their later configured position");
+  await capture("cross-position");
+  await focus(8211);await button("2 hops").click();await button("Show 10 more child Assets for Host 1").waitFor();
+  await capture("first-eight");
+  await focus(8202);await button("Show 18 child Assets for Host 1").waitFor();
+  const before=requests.length;
+  for(const [host,count] of [[1,18],[2,4],[3,3]])await button(`Show ${count} child Assets for Host ${host}`).click();
+  await button("Show 10 more child Assets for Host 1").click();await node(8317).waitFor();
+  assert.equal(requests.length,before,"All-branch expansion remains presentation-only");
+  await capture("all-expanded");
+  await button("Expand Infrastructure Topology").click();await button("Hide details panel").click();await capture("fullscreen");
+  await button("Show details panel").click();await node(8211).click();
+  assert.match(await page.getByLabel("Topology inspector",{exact:true}).innerText(),/Runs on →/);
+  await capture("fullscreen-details");await button("Close expanded Infrastructure Topology").click();
+}
+
+async function checkTopBiasedFit(page) {
+  const world=await page.locator(".topology-connectivity-world").boundingBox();
+  const viewport=await page.locator(".topology-connectivity-viewport").boundingBox();
+  assert.ok(Math.abs(world.x+world.width/2-viewport.x-viewport.width/2)<2,"Complete graph is horizontally centred");
+  assert.ok(Math.abs(world.y-viewport.y-16)<1,"Complete graph is top-biased");
+  assert.ok(world.width<=viewport.width-31 && world.height<=viewport.height-31,"Fit includes complete graph bounds");
+}
+
+async function checkOrthogonalGeometry(page) {
+  await checkGeometry(page);
+  const geometry=await page.locator(".topology-connectivity-world").evaluate(world=>({
+    labels:world.querySelectorAll("svg text").length,
+    lines:world.querySelectorAll("svg line").length,
+    boxes:[...world.querySelectorAll("[data-node-key],.topology-disclosure-more,.topology-disclosure-badge")].map(n=>({key:n.dataset.nodeKey||n.className,x:n.offsetLeft,y:n.offsetTop,width:n.offsetWidth,height:n.offsetHeight})),
+    paths:[...world.querySelectorAll("path[data-edge-key]")].map(p=>({key:p.dataset.edgeKey,d:p.getAttribute("d")}))
+  }));
+  assert.equal(geometry.labels,0);assert.equal(geometry.lines,0);
+  assert.ok(geometry.paths.length,"Relationship paths are rendered");
+  for(const path of geometry.paths){
+    assert.doesNotMatch(path.d,/[ACHQSTVZ]/i,"Only explicit M/L orthogonal segments");
+    const points=[...path.d.matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]);
+    for(let i=1;i<points.length;i++){
+      const [x,y]=points[i],[px,py]=points[i-1];
+      assert.ok(x===px||y===py,`${path.key} diagonal`);
+      for(const box of geometry.boxes){
+        const hit=x===px ? x>box.x+.5&&x<box.x+box.width-.5&&Math.max(y,py)>box.y+.5&&Math.min(y,py)<box.y+box.height-.5
+          : y>box.y+.5&&y<box.y+box.height-.5&&Math.max(x,px)>box.x+.5&&Math.min(x,px)<box.x+box.width-.5;
+        assert.ok(!hit,`${path.key} intersects ${box.key}`);
+      }
+    }
+  }
 }
 
 async function checkLayeredLayout(page, data, requests, theme, width) {
@@ -1106,6 +1185,11 @@ try {
       else if (url.pathname === "/api/assets") body = data.assets.filter(a=> !url.searchParams.get("category_id") || data.asset_types.find(t=>t.key===a.asset_type)?.category_id === url.searchParams.get("category_id")).slice(0,31);
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
+    if (process.env.ATLAS_ORTHOGONAL_ONLY) {
+      await checkOrthogonalLayout(page, data, requests, theme, width);
+      assert.deepEqual(errors,[]); checks++; await context.close();
+      console.log(`Passed orthogonal geometry: ${theme} ${width}px`); continue;
+    }
     await checkConnectivitySearch(page, data, requests, theme, width);
     if (process.env.ATLAS_DISCLOSURE_ONLY) {
       await checkBranchDisclosure(page, data, requests, theme, width);
@@ -1322,8 +1406,8 @@ try {
     assert.equal(await page.locator(`[data-node-key="network:${id(305)}"]`).getAttribute("data-presentation-accent"),"blue");
     assert.equal(await page.locator(`[data-node-key="network:${id(303)}"]`).getAttribute("data-presentation-accent"),"orange");
     assert.match(await page.locator(`[data-node-key="network:${id(305)}"]`).innerText(),/VLAN 99.*10.0.99.0\/24/s);
-    assert.equal(await page.locator('.topology-connectivity-world line[stroke-dasharray="6 5"]').count(),2);
-    assert.equal(await page.locator('.topology-connectivity-world line[stroke="var(--muted)"]').count(),1);
+    assert.equal(await page.locator('.topology-connectivity-world path[stroke-dasharray="6 5"]').count(),2);
+    assert.equal(await page.locator('.topology-connectivity-world path[stroke="var(--muted)"]').count(),1);
     assert.equal(await adguardNode.evaluate(el=>getComputedStyle(el).borderWidth),"2px");
     assert.notEqual(await adguardNode.evaluate(el=>getComputedStyle(el).boxShadow),"none");
     await checkStyleTokens(page.locator('.topology-graph-node:not(.is-focus)'), { borderTopColor: "--identity-border", backgroundColor: "--identity-tint" });
@@ -1332,7 +1416,7 @@ try {
     await page.getByRole("button",{name:"Refresh",exact:true}).click();
     await page.locator(`[data-node-key="network:${id(305)}"][data-presentation-accent="purple"]`).waitFor();
     assert.equal(await adguardNode.getAttribute("data-presentation-accent"),"green");
-    assert.equal(await page.locator('.topology-connectivity-world g[data-presentation-accent="purple"] line[stroke-dasharray]').count(),1);
+    assert.equal(await page.locator('.topology-connectivity-world g[data-presentation-accent="purple"] path[stroke-dasharray]').count(),1);
     await page.locator(`[data-node-key="asset:${id(30)}"]`).click();
     assert.equal(await page.locator('[aria-label="Topology inspector"] h2').innerText(),"PVE1");
     assert.equal(await page.getByRole("link",{name:"Open Asset",exact:true}).getAttribute("href"),`/assets/${id(30)}`);
@@ -1374,8 +1458,8 @@ try {
       await checkGeometry(page);
     await checkConnectivityContrast(page);
     }
-    if (width === 1440) assert.ok((await page.locator("[data-node-key]").first().boundingBox()).width >= 85, "Fit keeps 14-node cards readable on desktop");
     await page.screenshot({ path:`${output}/useful-two-hops-${theme}-${width}.png`,fullPage:true });
+    if (width === 1440) assert.ok((await page.locator("[data-node-key]").first().boundingBox()).width >= 85, "Fit keeps 14-node cards readable on desktop");
     await expand.click(); await close.waitFor();
     await checkGeometry(page);
     await checkConnectivityContrast(page);
@@ -1401,10 +1485,8 @@ try {
     assert.equal(requests.filter(r => !r.includes("/icon?")).length,beforeGraphExpand);
     assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),id(100));
     const focusBox = await page.locator(`[data-node-key="asset:${id(100)}"]`).boundingBox();
-    const canvasBox = await page.locator(".topology-connectivity-viewport").boundingBox();
     assert.ok(focusBox.y + focusBox.height < 1000, "Focused Asset stays in the viewport");
-    assert.ok(Math.abs(focusBox.x + focusBox.width / 2 - (canvasBox.x + canvasBox.width / 2)) < 5, "Focus remains horizontally centred");
-    assert.ok(Math.abs(focusBox.y + focusBox.height / 2 - (canvasBox.y + canvasBox.height / 2)) < 5, "Focus remains vertically centred");
+    await checkTopBiasedFit(page);
     assert.ok(requests.some(r => r.includes("/icon?v=")), "Shared cached icons are requested");
     await page.screenshot({ path:`${output}/connectivity-${theme}-${width}.png`,fullPage:true });
     await close.click();
@@ -1529,11 +1611,13 @@ try {
     Object.assign(data, fixture(), {topology_positions:positionSeeds.map(position)});
     resolvePositions(data);
     await checkBranchDisclosure(page, data, requests, theme, width);
+    await checkOrthogonalLayout(page, data, requests, theme, width);
     assert.deepEqual(errors,[]);
     console.log(`Passed topology and relationship classes: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
+  if (process.env.ATLAS_ORTHOGONAL_ONLY) console.log(`Passed ${checks} orthogonal scenarios.`);
+  else if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
   else if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
   else if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
   else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
