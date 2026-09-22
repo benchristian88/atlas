@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectivityLayout, connectivityPositionGroups, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT } from "../lib/infrastructure-topology.mjs";
+import { connectivityLayout, connectivityPositionGroups, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, CONNECTIVITY_RAIL_GAP } from "../lib/infrastructure-topology.mjs";
 const fixturePositions = Object.fromEntries(["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"].map((key, sort_order) => [key, { id: key, key, name: key, sort_order, active: true }]));
 const node = (key, position, distance = 1) => ({ key, entity_id: key, entity_type: "asset", name: key, topology_position: fixturePositions[position] || null, distance });
 const edge = (source, target, parent = null) => ({ key: `${source}/${target}`, source_key: source, target_key: target, kind: "relationship", topology_class: parent ? "platform" : "physical_network", platform_parent_key: parent, directional: Boolean(parent) });
@@ -33,7 +33,7 @@ test("missing bands collapse, no objects are invented, and multi-host grouping f
   const p=layout(small);
   assert.equal(Object.keys(p).length,3); assert.ok(p.s.y<p.h.y && p.h.y<p.w.y);
   const graph=homelab(), q=layout(graph);
-  assert.equal(q.h1.y,q.h2.y); assert.equal(q.h2.y,q.h3.y);
+  assert.equal(q.h1.y,q.h2.y); assert.ok(q.h3.y>q.s2.y,"Separate branches retain their own container clearance");
   assert.ok(q.e.y<q.f.y && q.f.y<q.a.y && q.a.y<q.s1.y && q.s1.y<q.h1.y);
   assert.ok(q.h1.x<q.h2.x && q.h2.x<q.h3.x);
   assert.ok(Math.abs(q.h1.x-q.s1.x)<Math.abs(q.h1.x-q.s2.x));
@@ -154,8 +154,18 @@ test("shared children and cycles cannot hide focus or promise already visible ch
 function assertRoutes(graph) {
   const nodes = connectivityLayout(graph), routes = connectivityRoutes(nodes, graph.edges);
   noOverlap(nodes);
+  const groups = connectivityPositionGroups(nodes);
   for (const edge of graph.edges) {
     const points = routes[edge.key].points;
+    for (const group of groups) {
+      const members = [...group.node_keys, ...group.disclosure_keys];
+      if (members.includes(edge.source_key) && members.includes(edge.target_key)) continue;
+      for(let i=1;i<points.length;i++) {
+        const [x,y]=points[i], [px,py]=points[i-1];
+        const crosses=y===py && y>=group.top && y<=group.top+group.height && Math.max(x,px)>group.left && Math.min(x,px)<group.left+group.width && x!==px;
+        assert.ok(!crosses,`${edge.key} runs horizontally inside/on ${group.key}`);
+      }
+    }
     for (let i = 1; i < points.length; i++) {
       const [x, y] = points[i], [px, py] = points[i - 1];
       assert.ok(x === px || y === py, `${edge.key} has a diagonal`);
@@ -193,7 +203,7 @@ test("physical fan-out shares a horizontal rail and skipped positions retain sep
   result=assertRoutes(graph);
   const p=Object.fromEntries(result.nodes.map(n=>[n.key,n]));
   assert.ok(p.b1.y===p.b2.y && p.b2.y===p.b3.y && p.c1.y===p.c2.y && p.c1.y===p.b1.y);
-  const tracks=Object.values(result.routes).slice(-2).map(r=>r.points.filter((point,i,ps)=>i && point[0]===ps[i-1][0] && Math.abs(point[1]-ps[i-1][1])>30).map(p=>p[0]));
+  const tracks=Object.values(result.routes).slice(-2).map(r=>r.points.filter((point,i,ps)=>i && point[0]===ps[i-1][0] && Math.abs(point[1]-ps[i-1][1])>20).map(p=>p[0]));
   assert.ok(tracks[0].some(x=>!tracks[1].includes(x)),"Deep targets have separate vertical drops");
 });
 
@@ -301,7 +311,7 @@ test("position containers reflow with disclosure and width; controls are never g
   const narrow=connectivityLayout(preview,{width:700}),wide=connectivityLayout(preview,{width:1440});
   const height=nodes=>Math.max(...nodes.map(n=>n.y))-Math.min(...nodes.map(n=>n.y));
   assert.ok(height(wide)<=height(narrow));
-  const columns=nodes=>new Set(nodes.filter(n=>n.key.startsWith("child1-")).map(n=>n.x)).size;
+  const columns=nodes=>new Set(nodes.filter(n=>n.key.startsWith("child1-")).map(n=>n.column)).size;
   assert.ok(columns(wide)>columns(narrow));
 });
 
@@ -359,4 +369,44 @@ test("disclosure attachment preserves local clusters, position IDs, counts and s
   assert.deepEqual(decorated.map(g=>g.node_keys),original.map(g=>g.node_keys));
   assert.deepEqual(decorated.map(g=>g.disclosure_keys),[[],["nearby"]]);
   assert.deepEqual(connectivityPositionGroups([members[0],controls[0]]),[],"One card keeps the existing unboxed behavior");
+});
+
+
+test("external fan-out reserves parent/group clearance and enters every preview/full member vertically once", () => {
+  const graph=localBranches();
+  graph.nodes=graph.nodes.filter(n=>!n.key.startsWith("e"));graph.edges=graph.edges.filter(e=>!e.source_key.startsWith("e"));
+  for(let i=0;i<18;i++){const key=`item-${String(i).padStart(2,"0")}`;graph.nodes.push({...arbitrary(key,80),distance:2});graph.edges.push(edge(key,"c1","c1"));}
+  graph.focus_key="c1";
+  for(const branches of [{},{c1:"all"}]) {
+    const preview=connectivityPreview(graph,branches),shown={...preview,nodes:[...preview.nodes,...preview.moreNodes],edges:[...preview.edges,...preview.moreEdges]};
+    const {nodes,routes}=assertRoutes(shown),groups=connectivityPositionGroups(nodes);
+    const childGroup=groups.find(g=>g.node_keys.includes("item-00")),parentGroup=groups.find(g=>g.node_keys.includes("c1"));
+    const parent=nodes.find(n=>n.key==="c1"), parentBottom=parentGroup.top+parentGroup.height;
+    const rails=new Set();
+    for(const key of [...childGroup.node_keys,...childGroup.disclosure_keys]) {
+      const edge=shown.edges.find(e=>[e.source_key,e.target_key].includes(key) && [e.source_key,e.target_key].includes("c1"));
+      const points=edge.source_key==="c1"?routes[edge.key].points:[...routes[edge.key].points].reverse();
+      const target=nodes.find(n=>n.key===key),rail=points[1][1];rails.add(rail);
+      assert.ok(rail>=parentBottom+CONNECTIVITY_RAIL_GAP);
+      assert.ok(rail>=parent.y+44+CONNECTIVITY_RAIL_GAP);
+      assert.ok(rail<=childGroup.top-CONNECTIVITY_RAIL_GAP);
+      const crossings=points.slice(1).filter(([x,y],i)=>x===points[i][0] && Math.min(y,points[i][1])<childGroup.top && Math.max(y,points[i][1])>childGroup.top);
+      assert.equal(crossings.length,1);assert.equal(crossings[0][0],target.x);
+      assert.equal(points.at(-1)[0],target.x);
+    }
+    assert.equal(rails.size,1,"One shared external distribution rail");
+    assert.equal(childGroup.node_keys.length,branches.c1?18:8);
+    assert.equal(childGroup.disclosure_keys.length,branches.c1?0:1);
+  }
+});
+
+test("footer exit clearance keeps long-named managed siblings in their local group", () => {
+  for(const name of ["Custom host position", "An administrator-defined position with a longer label"]) {
+    const graph=localBranches();
+    for(const n of graph.nodes.filter(n=>n.topology_position.sort_order===60))n.topology_position.name=name;
+    const {nodes,routes}=assertRoutes(graph),groups=assertGroups(nodes,routes);
+    const group=groups.find(g=>g.position_id==="rank-60");
+    assert.deepEqual(group.node_keys,["b1","b2","b3"]);
+    assert.ok(group.left+12+group.labelWidth<nodes.find(n=>n.key==="b1").x,"Footer leaves the member exit lane clear");
+  }
 });

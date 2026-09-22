@@ -152,9 +152,14 @@ Local siblings with the same position share a baseline after their upper
 neighbours; leaf grids reserve only actual rows. The renderer packs occupied
 subtree/card/container contours before centring parents over descendants.
 Different sibling positions reserve separate horizontal space but may share Y.
-Cards, labels, badges and orthogonal routing tracks determine the 168px row
-spacing. Leaf grids start at four columns (six for more than twelve children)
-and can use additional viewport width up to eight columns.
+Each branch reserves 16px from its parent card/container bottom to an external
+rail and another 16px from that rail to its child card/container top. This uses
+actual local bounds, including footer and disclosure space, rather than global
+ranks. Leaf grids retain 168px row spacing and start at four columns (six for
+more than twelve children), using additional viewport width up to eight columns.
+Later rows stagger horizontally into reserved vertical lanes, so each child and
+disclosure control is reachable directly from above without crossing earlier
+cards or making a horizontal jog inside the group.
 
 `connectivityPositionGroups` derives containers from visible Assets sharing a
 primary upstream anchor and durable position ID, splitting distant peers and
@@ -164,8 +169,9 @@ bottom-left label footer. Matching +N more controls extend the visual bounds of
 the nearest existing group with the same upstream anchor and position ID, using
 the control’s actual dimensions. They never enter Asset membership or counts.
 Singletons, Automatic nodes and Networks retain their existing unboxed behavior.
-Decoration bounds are separate from the established packing envelope, so this
-presentation refinement does not change node placement or cluster membership.
+Packing accounts for complete decorated bounds and routing clearance. Local
+proximity includes the reserved lane width; it never joins unrelated upstream
+clusters. Footer labels retain a clear vertical exit at every member’s X.
 The managed position name labels the group; a stable hash of its ID selects a
 subtle existing Atlas palette tint, independent of Category and label/order edits.
 Borders and text identify groups without colour. Containers are ephemeral and
@@ -188,11 +194,20 @@ change or leaving Connectivity. No extra request or write occurs. Intentional
 collapse does not set truncation; the server safety warning remains separate.
 All Connectivity edges use orthogonal trunks, horizontal distribution rails and
 vertical drops, including physical relationships and dashed Network membership.
-Routes check every segment against padded card rectangles and position labels.
-Container borders/backgrounds do not clip edges. Later grid rows and
-skipped positions use deterministic gutter or exterior tracks, preferring short
-routes and separate long tracks for distinct targets. Shared fan-out rails retain
-individual records and canonical arrow direction. No diagonal fallback exists.
+Routes check padded cards, footer labels and containers. External horizontal
+segments cannot touch or enter a container; unrelated containers block vertical
+segments too. Only the terminal vertical exit/drop crosses its endpoint group.
+Relationships wholly within one local container may use internal tracks, still
+avoiding cards and labels. Source rails are below the parent’s complete bounds;
+child drops enter from above the child container with a visible gap. Container
+bounds include members, disclosure controls, padding and labels, never rails.
+
+Simple shared trunks/rails/drops are preferred. If an obstacle intervenes,
+deterministic exterior tracks preserve these endpoint zones. Dense overlays
+that need more bends use a bounded rectilinear visibility search over obstacle
+boundary coordinates. Every returned segment undergoes the same obstacle checks;
+there is no diagonal fallback. Shared rails retain individual relationship
+records and canonical arrow direction.
 Graph bounds include routes, cards, local containers and disclosure controls. Relationship text is
 shown in the details inspector, not on the canvas. Other graph renderers are
 unchanged. Expansion and available viewport width recompute geometry while

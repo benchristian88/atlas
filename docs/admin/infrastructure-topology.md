@@ -55,8 +55,11 @@ live monitoring or freshness estimate is implied.
   defines sequence, not distance. No infrastructure is invented.
   Recorded relationships group related cards horizontally, with parents centred
   over visible branch footprints. Connections use vertical trunks, shared horizontal
-  rails and vertical drops. Long connections use clear tracks around intervening
-  cards; sharing an upstream neighbour never moves an Asset into another position.
+  rails and vertical drops. Horizontal rails stay in whitespace outside position
+  containers, clear of parent cards, footers and child-group borders. Staggered
+  child rows reserve straight vertical entry paths; large expanded groups may
+  widen to keep those paths clear. Long connections route around unrelated
+  cards and containers; sharing an upstream neighbour never moves an Asset into another position.
   Relationship labels are shown in the details panel, which also retains canonical
   direction and related Assets. Focused hosts show
   the first eight returned children in name/ID order, followed by a connected

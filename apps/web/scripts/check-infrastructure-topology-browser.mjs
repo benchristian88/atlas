@@ -795,6 +795,7 @@ async function checkLocalPositions(page, data, requests, theme, width) {
   const host=await node(8901).boundingBox(),appliance=await node(8906).boundingBox();
   assert.ok(Math.abs(host.y-appliance.y)<1,"Independent positions share Y");
   assert.equal(await page.locator(`[data-position-id="${id(8801)}"]`).count(),1);
+  assert.equal(await page.locator(`[data-position-id="${id(8801)}"]`).getAttribute("aria-label"),"Platform / host: 3 Assets");
   assert.equal(await page.locator(`[data-position-id="${id(8803)}"]`).count(),1);
   assert.equal(await page.locator(`[data-position-id="${id(8802)}"]`).count(),1);
   const semanticBefore=JSON.stringify({positions:data.topology_positions,types:data.asset_types,relationships:data.relationships});
@@ -819,7 +820,9 @@ async function checkLocalPositions(page, data, requests, theme, width) {
   });
   const world=await page.locator(".topology-connectivity-world").boundingBox();
   assert.ok(Number.isFinite(rail),"Incoming rail is present");
-  assert.ok((group.y-world.y)/scale-rail>=24,"Container starts clear of the incoming rail");
+  assert.ok((group.y-world.y)/scale-rail>=15.5,"Container starts at least 16 layout pixels below the rail");
+  const parentGroup=await page.locator(`[data-position-id="${id(8802)}"]`).boundingBox();
+  assert.ok(rail-(parentGroup.y+parentGroup.height-world.y)/scale>=15.5,"Rail clears the complete parent group and footer");
   await button("Show 10 more child Assets for Runtime A").click();await node(8937).waitFor();
   assert.equal(requests.length,before);
   assert.equal(await page.locator(`[data-position-id="${id(8804)}"]`).getAttribute("aria-label"),"Workload: 18 Assets");
@@ -844,6 +847,7 @@ async function checkOrthogonalGeometry(page) {
     labels:world.querySelectorAll("svg text").length,
     lines:world.querySelectorAll("svg line").length,
     boxes:[...world.querySelectorAll("[data-node-key],.topology-disclosure-more,.topology-disclosure-badge,.topology-position-label")].map(n=>({key:n.dataset.nodeKey||n.className,x:n.offsetLeft+(n.classList.contains("topology-position-label")?n.parentElement.offsetLeft+1:0),y:n.offsetTop+(n.classList.contains("topology-position-label")?n.parentElement.offsetTop+1:0),width:n.offsetWidth,height:n.offsetHeight})),
+    groups:[...world.querySelectorAll(".topology-position-group")].map(g=>({key:g.dataset.positionId,x:parseFloat(g.style.left),y:parseFloat(g.style.top),width:parseFloat(g.style.width),height:parseFloat(g.style.height)})),
     paths:[...world.querySelectorAll("path[data-edge-key]")].map(p=>({key:p.dataset.edgeKey,d:p.getAttribute("d")}))
   }));
   assert.equal(geometry.labels,0);assert.equal(geometry.lines,0);
@@ -854,6 +858,16 @@ async function checkOrthogonalGeometry(page) {
     for(let i=1;i<points.length;i++){
       const [x,y]=points[i],[px,py]=points[i-1];
       assert.ok(x===px||y===py,`${path.key} diagonal`);
+      for(const g of geometry.groups) {
+        const inside=([x,y])=>x>g.x&&x<g.x+g.width&&y>g.y&&y<g.y+g.height;
+        if(inside(points[0])&&inside(points.at(-1)))continue; // Same local group only.
+        const horizontal=x!==px && y===py && y>=g.y && y<=g.y+g.height && Math.max(x,px)>g.x && Math.min(x,px)<g.x+g.width;
+        assert.ok(!horizontal,`${path.key} horizontal segment enters or touches container ${g.key}`);
+        if(!inside(points[0])&&!inside(points.at(-1))) {
+          const vertical=x===px&&x>g.x&&x<g.x+g.width&&Math.max(y,py)>g.y&&Math.min(y,py)<g.y+g.height;
+          assert.ok(!vertical,`${path.key} enters unrelated container ${g.key}`);
+        }
+      }
       for(const box of geometry.boxes){
         const hit=x===px ? x>box.x+.5&&x<box.x+box.width-.5&&Math.max(y,py)>box.y+.5&&Math.min(y,py)<box.y+box.height-.5
           : y>box.y+.5&&y<box.y+box.height-.5&&Math.max(x,px)>box.x+.5&&Math.min(x,px)<box.x+box.width-.5;
@@ -888,7 +902,8 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   await focus(2102);await button("2 hops").click();await node(2107).waitFor();
   await ordered([2100,2101,2102,2103,2105]);
   const hosts=await Promise.all([2105,2106,2107].map(n=>node(n).boundingBox()));
-  assert.ok(hosts.every(box=>Math.abs(box.y-hosts[0].y)<1),"Three hosts align");
+  assert.ok(Math.abs(hosts[1].y-hosts[0].y)<1,"Hosts in the same local group align");
+  await ordered([2104,2107]); // This sibling branch reserves its own group clearance.
   assert.match(await node(2105).innerText(),/18 child Assets/);
   assert.equal(await node(2200).count(),0,"Neighbour host stays a summary");
   await checkGeometry(page);
