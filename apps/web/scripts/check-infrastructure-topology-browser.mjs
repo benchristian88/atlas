@@ -715,18 +715,31 @@ async function checkOrthogonalLayout(page, data, requests, theme, width) {
   const types = ["security_edge","aggregation_network","access_network","platform","infrastructure","workload"].map((role,i)=>({id:id(8100+i),key:`arbitrary_${i}`,name:`Custom type ${i}`,category_id:id(3),active:true,topology_position_id:position(role).id}));
   data.asset_types=types;resolvePositions(data);
   const asset=(n,name,type)=>({id:id(n),name,asset_type:types[type].key,customer_id:customer.id,site_id:site.id,status:"operational"});
-  data.assets=[asset(8200,"Edge device",0),asset(8201,"Aggregation",1),asset(8202,"Access fabric",2),...[1,2,3].map(i=>asset(8210+i,`Host ${i}`,3))];
+  data.assets=[asset(8200,"Edge device",0),asset(8201,"Aggregation",1),asset(8202,"Access fabric",2),...[1,2,3].map(i=>asset(8210+i,`PVE${i}`,3))];
   data.relationships=[];data.platform_links=[];data.asset_interfaces=[];data.networks=[];
   const connect=(a,b,platform=false)=>{const r={id:id(8600+data.relationships.length),source_asset_id:id(a),target_asset_id:id(b),relationship_type:platform?"runs_on":"connects_to"};data.relationships.push(r);if(platform)data.platform_links.push({relationship_id:r.id,parent_id:id(b),child_id:id(a)});};
   connect(8200,8201);connect(8201,8202);
   for(const host of [8211,8212,8213])connect(8202,host);
-  for(const [host,count,start] of [[8211,18,8300],[8212,4,8400],[8213,3,8500]])for(let i=0;i<count;i++){data.assets.push(asset(start+i,`Workload ${start+i}`,5));connect(start+i,host,true);}
+  for(const [host,count,start] of [[8211,18,8300],[8212,2,8400],[8213,1,8500]])for(let i=0;i<count;i++){data.assets.push(asset(start+i,`Workload ${start+i}`,5));connect(start+i,host,true);}
   const button=name=>page.getByRole("button",{name,exact:true});
   const node=n=>page.locator(`[data-node-key="asset:${id(n)}"]`);
   const focus=async n=>{await page.getByLabel("Focus",{exact:true}).selectOption(id(n));await node(n).and(page.locator(".is-focus")).waitFor();};
   const capture=async name=>{
     await button("Fit").click();
     await checkOrthogonalGeometry(page);
+    await checkTopBiasedFit(page);
+    const group=page.locator(`[data-position-id="${position("platform").id}"]`);
+    if(await node(8211).count() && await node(8212).count() && await node(8213).count()) {
+      assert.equal(await group.count(),1);
+      assert.match(await group.getAttribute("aria-label"),/3 Assets$/);
+      assert.equal(await group.getAttribute("data-group-key"),JSON.stringify([`asset:${id(8202)}`,position("platform").id]));
+    }
+    const cards=await page.locator('[data-node-key]').evaluateAll(elements=>elements.filter(e=>Number(e.dataset.nodeKey.slice(-12))>=8300 && Number(e.dataset.nodeKey.slice(-12))<8318).map(e=>({x:e.offsetLeft,y:e.offsetTop})));
+    if(cards.length>=8) {
+      const rows=[...new Set(cards.map(c=>c.y))].sort((a,b)=>a-b);
+      assert.deepEqual(rows.map(y=>cards.filter(c=>c.y===y).length),cards.length===18?[4,4,4,4,2]:[4,4]);
+      assert.equal(new Set(cards.map(c=>c.x)).size,4);
+    }
     await page.screenshot({path:`${output}/orthogonal-${name}-${theme}-${width}.png`,fullPage:true});
   };
   await page.goto(`${base}/topology`);await button("Connectivity").click();await focus(8300);
@@ -744,12 +757,16 @@ async function checkOrthogonalLayout(page, data, requests, theme, width) {
   const hostBox=await node(8211).boundingBox(),applianceBox=await node(8220).boundingBox();
   assert.ok(Math.abs(hostBox.y-applianceBox.y)<1,"Independent appliance and host branches compact side by side");
   await capture("cross-position");
-  await focus(8211);await button("2 hops").click();await button("Show 10 more child Assets for Host 1").waitFor();
+  await focus(8211);await button("2 hops").click();await button("Show 10 more child Assets for PVE1").waitFor();
   await capture("first-eight");
-  await focus(8202);await button("Show 18 child Assets for Host 1").waitFor();
+  await button("Show 10 more child Assets for PVE1").click();await node(8317).waitFor();await capture("eighteen");
+  await focus(8202);await button("Show 18 child Assets for PVE1").waitFor();
   const before=requests.length;
-  for(const [host,count] of [[1,18],[2,4],[3,3]])await button(`Show ${count} child Assets for Host ${host}`).click();
-  await button("Show 10 more child Assets for Host 1").click();await node(8317).waitFor();
+  await capture("collapsed");
+  await button("Show 1 child Assets for PVE3").click();await node(8500).waitFor();await capture("one-child");
+  await button("Show 2 child Assets for PVE2").click();await node(8401).waitFor();await capture("two-children");
+  await button("Show 18 child Assets for PVE1").click();
+  await button("Show 10 more child Assets for PVE1").click();await node(8317).waitFor();
   assert.equal(requests.length,before,"All-branch expansion remains presentation-only");
   await capture("all-expanded");
   await button("Expand Infrastructure Topology").click();await button("Hide details panel").click();await capture("fullscreen");
@@ -814,9 +831,10 @@ async function checkLocalPositions(page, data, requests, theme, width) {
   assert.ok(more.y-group.y>=20*scale-.5 && group.y+group.height-more.y-more.height>=48*scale-.5,"Disclosure is padded inside its existing group");
   assert.ok(Math.abs((first.y-group.y)/scale-20)<1,"Container top keeps compact card padding");
   const rail=await page.locator(".topology-connectivity-world").evaluate(world=>{
-    const first=world.querySelector('[data-node-key="asset:00000000-0000-4000-8000-000000008920"]');
-    const points=[...world.querySelectorAll('path[data-edge-key]')].flatMap(p=>[...p.getAttribute('d').matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]));
-    return Math.max(...points.filter(([x,y])=>x===first.offsetLeft+90 && y<first.offsetTop-20).map(p=>p[1]));
+    const group=[...world.querySelectorAll('.topology-position-group')].find(g=>g.getAttribute('aria-label')==='Workload: 8 Assets');
+    const path=[...world.querySelectorAll('path[data-group-connection]')].find(p=>p.dataset.groupConnection===group.dataset.groupKey);
+    const points=[...path.getAttribute('d').matchAll(/[ML]([-\d.]+),([-\d.]+)/g)].map(m=>[Number(m[1]),Number(m[2])]);
+    return Math.max(...points.filter(p=>p[1]<parseFloat(group.style.top)).map(p=>p[1]));
   });
   const world=await page.locator(".topology-connectivity-world").boundingBox();
   assert.ok(Number.isFinite(rail),"Incoming rail is present");
@@ -848,7 +866,7 @@ async function checkOrthogonalGeometry(page) {
     lines:world.querySelectorAll("svg line").length,
     boxes:[...world.querySelectorAll("[data-node-key],.topology-disclosure-more,.topology-disclosure-badge,.topology-position-label")].map(n=>({key:n.dataset.nodeKey||n.className,x:n.offsetLeft+(n.classList.contains("topology-position-label")?n.parentElement.offsetLeft+1:0),y:n.offsetTop+(n.classList.contains("topology-position-label")?n.parentElement.offsetTop+1:0),width:n.offsetWidth,height:n.offsetHeight})),
     groups:[...world.querySelectorAll(".topology-position-group")].map(g=>({key:g.dataset.positionId,x:parseFloat(g.style.left),y:parseFloat(g.style.top),width:parseFloat(g.style.width),height:parseFloat(g.style.height)})),
-    paths:[...world.querySelectorAll("path[data-edge-key]")].map(p=>({key:p.dataset.edgeKey,d:p.getAttribute("d")}))
+    paths:[...world.querySelectorAll("path[data-edge-key]")].map(p=>({key:p.dataset.edgeKey,d:p.getAttribute("d"),internal:p.dataset.internalRouting==="true"}))
   }));
   assert.equal(geometry.labels,0);assert.equal(geometry.lines,0);
   assert.ok(geometry.paths.length,"Relationship paths are rendered");
@@ -860,7 +878,7 @@ async function checkOrthogonalGeometry(page) {
       assert.ok(x===px||y===py,`${path.key} diagonal`);
       for(const g of geometry.groups) {
         const inside=([x,y])=>x>g.x&&x<g.x+g.width&&y>g.y&&y<g.y+g.height;
-        if(inside(points[0])&&inside(points.at(-1)))continue; // Same local group only.
+        if((inside(points[0])&&inside(points.at(-1))) || (path.internal && (inside(points[0]) || inside(points.at(-1)))))continue; // Same local group only.
         const horizontal=x!==px && y===py && y>=g.y && y<=g.y+g.height && Math.max(x,px)>g.x && Math.min(x,px)<g.x+g.width;
         assert.ok(!horizontal,`${path.key} horizontal segment enters or touches container ${g.key}`);
         if(!inside(points[0])&&!inside(points.at(-1))) {
@@ -911,12 +929,12 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   await node(2105).dblclick();await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).waitFor();
   assert.equal(await page.locator('[data-node-key]').count(),12); // host, 8 children, access, aggregation, peer host
   await ordered([2102,2103,2105,2200]);
-  assert.equal(await page.locator(".topology-host-rail").count(),8);
+  assert.equal(await page.locator("path[data-group-connection]").count(),1);
   const beforeExpand=requests.length;
   await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).click();await node(2217).waitFor();
   assert.equal(requests.length,beforeExpand,"Child expansion must not request or mutate data");
   assert.equal(await page.getByLabel("Focus",{exact:true}).inputValue(),id(2105));
-  assert.equal(await page.locator(".topology-host-rail").count(),18);
+  assert.equal(await page.locator("path[data-group-connection]").count(),1);
   await checkGeometry(page);
   await page.screenshot({path:`${output}/layered-eighteen-children-${theme}-${width}.png`,fullPage:true});
   await node(2200).dblclick();await node(2200).and(page.locator(".is-focus")).waitFor();

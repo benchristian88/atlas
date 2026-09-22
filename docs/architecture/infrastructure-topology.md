@@ -155,23 +155,27 @@ Different sibling positions reserve separate horizontal space but may share Y.
 Each branch reserves 16px from its parent card/container bottom to an external
 rail and another 16px from that rail to its child card/container top. This uses
 actual local bounds, including footer and disclosure space, rather than global
-ranks. Leaf grids retain 168px row spacing and start at four columns (six for
-more than twelve children), using additional viewport width up to eight columns.
-Later rows stagger horizontally into reserved vertical lanes, so each child and
-disclosure control is reachable directly from above without crossing earlier
-cards or making a horizontal jog inside the group.
+ranks. Managed-position sibling grids use four aligned columns at every viewport
+size, including fullscreen: eight children form 4+4; eighteen form 4+4+4+4+2.
+Cards have 32px horizontal and vertical gaps (212px horizontal and 120px vertical
+centre spacing). An expanded descendant does not restore a single-row sibling
+layout. Descendant forests start below their complete parent group's bounds.
+The optional five-column mode is not used; zoom and inspector resizing do not
+change grid membership or column count.
 
-`connectivityPositionGroups` derives containers from visible Assets sharing a
-primary upstream anchor and durable position ID, splitting distant peers and
-boxes that would enclose unrelated cards. Disconnected roots are not combined.
-Groups wrap actual members with compact top padding below incoming rails and a
-bottom-left label footer. Matching +N more controls extend the visual bounds of
-the nearest existing group with the same upstream anchor and position ID, using
-the control’s actual dimensions. They never enter Asset membership or counts.
-Singletons, Automatic nodes and Networks retain their existing unboxed behavior.
-Packing accounts for complete decorated bounds and routing clearance. Local
-proximity includes the reserved lane width; it never joins unrelated upstream
-clusters. Footer labels retain a clear vertical exit at every member’s X.
+`connectivityPositionMembership` derives semantic identities from the primary
+upstream anchor and durable Position ID. Coordinates, proximity, member names
+and descendant counts never split these groups or enter their identity.
+Different anchors remain separate. Singleton identities are retained internally,
+while `connectivityPositionGroups` draws backgrounds only for two or more Assets.
+Automatic nodes, Networks and disconnected roots remain unboxed.
+
+Groups wrap actual cards, consistent padding and a bottom-left label footer.
+Matching +N more controls attach by parent anchor and Position ID, centred beneath
+the final visible grid row. Their actual dimensions extend the bounds without
+entering Asset membership or counts. Packing works on complete semantic sibling
+groups so unrelated cards are kept outside, rather than dissolving a group when
+its members spread apart. Footer labels retain a clear vertical exit lane.
 The managed position name labels the group; a stable hash of its ID selects a
 subtle existing Atlas palette tint, independent of Category and label/order edits.
 Borders and text identify groups without colour. Containers are ephemeral and
@@ -195,12 +199,22 @@ collapse does not set truncation; the server safety warning remains separate.
 All Connectivity edges use orthogonal trunks, horizontal distribution rails and
 vertical drops, including physical relationships and dashed Network membership.
 Routes check padded cards, footer labels and containers. External horizontal
-segments cannot touch or enter a container; unrelated containers block vertical
-segments too. Only the terminal vertical exit/drop crosses its endpoint group.
+segments stay outside containers; unrelated containers block vertical segments
+too. Individual overlays terminating on an interior grid card may use orthogonal
+card gaps within their endpoint containers when a direct vertical drop is blocked.
+Cards and footer labels remain obstacles on every route.
 Relationships wholly within one local container may use internal tracks, still
 avoiding cards and labels. Source rails are below the parent’s complete bounds;
 child drops enter from above the child container with a visible gap. Container
 bounds include members, disclosure controls, padding and labels, never rails.
+
+Two or more Assets sharing a backend-projected platform parent and matching
+relationship metadata use one presentation connector ending at the group border.
+It has no domain arrow or relationship label. All original edge records remain
+available to the inspector; no synthetic domain relationship is created.
+Single children, mixed relationship semantics, physical links and dashed Network
+membership retain individual routes. Matching disclosure controls share the group
+connector. Selecting any member highlights the shared connector.
 
 Simple shared trunks/rails/drops are preferred. If an obstacle intervenes,
 deterministic exterior tracks preserve these endpoint zones. Dense overlays

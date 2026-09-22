@@ -228,23 +228,23 @@ function Connectivity({ graph, view, selectedKey, onSelect, onFocus, expanded, b
       pan.current = { x: (left - (canvasWidth - width) / 2) / scale, y: top / scale };
     }
   }} className="topology-connectivity-viewport" style={{ height }}><div className="topology-connectivity-canvas" style={{ width: canvasWidth, height: canvasHeight }}><div className="topology-connectivity-world" role="group" aria-label="Recorded connectivity" style={{ width: layoutWidth, height: layoutHeight, left: (canvasWidth - layoutWidth * scale) / 2, top, transform: `scale(${scale})` }}>
-    {groups.map(group => <div key={group.key} className="topology-position-group" data-position-id={group.position_id} {...presentationAttributes(group)} role="group" aria-label={`${group.name}: ${group.node_keys.length} Assets`}
+    {groups.map(group => <div key={group.key} className="topology-position-group" data-position-id={group.position_id} data-group-key={group.key} {...presentationAttributes(group)} role="group" aria-label={`${group.name}: ${group.node_keys.length} Assets`}
       style={{ left: group.left + extentX, top: group.top + extentY, width: group.width, height: group.height }}>
       <span className="topology-position-label" title={group.name} style={{ width: group.labelWidth }}>{group.name}</span>
     </div>)}
     <svg width={layoutWidth} height={layoutHeight} aria-hidden="true">
       <defs><marker id="topology-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--muted)" /></marker></defs>
       {presentationEdges.map(edge => {
-        const route = routes[edge.key]; if (!route) return null;
-        const relevant = edge.source_key === selectedKey || edge.target_key === selectedKey;
+        const route = routes[edge.key]; if (!route || route.render === false) return null;
+        const relevant = edge.source_key === selectedKey || edge.target_key === selectedKey || route.member_keys?.includes(selectedKey);
         const membershipNetwork = edge.kind === "membership" ? view.networkById[edge.target_key.slice(8)] : null;
         return <g key={edge.key} {...(membershipNetwork ? presentationAttributes(membershipNetwork) : {})}><path
-          data-edge-key={edge.key} data-source-key={edge.source_key} data-target-key={edge.target_key}
-          className={edge.kind === "disclosure" ? "topology-disclosure-edge" : edge.platform_parent_key ? "topology-host-rail" : "topology-relationship-edge"}
+          data-internal-routing={route.internal_routing || undefined} data-group-connection={route.group_key} data-edge-key={edge.key} data-source-key={edge.source_key} data-target-key={edge.target_key}
+          className={route.group_key ? "topology-host-rail" : edge.kind === "disclosure" ? "topology-disclosure-edge" : edge.platform_parent_key ? "topology-host-rail" : "topology-relationship-edge"}
           d={route.points.map(([x, y], index) => `${index ? "L" : "M"}${x + extentX},${y + extentY}`).join(" ")}
           fill="none" stroke={membershipNetwork ? "var(--identity-emphasis)" : "var(--muted)"} strokeWidth={relevant ? 2 : 1}
           strokeDasharray={edge.kind === "membership" ? "6 5" : undefined}
-          markerEnd={edge.directional ? "url(#topology-arrow)" : undefined} /></g>;
+          markerEnd={edge.directional && !route.group_key ? "url(#topology-arrow)" : undefined} /></g>;
       })}
     </svg>
     {nodes.map(node => {

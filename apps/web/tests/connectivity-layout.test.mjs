@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectivityLayout, connectivityPositionGroups, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, CONNECTIVITY_RAIL_GAP } from "../lib/infrastructure-topology.mjs";
+import { connectivityLayout, connectivityPositionGroups, connectivityPositionMembership, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, CONNECTIVITY_RAIL_GAP } from "../lib/infrastructure-topology.mjs";
 const fixturePositions = Object.fromEntries(["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"].map((key, sort_order) => [key, { id: key, key, name: key, sort_order, active: true }]));
 const node = (key, position, distance = 1) => ({ key, entity_id: key, entity_type: "asset", name: key, topology_position: fixturePositions[position] || null, distance });
 const edge = (source, target, parent = null) => ({ key: `${source}/${target}`, source_key: source, target_key: target, kind: "relationship", topology_class: parent ? "platform" : "physical_network", platform_parent_key: parent, directional: Boolean(parent) });
@@ -160,6 +160,7 @@ function assertRoutes(graph) {
     for (const group of groups) {
       const members = [...group.node_keys, ...group.disclosure_keys];
       if (members.includes(edge.source_key) && members.includes(edge.target_key)) continue;
+      if (routes[edge.key].internal_routing && (members.includes(edge.source_key) || members.includes(edge.target_key))) continue;
       for(let i=1;i<points.length;i++) {
         const [x,y]=points[i], [px,py]=points[i-1];
         const crosses=y===py && y>=group.top && y<=group.top+group.height && Math.max(x,px)>group.left && Math.min(x,px)<group.left+group.width && x!==px;
@@ -312,7 +313,7 @@ test("position containers reflow with disclosure and width; controls are never g
   const height=nodes=>Math.max(...nodes.map(n=>n.y))-Math.min(...nodes.map(n=>n.y));
   assert.ok(height(wide)<=height(narrow));
   const columns=nodes=>new Set(nodes.filter(n=>n.key.startsWith("child1-")).map(n=>n.column)).size;
-  assert.ok(columns(wide)>columns(narrow));
+  assert.equal(columns(wide),4); assert.equal(columns(narrow),4);
 });
 
 test("secondary upper neighbours constrain order, and container tint survives rename/reorder", () => {
@@ -338,7 +339,7 @@ test("mixed leaf/subtree siblings retain compact columns and readable desktop Fi
     edges:[...peers,"appliance"].map(k=>edge("upstream",k)).concat([0,1,2,3].map(i=>edge(`child${i}`,"h2","h2")))};
   const {nodes,routes}=assertRoutes(graph);assertGroups(nodes,routes);
   const p=Object.fromEntries(nodes.map(n=>[n.key,n]));
-  assert.ok(peers.every((k,i)=>i===0 || p[k].x>p[peers[i-1]].x),"Leaf runs keep stable ordering around subtree siblings");
+  assert.deepEqual(peers.map(k=>p[k]).sort((a,b)=>a.y-b.y||a.x-b.x).map(n=>n.key),peers,"Mixed siblings retain row-major ordering");
   assert.ok(connectivityFit(connectivityBounds(nodes,routes),750,600).scale*CONNECTIVITY_NODE_WIDTH>=85);
 });
 
@@ -367,12 +368,12 @@ test("disclosure attachment preserves local clusters, position IDs, counts and s
   const controls=[control("nearby","parent",60,1228),control("wrong-parent","other",60,0),control("wrong-position","parent",70,0)];
   const original=connectivityPositionGroups(members),decorated=connectivityPositionGroups([...members,...controls]);
   assert.deepEqual(decorated.map(g=>g.node_keys),original.map(g=>g.node_keys));
-  assert.deepEqual(decorated.map(g=>g.disclosure_keys),[[],["nearby"]]);
+  assert.deepEqual(decorated.map(g=>g.disclosure_keys),[["nearby"]]);
   assert.deepEqual(connectivityPositionGroups([members[0],controls[0]]),[],"One card keeps the existing unboxed behavior");
 });
 
 
-test("external fan-out reserves parent/group clearance and enters every preview/full member vertically once", () => {
+test("dense fan-out reserves parent/group clearance and terminates at the group boundary", () => {
   const graph=localBranches();
   graph.nodes=graph.nodes.filter(n=>!n.key.startsWith("e"));graph.edges=graph.edges.filter(e=>!e.source_key.startsWith("e"));
   for(let i=0;i<18;i++){const key=`item-${String(i).padStart(2,"0")}`;graph.nodes.push({...arbitrary(key,80),distance:2});graph.edges.push(edge(key,"c1","c1"));}
@@ -386,13 +387,12 @@ test("external fan-out reserves parent/group clearance and enters every preview/
     for(const key of [...childGroup.node_keys,...childGroup.disclosure_keys]) {
       const edge=shown.edges.find(e=>[e.source_key,e.target_key].includes(key) && [e.source_key,e.target_key].includes("c1"));
       const points=edge.source_key==="c1"?routes[edge.key].points:[...routes[edge.key].points].reverse();
-      const target=nodes.find(n=>n.key===key),rail=points[1][1];rails.add(rail);
+      const rail=points[1][1];rails.add(rail);
       assert.ok(rail>=parentBottom+CONNECTIVITY_RAIL_GAP);
       assert.ok(rail>=parent.y+44+CONNECTIVITY_RAIL_GAP);
       assert.ok(rail<=childGroup.top-CONNECTIVITY_RAIL_GAP);
-      const crossings=points.slice(1).filter(([x,y],i)=>x===points[i][0] && Math.min(y,points[i][1])<childGroup.top && Math.max(y,points[i][1])>childGroup.top);
-      assert.equal(crossings.length,1);assert.equal(crossings[0][0],target.x);
-      assert.equal(points.at(-1)[0],target.x);
+      assert.equal(routes[edge.key].group_key,childGroup.key);
+      assert.equal(points.at(-1)[1],childGroup.top,"One connector terminates on the group boundary");
     }
     assert.equal(rails.size,1,"One shared external distribution rail");
     assert.equal(childGroup.node_keys.length,branches.c1?18:8);
@@ -409,4 +409,99 @@ test("footer exit clearance keeps long-named managed siblings in their local gro
     assert.deepEqual(group.node_keys,["b1","b2","b3"]);
     assert.ok(group.left+12+group.labelWidth<nodes.find(n=>n.key==="b1").x,"Footer leaves the member exit lane clear");
   }
+});
+
+function stableHosts() {
+  const graph = {focus_key:"switch",nodes:[node("switch","access_network"),...[1,2,3].map(i=>node(`PVE${i}`,"platform"))],edges:[]};
+  for(const [parent,count] of [["PVE1",18],["PVE2",2],["PVE3",1]]) {
+    graph.edges.push(edge("switch",parent));
+    for(let i=0;i<count;i++) {
+      const key=`${parent}-workload-${String(i).padStart(2,"0")}`;
+      graph.nodes.push(node(key,"workload",2));graph.edges.push({...edge(key,parent,parent),label:"Runs on"});
+    }
+  }
+  return graph;
+}
+const presented = (graph,branches) => {
+  const p=connectivityPreview(graph,branches);
+  return {...p,nodes:[...p.nodes,...p.moreNodes],edges:[...p.edges,...p.moreEdges]};
+};
+test("semantic host membership and identity survive one, two, preview and all descendant expansion", () => {
+  const graph=stableHosts(),before=structuredClone(graph);
+  let identity;
+  for(const branches of [{},{PVE3:"all"},{PVE2:"all"},{PVE1:"preview"},{PVE1:"all",PVE2:"all",PVE3:"all"}]) {
+    const {nodes,routes}=assertRoutes(presented(graph,branches));
+    const hostGroup=connectivityPositionGroups(nodes).find(g=>g.position_id==="platform");
+    assert.deepEqual(hostGroup.node_keys,["PVE1","PVE2","PVE3"]);
+    identity ??= hostGroup.key;assert.equal(hostGroup.key,identity);
+    if(branches.PVE3) {
+      const singleton=connectivityPositionMembership(nodes).find(g=>g.parent_key==="PVE3");
+      assert.equal(singleton.node_keys.length,1);
+      assert.ok(!connectivityPositionGroups(nodes).some(g=>g.key===singleton.key));
+      assert.equal(routes["PVE3-workload-00/PVE3"].group_key,undefined);
+    }
+    if(branches.PVE2) assert.equal(Object.values(routes).filter(r=>r.group_key && r.render).length,branches.PVE1?2:1);
+  }
+  assert.deepEqual(graph,before);
+});
+test("18 workloads use four aligned columns, first eight use two rows and a centred contained control", () => {
+  const graph=stableHosts();graph.focus_key="PVE1";
+  for(const width of [700,900,1440,2400]) for(const all of [false,true]) {
+    const shown=presented(graph,all?{PVE1:"all"}:{}),nodes=connectivityLayout(shown,{width});
+    const children=nodes.filter(n=>n.key.startsWith("PVE1-workload"));
+    const rows=[...new Set(children.map(n=>n.y))].sort((a,b)=>a-b);
+    assert.deepEqual(rows.map(y=>children.filter(n=>n.y===y).length),all?[4,4,4,4,2]:[4,4]);
+    assert.equal(new Set(children.map(n=>n.x)).size,4);
+    assert.deepEqual([...children].sort((a,b)=>a.y-b.y||a.x-b.x).map(n=>n.key),children.map(n=>n.key).sort());
+    const group=connectivityPositionGroups(nodes).find(g=>g.parent_key==="PVE1");
+    assert.ok(group.width<950);assert.ok(group.height<650);
+    const routes=connectivityRoutes(nodes,shown.edges);
+    const connectors=Object.values(routes).filter(r=>r.group_key===group.key);
+    assert.equal(connectors.filter(r=>r.render).length,1);
+    assert.equal(connectors.length,all?18:9);
+    if(!all) {
+      const control=nodes.find(n=>n.entity_type==="disclosure");
+      assert.equal(control.x,(Math.min(...children.map(n=>n.x))+Math.max(...children.map(n=>n.x)))/2);
+      assert.ok(control.y>Math.max(...children.map(n=>n.y)));
+      assert.deepEqual(group.disclosure_keys,[control.key]);
+    }
+  }
+});
+test("mixed hosting semantics and network membership keep individual truthful routes", () => {
+  const graph=stableHosts();graph.edges.find(e=>e.key==="PVE2-workload-00/PVE2").label="Hosted by";
+  const {routes}=assertRoutes(presented(graph,{PVE2:"all"}));
+  for(const key of ["PVE2-workload-00/PVE2","PVE2-workload-01/PVE2"])assert.equal(routes[key].group_key,undefined);
+  graph.nodes.push({...node("network","automatic"),entity_type:"network"});
+  graph.edges.push({...edge("PVE1-workload-17","network"),kind:"membership",topology_class:null});
+  const result=assertRoutes(presented(graph,{PVE1:"all"}));
+  assert.equal(result.routes["PVE1-workload-17/network"].group_key,undefined);
+});
+
+
+test("a descendant on a workload preserves the four-column ancestor grid", () => {
+  const graph=stableHosts();
+  graph.nodes.push({...node("nested","endpoint",3)});
+  graph.edges.push({...edge("nested","PVE1-workload-00","PVE1-workload-00"),label:"Runs on"});
+  const {nodes}=assertRoutes(presented(graph,{PVE1:"all","PVE1-workload-00":"all"}));
+  const children=nodes.filter(n=>n.key.startsWith("PVE1-workload"));
+  assert.equal(new Set(children.map(n=>n.x)).size,4);
+  assert.equal(new Set(children.map(n=>n.y)).size,5);
+  const group=connectivityPositionGroups(nodes).find(g=>g.parent_key==="PVE1");
+  assert.ok(nodes.find(n=>n.key==="nested").y>group.top+group.height);
+});
+
+test("first-eight control stays finite and contained when every preview member has descendants", () => {
+  const graph=stableHosts();graph.focus_key="PVE1";
+  const branches={};
+  for(let i=0;i<8;i++) {
+    const parent=`PVE1-workload-${String(i).padStart(2,"0")}`,key=`nested-${i}`;
+    graph.nodes.push(node(key,"endpoint",3));graph.edges.push({...edge(key,parent,parent),label:"Runs on"});branches[parent]="all";
+  }
+  const {nodes}=assertRoutes(presented(graph,branches));
+  assert.ok(nodes.every(n=>Number.isFinite(n.x)&&Number.isFinite(n.y)));
+  const group=connectivityPositionGroups(nodes).find(g=>g.parent_key==="PVE1");
+  assert.equal(group.node_keys.length,8);assert.deepEqual(group.disclosure_keys,["disclosure:PVE1"]);
+  const children=nodes.filter(n=>group.node_keys.includes(n.key));
+  assert.equal(new Set(children.map(n=>n.x)).size,4);
+  assert.equal(new Set(children.map(n=>n.y)).size,2);
 });

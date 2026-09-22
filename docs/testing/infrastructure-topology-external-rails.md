@@ -1,5 +1,7 @@
 # Connectivity external routing zones
 
+Historical acceptance record. The later [stable groups and compact grid refinement](infrastructure-topology-stable-groups.md) replaces staggered hosting grids and per-child drops with aligned grids and presentation-only group connectors.
+
 Branch: `feature/topology-orthogonal-layout`; starting HEAD:
 `4b977f065754b8cb985c5f70603b2fd4f102b44b`. The working tree was initially clean.
 No commit, push or merge was performed. This is renderer geometry only: no API,
