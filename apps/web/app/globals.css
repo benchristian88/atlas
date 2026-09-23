@@ -1360,7 +1360,6 @@ tbody tr:hover { background: var(--surface-muted); }
 .graph-workspace.topology-details-hidden { grid-template-columns: minmax(0, 1fr); }
 .topology-main { min-width: 0; }
 .topology-platform-grid { align-items: stretch; }
-.topology-platform-card { min-height: 360px; }
 .topology-children { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .topology-child { min-width: 0; overflow-wrap: anywhere; }
 .audit-disclosure { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: inherit; cursor: pointer; }

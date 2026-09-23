@@ -40,6 +40,7 @@ function TopologyWorkbench() {
   const [expandedParents, setExpandedParents] = useState({});
   const [focusId, setFocusId] = useState(""), [hops, setHops] = useState(1), [showNetworks, setShowNetworks] = useState(true);
   const [graph, setGraph] = useState(null), [graphError, setGraphError] = useState("");
+  const supportsFullscreen = tab === "connectivity";
   const [expanded, setExpanded] = useState(false), [detailsHidden, setDetailsHidden] = useState(false);
   const [expandedConnectivityHosts, setExpandedConnectivityHosts] = useState({});
   const toolbar = useRef(null);
@@ -109,6 +110,7 @@ function TopologyWorkbench() {
     setParentId(""); setExpandedParents({}); setExpandedConnectivityHosts({});
     setFocusId(initial.focusId || ""); // Empty uses first visible Asset in byName order.
     setHops(1); setShowNetworks(true); setGraph(null); setGraphError("");
+    if (destination !== "connectivity") setExpanded(false);
     setTab(destination);
     toolbar.current?.closest("dialog")?.scrollTo({ left: 0, top: 0, behavior: "instant" });
     scrollPosition.current = { left: 0, top: 0 };
@@ -117,7 +119,7 @@ function TopologyWorkbench() {
   const openNetwork = id => enterView("networks", { networkId: id });
   return <div className="operations-page infrastructure-topology">
     <PageHeader eyebrow="Knowledge" title="Infrastructure Topology" description="Visualise your infrastructure, networks and connectivity." />
-    <ExpandedGraphSurface title="Infrastructure Topology" expanded={expanded} onClose={() => { setExpanded(false); setHops(n => Math.min(n, 2)); }} returnFocus={expandButton} scrollPosition={scrollPosition}>
+    <ExpandedGraphSurface title="Infrastructure Topology" expanded={supportsFullscreen && expanded} onClose={() => { setExpanded(false); setHops(n => Math.min(n, 2)); }} returnFocus={expandButton} scrollPosition={scrollPosition}>
       <div className="topology-toolbar" ref={toolbar}>
         <div className="lens-selector" aria-label="Topology views">{Object.entries(tabs).map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} className={`button selector-control-text ${tab === key ? "button-primary" : "button-secondary"}`} onClick={() => { if (key !== tab) enterView(key); }}>{label}</button>)}</div>
         <div className="row-actions"><TopologyCategoryFilter
@@ -128,7 +130,7 @@ function TopologyWorkbench() {
           open={filtersOpen} onOpenChange={setFiltersOpen}
           onChange={(id, checked) => setChoices(current => ({ ...current, [id]: checked }))}
           onReset={() => { setChoices({}); setClassChoices({}); }}
-        /><button type="button" className="text-button" onClick={() => setReload(n => n + 1)}>Refresh</button>{tab !== "overview" && <DetailsPanelToggle hidden={detailsHidden} onToggle={() => setDetailsHidden(hidden => !hidden)} />}{!expanded && <button ref={expandButton} type="button" className="button button-secondary graph-icon-button" title="Expand Infrastructure Topology" aria-label="Expand Infrastructure Topology" onClick={() => { scrollPosition.current = { left: window.scrollX, top: window.scrollY }; setExpanded(true); }}><NavigationIcon name="expand" /></button>}</div>
+        /><button type="button" className="text-button" onClick={() => setReload(n => n + 1)}>Refresh</button>{tab !== "overview" && <DetailsPanelToggle hidden={detailsHidden} onToggle={() => setDetailsHidden(hidden => !hidden)} />}{supportsFullscreen && !expanded && <button ref={expandButton} type="button" className="button button-secondary graph-icon-button" title="Expand Infrastructure Topology" aria-label="Expand Infrastructure Topology" onClick={() => { scrollPosition.current = { left: window.scrollX, top: window.scrollY }; setExpanded(true); }}><NavigationIcon name="expand" /></button>}</div>
       </div>
       {error && <p className="error-banner" role="alert">{error}</p>}
       {!data && !error && <p role="status">Loading infrastructure…</p>}

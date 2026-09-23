@@ -72,6 +72,7 @@ try {
     data.asset_types.push({ id:id(610+count), key:`grid_${count}`, name:`Grid ${count}`, category_id:id(600+count), active:true });
     for (let i=0; i<count; i++) data.assets.push({ id:id(650+count*10+i), name:`Parent ${count}-${i}`, asset_type:`grid_${count}`, customer_id:customer.id, site_id:site.id, status:"operational" });
   }
+  for (const child of [102,103,104,105]) data.platform_links.push({relationship_id:`height-${child}`,parent_id:id(690),child_id:id(child)});
   const kgNode = (n, type, name) => ({ key:`${type}:${id(n)}`, entity_id:id(n), entity_type:type, name, href:`/assets/${id(n)}`, customer_id:customer.id, site_id:site.id });
   const kgNodes = [kgNode(800,"business_function","Home operations"), kgNode(801,"service","Name resolution"), kgNode(30,"asset","PVE1"), ...Array.from({length: 8}, (_, i) => kgNode(820+i, "asset", `Graph Asset ${i+1}`))];
   await page.route("**/api/**", async route => {
@@ -93,9 +94,26 @@ try {
   assert.equal(await workload.locator('.topology-summary-icons a:not(.topology-preview-more)').count(),12);
   assert.equal(await workload.locator('.topology-preview-more').innerText(),"+5");
   assert.match(await workload.locator('.topology-preview-more').getAttribute('href'),/category/);
+  assert.equal(await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).count(),0);
   await shot('01-overview-12-plus-5');
   await page.getByRole('button',{name:'Platform',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).count(),0);
   const checkGrid = async (columns) => {
+    const rows = await page.locator('.topology-platform-grid').evaluateAll(grids => grids.flatMap(grid => {
+      const rows = new Map();
+      for (const card of grid.children) {
+        const rect=card.getBoundingClientRect(), key=Math.round(rect.top);
+        if(!rows.has(key))rows.set(key,[]);
+        rows.get(key).push({height:rect.height,children:card.querySelectorAll('.topology-child').length,scroll:card.scrollHeight,client:card.clientHeight});
+      }
+      return [...rows.values()];
+    }));
+    for(const row of rows) {
+      assert.ok(row.every(card=>Math.abs(card.height-row[0].height)<1),'equal heights within each row');
+      assert.ok(row.every(card=>card.scroll<=card.client+1),'no card content clipping');
+      if(row.every(card=>card.children===0))assert.ok(row[0].height<220,'childless row has no reserved preview space');
+    }
+    assert.ok(rows.some(row=>row.some(card=>card.children>0)&&row.some(card=>card.children===0)),'mixed content shares row height');
     for (let count=1; count<=5; count++) {
       const grid = page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:`Grid ${count} ${count}`,exact:true})}).locator('.topology-platform-grid');
       const dimensions = await grid.evaluate(el => ({ width:el.clientWidth, tracks:getComputedStyle(el).gridTemplateColumns.split(' ').map(parseFloat), cards:[...el.children].map(c=>({width:c.getBoundingClientRect().width, left:c.offsetLeft, top:c.offsetTop})) }));
@@ -110,6 +128,10 @@ try {
   await page.getByRole('button',{name:'Hide details panel'}).click();
   await checkGrid(4);
   await shot('11-platform-four-columns-single-and-multiple');
+  await page.locator('.topology-toolbar').screenshot({path:`${output}/21-platform-toolbar.png`});
+  await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Backup 1',exact:true})}).screenshot({path:`${output}/22-backup-compact.png`});
+  await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Compute 6',exact:true})}).screenshot({path:`${output}/23-mixed-and-compact-rows.png`});
+  await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Grid 4 4',exact:true})}).screenshot({path:`${output}/24-one-populated-card.png`});
   await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Grid 1 1',exact:true})}).screenshot({path:`${output}/15-platform-single-four.png`});
   await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Grid 5 5',exact:true})}).screenshot({path:`${output}/16-platform-five-four.png`});
   await page.getByRole('button',{name:'Show details panel'}).click();
@@ -144,6 +166,8 @@ try {
   await page.getByRole('button',{name:'View platform (1)',exact:true}).click();
   assert.equal(await page.locator(`[data-platform-id="${id(31)}"] .topology-child`).count(),1);
   await page.getByRole('button',{name:'Network & VLAN',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).count(),0);
+  await page.locator('.topology-toolbar').screenshot({path:`${output}/25-networks-toolbar.png`});
   await page.locator('.topology-network-list button').filter({hasText:'Management'}).click();
   await page.getByRole('button',{name:'IP address',exact:true}).click();
   const ips = await page.locator('.topology-network-detail tbody tr td:nth-child(3)').allTextContents();
@@ -162,6 +186,8 @@ try {
   await page.locator('.topology-network-detail tbody button').nth(1).click();
   await page.getByRole('button',{name:'Show details panel'}).click();
   await page.getByRole('button',{name:'Connectivity',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).count(),1);
+  await page.locator('.topology-toolbar').screenshot({path:`${output}/26-connectivity-toolbar.png`});
   assert.equal(await page.getByRole('button',{name:'3 hops',exact:true}).count(),0);
   await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).click();
   await page.getByRole('button',{name:'3 hops',exact:true}).click();
@@ -170,6 +196,15 @@ try {
   await shot('04-connectivity-three-hops');
   await page.getByRole('button',{name:'Close expanded Infrastructure Topology',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'2 hops',exact:true}).getAttribute('aria-pressed'),'true');
+  for (const destination of ['Overview','Platform','Network & VLAN']) {
+    await page.getByRole('button',{name:'Connectivity',exact:true}).click();
+    await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).click();
+    await page.getByRole('button',{name:destination,exact:true}).click();
+    assert.equal(await page.locator('dialog').evaluate(el=>el.matches(':modal')),false);
+    assert.equal(await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'Close expanded Infrastructure Topology',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>document.body.style.position),'');
+  }
   await page.goto(`${base}/knowledge-graph?types=business_function,service,asset&relationships=service_business_function,service_asset,service_service,asset_relationship`);
   const geometry = () => page.locator('.landscape-viewport').evaluate(el => {
     const canvas=el.querySelector('.landscape-canvas'), card=canvas.querySelector('.landscape-node');

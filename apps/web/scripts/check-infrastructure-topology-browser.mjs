@@ -155,91 +155,87 @@ async function checkCategoryPointerInput(page, data, theme, width) {
   const row = name => panel.locator("label").filter({ has: page.getByRole("checkbox", { name, exact: true }) });
   const card = n => page.locator(`[data-platform-id="${id(n)}"]`);
   await page.getByRole("button", { name: "Platform", exact: true }).click();
-  for (const expanded of [false, true]) {
-    if (expanded) await page.getByRole("button", { name: "Expand Infrastructure Topology", exact: true }).click();
-    await filters.click();
-    const initial = await checkbox("Backup").isChecked();
-    assert.equal(initial, true);
-    const audit = await panel.evaluate(panel => {
-      const inspect = element => {
-        const box = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-        return { box: box.toJSON(), hit: hit?.outerHTML.slice(0, 300), intended: element === hit || element.contains(hit),
-          pointerEvents: style.pointerEvents, zIndex: style.zIndex,
-          before: getComputedStyle(element, "::before").content, after: getComputedStyle(element, "::after").content };
-      };
-      return { panel: inspect(panel), options: [...panel.querySelectorAll("label")].map(label => ({
-        name: label.textContent, row: inspect(label), checkbox: inspect(label.querySelector("input")),
-        text: inspect(label.querySelector(".presentation-identity > span:last-child")), icon: inspect(label.querySelector(".presentation-icon")),
-      })) };
-    });
-    await writeFile(`${output}/filter-hit-test-${theme}-${width}-${expanded}.json`, JSON.stringify(audit, null, 2));
-    assert.equal(audit.panel.pointerEvents, "auto");
-    for (const option of audit.options) for (const part of ["row", "checkbox", "text", "icon"]) {
-      assert.ok(option[part].intended, `${option.name} ${part} must receive the pointer: ${JSON.stringify(option[part])}`);
-      assert.equal(option[part].pointerEvents, "auto");
-      assert.ok(option[part].box.width > 0 && option[part].box.height > 0);
-    }
-    const backupState = async enabled => {
-      assert.equal(await panel.isVisible(), true, "Inside interaction keeps the popover mounted");
-      assert.equal(await checkbox("Backup").isVisible(), true);
-      assert.equal(await checkbox("Backup").isChecked(), enabled);
-      assert.equal(await checkbox("Backup").evaluate(input => input.matches(":checked")), enabled, "Native visible checkmark state");
-      assert.equal(await filters.innerText(), enabled ? "Filters" : "Filters · 1");
-      await card(34).waitFor({ state: enabled ? "visible" : "detached" });
+  await filters.click();
+  const initial = await checkbox("Backup").isChecked();
+  assert.equal(initial, true);
+  const audit = await panel.evaluate(panel => {
+    const inspect = element => {
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return { box: box.toJSON(), hit: hit?.outerHTML.slice(0, 300), intended: element === hit || element.contains(hit),
+        pointerEvents: style.pointerEvents, zIndex: style.zIndex,
+        before: getComputedStyle(element, "::before").content, after: getComputedStyle(element, "::after").content };
     };
-    // Start with the label/row, the path missed by the original acceptance.
-    await row("Backup").click(); await backupState(!initial);
-    const inputIds = await panel.getByRole("checkbox").evaluateAll(inputs => inputs.map(input => input.id));
-    assert.equal(new Set(inputIds).size, data.categories.length);
-    assert.ok(inputIds.every(Boolean));
-    assert.equal(await row("Backup").getAttribute("for"), await checkbox("Backup").getAttribute("id"));
-    await page.screenshot({ path: `${output}/filter-pointer-off-${theme}-${width}-${expanded}.png` });
-    await row("Backup").click(); await backupState(initial);
-    await checkbox("Backup").click(); await backupState(false);
-    await checkbox("Backup").click(); await backupState(true);
-    const text = row("Backup").locator(".presentation-identity > span:last-child");
-    await text.click(); await backupState(false);
-    await text.click(); await backupState(true);
-    const bounds = await row("Backup").boundingBox();
-    await row("Backup").click({ position: { x: bounds.width - 2, y: bounds.height / 2 } }); await backupState(false);
-    await row("Backup").click({ position: { x: bounds.width - 2, y: bounds.height / 2 } }); await backupState(true);
-    // A second category verifies icon activation and actual projection removal.
-    await row("Compute").locator(".presentation-icon").click();
-    assert.equal(await checkbox("Compute").isChecked(), false);
-    assert.equal(await filters.innerText(), "Filters · 1");
-    await card(30).waitFor({ state: "detached" });
-    await row("Compute").locator(".presentation-icon").click();
-    assert.equal(await checkbox("Compute").isChecked(), true);
-    assert.equal(await filters.innerText(), "Filters");
-    await card(30).waitFor();
-    // Native Tab navigation focuses Workload then Uncategorized then Backup.
-    await page.keyboard.press("Tab"); await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
-    assert.equal(await checkbox("Backup").evaluate(input => input === document.activeElement), true);
-    await page.keyboard.press("Space"); await backupState(false);
-    await page.keyboard.press("Space"); await backupState(true);
-    await row("Backup").click();
-    await row("Uncategorized").locator(".presentation-identity > span:last-child").click();
-    assert.equal(await filters.innerText(), "Filters · 2");
-    await card(150).waitFor();
-    await panel.getByRole("button", { name: "Reset to defaults", exact: true }).click();
-    await backupState(true);
-    for (const category of data.categories) assert.equal(await checkbox(category.name).isChecked(), category.show_in_topology);
-    await card(150).waitFor({ state: "detached" });
-    await page.screenshot({ path: `${output}/filter-pointer-reset-${theme}-${width}-${expanded}.png` });
-    // An uncovered heading inside the expanded dialog is outside the filter.
-    await page.getByRole("heading", { name: "Infrastructure Topology", exact: true }).last().click();
-    assert.equal(await panel.count(), 0);
-    await filters.click(); await page.keyboard.press("Escape");
-    assert.equal(await panel.count(), 0);
-    assert.equal(await filters.evaluate(button => button === document.activeElement), true);
-    await filters.click();
-    await page.keyboard.press("Shift+Tab"); // First checkbox -> Filters.
-    await page.keyboard.press("Shift+Tab"); // Filters -> outside the filter root.
-    assert.equal(await panel.count(), 0, "Keyboard blur still dismisses after pointer use");
-    if (expanded) await page.getByRole("button", { name: "Close expanded Infrastructure Topology", exact: true }).click();
+    return { panel: inspect(panel), options: [...panel.querySelectorAll("label")].map(label => ({
+      name: label.textContent, row: inspect(label), checkbox: inspect(label.querySelector("input")),
+      text: inspect(label.querySelector(".presentation-identity > span:last-child")), icon: inspect(label.querySelector(".presentation-icon")),
+    })) };
+  });
+  await writeFile(`${output}/filter-hit-test-${theme}-${width}-embedded.json`, JSON.stringify(audit, null, 2));
+  assert.equal(audit.panel.pointerEvents, "auto");
+  for (const option of audit.options) for (const part of ["row", "checkbox", "text", "icon"]) {
+    assert.ok(option[part].intended, `${option.name} ${part} must receive the pointer: ${JSON.stringify(option[part])}`);
+    assert.equal(option[part].pointerEvents, "auto");
+    assert.ok(option[part].box.width > 0 && option[part].box.height > 0);
   }
+  const backupState = async enabled => {
+    assert.equal(await panel.isVisible(), true, "Inside interaction keeps the popover mounted");
+    assert.equal(await checkbox("Backup").isVisible(), true);
+    assert.equal(await checkbox("Backup").isChecked(), enabled);
+    assert.equal(await checkbox("Backup").evaluate(input => input.matches(":checked")), enabled, "Native visible checkmark state");
+    assert.equal(await filters.innerText(), enabled ? "Filters" : "Filters · 1");
+    await card(34).waitFor({ state: enabled ? "visible" : "detached" });
+  };
+  // Start with the label/row, the path missed by the original acceptance.
+  await row("Backup").click(); await backupState(!initial);
+  const inputIds = await panel.getByRole("checkbox").evaluateAll(inputs => inputs.map(input => input.id));
+  assert.equal(new Set(inputIds).size, data.categories.length);
+  assert.ok(inputIds.every(Boolean));
+  assert.equal(await row("Backup").getAttribute("for"), await checkbox("Backup").getAttribute("id"));
+  await page.screenshot({ path: `${output}/filter-pointer-off-${theme}-${width}-embedded.png` });
+  await row("Backup").click(); await backupState(initial);
+  await checkbox("Backup").click(); await backupState(false);
+  await checkbox("Backup").click(); await backupState(true);
+  const text = row("Backup").locator(".presentation-identity > span:last-child");
+  await text.click(); await backupState(false);
+  await text.click(); await backupState(true);
+  const bounds = await row("Backup").boundingBox();
+  await row("Backup").click({ position: { x: bounds.width - 2, y: bounds.height / 2 } }); await backupState(false);
+  await row("Backup").click({ position: { x: bounds.width - 2, y: bounds.height / 2 } }); await backupState(true);
+  // A second category verifies icon activation and actual projection removal.
+  await row("Compute").locator(".presentation-icon").click();
+  assert.equal(await checkbox("Compute").isChecked(), false);
+  assert.equal(await filters.innerText(), "Filters · 1");
+  await card(30).waitFor({ state: "detached" });
+  await row("Compute").locator(".presentation-icon").click();
+  assert.equal(await checkbox("Compute").isChecked(), true);
+  assert.equal(await filters.innerText(), "Filters");
+  await card(30).waitFor();
+  // Native Tab navigation focuses Workload then Uncategorized then Backup.
+  await page.keyboard.press("Tab"); await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
+  assert.equal(await checkbox("Backup").evaluate(input => input === document.activeElement), true);
+  await page.keyboard.press("Space"); await backupState(false);
+  await page.keyboard.press("Space"); await backupState(true);
+  await row("Backup").click();
+  await row("Uncategorized").locator(".presentation-identity > span:last-child").click();
+  assert.equal(await filters.innerText(), "Filters · 2");
+  await card(150).waitFor();
+  await panel.getByRole("button", { name: "Reset to defaults", exact: true }).click();
+  await backupState(true);
+  for (const category of data.categories) assert.equal(await checkbox(category.name).isChecked(), category.show_in_topology);
+  await card(150).waitFor({ state: "detached" });
+  await page.screenshot({ path: `${output}/filter-pointer-reset-${theme}-${width}-embedded.png` });
+  // The page heading is outside the filter.
+  await page.getByRole("heading", { name: "Infrastructure Topology", exact: true }).last().click();
+  assert.equal(await panel.count(), 0);
+  await filters.click(); await page.keyboard.press("Escape");
+  assert.equal(await panel.count(), 0);
+  assert.equal(await filters.evaluate(button => button === document.activeElement), true);
+  await filters.click();
+  await page.keyboard.press("Shift+Tab"); // First checkbox -> Filters.
+  await page.keyboard.press("Shift+Tab"); // Filters -> outside the filter root.
+  assert.equal(await panel.count(), 0, "Keyboard blur still dismisses after pointer use");
   await page.getByRole("button", { name: "Overview", exact: true }).click();
 }
 
@@ -306,7 +302,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   await pve.getByRole("button", { name: "+16 more", exact: true }).click();
   await pve.locator(".topology-asset-identity").first().click();
   await search.fill("AdGuard"); await overrides();
-  for (const action of [async () => { await expand.click(); await close.click(); }, async () => {
+  for (const action of [async () => {
     const count = requests.filter(r => r === "/api/topology").length;
     await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === "/api/topology"), button("Refresh").click()]);
     assert.ok(requests.filter(r => r === "/api/topology").length > count);
@@ -320,7 +316,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   await filters.click(); await button("Overview").click();
   assert.equal(await page.locator(".topology-detail-inspector").count(), 0);
   await defaults();
-  await overrides(); await expand.click(); await close.click();
+  await overrides(); assert.equal(await expand.count(), 0);
   assert.equal(await filters.innerText(), "Filters · 2");
   await button("Platform").click();
   assert.equal(await search.inputValue(), "");
@@ -332,7 +328,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   const networkSearch = page.getByLabel("Search Networks and connected Assets", { exact: true });
   await page.locator(".topology-network-list").getByRole("button", { name: /^Management/ }).click();
   await networkSearch.fill("Management"); await overrides();
-  await expand.click(); await close.click();
+  assert.equal(await expand.count(), 0);
   assert.equal(await networkSearch.inputValue(), "Management");
   assert.match(await page.locator(".topology-network-heading").innerText(), /Management/);
   assert.equal(await filters.innerText(), "Filters · 2");
@@ -414,7 +410,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
 async function checkTopologyHeaders(page) {
   for (const view of ["Overview", "Platform", "Network & VLAN", "Connectivity"]) {
     await page.getByRole("button", { name: view, exact: true }).click();
-    for (const expanded of [false, true]) {
+    for (const expanded of view === "Connectivity" ? [false, true] : [false]) {
       if (expanded) await page.getByRole("button", { name: "Expand Infrastructure Topology", exact: true }).click();
       assert.equal(await page.getByText(/Recorded knowledge/).count(), 0, `${view}, expanded=${expanded}`);
       assert.equal(await page.locator(".topology-context").count(), 0);
@@ -1457,17 +1453,9 @@ try {
     await page.getByLabel(/^Search assets$/i,{exact:true}).fill("");
     const expand = page.getByRole("button",{name:"Expand Infrastructure Topology",exact:true});
     const close = page.getByRole("button",{name:"Close expanded Infrastructure Topology",exact:true});
-    assert.equal(await expand.innerText(), "");
-    assert.equal(await expand.getAttribute("title"), "Expand Infrastructure Topology");
-    assert.equal(await expand.locator("svg").count(), 1);
-    const beforeExpand = requests.filter(r => !r.includes("/icon?")).length;
-    await expand.click(); await close.waitFor();
-    assert.equal(await page.locator("dialog").evaluate(el=>el.matches(":modal")),true);
-    assert.equal(await page.evaluate(()=>document.body.style.position),"fixed");
-    assert.equal(requests.filter(r => !r.includes("/icon?")).length,beforeExpand);
+    assert.equal(await expand.count(), 0);
+    assert.equal(await close.count(), 0);
     await page.screenshot({ path:`${output}/platform-${theme}-${width}.png`,fullPage:true });
-    await page.keyboard.press("Escape"); await expand.waitFor();
-    assert.equal(await page.evaluate(()=>document.body.style.position),"");
     await page.getByRole("button",{name:"Network & VLAN",exact:true}).click();
     assert.equal(await page.locator(".topology-network-list button").count(),14);
     await checkStyleTokens(page.locator(".topology-network-list button"), { borderBottomColor: "--border" });
@@ -1508,9 +1496,8 @@ try {
     await page.locator(".topology-network-list").getByRole("button",{name:/^Apps/}).click();
     assert.match(await page.locator(".topology-network-detail").innerText(),/AdGuard Home/);
     assert.match(await page.locator(".topology-network-detail").innerText(),/10.0.3.5/);
-    await expand.click(); await close.waitFor();
-    assert.match(await page.locator(".topology-network-detail").innerText(),/10.0.3.5/);
-    await close.click();
+    assert.equal(await expand.count(), 0);
+    assert.equal(await close.count(), 0);
     await page.getByRole("button",{name:"Connectivity",exact:true}).click();
     await page.getByLabel("Focus",{exact:true}).selectOption(id(100)).catch(async e => { await page.screenshot({ path: `${output}/failure.png` }); console.error(await page.locator("body").innerText()); throw e; });
     await page.locator(`[data-node-key="asset:${id(100)}"]`).waitFor();
@@ -1740,5 +1727,5 @@ try {
   else if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
   else if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
   else if (process.env.ATLAS_LAYERED_ONLY) console.log(`Passed ${checks} layered scenarios: custom positions, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus, expanded inspector selection/resize, position edit/reload, managed position CRUD and keyboard reordering.`);
-  else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in normal and expanded mode; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four normal/expanded headers without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
+  else console.log(`Passed ${checks} topology/picker browser scenarios: Relationship Type Add/Edit defaults and persistence, custom Physical/Logical/Other traversal, class defaults/toggles/count/reset/tab entry/refocus/expand/refresh/empty selection; Asset/Network single-click stability and double-click/inspector/keyboard refocus, exact request counts, preserved hops/filters/search/Network toggle, Fit/pan reset and Service Types edit without naming note; native filter checkbox/row/text/icon pointer clicks, hit-testing, visible checkmarks/content/count, keyboard/reset/dismissal in Platform; compact menus, all registry options, keyboard/Escape/Tab/outside dismissal, focus return, live previews, edit/save/reload, all four embedded headers and expanded Connectivity without context line; category/Network form writes, Compute server/blue, Workload cube/green, Management blue then purple, IoT purple, Apps orange, Infra red, multihomed AdGuard, Home Automation home/teal, custom Network cloud/rose; light/dark at 1440, 1100 and 800px; 25-Asset preview, 20 PVE1 children, suppressed sibling/Network fan-out, genuine switch paths, direct host/Network focus, mixed-neighbourhood collision/readability checks, icon/fallback containment during zoom/pan/Fit, limit notices, interface IPs, Assets cleanup and expanded-state preservation; managed position hierarchy, three hosts, eight/18 children, local expansion, Automatic neighbours, refocus and expanded details selection/resize.`);
 } finally { await browser.close(); }

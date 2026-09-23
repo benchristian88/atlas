@@ -185,10 +185,15 @@ a heavier border; selected nodes have an outer ring, and keyboard focus uses a
 dashed outline. These remain distinct from the category or Network accent in
 both themes. Refresh after editing presentation settings to reload them.
 
-The four-arrow **Expand Infrastructure Topology** button fills the Atlas viewport without using browser
-fullscreen. Close with the button or Escape. Tab, selection, filters, expanded
-child lists, graph zoom/pan and Network detail remain intact, and page scrolling
-is restored. Expand and Refresh do not apply the tab-switch reset rule.
+Only Connectivity offers the four-arrow **Expand Infrastructure Topology** button.
+It fills the Atlas viewport without using browser fullscreen. Close with the button
+or Escape. Selection, filters, graph disclosure and zoom/pan remain intact, and page scrolling
+is restored. Switching to Overview, Platform or Network & VLAN closes expanded
+mode. Expand and Refresh do not apply the tab-switch reset rule.
+
+Platform card heights follow the tallest actual content in each grid row.
+Childless rows stay compact; other rows can grow to accommodate child previews.
+Empty grid tracks remain empty, including single-Asset categories.
 This surface is designed for desktop and laptop use; narrower windows retain a
 usable stacked layout.
 
