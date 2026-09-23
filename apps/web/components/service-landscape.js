@@ -1,8 +1,9 @@
 "use client";
 
+import { landscapeGeometry, fitLandscape } from "../lib/landscape-geometry.mjs";
 import { AssetIcon } from "./asset-icon";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
 import { EntityMark, RecordedStatus } from "./operations-primitives";
 
@@ -15,20 +16,33 @@ function locateNode(viewport, key) {
   viewport.scrollTo({ left: viewport.scrollLeft + target.left - bounds.left - (viewport.clientWidth - target.width) / 2, top: viewport.scrollTop + vertical, behavior: "instant" });
 }
 
-export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, centerKey = "", locateRequest = null }) {
+export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
   const viewport = useRef(null);
   const [expanded, setExpanded] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(0);
-  useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => setViewportWidth(entry.contentRect.width));
-    if (viewport.current) observer.observe(viewport.current);
-    return () => observer.disconnect();
-  }, []);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    let frame;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setViewportWidth(element.clientWidth);
+        setViewportHeight(element.clientHeight);
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [expandedView, detailsHidden]);
   const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
   const layout = useMemo(() => {
-    const stepX = compact ? Math.max(222, viewportWidth / 3) : 330;
-    const nodeWidth = compact ? stepX - 36 : 226;
+    const geometry = landscapeGeometry(viewportWidth, expandedView);
+    const stepX = compact ? Math.max(222, viewportWidth / 3) : geometry.stepX;
+    const nodeWidth = compact ? stepX - 36 : geometry.nodeWidth;
+    const nodeHeight = compact ? 64 : geometry.nodeHeight;
     const stepY = compact ? 98 : 140;
     const positions = new Map();
     const groupIdsBySource = new Map();
@@ -41,7 +55,8 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
       let y = 70;
       lane.nodes.forEach((node) => {
         positions.set(node.key, { x: index * stepX + 12, y, node });
-        y += compact ? stepY : Math.max(stepY, 115 + (groupIdsBySource.get(node.key)?.size || 0) * 58);
+        const groupCount = groupIdsBySource.get(node.key)?.size || 0;
+        y += compact ? stepY : Math.max(stepY, groupCount ? nodeHeight + 51 + groupCount * 58 : 0);
       });
       height = Math.max(height, y + 50);
     });
@@ -51,18 +66,33 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
       if (!groups.has(key)) {
         const subject = positions.get(edge.source_key);
         const groupIndex = [...groupIdsBySource.get(edge.source_key)].indexOf(edge.dependency_group_id);
-        groups.set(key, { ...edge, key, x: subject.x + nodeWidth - 110, y: subject.y + 100 + groupIndex * 58, edges: [] });
+        groups.set(key, { ...edge, key, x: subject.x + nodeWidth - 135, y: subject.y + nodeHeight + 36 + groupIndex * 58, edges: [] });
       }
       groups.get(key).edges.push(edge);
     }
-    return { nodeWidth, stepX, positions, groups: [...groups.values()], width: stepX * 3, height };
-  }, [presentation, compact, viewportWidth]);
+    return { nodeWidth, nodeHeight, stepX, positions, groups: [...groups.values()], width: stepX * 3, height };
+  }, [presentation, compact, viewportWidth, expandedView]);
 
-  useEffect(() => {
-    if (!fitKey || !viewport.current) return;
-    setZoom(Math.min(1, Math.max(.8, viewport.current.clientWidth / layout.width)));
+  // Native CSS-pixel sizing is the readable default. Height never determines
+  // card size; the existing viewport owns vertical overflow.
+  const previousMode = useRef(expandedView);
+  useLayoutEffect(() => {
+    if (compact || !viewportWidth) return;
+    const modeChanged = previousMode.current !== expandedView;
+    previousMode.current = expandedView;
+    setZoom(1);
+    viewport.current.scrollTo({ left: 0, top: modeChanged ? 0 : viewport.current.scrollTop });
+  }, [expandedView, detailsHidden, viewportWidth, compact]);
+
+  // Only a new explicit Fit request contains the entire graph in both axes.
+  const previousFit = useRef(fitKey);
+  useLayoutEffect(() => {
+    if (previousFit.current === fitKey) return;
+    previousFit.current = fitKey;
+    if (compact || !viewportWidth || !viewportHeight) return;
+    setZoom(fitLandscape(viewportWidth, viewportHeight, layout.width, layout.height));
     viewport.current.scrollTo({ left: 0, top: 0 });
-  }, [fitKey, layout.width]);
+  }, [fitKey, compact, viewportWidth, viewportHeight, layout.width, layout.height]);
   useEffect(() => {
     if (!centerKey) return;
     locateNode(viewport.current, centerKey);
@@ -77,22 +107,23 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   function edgePath(source, target, sourceWidth = layout.nodeWidth) {
     if (source.x === target.x) {
       const x = source.x + layout.nodeWidth;
-      return `M${x} ${source.y + 30} C${x + 42} ${source.y + 30},${x + 42} ${target.y + 30},${x} ${target.y + 30}`;
+      const bend = Math.min(42, Math.max(8, layout.stepX - layout.nodeWidth - 12));
+      return `M${x} ${source.y + layout.nodeHeight / 2} C${x + bend} ${source.y + layout.nodeHeight / 2},${x + bend} ${target.y + layout.nodeHeight / 2},${x} ${target.y + layout.nodeHeight / 2}`;
     }
     const right = source.x < target.x;
     const x1 = source.x + (right ? sourceWidth : 0), x2 = target.x + (right ? 0 : layout.nodeWidth);
     const mid = (x1 + x2) / 2;
-    return `M${x1} ${source.y + 30} C${mid} ${source.y + 30},${mid} ${target.y + 30},${x2} ${target.y + 30}`;
+    return `M${x1} ${source.y + layout.nodeHeight / 2} C${mid} ${source.y + layout.nodeHeight / 2},${mid} ${target.y + layout.nodeHeight / 2},${x2} ${target.y + layout.nodeHeight / 2}`;
   }
   const drag = useRef(null);
-  return <div className={`service-landscape ${compact ? "landscape-compact" : ""}`}>
-    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.8, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
-    <div className="landscape-viewport" ref={viewport} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
+  return <div className={`service-landscape ${compact ? "landscape-compact" : expandedView ? "landscape-expanded" : ""}`}>
+    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
+    <div className="landscape-viewport" ref={viewport} style={!compact && !expandedView ? { height: `min(66vh, ${layout.height}px)` } : undefined} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
       if (event.pointerType !== "mouse" || event.target.closest("button, a")) return;
       drag.current = { x: event.clientX, y: event.clientY, left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop };
       event.currentTarget.setPointerCapture(event.pointerId);
     }} onPointerMove={(event) => { if (drag.current) { event.currentTarget.scrollLeft = drag.current.left + drag.current.x - event.clientX; event.currentTarget.scrollTop = drag.current.top + drag.current.y - event.clientY; } }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
-      <div style={{ width: layout.width * zoom, height: layout.height * zoom }}>
+      <div style={{ width: layout.width * zoom, height: layout.height * zoom, marginInline: "auto", ...(!compact ? { marginBlock: 16 } : {}) }}>
         <div className="landscape-canvas" style={{ width: layout.width, height: layout.height, transform: `scale(${zoom})` }}>
           {presentation.lanes.map((lane, index) => <section className={`landscape-lane entity-${lane.type}`} key={lane.type} style={{ left: index * layout.stepX, width: layout.stepX - 12, height: layout.height }} aria-label={lane.label}>
             <header><EntityMark type={lane.type} /><div><h3>{lane.label} <span>({lane.total})</span></h3><small>{lane.description}</small></div></header>
@@ -105,11 +136,11 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
               const source = group ? { x: group.x, y: group.y - 10 } : layout.positions.get(edge.source_key), target = layout.positions.get(edge.target_key);
               return <path key={edge.key} d={edgePath(source, target, group ? 135 : layout.nodeWidth)} markerEnd={`url(#${compact ? "overview-arrow" : "graph-arrow"})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${analysis ? pathKeys.has(edge.key) ? "consequence-path" : "context-edge" : ""}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>;
             })}
-            {layout.groups.map((group) => { const subject = layout.positions.get(group.source_key); return <path key={group.key} d={`M${subject.x + layout.nodeWidth / 2} ${subject.y + 64} V${group.y - 8} H${group.x + 67} V${group.y}`} />; })}
+            {layout.groups.map((group) => { const subject = layout.positions.get(group.source_key); return <path key={group.key} d={`M${subject.x + layout.nodeWidth / 2} ${subject.y + layout.nodeHeight} V${group.y - 8} H${group.x + 67} V${group.y}`} />; })}
           </svg>
           {[...layout.positions.values()].map(({ node, x, y }) => {
             const state = analysisState(node, analysis);
-            return <button className={`landscape-node entity-${node.entity_type} ${node.key === selected ? "is-selected" : ""} ${state ? `analysis-${state}` : analysis ? "analysis-context" : ""}`} key={node.key} data-node-key={node.key} style={{ left: x, top: y, width: layout.nodeWidth }} type="button" aria-pressed={node.key === selected} aria-label={`${node.entity_type.replaceAll("_", " ")}: ${node.name}${state ? `. Scenario: ${state}` : ""}`} onClick={() => onSelect?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect?.(node); } }} onDoubleClick={() => onFocus?.(node)}>
+            return <button className={`landscape-node entity-${node.entity_type} ${node.key === selected ? "is-selected" : ""} ${state ? `analysis-${state}` : analysis ? "analysis-context" : ""}`} key={node.key} data-node-key={node.key} style={{ left: x, top: y, width: layout.nodeWidth, minHeight: layout.nodeHeight }} type="button" aria-pressed={node.key === selected} aria-label={`${node.entity_type.replaceAll("_", " ")}: ${node.name}${state ? `. Scenario: ${state}` : ""}`} onClick={() => onSelect?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect?.(node); } }} onDoubleClick={() => onFocus?.(node)}>
               {node.entity_type === "asset" ? <AssetIcon asset={node} size={32} /> : <EntityMark type={node.entity_type} />}<span className="landscape-node-text"><strong>{node.name}</strong><small>{node.entity_type.replaceAll("_", " ")}{!compact && node.criticality_name && <span className="ops-badge">{node.criticality_name}</span>}</small>
                 {node.site_id && node.site_id !== siteId && <small className="site-badge">{node.site_name || "Another authorized Site"}</small>}
                 {state && <small className="analysis-label">{state.toUpperCase()}</small>}

@@ -124,7 +124,7 @@ def get_connectivity(
     context: RequestContext,
     focus_asset_id: uuid.UUID | None = None,
     focus_network_id: uuid.UUID | None = None,
-    hops: int = Query(1, ge=1, le=2),
+    hops: int = Query(1, ge=1, le=3),
     category_ids: list[uuid.UUID] | None = Query(None),
     topology_classes: str | None = Query(None, description="Comma-separated topology classes; omitted uses defaults, empty enables none"),
     show_networks: bool = True,

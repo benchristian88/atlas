@@ -11,13 +11,13 @@ preserving valid search, filters, focus, selection and graph viewport. No
 live monitoring or freshness estimate is implied.
 
 - **Overview** summarises visible Assets, Networks, interfaces and represented
-  categories. Each category previews up to six Assets in name/ID order; **+N**
+  categories. Each category previews up to twelve Assets in name/ID order; **+N**
   shows how many more visible Assets it contains. **View all** opens Assets
   filtered by that category. An Asset preview opens its normal detail page;
   Overview does not expand inline details. Select a Network to open its detail.
 - **Platform** groups top-level Assets by managed category in a wrapping card
   grid. Recorded hosting, running and containment relationships supply compact
-  child tiles. A card shows eight children initially; **Show all** expands the
+  child tiles. A card shows at most four direct children in a two-column preview; **+N more** expands the
   full list without pagination. **View platform** opens a child's own recorded
   children. Standalone Assets remain visible. A closed relationship cycle is
   explicitly labelled and remains navigable. Cards and child tiles show IPs from
@@ -31,7 +31,7 @@ live monitoring or freshness estimate is implied.
   A multihomed Asset can appear in several Networks, with each interface's IP
   and MAC where recorded. Gateway is a stored value, never a synthesized device.
 - **Connectivity** starts with one focused Asset. Search and choose another,
-  then select **1 hop** or **2 hops** to explore a bounded graph.
+  then select **1 hop** or **2 hops** to explore a bounded graph. Expanded mode also offers **3 hops**; closing it returns depth 3 to 2.
   Solid lines show recorded Asset relationships;
   dashed lines show interface membership. A workload → host → sibling path is
   suppressed, as is Asset → Network → peer membership. Other recorded paths,
@@ -75,7 +75,7 @@ live monitoring or freshness estimate is implied.
   In expanded Connectivity, the compact **Hide details panel** / **Show details
   panel** icon releases/restores the inspector's width. Selection continues while
   hidden, and reopening shows the latest selection. This never refetches the graph.
-  Closing expanded mode restores the embedded inspector. Canvas dimensions and
+  Closing expanded mode preserves the inspector visibility choice. Canvas dimensions and
   Fit respond to the available width.
 
 [Managed Topology Positions](topology-positions.md) determine branch-local ordering; actual
@@ -185,10 +185,15 @@ a heavier border; selected nodes have an outer ring, and keyboard focus uses a
 dashed outline. These remain distinct from the category or Network accent in
 both themes. Refresh after editing presentation settings to reload them.
 
-The four-arrow **Expand Infrastructure Topology** button fills the Atlas viewport without using browser
-fullscreen. Close with the button or Escape. Tab, selection, filters, expanded
-child lists, graph zoom/pan and Network detail remain intact, and page scrolling
-is restored. Expand and Refresh do not apply the tab-switch reset rule.
+Only Connectivity offers the four-arrow **Expand Infrastructure Topology** button.
+It fills the Atlas viewport without using browser fullscreen. Close with the button
+or Escape. Selection, filters, graph disclosure and zoom/pan remain intact, and page scrolling
+is restored. Switching to Overview, Platform or Network & VLAN closes expanded
+mode. Expand and Refresh do not apply the tab-switch reset rule.
+
+Platform card heights follow the tallest actual content in each grid row.
+Childless rows stay compact; other rows can grow to accommodate child previews.
+Empty grid tracks remain empty, including single-Asset categories.
 This surface is designed for desktop and laptop use; narrower windows retain a
 usable stacked layout.
 
@@ -208,3 +213,9 @@ inventory details, then open its detail page and use **Interfaces and networks �
 Add interface**. Enter the interface name, IP address and optional Network. Mark
 an interface primary when appropriate. Asset editing does not change interface
 addresses. Assets without an Interface IP show no address in topology.
+
+Platform, Network & VLAN and Connectivity share a persistent right-hand Asset
+inspector with **Open Asset** and **Hide/Show details panel**. Selection survives
+hiding the panel. Network membership headers sort Name, Interface, IP address,
+MAC and Recorded status; IP sorting compares IPv4/IPv6 numerically, with
+Asset name and durable IDs as stable secondary keys. Sorting is local UI state.

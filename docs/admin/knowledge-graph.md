@@ -40,3 +40,15 @@ Focus depth and retains that context when relationship lines are filtered.
 Neither depth nor expansion changes recorded dependencies or predicts live
 availability. Asset artwork uses the same cached icon and fallback rules as the
 normal graph.
+
+Knowledge Graph opens with readable cards, width-based lanes and top-aligned
+content. Tall graphs scroll inside the graph area. Expanded mode uses slightly
+larger cards and the available width excluding the inspector. Leaving expanded
+mode restores the embedded card size and default framing.
+**Hide/Show details panel** adjusts the lanes and preserves selection and vertical
+scroll position. Expanding **+N more** adds vertical content without shrinking cards.
+Manual zoom and pan remain undisturbed by ordinary selection and content updates.
+**Fit** explicitly shows the entire visible graph using both width and height;
+this can make tall graphs small. Reloading or changing viewport mode restores the
+readable default instead of retaining that Fit scale. Very narrow graph areas
+allow horizontal scrolling to preserve readable text.

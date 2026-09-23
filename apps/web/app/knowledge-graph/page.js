@@ -8,6 +8,7 @@ import { AccessDenied } from "../../components/access-denied";
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { ServiceLandscape } from "../../components/service-landscape";
+import { DetailsPanelToggle } from "../../components/details-panel-toggle";
 import { ExpandedGraphSurface } from "../../components/expanded-graph-surface";
 import { NavigationIcon } from "../../components/navigation-icon.mjs";
 import { GraphInspector } from "../../components/graph-inspector";
@@ -21,6 +22,7 @@ function KnowledgeGraph() {
   const workspace = useWorkspaceContext();
   const { hasAnyPermission, hasPermission } = useAuth();
   const [expanded, setExpanded] = useState(false);
+  const [detailsHidden, setDetailsHidden] = useState(false);
   const expandButton = useRef(null);
   const expansionScroll = useRef({ left: 0, top: 0 });
   const urlState = useMemo(() => parseGraphState(params), [params]);
@@ -107,6 +109,7 @@ function KnowledgeGraph() {
         <button className="button button-secondary" type="button" aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)}>Filters</button>
         {state.focus && !state.focus.startsWith("business_function:") && !state.analysis && <button className="button button-secondary" type="button" onClick={() => update({ analysis: true })}>Preview unavailable</button>}
         <button className="button button-secondary" type="button" onClick={() => setFitKey((n) => n + 1)}>Fit</button>
+        <DetailsPanelToggle hidden={detailsHidden} onToggle={() => setDetailsHidden(value => !value)} />
         <button ref={expandButton} hidden={expanded} className="button button-secondary graph-icon-button" type="button" aria-label="Expand Knowledge Graph" title="Expand Knowledge Graph" onClick={() => { expansionScroll.current = { left: window.scrollX, top: window.scrollY }; setExpanded(true); }}><NavigationIcon name="expand" /></button>
       </div>
       {showFilters && <section className="ops-card graph-filters" aria-label="Graph filters"><fieldset><legend>Node types</legend>{LANES.map((lane) => <label key={lane.type}><input type="checkbox" checked={state.types.includes(lane.type)} onChange={() => toggle("types", lane.type)} />{lane.label}</label>)}</fieldset><fieldset><legend>Relationships</legend>{Object.entries(RELATIONSHIPS).map(([key, label]) => <label key={key}><input type="checkbox" checked={state.families.includes(key)} onChange={() => toggle("families", key)} />{label}</label>)}</fieldset></section>}
@@ -115,8 +118,8 @@ function KnowledgeGraph() {
       {analysisError && <div className="error-banner" role="alert">{analysisError}</div>}
       {(graph?.truncated || analysis?.truncated) && <div className="warning-banner" role="status">{[...(graph?.warnings || []), ...(analysis?.warnings || [])].join(" ")}</div>}
       {!graph && !error && <div className="ops-card" role="status">Loading Knowledge Graph…</div>}
-      {graph && <div className="graph-workspace"><section className="ops-card graph-surface" aria-label="Graph workspace">{!graph.nodes.length ? <div className="ops-guided"><h2>Build your service landscape</h2><p>Record Services and their relationships to Assets and Business Functions.</p>{hasPermission("services.create") && <Link className="button button-primary" href="/services/new">Add a Service</Link>}{hasPermission("knowledge_gaps.view") && <Link className="text-button" href="/knowledge-gaps">Open Knowledge Gaps</Link>}</div> : <ServiceLandscape graph={displayed} selected={selectedNode?.key || ""} centerKey={state.focus} types={state.types} families={state.families} siteId={workspace.siteId} fitKey={fitKey} locateRequest={locateRequest} analysis={analysis} onSelect={selectNode} onFocus={focusNode} onGroup={setGroup} />}</section>
-        <GraphInspector key={selectedNode?.key || "empty"} selected={selectedNode} group={visibleGroup} graph={displayed} analysis={analysis} analysisActive={state.analysis} siteId={workspace.siteId} onFocus={focusNode} onSelect={selectNode} onPreview={(node) => { setSelected(node.key); update({ focus: node.key, analysis: true }); }} />
+      {graph && <div className={`graph-workspace${detailsHidden ? " topology-details-hidden" : ""}`}><section className="ops-card graph-surface" aria-label="Graph workspace">{!graph.nodes.length ? <div className="ops-guided"><h2>Build your service landscape</h2><p>Record Services and their relationships to Assets and Business Functions.</p>{hasPermission("services.create") && <Link className="button button-primary" href="/services/new">Add a Service</Link>}{hasPermission("knowledge_gaps.view") && <Link className="text-button" href="/knowledge-gaps">Open Knowledge Gaps</Link>}</div> : <ServiceLandscape expandedView={expanded} detailsHidden={detailsHidden} graph={displayed} selected={selectedNode?.key || ""} centerKey={state.focus} types={state.types} families={state.families} siteId={workspace.siteId} fitKey={fitKey} locateRequest={locateRequest} analysis={analysis} onSelect={selectNode} onFocus={focusNode} onGroup={setGroup} />}</section>
+        {!detailsHidden && <GraphInspector key={selectedNode?.key || "empty"} selected={selectedNode} group={visibleGroup} graph={displayed} analysis={analysis} analysisActive={state.analysis} siteId={workspace.siteId} onFocus={focusNode} onSelect={selectNode} onPreview={(node) => { setSelected(node.key); update({ focus: node.key, analysis: true }); }} />}
       </div>}
       {state.analysis && analysis && !analysis.results.length && <p className="ops-card" role="status">No Service consequences were found in the authorized knowledge for this scenario.</p>}
     </ExpandedGraphSurface>}

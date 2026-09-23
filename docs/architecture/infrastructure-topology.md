@@ -52,7 +52,7 @@ redacted; neither its name nor a membership edge is emitted. Network, Customer
 and Site records retain their own permission checks. Counts are derived only
 from these authorized collections.
 
-`GET /api/topology/connectivity` accepts exactly one of `focus_asset_id` or `focus_network_id`, `hops=1|2`,
+`GET /api/topology/connectivity` accepts exactly one of `focus_asset_id` or `focus_network_id`, `hops=1|2|3`,
 optional repeated `category_ids`, comma-separated `topology_classes`, `show_networks` and `limit` (default and maximum
 100). An inaccessible or nonexistent focus returns the same 404. Omitted category
 IDs use managed visibility defaults. The domain service performs deterministic,
@@ -329,7 +329,7 @@ were introduced.
 
 ## Interface-first display and search
 
-Overview shows six authorized Asset previews per category, plus an explicit
+Overview shows twelve authorized Asset previews per category, plus an explicit
 remainder and category-filtered Assets link. Preview links open canonical Asset
 detail routes and never create an Overview inspector. The sidebar label is
 Topology; the product/page name remains Infrastructure Topology.
