@@ -1,0 +1,170 @@
+// Isolated browser fixtures; never writes to live Atlas knowledge.
+import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { mkdir, writeFile } from "node:fs/promises";
+import { PRESENTATION_ICONS, PRESENTATION_ACCENTS } from "../lib/presentation.mjs";
+import { contrastRatio } from "../lib/accent-theme.mjs";
+const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
+const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3108";
+const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-topology-browser-results";
+await mkdir(output, { recursive: true });
+const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const positionSeeds = ["external", "security_edge", "routing", "aggregation_network", "access_network", "platform", "infrastructure", "workload", "endpoint"];
+const position = key => key === "automatic" ? null : ({ id: id(5000 + positionSeeds.indexOf(key)), key, name: key, sort_order: positionSeeds.indexOf(key), active: true });
+function resolvePositions(data) {
+  for (const type of data.asset_types) type.topology_position = data.topology_positions.find(p => p.id === type.topology_position_id) || null;
+}
+const customer = { id: id(1), name: "Homelab", status: "active" };
+const site = { id: id(2), customer_id: customer.id, name: "Home", status: "active" };
+const permissions = ["service_types.view", "service_types.manage", "assets.view", "assets.create", "asset_types.view", "asset_types.manage", "customers.view", "sites.view", "networks.view", "networks.create", "networks.edit", "audit.view", "services.view", "business_functions.view", "service_dependencies.view", "relationships.view", "relationship_types.view", "relationship_types.manage"];
+const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSawAAAAASUVORK5CYII=", "base64");
+function fixture() {
+  const categories = [{ id: id(3), key: "hardware", name: "Compute", icon_key: "server", accent_key: "blue", show_in_topology: true, active: true, sort_order: 0 }, { id: id(4), key: "workload", name: "Workload", icon_key: "cube", accent_key: "green", show_in_topology: true, active: true, sort_order: 10 }, { id: id(5), key: "uncategorized", name: "Uncategorized", icon_key: "infrastructure", accent_key: "slate", show_in_topology: false, active: true, sort_order: 100 }, ...Array.from({ length: 8 }, (_, n) => ({ id: id(6+n), key: `custom_${n}`, name: n === 0 ? "Backup" : `Custom Category ${n}`, active: true, show_in_topology: true, sort_order: 100 }))];
+  const types = [{ id: id(20), key: "server", name: "Server", topology_position_id: position("platform")?.id || null, category_id: id(3), category: "Compute", active: true }, { id: id(21), key: "docker_compose", name: "Docker Compose", topology_position_id: position("workload")?.id || null, category_id: id(4), category: "Workload", active: true }, { id: id(22), key: "unknown", name: "Unknown", category_id: id(5), category: "Uncategorized", active: true }];
+  types.push({ id: id(23), key: "backup_appliance", name: "Backup Appliance", topology_position_id: position("infrastructure")?.id || null, category_id: id(6), category: "Backup", active: true });
+  const asset = (n, name, type = "server") => ({ id: id(n), name, asset_type: type, customer_id: customer.id, site_id: site.id, status: "operational", hostname: `${name.toLowerCase().replaceAll(" ", "-")}.home`, cached_icon_url: `/api/assets/${id(n)}/icon?v=${"a".repeat(64)}` });
+  const hosts = [asset(30, "PVE1"), asset(31, "PVE2"), asset(32, "PVE3"), asset(33, "PVE4")];
+  const children = Array.from({ length: 25 }, (_, i) => asset(100+i, i === 1 ? "Atlas DNS" : i ? `Workload ${String(i).padStart(2,"0")}` : "AdGuard Home", "docker_compose"));
+  types.push({ id: id(24), key: "custom_fabric", name: "Custom Fabric", category_id: id(3), category: "Compute", topology_position_id: position("access_network")?.id || null, active: true });
+  const assets = [...hosts, asset(34,"PBS","backup_appliance"), asset(35,"Synology"), asset(36,"USW-16-poe","custom_fabric"), asset(37,"Router"), ...children, asset(150,"Uncategorized Asset","unknown")];
+  const relationships = children.map((a,i) => ({ id: id(200+i), source_asset_id: a.id, target_asset_id: hosts[i < 20 ? 0 : i < 24 ? 1 : i < 27 ? 2 : 3].id, relationship_type: "runs_on" }));
+  const platform_links = relationships.map(r => ({ relationship_id: r.id, parent_id: r.target_asset_id, child_id: r.source_asset_id }));
+  for (const [source, target] of [[30,36], [31,36], [36,34], [36,35], [36,37], [36,32], [36,110], [36,111], [36,112]]) relationships.push({ id: id(500+relationships.length), source_asset_id: id(source), target_asset_id: id(target), relationship_type: "connects_to" });
+  const networks = ["Default", "Main", "IoT", "Apps", "Infra", "Management", ...Array.from({length: 8}, (_,i)=>`Extra ${i}`)].map((name,i) => ({ id: id(300+i), name, network_type: "vlan", icon_key: "network", accent_key: ["blue", "teal", "purple", "orange", "red", "blue"][i] || "slate", vlan_id: i===5 ? 99 : i, cidr: `10.0.${i===5?99:i}.0/24`, gateway: `10.0.${i===5?99:i}.1`, customer_id: customer.id, site_id: site.id }));
+  const asset_interfaces = [{ id: id(400), asset_id: children[0].id, network_id: networks[5].id, name: "eth0", ip_address: "10.0.99.5", mac_address: "02:00:00:00:00:05", is_primary: true }, { id: id(401), asset_id: children[0].id, network_id: networks[3].id, name: "eth1", ip_address: "10.0.3.5" }];
+  asset_interfaces.push({ id: id(402), asset_id: hosts[0].id, network_id: null, name: "vmbr0", ip_address: "10.0.99.21" });
+  for (let i=1; i<20; i++) asset_interfaces.push({ id: id(410+i), asset_id: children[i].id, network_id: networks[5].id, name: "eth0", ip_address: `10.0.99.${100+i}` });
+  assets.forEach(a => { a.ip_address = "192.0.2.254"; });
+  return { categories, asset_types: types, assets, relationships, relationship_types: [{ key: "runs_on", topology_class: "platform", name: "Runs on", source_label: "Runs on", directional: true }, { key: "connects_to", topology_class: "physical_network", name: "Connects to", source_label: "Connects to", directional: false }], networks, asset_interfaces, customers: [customer], sites: [site], platform_links };
+}
+function graphFixture(data, params) {
+  // Exercise the production traversal instead of maintaining a second algorithm.
+  const api = fileURLToPath(new URL("../../api/", import.meta.url));
+  return JSON.parse(execFileSync(process.env.ATLAS_PYTHON || `${api}.venv/bin/python`, ["-c", `
+import json, sys
+from app.services.infrastructure_topology import connectivity
+payload = json.load(sys.stdin)
+print(json.dumps(connectivity(**payload)))
+`], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_classes: params.has("topology_classes") ? params.get("topology_classes").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids") }) }));
+}
+
+const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const errors = [], requests = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const data = fixture();
+  data.assets.forEach(asset => { delete asset.cached_icon_url; });
+  data.topology_positions = positionSeeds.map(position); resolvePositions(data);
+  // Exactly seventeen workload previews and an eighteen-child parent.
+  data.assets = data.assets.filter(a => a.asset_type !== "docker_compose" || Number(a.id.slice(-12)) < 117);
+  data.assets.push({ ...data.assets.find(a => a.id === id(100)), id: id(118), name: "Nested host", asset_type: "server" });
+  data.platform_links = data.platform_links.filter(l => data.assets.some(a => a.id === l.child_id));
+  data.platform_links.push({ relationship_id:id(900), parent_id:id(30), child_id:id(118) }, { relationship_id:id(901),parent_id:id(118),child_id:id(31) });
+  for (const [parent, children] of [[32,[100,101]], [33,[102,103,104,105]], [31,[106]]]) for (const child of children) data.platform_links.push({relationship_id:`fixture-${parent}-${child}`,parent_id:id(parent),child_id:id(child)});
+  data.relationships = data.relationships.filter(r => data.assets.some(a => a.id === r.source_asset_id) && data.assets.some(a => a.id === r.target_asset_id));
+  data.asset_interfaces = data.asset_interfaces.filter(i => data.assets.some(a => a.id === i.asset_id));
+  [100,2,20,9].forEach((n,index) => { data.asset_interfaces[index] = { ...data.asset_interfaces[index], network_id:id(305), ip_address:`10.0.0.${n}` }; });
+  const kgNode = (n, type, name) => ({ key:`${type}:${id(n)}`, entity_id:id(n), entity_type:type, name, href:`/assets/${id(n)}`, customer_id:customer.id, site_id:site.id });
+  const kgNodes = [kgNode(800,"business_function","Home operations"), kgNode(801,"service","Name resolution"), kgNode(30,"asset","PVE1")];
+  await page.route("**/api/**", async route => {
+    const url = new URL(route.request().url()); requests.push(url.pathname + url.search);
+    if (url.pathname.endsWith("/icon")) return route.fulfill({contentType:"image/png",body:png});
+    let body = [];
+    if (url.pathname === "/api/auth/me") body = {id:id(99),display_name:"Investigator",email:"fixture@example.test",permissions,assignments:[{scope_type:"global",permissions}]};
+    else if (url.pathname === "/api/context") body = {customers:[customer],sites:[site],global_access:true,selected_customer_id:customer.id,selected_site_id:site.id};
+    else if (url.pathname === "/api/topology") body = data;
+    else if (url.pathname === "/api/topology/connectivity") body = graphFixture(data,url.searchParams);
+    else if (url.pathname.startsWith("/api/operational-graph")) body = {nodes:kgNodes,edges:[{key:"bf",source_key:kgNodes[0].key,target_key:kgNodes[1].key,edge_family:"service_business_function",label:"Supported by"},{key:"svc",source_key:kgNodes[1].key,target_key:kgNodes[2].key,edge_family:"service_asset",label:"Depends on"}],truncated:false,warnings:[]};
+    else if (url.pathname === "/api/audit-events") body = [1,2].map(n => ({id:id(950+n),created_at:"2026-09-23T01:00:00Z",actor_snapshot:"Operator",event_type:"asset.updated",target_type:"asset",target_id:id(30),customer_id:customer.id,site_id:site.id,success:true,change_summary:"Updated recorded Asset details",metadata:{name:{from:"Old host",to:"PVE1"},active:{before:true,after:false},added:{after:"New value"},removed:{before:"Previous value"},api_token:"[redacted]"}}));
+    await route.fulfill({contentType:"application/json",body:JSON.stringify(body)});
+  });
+  const shot = async name => page.screenshot({path:`${output}/${name}.png`,fullPage:true});
+  await page.goto(`${base}/topology`);
+  const workload = page.locator('.topology-summary-row').filter({hasText:"Workload"});
+  await workload.waitFor();
+  assert.equal(await workload.locator('.topology-summary-icons a:not(.topology-preview-more)').count(),12);
+  assert.equal(await workload.locator('.topology-preview-more').innerText(),"+5");
+  assert.match(await workload.locator('.topology-preview-more').getAttribute('href'),/category/);
+  await shot('01-overview-12-plus-5');
+  await page.getByRole('button',{name:'Platform',exact:true}).click();
+  const parent = page.locator(`[data-platform-id="${id(30)}"]`);
+  assert.equal(await parent.locator('.topology-child').count(),4);
+  for (const [n,count] of [[32,2],[33,4],[35,0]]) assert.equal(await page.locator(`[data-platform-id="${id(n)}"] .topology-child`).count(),count);
+  await parent.locator(':scope > .topology-asset-identity').click();
+  await page.getByRole('link',{name:'Open Asset',exact:true}).waitFor();
+  assert.equal(await page.locator('.topology-detail-inspector').count(),0);
+  await shot('02-platform-inspector-four-children');
+  await parent.screenshot({path:`${output}/09-platform-child-preview.png`});
+  await page.getByRole('button',{name:'Hide details panel'}).click();
+  await parent.locator('.topology-child .topology-asset-identity').first().click();
+  await page.getByRole('button',{name:'Show details panel'}).click();
+  assert.match(await page.locator('.graph-inspector h2').innerText(),/AdGuard/);
+  await parent.getByRole('button',{name:'+14 more',exact:true}).click();
+  assert.equal(await parent.locator('.topology-child').count(),18);
+  await parent.getByRole('button',{name:'View platform (1)',exact:true}).click();
+  assert.equal(await page.locator(`[data-platform-id="${id(118)}"] .topology-child`).count(),1);
+  await page.getByRole('button',{name:'View platform (1)',exact:true}).click();
+  assert.equal(await page.locator(`[data-platform-id="${id(31)}"] .topology-child`).count(),1);
+  await page.getByRole('button',{name:'Network & VLAN',exact:true}).click();
+  await page.locator('.topology-network-list button').filter({hasText:'Management'}).click();
+  await page.getByRole('button',{name:'IP address',exact:true}).click();
+  const ips = await page.locator('.topology-network-detail tbody tr td:nth-child(3)').allTextContents();
+  assert.deepEqual(ips.slice(0,4),['10.0.0.2','10.0.0.9','10.0.0.20','10.0.0.100']);
+  await page.getByRole('button',{name:'IP address ↑',exact:true}).click();
+  assert.equal(await page.locator('.topology-network-detail th[aria-sort="descending"]').innerText(),'IP address ↓');
+  await page.getByRole('button',{name:'Name',exact:true}).click();
+  assert.match(await page.locator('.topology-network-detail tbody button').first().innerText(),/AdGuard/);
+  await page.getByRole('button',{name:'Name ↑',exact:true}).click();
+  assert.match(await page.locator('.topology-network-detail tbody button').first().innerText(),/Workload 16/);
+  await page.getByRole('button',{name:'IP address',exact:true}).click();
+  await page.locator('.topology-network-detail tbody button').first().click();
+  await shot('03-network-inspector-sorted-ips');
+  await page.locator('.topology-network-detail').screenshot({path:`${output}/10-network-ip-sort.png`});
+  await page.getByRole('button',{name:'Hide details panel'}).click();
+  await page.locator('.topology-network-detail tbody button').nth(1).click();
+  await page.getByRole('button',{name:'Show details panel'}).click();
+  await page.getByRole('button',{name:'Connectivity',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'3 hops',exact:true}).count(),0);
+  await page.getByRole('button',{name:'Expand Infrastructure Topology',exact:true}).click();
+  await page.getByRole('button',{name:'3 hops',exact:true}).click();
+  await page.waitForFunction(() => document.querySelector('.topology-connectivity-viewport'));
+  assert.ok(requests.some(url=>url.includes('hops=3')));
+  await shot('04-connectivity-three-hops');
+  await page.getByRole('button',{name:'Close expanded Infrastructure Topology',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'2 hops',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.goto(`${base}/knowledge-graph?types=business_function,service,asset`);
+  await page.locator('[data-node-key]').first().click();
+  await page.getByRole('button',{name:'Expand Knowledge Graph',exact:true}).click();
+  await page.waitForTimeout(300);
+  await shot('05-knowledge-visible');
+  const width = await page.locator('.landscape-viewport').evaluate(el=>el.clientWidth);
+  await page.getByRole('button',{name:'Hide details panel'}).click();
+  await page.waitForTimeout(300);
+  assert.ok(await page.locator('.landscape-viewport').evaluate(el=>el.clientWidth) > width);
+  await shot('06-knowledge-hidden');
+  await page.getByRole('button',{name:'Zoom out',exact:true}).click();
+  const zoom = await page.locator('.landscape-zoom span').innerText();
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('.landscape-zoom span').innerText(),zoom);
+  await page.getByRole('button',{name:'Show details panel'}).click();
+  await page.locator('.graph-inspector h2').waitFor();
+  await page.setViewportSize({width:1100,height:800});
+  await page.waitForTimeout(300);
+  assert.notEqual(await page.locator('.landscape-zoom span').innerText(),zoom);
+  await page.setViewportSize({width:1440,height:1000});
+  await page.goto(`${base}/admin/audit`);
+  await page.getByRole('button',{name:'Expand audit record'}).first().waitFor();
+  await shot('07-audit-collapsed');
+  await page.getByRole('button',{name:'Expand audit record'}).first().click();
+  await page.getByRole('button',{name:'Expand audit record'}).first().click();
+  assert.equal(await page.getByRole('region',{name:'Audit investigation'}).count(),2);
+  assert.equal(await page.getByRole('cell',{name:'Added',exact:true}).count(),2);
+  await shot('08-audit-expanded-diffs');
+  await page.getByRole('button',{name:'Collapse audit record'}).first().click();
+  assert.equal(await page.getByRole('region',{name:'Audit investigation'}).count(),1);
+  assert.deepEqual(errors,[]);
+  console.log('All seven UI-polish browser acceptance areas passed.');
+} finally { await browser.close(); }

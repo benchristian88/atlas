@@ -79,12 +79,12 @@ test("category form uses required managed choices and retains inactive current a
 });
 
 
-test("category preview is six of 25 and interface IP display is deterministic", () => {
+test("category preview is twelve of 25 and interface IP display is deterministic", () => {
   const data = fixture();
   const view = topologyPresentation(data, new Set(["custom"]));
   assert.equal(view.assets.length, 25);
-  assert.equal(view.assets.slice(0, CATEGORY_PREVIEW_COUNT).length, 6);
-  assert.equal(view.assets.length - CATEGORY_PREVIEW_COUNT, 19);
+  assert.equal(view.assets.slice(0, CATEGORY_PREVIEW_COUNT).length, 12);
+  assert.equal(view.assets.length - CATEGORY_PREVIEW_COUNT, 13);
   assert.equal(compactInterfaceIp([]), "");
   const ips = [{ id: "b", name: "eth1", ip_address: "192.168.3.53" }, { id: "a", name: "eth0", ip_address: "192.168.99.21" }];
   assert.equal(compactInterfaceIp(ips.slice(0, 1)), "192.168.3.53");

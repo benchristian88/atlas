@@ -96,11 +96,12 @@ def test_connectivity_bounded_deterministic_cycle_safe():
     assert all(e["source_key"] in {n["key"] for n in graph["nodes"]} and e["target_key"] in {n["key"] for n in graph["nodes"]} for e in graph["edges"])
 
 
-def test_dense_edge_limit_retains_paths_to_every_returned_node():
+@pytest.mark.parametrize("hops", [2, 3])
+def test_dense_edge_limit_retains_paths_to_every_returned_node(hops):
     t = fixture_topology()
     # Preserve connections to Assets even with many parallel membership edges.
     t["asset_interfaces"] = [{"id": f"i{i}", "asset_id": "AdGuard", "network_id": "n1", "name": f"eth{i}", "ip_address": None} for i in range(520)]
-    graph = connectivity(t, "AdGuard", hops=2)
+    graph = connectivity(t, "AdGuard", hops=hops)
     assert len(graph["edges"]) == 500 and graph["truncated"]
     reached = {graph["focus_key"]}
     for _ in graph["nodes"]:
@@ -125,9 +126,10 @@ def homelab_topology():
     return t, siblings
 
 
-def test_child_focus_suppresses_siblings_and_network_peers_but_preserves_technical_paths():
+@pytest.mark.parametrize("hops", [2, 3])
+def test_child_focus_suppresses_siblings_and_network_peers_but_preserves_technical_paths(hops):
     t, siblings = homelab_topology()
-    graph = connectivity(t, "AdGuard", hops=2)
+    graph = connectivity(t, "AdGuard", hops=hops)
     keys = {n["key"] for n in graph["nodes"]}
     assert keys == {"asset:AdGuard", "asset:PVE1", "asset:PVE2", "asset:USW-16-poe", "network:n1", "network:n2"}
     assert not graph["truncated"]  # Deliberate semantic pruning is not cap clipping.
@@ -135,7 +137,7 @@ def test_child_focus_suppresses_siblings_and_network_peers_but_preserves_technic
     assert switch["distance"] == 2 and switch["parent_key"] == "asset:PVE1"
     t["relationships"].reverse()
     t["asset_interfaces"].reverse()
-    assert connectivity(t, "AdGuard", hops=2) == graph
+    assert connectivity(t, "AdGuard", hops=hops) == graph
 
 
 def test_explicit_host_and_network_focus_show_direct_children_and_members():
@@ -203,3 +205,21 @@ def test_child_metadata_respects_categories_classes_and_deduplicates_canonical_l
     assert parent["eligible_child_count"] == parent["returned_child_count"] == 18
     graph = connectivity(t, "parent", topology_classes=["physical_network"])
     assert all(n["eligible_child_count"] == n["returned_child_count"] == 0 for n in graph["nodes"])
+
+
+def test_three_hops_remain_bounded_filtered_and_cycle_safe():
+    data = fixture_topology()
+    data["assets"].append({"id": "third", "name": "third", "asset_type": "custom"})
+    data["relationships"].append({"id": "third-edge", "source_asset_id": "PVE2", "target_asset_id": "third", "relationship_type": "custom_link"})
+    assert "asset:third" not in {n["key"] for n in connectivity(data, "AdGuard", hops=2)["nodes"]}
+    graph = connectivity(data, "AdGuard", hops=3)
+    assert next(n for n in graph["nodes"] if n["key"] == "asset:third")["distance"] == 3
+    assert "asset:hidden" not in {n["key"] for n in graph["nodes"]}
+    assert graph["node_limit"] == 100 and graph["edge_limit"] == 500
+    assert "asset:third" not in {n["key"] for n in connectivity(data, "AdGuard", hops=3, topology_classes={"platform"})["nodes"]}
+    assert connectivity(data, "AdGuard", hops=3, limit=2)["truncated"]
+    data["relationships"].append({"id": "cycle", "source_asset_id": "third", "target_asset_id": "AdGuard", "relationship_type": "custom_link"})
+    nodes = connectivity(data, "AdGuard", hops=3)["nodes"]
+    assert len(nodes) == len({n["key"] for n in nodes})
+    with pytest.raises(HTTPException):
+        connectivity(data, "AdGuard", hops=4)

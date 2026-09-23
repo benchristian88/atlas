@@ -15,13 +15,14 @@ function locateNode(viewport, key) {
   viewport.scrollTo({ left: viewport.scrollLeft + target.left - bounds.left - (viewport.clientWidth - target.width) / 2, top: viewport.scrollTop + vertical, behavior: "instant" });
 }
 
-export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, centerKey = "", locateRequest = null }) {
+export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
   const viewport = useRef(null);
   const [expanded, setExpanded] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => setViewportWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => { setViewportWidth(entry.contentRect.width); setViewportHeight(entry.contentRect.height); });
     if (viewport.current) observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
@@ -58,11 +59,13 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
     return { nodeWidth, stepX, positions, groups: [...groups.values()], width: stepX * 3, height };
   }, [presentation, compact, viewportWidth]);
 
+  // Fit only for explicit requests or structural viewport changes. Selection,
+  // graph presentation and manual zoom/pan must not continually reset the view.
   useEffect(() => {
-    if (!fitKey || !viewport.current) return;
-    setZoom(Math.min(1, Math.max(.8, viewport.current.clientWidth / layout.width)));
+    if ((!fitKey && !expandedView) || !viewport.current) return;
+    setZoom(Math.min(1.5, Math.max(.1, Math.min(viewport.current.clientWidth / layout.width, viewport.current.clientHeight / layout.height))));
     viewport.current.scrollTo({ left: 0, top: 0 });
-  }, [fitKey, layout.width]);
+  }, [fitKey, expandedView, detailsHidden, expandedView ? viewportWidth : 0, expandedView ? viewportHeight : 0]);
   useEffect(() => {
     if (!centerKey) return;
     locateNode(viewport.current, centerKey);
@@ -86,7 +89,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   }
   const drag = useRef(null);
   return <div className={`service-landscape ${compact ? "landscape-compact" : ""}`}>
-    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.8, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
+    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
     <div className="landscape-viewport" ref={viewport} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
       if (event.pointerType !== "mouse" || event.target.closest("button, a")) return;
       drag.current = { x: event.clientX, y: event.clientY, left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop };

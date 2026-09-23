@@ -40,3 +40,8 @@ Focus depth and retains that context when relationship lines are filtered.
 Neither depth nor expansion changes recorded dependencies or predicts live
 availability. Asset artwork uses the same cached icon and fallback rules as the
 normal graph.
+
+Expanded Knowledge Graph automatically Fits on entry, details-panel hide/show,
+and viewport resize. **Hide/Show details panel** preserves the selected entity.
+Manual zoom and pan remain undisturbed until a structural viewport change or
+explicit **Fit**. Fit measures both available width and height.

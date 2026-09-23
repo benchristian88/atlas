@@ -13,7 +13,7 @@ export function topologyClassSelection(overrides = {}) {
 
 // Presentation over authorized domain projections. No relationship semantics live here.
 export const CHILD_PREVIEW_COUNT = 8;
-export const CATEGORY_PREVIEW_COUNT = 6;
+export const CATEGORY_PREVIEW_COUNT = 12;
 export const CONNECTIVITY_NODE_WIDTH = 180;
 export const CONNECTIVITY_NODE_HEIGHT = 88;
 export const CONNECTIVITY_RAIL_GAP = 16;

@@ -260,7 +260,8 @@ def test_focus_finder_non_disclosure_by_name_hostname_and_ip(client, db, scope):
 
 
 @pytest.mark.parametrize("child_count", [18, 120])
-def test_connectivity_api_capacity_and_child_counts_respect_scope(client, db, child_count):
+@pytest.mark.parametrize("hops", [2, 3])
+def test_connectivity_api_capacity_and_child_counts_respect_scope(client, db, child_count, hops):
     sites, assets, _ = seed_scope(db)
     parent = assets[1]
     children = [Asset(workspace_id=parent.workspace_id, customer_id=parent.customer_id,
@@ -276,7 +277,7 @@ def test_connectivity_api_capacity_and_child_counts_respect_scope(client, db, ch
         scope_type="site", customer_id=parent.customer_id, site_id=parent.site_id,
         permissions=frozenset({"assets.view", "networks.view"}))
     app.dependency_overrides[get_principal] = lambda: Principal(actor.user, (*actor.grants, scoped))
-    url = f"/api/topology/connectivity?focus_asset_id={parent.id}&hops=2"
+    url = f"/api/topology/connectivity?focus_asset_id={parent.id}&hops={hops}"
     response = client.get(url)
     assert response.status_code == 200, response.text
     graph = response.json()

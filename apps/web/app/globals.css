@@ -1355,3 +1355,18 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-disclosure-badge:hover, .topology-disclosure-more:hover { border-color: var(--accent); background: var(--surface-muted); }
 .topology-disclosure-badge:focus-visible, .topology-disclosure-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .topology-host-rail { pointer-events: stroke; }
+
+/* Shared investigation panels keep selection alongside the working surface. */
+.graph-workspace.topology-details-hidden { grid-template-columns: minmax(0, 1fr); }
+.topology-main { min-width: 0; }
+.topology-platform-grid { align-items: stretch; }
+.topology-platform-card { min-height: 360px; }
+.topology-children { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.topology-child { min-width: 0; overflow-wrap: anywhere; }
+.audit-disclosure { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: inherit; cursor: pointer; }
+.audit-investigation { max-height: 480px; overflow: auto; padding: 16px; white-space: normal; overflow-wrap: anywhere; }
+.audit-investigation td { white-space: normal; vertical-align: top; }
+.audit-investigation dl { display: grid; grid-template-columns: minmax(100px, 160px) minmax(0, 1fr); gap: 6px 16px; }
+.audit-investigation dd { margin: 0; }
+.audit-investigation pre { white-space: pre-wrap; margin: 0; font: inherit; }
+.audit-disclosure:focus-visible, .audit-investigation:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }

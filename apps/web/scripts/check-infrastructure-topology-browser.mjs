@@ -303,7 +303,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   assert.equal(await button("Refresh").evaluate(el => el === document.activeElement), true);
 
   const pve = page.locator(`[data-platform-id="${id(30)}"]`);
-  await pve.getByRole("button", { name: "Show all 20 (+12 more)", exact: true }).click();
+  await pve.getByRole("button", { name: "+16 more", exact: true }).click();
   await pve.locator(".topology-asset-identity").first().click();
   await search.fill("AdGuard"); await overrides();
   for (const action of [async () => { await expand.click(); await close.click(); }, async () => {
@@ -314,7 +314,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
     await action();
     assert.equal(await search.inputValue(), "AdGuard");
     assert.equal(await filters.innerText(), "Filters · 2");
-    assert.equal(await page.locator(".topology-detail-inspector").count(), 1);
+    assert.equal(await page.locator(".graph-inspector h2").count(), 1);
   }
   await button("Platform").click(); assert.equal(await search.inputValue(), "AdGuard", "Active tab does not reset");
   await filters.click(); await button("Overview").click();
@@ -324,7 +324,7 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   assert.equal(await filters.innerText(), "Filters · 2");
   await button("Platform").click();
   assert.equal(await search.inputValue(), "");
-  assert.equal(await pve.locator(".topology-child").count(), 8);
+  assert.equal(await pve.locator(".topology-child").count(), 4);
   assert.equal(await page.locator(".topology-detail-inspector").count(), 0);
   await defaults();
 
@@ -956,8 +956,9 @@ async function checkLayeredLayout(page, data, requests, theme, width) {
   assert.match(await page.getByLabel("Topology inspector",{exact:true}).innerText(),/Object 2105/);
   assert.equal(requests.length,beforeHide,"Panel selection and resize do not refetch");
   await button("Hide details panel").click();await button("Close expanded Infrastructure Topology").click();
-  assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),1,"Embedded details restored");
-  assert.equal(await button("Hide details panel").count(),0);
+  assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),0,"Explicitly hidden details stay hidden");
+  await button("Show details panel").click();
+  assert.equal(await page.getByLabel("Topology inspector",{exact:true}).count(),1);
   // Leaving Connectivity resets the local host preview, including prior +N expansion.
   await button("Overview").click();await button("Connectivity").click();await focus(2105);
   await page.getByRole("button", { name: "Show 10 more child Assets for Object 2105", exact: true }).waitFor();
@@ -1394,8 +1395,8 @@ try {
     assert.deepEqual(await page.locator(".topology-metrics [data-presentation-accent]").evaluateAll(els=>els.map(el=>el.dataset.presentationAccent)), ["blue","cyan","teal","purple"]);
     await checkIdentityContrast(page);
     await page.screenshot({path:`${output}/overview-${theme}-${width}.png`,fullPage:true});
-    assert.equal(await workloadSummary.locator(".asset-icon").count(), 6);
-    assert.equal(await workloadSummary.locator(".topology-preview-more").innerText(), "+19");
+    assert.equal(await workloadSummary.locator(".asset-icon").count(), 12);
+    assert.equal(await workloadSummary.locator(".topology-preview-more").innerText(), "+13");
     assert.equal(await page.getByRole("button", { name:"Close details", exact:true }).count(), 0);
     const preview = workloadSummary.getByRole("link", {name:"Open AdGuard Home",exact:true});
     assert.equal(await preview.getAttribute("href"), `/assets/${id(100)}`);
@@ -1419,10 +1420,10 @@ try {
     await page.getByLabel("Uncategorized", {exact:true}).click();
     await page.getByRole("button",{name:"Platform",exact:true}).click();
     const pve = page.locator(`[data-platform-id="${id(30)}"]`);
-    assert.equal(await pve.locator(".topology-child").count(),8);
+    assert.equal(await pve.locator(".topology-child").count(),4);
     assert.equal(await pve.getAttribute("data-presentation-accent"), "blue");
     assert.equal(await pve.locator(".topology-child").first().getAttribute("data-presentation-accent"), "green");
-    assert.equal(await pve.locator(".topology-asset-identity .asset-icon").count(),9);
+    assert.equal(await pve.locator(".topology-asset-identity .asset-icon").count(),5);
     assert.equal(await page.locator(".topology-platform-section > h2 [data-presentation-icon]").first().getAttribute("data-presentation-icon"), "server");
     await checkStyleTokens(page.locator(".topology-platform-card, .topology-child"), neutralBorders);
     await checkStyleTokens(page.locator(".topology-platform-section > h2"), { borderBottomColor: "--border", backgroundColor: "--identity-tint" });
@@ -1437,12 +1438,13 @@ try {
       await page.keyboard.press("Tab");
       await page.keyboard.press("Shift+Tab");
       assert.equal(await identity.evaluate(el => el.matches(":focus-visible") && getComputedStyle(el).outlineStyle !== "none"), true, "Platform keyboard focus remains visible");
-      await page.getByRole("button", { name: "Close details", exact: true }).click();
+      await page.getByRole("button", { name: "Hide details panel", exact: true }).click();
+      await page.getByRole("button", { name: "Show details panel", exact: true }).click();
     }
     assert.match(await pve.innerText(), /10.0.99.21/);
     assert.match(await pve.locator(".topology-child").filter({hasText:"AdGuard Home"}).innerText(), /10.0.99.5 \+1/);
     assert.doesNotMatch(await pve.innerText(), /192.0.2.254/);
-    await pve.getByRole("button",{name:"Show all 20 (+12 more)",exact:true}).click();
+    await pve.getByRole("button",{name:"+16 more",exact:true}).click();
     assert.equal(await pve.locator(".topology-child").count(),20);
     await pve.getByRole("button",{name:"Show fewer",exact:true}).click();
     const platformGeometry = await page.locator(".topology-platform-card").evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,left:n.getBoundingClientRect().left})));

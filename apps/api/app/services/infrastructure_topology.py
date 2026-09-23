@@ -31,8 +31,8 @@ def platform_links(relationships):
 
 def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=MAX_CONNECTIVITY_NODES, focus_network_id=None, topology_classes=None):
     """Bounded, path-aware neighbourhood over authorized records only."""
-    if hops not in (1, 2) or not 1 <= limit <= MAX_CONNECTIVITY_NODES:
-        raise HTTPException(422, f"Connectivity requires 1 or 2 hops and a limit of 1–{MAX_CONNECTIVITY_NODES}")
+    if hops not in (1, 2, 3) or not 1 <= limit <= MAX_CONNECTIVITY_NODES:
+        raise HTTPException(422, f"Connectivity requires 1, 2 or 3 hops and a limit of 1–{MAX_CONNECTIVITY_NODES}")
     classes = DEFAULT_TOPOLOGY_CLASSES if topology_classes is None else set(topology_classes)
     if not classes <= TOPOLOGY_CLASSES:
         raise HTTPException(422, "Unsupported topology class")
