@@ -67,8 +67,13 @@ try {
   data.relationships = data.relationships.filter(r => data.assets.some(a => a.id === r.source_asset_id) && data.assets.some(a => a.id === r.target_asset_id));
   data.asset_interfaces = data.asset_interfaces.filter(i => data.assets.some(a => a.id === i.asset_id));
   [100,2,20,9].forEach((n,index) => { data.asset_interfaces[index] = { ...data.asset_interfaces[index], network_id:id(305), ip_address:`10.0.0.${n}` }; });
+  for (let count = 1; count <= 5; count++) {
+    data.categories.push({ id:id(600+count), key:`grid_${count}`, name:`Grid ${count}`, active:true, show_in_topology:true });
+    data.asset_types.push({ id:id(610+count), key:`grid_${count}`, name:`Grid ${count}`, category_id:id(600+count), active:true });
+    for (let i=0; i<count; i++) data.assets.push({ id:id(650+count*10+i), name:`Parent ${count}-${i}`, asset_type:`grid_${count}`, customer_id:customer.id, site_id:site.id, status:"operational" });
+  }
   const kgNode = (n, type, name) => ({ key:`${type}:${id(n)}`, entity_id:id(n), entity_type:type, name, href:`/assets/${id(n)}`, customer_id:customer.id, site_id:site.id });
-  const kgNodes = [kgNode(800,"business_function","Home operations"), kgNode(801,"service","Name resolution"), kgNode(30,"asset","PVE1")];
+  const kgNodes = [kgNode(800,"business_function","Home operations"), kgNode(801,"service","Name resolution"), kgNode(30,"asset","PVE1"), ...Array.from({length: 8}, (_, i) => kgNode(820+i, "asset", `Graph Asset ${i+1}`))];
   await page.route("**/api/**", async route => {
     const url = new URL(route.request().url()); requests.push(url.pathname + url.search);
     if (url.pathname.endsWith("/icon")) return route.fulfill({contentType:"image/png",body:png});
@@ -90,6 +95,36 @@ try {
   assert.match(await workload.locator('.topology-preview-more').getAttribute('href'),/category/);
   await shot('01-overview-12-plus-5');
   await page.getByRole('button',{name:'Platform',exact:true}).click();
+  const checkGrid = async (columns) => {
+    for (let count=1; count<=5; count++) {
+      const grid = page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:`Grid ${count} ${count}`,exact:true})}).locator('.topology-platform-grid');
+      const dimensions = await grid.evaluate(el => ({ width:el.clientWidth, tracks:getComputedStyle(el).gridTemplateColumns.split(' ').map(parseFloat), cards:[...el.children].map(c=>({width:c.getBoundingClientRect().width, left:c.offsetLeft, top:c.offsetTop})) }));
+      assert.equal(dimensions.tracks.length,columns);
+      assert.equal(dimensions.cards.length,count);
+      for (const card of dimensions.cards) assert.ok(Math.abs(card.width-(dimensions.width-16*(columns-1))/columns)<1);
+      if(count>columns) assert.equal(dimensions.cards[columns].left,dimensions.cards[0].left);
+    }
+  };
+  // The same browser width gives four tracks without details and three with it.
+  await page.setViewportSize({width:1800,height:1000});
+  await page.getByRole('button',{name:'Hide details panel'}).click();
+  await checkGrid(4);
+  await shot('11-platform-four-columns-single-and-multiple');
+  await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Grid 1 1',exact:true})}).screenshot({path:`${output}/15-platform-single-four.png`});
+  await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Grid 5 5',exact:true})}).screenshot({path:`${output}/16-platform-five-four.png`});
+  await page.getByRole('button',{name:'Show details panel'}).click();
+  await checkGrid(3);
+  await page.locator(`[data-platform-id="${id(30)}"] > .topology-asset-identity`).click();
+  await shot('12-platform-three-columns-inspector');
+  await page.locator('.topology-platform-section').filter({has:page.getByRole('heading',{name:'Grid 1 1',exact:true})}).screenshot({path:`${output}/17-platform-single-three.png`});
+  await page.setViewportSize({width:1440,height:1000});
+  await checkGrid(2);
+  await page.getByRole('button',{name:'Hide details panel'}).click();
+  await checkGrid(3);
+  await page.setViewportSize({width:1100,height:1000});
+  await checkGrid(2);
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('button',{name:'Show details panel'}).click();
   const parent = page.locator(`[data-platform-id="${id(30)}"]`);
   assert.equal(await parent.locator('.topology-child').count(),4);
   for (const [n,count] of [[32,2],[33,4],[35,0]]) assert.equal(await page.locator(`[data-platform-id="${id(n)}"] .topology-child`).count(),count);
@@ -136,25 +171,58 @@ try {
   await page.getByRole('button',{name:'Close expanded Infrastructure Topology',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'2 hops',exact:true}).getAttribute('aria-pressed'),'true');
   await page.goto(`${base}/knowledge-graph?types=business_function,service,asset`);
+  const geometry = () => page.locator('.landscape-viewport').evaluate(el => {
+    const canvas=el.querySelector('.landscape-canvas'), bounds=canvas.getBoundingClientRect(), viewport=el.getBoundingClientRect();
+    return {width:el.clientWidth,height:el.clientHeight,contentWidth:bounds.width,contentHeight:bounds.height,left:bounds.left-viewport.left,zoom:Number(canvas.style.transform.match(/[\d.]+/)[0]),lane:parseFloat(canvas.querySelector('.landscape-lane').style.width)};
+  });
+  const fitted = async (expanded) => {
+    await page.waitForFunction(expanded => {
+      const el=document.querySelector('.landscape-viewport'), canvas=el?.querySelector('.landscape-canvas');
+      if(!canvas)return false;
+      const rect=canvas.getBoundingClientRect();
+      const expected=Math.min(1.5,Math.max(.1,Math.min((el.clientWidth-32)/parseFloat(canvas.style.width),(el.clientHeight-32)/parseFloat(canvas.style.height))));
+      const zoom=Number(canvas.style.transform.match(/[\d.]+/)[0]);
+      return Math.abs(zoom-expected)<.001 && (!expanded || Math.abs(rect.width-(el.clientWidth-32))<1);
+    }, expanded);
+    return geometry();
+  };
+  const embedded=await fitted(false);
+  await shot('13-knowledge-embedded');
   await page.locator('[data-node-key]').first().click();
+  const selection=await page.locator('.graph-inspector h2').innerText();
+  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  await page.getByRole('button',{name:'Fit',exact:true}).click();
+  assert.deepEqual(await fitted(false),embedded);
   await page.getByRole('button',{name:'Expand Knowledge Graph',exact:true}).click();
-  await page.waitForTimeout(300);
+  const expanded=await fitted(true);
+  assert.ok(expanded.lane>embedded.lane);
+  assert.ok(expanded.zoom>embedded.zoom);
+  assert.ok(expanded.contentHeight<=expanded.height-31);
+  assert.ok(expanded.contentWidth>embedded.contentWidth);
   await shot('05-knowledge-visible');
-  const width = await page.locator('.landscape-viewport').evaluate(el=>el.clientWidth);
   await page.getByRole('button',{name:'Hide details panel'}).click();
-  await page.waitForTimeout(300);
-  assert.ok(await page.locator('.landscape-viewport').evaluate(el=>el.clientWidth) > width);
+  const hidden=await fitted(true);
+  assert.ok(hidden.width>expanded.width);
+  assert.ok(hidden.lane>expanded.lane);
   await shot('06-knowledge-hidden');
   await page.getByRole('button',{name:'Zoom out',exact:true}).click();
-  const zoom = await page.locator('.landscape-zoom span').innerText();
-  await page.waitForTimeout(300);
-  assert.equal(await page.locator('.landscape-zoom span').innerText(),zoom);
+  const zoom=(await geometry()).zoom;
+  await page.locator('[data-node-key]').first().click();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal((await geometry()).zoom,zoom);
+  await page.getByRole('button',{name:'Fit',exact:true}).click();
+  await fitted(true);
   await page.getByRole('button',{name:'Show details panel'}).click();
-  await page.locator('.graph-inspector h2').waitFor();
+  await fitted(true);
+  assert.equal(await page.locator('.graph-inspector h2').innerText(),selection);
   await page.setViewportSize({width:1100,height:800});
-  await page.waitForTimeout(300);
-  assert.notEqual(await page.locator('.landscape-zoom span').innerText(),zoom);
+  await fitted(true);
   await page.setViewportSize({width:1440,height:1000});
+  await fitted(true);
+  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  await page.getByRole('button',{name:'Close expanded Knowledge Graph',exact:true}).click();
+  assert.deepEqual(await fitted(false),embedded);
+  await shot('14-knowledge-returned-embedded');
   await page.goto(`${base}/admin/audit`);
   await page.getByRole('button',{name:'Expand audit record'}).first().waitFor();
   await shot('07-audit-collapsed');

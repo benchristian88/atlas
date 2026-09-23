@@ -1284,7 +1284,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-platform-section { margin: 22px 0; }
 .topology-platform-section > h2 { font-size: 16px; }
 .topology-platform-section > h2 small { font-weight: 400; color: var(--muted); margin-left: 8px; }
-.topology-platform-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr)); gap: 16px; align-items: start; }
+.topology-platform-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr)); gap: 16px; align-items: start; }
 .topology-platform-card { min-width: 0; }
 .topology-asset-identity { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 0; font: inherit; border: 0; background: transparent; color: var(--text); cursor: pointer; }
 .topology-asset-identity > span:last-child { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }

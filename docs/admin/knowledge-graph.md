@@ -42,6 +42,9 @@ availability. Asset artwork uses the same cached icon and fallback rules as the
 normal graph.
 
 Expanded Knowledge Graph automatically Fits on entry, details-panel hide/show,
-and viewport resize. **Hide/Show details panel** preserves the selected entity.
+viewport resize, and return to the embedded view. Expanded lanes spread across
+the measured graph area, excluding the inspector, with tighter row spacing and
+uniform card scaling. Leaving expanded mode restores the embedded layout and Fit.
+**Hide/Show details panel** preserves the selected entity.
 Manual zoom and pan remain undisturbed until a structural viewport change or
 explicit **Fit**. Fit measures both available width and height.

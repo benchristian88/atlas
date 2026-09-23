@@ -1,8 +1,9 @@
 "use client";
 
+import { landscapeGeometry, fitLandscape } from "../lib/landscape-geometry.mjs";
 import { AssetIcon } from "./asset-icon";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
 import { EntityMark, RecordedStatus } from "./operations-primitives";
 
@@ -21,16 +22,28 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   const [zoom, setZoom] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => { setViewportWidth(entry.contentRect.width); setViewportHeight(entry.contentRect.height); });
-    if (viewport.current) observer.observe(viewport.current);
-    return () => observer.disconnect();
-  }, []);
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    let frame;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setViewportWidth(element.clientWidth);
+        setViewportHeight(element.clientHeight);
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [expandedView, detailsHidden]);
   const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
   const layout = useMemo(() => {
-    const stepX = compact ? Math.max(222, viewportWidth / 3) : 330;
+    let stepX = compact ? Math.max(222, viewportWidth / 3) : 330;
     const nodeWidth = compact ? stepX - 36 : 226;
-    const stepY = compact ? 98 : 140;
+    // Expanded mode spends less height on empty inter-card space so Fit can
+    // keep cards readable. Dependency markers retain their full clearance.
+    const stepY = compact ? 98 : expandedView ? 104 : 140;
     const positions = new Map();
     const groupIdsBySource = new Map();
     if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id) {
@@ -42,10 +55,17 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
       let y = 70;
       lane.nodes.forEach((node) => {
         positions.set(node.key, { x: index * stepX + 12, y, node });
-        y += compact ? stepY : Math.max(stepY, 115 + (groupIdsBySource.get(node.key)?.size || 0) * 58);
+        const groupCount = groupIdsBySource.get(node.key)?.size || 0;
+        y += compact ? stepY : Math.max(stepY, groupCount ? 115 + groupCount * 58 : 0);
       });
       height = Math.max(height, y + 50);
     });
+    if (!compact && expandedView) {
+      stepX = landscapeGeometry(viewportWidth, viewportHeight, height).stepX;
+      presentation.lanes.forEach((lane, index) => lane.nodes.forEach((node) => {
+        positions.get(node.key).x = index * stepX + 12;
+      }));
+    }
     const groups = new Map();
     if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id) {
       const key = `dependency_group:${edge.dependency_group_id}`;
@@ -57,15 +77,16 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
       groups.get(key).edges.push(edge);
     }
     return { nodeWidth, stepX, positions, groups: [...groups.values()], width: stepX * 3, height };
-  }, [presentation, compact, viewportWidth]);
+  }, [presentation, compact, viewportWidth, viewportHeight, expandedView]);
 
   // Fit only for explicit requests or structural viewport changes. Selection,
   // graph presentation and manual zoom/pan must not continually reset the view.
-  useEffect(() => {
-    if ((!fitKey && !expandedView) || !viewport.current) return;
-    setZoom(Math.min(1.5, Math.max(.1, Math.min(viewport.current.clientWidth / layout.width, viewport.current.clientHeight / layout.height))));
+  useLayoutEffect(() => {
+    if (compact || !viewportWidth || !viewportHeight) return;
+    setZoom(fitLandscape(viewportWidth, viewportHeight, layout.width, layout.height));
     viewport.current.scrollTo({ left: 0, top: 0 });
-  }, [fitKey, expandedView, detailsHidden, expandedView ? viewportWidth : 0, expandedView ? viewportHeight : 0]);
+    // Layout/content changes alone must not undo manual zoom or pan.
+  }, [fitKey, expandedView, detailsHidden, viewportWidth, viewportHeight, compact]);
   useEffect(() => {
     if (!centerKey) return;
     locateNode(viewport.current, centerKey);
@@ -90,12 +111,12 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   const drag = useRef(null);
   return <div className={`service-landscape ${compact ? "landscape-compact" : ""}`}>
     {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
-    <div className="landscape-viewport" ref={viewport} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
+    <div className="landscape-viewport" ref={viewport} style={!compact && !expandedView ? { height: `min(66vh, ${layout.height}px)` } : undefined} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
       if (event.pointerType !== "mouse" || event.target.closest("button, a")) return;
       drag.current = { x: event.clientX, y: event.clientY, left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop };
       event.currentTarget.setPointerCapture(event.pointerId);
     }} onPointerMove={(event) => { if (drag.current) { event.currentTarget.scrollLeft = drag.current.left + drag.current.x - event.clientX; event.currentTarget.scrollTop = drag.current.top + drag.current.y - event.clientY; } }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
-      <div style={{ width: layout.width * zoom, height: layout.height * zoom }}>
+      <div style={{ width: layout.width * zoom, height: layout.height * zoom, marginInline: "auto", ...(!compact ? { marginBlock: 16 } : {}) }}>
         <div className="landscape-canvas" style={{ width: layout.width, height: layout.height, transform: `scale(${zoom})` }}>
           {presentation.lanes.map((lane, index) => <section className={`landscape-lane entity-${lane.type}`} key={lane.type} style={{ left: index * layout.stepX, width: layout.stepX - 12, height: layout.height }} aria-label={lane.label}>
             <header><EntityMark type={lane.type} /><div><h3>{lane.label} <span>({lane.total})</span></h3><small>{lane.description}</small></div></header>
