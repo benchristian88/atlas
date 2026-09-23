@@ -7,10 +7,17 @@ export function fitLandscape(width, height, contentWidth, contentHeight) {
   )));
 }
 
-// Widen the lanes in world coordinates when height limits uniform card scale.
-// Cards and vertical geometry stay unchanged; connectors follow the new positions.
-export function landscapeGeometry(width, height, contentHeight) {
-  const scale = fitLandscape(width, height, 990, contentHeight);
-  const stepX = Math.max(330, (width - PADDING * 2) / scale / 3);
-  return { stepX, width: stepX * 3 };
+// Layout is expressed in readable CSS pixels, independent of content height
+// and the user's view transform. Narrow screens scroll rather than shrink text.
+export function landscapeGeometry(width, expanded = false) {
+  const minimumNodeWidth = expanded ? 224 : 200;
+  const preferredNodeWidth = expanded ? 264 : 226;
+  const inset = 24;
+  const stepX = Math.max(minimumNodeWidth + inset, (width - PADDING * 2) / 3);
+  return {
+    stepX,
+    width: stepX * 3,
+    nodeWidth: Math.min(preferredNodeWidth, stepX - inset),
+    nodeHeight: expanded ? 72 : 64,
+  };
 }

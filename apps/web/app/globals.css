@@ -1370,3 +1370,8 @@ tbody tr:hover { background: var(--surface-muted); }
 .audit-investigation dd { margin: 0; }
 .audit-investigation pre { white-space: pre-wrap; margin: 0; font: inherit; }
 .audit-disclosure:focus-visible, .audit-investigation:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+
+/* Expanded cards keep the same hierarchy with slightly more generous spacing. */
+.landscape-expanded .landscape-node { padding: 12px; }
+.landscape-expanded .landscape-node strong { font-size: 13px; }
+.landscape-expanded .landscape-node small { font-size: 11px; }

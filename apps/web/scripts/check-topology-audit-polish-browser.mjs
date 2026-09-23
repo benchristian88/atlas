@@ -82,7 +82,7 @@ try {
     else if (url.pathname === "/api/context") body = {customers:[customer],sites:[site],global_access:true,selected_customer_id:customer.id,selected_site_id:site.id};
     else if (url.pathname === "/api/topology") body = data;
     else if (url.pathname === "/api/topology/connectivity") body = graphFixture(data,url.searchParams);
-    else if (url.pathname.startsWith("/api/operational-graph")) body = {nodes:kgNodes,edges:[{key:"bf",source_key:kgNodes[0].key,target_key:kgNodes[1].key,edge_family:"service_business_function",label:"Supported by"},{key:"svc",source_key:kgNodes[1].key,target_key:kgNodes[2].key,edge_family:"service_asset",label:"Depends on"}],truncated:false,warnings:[]};
+    else if (url.pathname.startsWith("/api/operational-graph")) body = {nodes:kgNodes,edges:[{key:"bf",source_key:kgNodes[0].key,target_key:kgNodes[1].key,edge_family:"service_business_function",label:"Supported by"},{key:"svc",source_key:kgNodes[1].key,target_key:kgNodes[2].key,edge_family:"service_asset",label:"Depends on"},{key:"asset-link",source_key:kgNodes[3].key,target_key:kgNodes[4].key,edge_family:"asset_relationship",label:"Depends on"}],truncated:false,warnings:[]};
     else if (url.pathname === "/api/audit-events") body = [1,2].map(n => ({id:id(950+n),created_at:"2026-09-23T01:00:00Z",actor_snapshot:"Operator",event_type:"asset.updated",target_type:"asset",target_id:id(30),customer_id:customer.id,site_id:site.id,success:true,change_summary:"Updated recorded Asset details",metadata:{name:{from:"Old host",to:"PVE1"},active:{before:true,after:false},added:{after:"New value"},removed:{before:"Previous value"},api_token:"[redacted]"}}));
     await route.fulfill({contentType:"application/json",body:JSON.stringify(body)});
   });
@@ -170,40 +170,98 @@ try {
   await shot('04-connectivity-three-hops');
   await page.getByRole('button',{name:'Close expanded Infrastructure Topology',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'2 hops',exact:true}).getAttribute('aria-pressed'),'true');
-  await page.goto(`${base}/knowledge-graph?types=business_function,service,asset`);
+  await page.goto(`${base}/knowledge-graph?types=business_function,service,asset&relationships=service_business_function,service_asset,service_service,asset_relationship`);
   const geometry = () => page.locator('.landscape-viewport').evaluate(el => {
-    const canvas=el.querySelector('.landscape-canvas'), bounds=canvas.getBoundingClientRect(), viewport=el.getBoundingClientRect();
-    return {width:el.clientWidth,height:el.clientHeight,contentWidth:bounds.width,contentHeight:bounds.height,left:bounds.left-viewport.left,zoom:Number(canvas.style.transform.match(/[\d.]+/)[0]),lane:parseFloat(canvas.querySelector('.landscape-lane').style.width)};
+    const canvas=el.querySelector('.landscape-canvas'), card=canvas.querySelector('.landscape-node');
+    const bounds=canvas.getBoundingClientRect(), viewport=el.getBoundingClientRect();
+    return {width:el.clientWidth,height:el.clientHeight,contentWidth:bounds.width,contentHeight:bounds.height,top:bounds.top-viewport.top,scrollTop:el.scrollTop,scrollHeight:el.scrollHeight,zoom:Number(canvas.style.transform.match(/[\d.]+/)[0]),lane:parseFloat(canvas.querySelector('.landscape-lane').style.width),cardWidth:card.getBoundingClientRect().width,cardHeight:card.getBoundingClientRect().height};
   });
-  const fitted = async (expanded) => {
-    await page.waitForFunction(expanded => {
+  const checkRouting = async () => {
+    const endpoints = await page.locator('.landscape-canvas').evaluate((canvas, keys) => {
+      const path=canvas.querySelector('.landscape-connectors > path');
+      const start=path.getPointAtLength(0).matrixTransform(path.getScreenCTM());
+      const end=path.getPointAtLength(path.getTotalLength()).matrixTransform(path.getScreenCTM());
+      const source=canvas.querySelector(`[data-node-key="${keys[0]}"]`).getBoundingClientRect();
+      const target=canvas.querySelector(`[data-node-key="${keys[1]}"]`).getBoundingClientRect();
+      return { startX:start.x, startY:start.y, endX:end.x, endY:end.y, source:source.toJSON(), target:target.toJSON() };
+    },kgNodes.slice(0,2).map(n=>n.key));
+    const contained = await page.locator('.landscape-canvas').evaluate(canvas => {
+      const width=parseFloat(canvas.style.width);
+      return [...canvas.querySelectorAll('.landscape-connectors > path')].every(path => {
+        const bounds=path.getBBox();
+        return bounds.x>=0 && bounds.x+bounds.width<=width;
+      });
+    });
+    assert.ok(contained, 'relationship curves remain inside current canvas bounds');
+    assert.ok(Math.abs(endpoints.startX-endpoints.source.right)<1);
+    assert.ok(Math.abs(endpoints.endX-endpoints.target.left)<1);
+    assert.ok(endpoints.startY> endpoints.source.top && endpoints.startY<endpoints.source.bottom);
+    assert.ok(endpoints.endY> endpoints.target.top && endpoints.endY<endpoints.target.bottom);
+  };
+  const defaultView = async () => {
+    await page.waitForFunction(() => {
       const el=document.querySelector('.landscape-viewport'), canvas=el?.querySelector('.landscape-canvas');
-      if(!canvas)return false;
-      const rect=canvas.getBoundingClientRect();
-      const expected=Math.min(1.5,Math.max(.1,Math.min((el.clientWidth-32)/parseFloat(canvas.style.width),(el.clientHeight-32)/parseFloat(canvas.style.height))));
-      const zoom=Number(canvas.style.transform.match(/[\d.]+/)[0]);
-      return Math.abs(zoom-expected)<.001 && (!expanded || Math.abs(rect.width-(el.clientWidth-32))<1);
-    }, expanded);
+      return canvas?.style.transform==='scale(1)' && Math.abs(parseFloat(canvas.style.width)-Math.max(el.clientWidth-32,el.closest('.landscape-expanded') ? 744 : 672))<1;
+    });
+    await checkRouting();
     return geometry();
   };
-  const embedded=await fitted(false);
+  const fitted = async () => {
+    await page.waitForFunction(() => {
+      const el=document.querySelector('.landscape-viewport'), canvas=el?.querySelector('.landscape-canvas');
+      if(!canvas)return false;
+      const expected=Math.min(1.5,Math.max(.1,Math.min((el.clientWidth-32)/parseFloat(canvas.style.width),(el.clientHeight-32)/parseFloat(canvas.style.height))));
+      return Math.abs(Number(canvas.style.transform.match(/[\d.]+/)[0])-expected)<.001;
+    });
+    await checkRouting();
+    const result=await geometry();
+    assert.ok(result.contentWidth<=result.width && result.contentHeight<=result.height);
+    assert.equal(await page.locator('.landscape-zoom span').innerText(),`${Math.round(result.zoom*100)}%`);
+    return result;
+  };
+  const embedded=await defaultView();
+  assert.ok(embedded.cardWidth>=200 && embedded.cardHeight>=64);
+  assert.ok(embedded.contentHeight>embedded.height);
+  assert.equal(embedded.top,16);
   await shot('13-knowledge-embedded');
   await page.locator('[data-node-key]').first().click();
   const selection=await page.locator('.graph-inspector h2').innerText();
-  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  const pageScroll=await page.evaluate(()=>window.scrollY);
+  await page.locator('.landscape-viewport').evaluate(el=>el.scrollTop=400);
+  assert.equal((await geometry()).scrollTop,400);
+  assert.equal((await geometry()).cardWidth,embedded.cardWidth);
+  assert.equal(await page.evaluate(()=>window.scrollY),pageScroll);
+  await shot('18-knowledge-scrolled');
+  await page.getByRole('button',{name:'+ 1 more assets',exact:true}).click();
+  const disclosed=await geometry();
+  assert.ok(disclosed.scrollHeight>embedded.scrollHeight);
+  assert.equal(disclosed.cardWidth,embedded.cardWidth);
+  assert.equal(disclosed.zoom,embedded.zoom);
+  await shot('19-knowledge-disclosed');
+  // Keyboard focus scrolls a lower card into the existing canvas viewport.
+  const last=page.locator('[data-node-key]').last();
+  await last.focus();
+  await last.press('Enter');
+  assert.equal(await last.getAttribute('aria-pressed'),'true');
   await page.getByRole('button',{name:'Fit',exact:true}).click();
-  assert.deepEqual(await fitted(false),embedded);
+  assert.ok((await fitted()).zoom<1);
+  await page.reload();
+  assert.equal((await defaultView()).cardWidth,embedded.cardWidth);
+  await page.locator('[data-node-key]').first().click();
   await page.getByRole('button',{name:'Expand Knowledge Graph',exact:true}).click();
-  const expanded=await fitted(true);
-  assert.ok(expanded.lane>embedded.lane);
-  assert.ok(expanded.zoom>embedded.zoom);
-  assert.ok(expanded.contentHeight<=expanded.height-31);
-  assert.ok(expanded.contentWidth>embedded.contentWidth);
+  const expanded=await defaultView();
+  assert.ok(expanded.cardWidth>embedded.cardWidth);
+  assert.ok(expanded.cardHeight>embedded.cardHeight);
+  assert.ok(expanded.contentHeight>expanded.height);
+  assert.equal(expanded.top,16);
   await shot('05-knowledge-visible');
+  await page.locator('.landscape-viewport').evaluate(el=>el.scrollTop=200);
   await page.getByRole('button',{name:'Hide details panel'}).click();
-  const hidden=await fitted(true);
-  assert.ok(hidden.width>expanded.width);
-  assert.ok(hidden.lane>expanded.lane);
+  const hidden=await defaultView();
+  assert.ok(hidden.width>expanded.width && hidden.lane>expanded.lane);
+  assert.equal(hidden.cardWidth,expanded.cardWidth);
+  assert.equal(hidden.scrollTop,200);
+  await page.locator('.landscape-viewport').evaluate(el=>el.scrollTop=0);
   await shot('06-knowledge-hidden');
   await page.getByRole('button',{name:'Zoom out',exact:true}).click();
   const zoom=(await geometry()).zoom;
@@ -211,17 +269,21 @@ try {
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   assert.equal((await geometry()).zoom,zoom);
   await page.getByRole('button',{name:'Fit',exact:true}).click();
-  await fitted(true);
+  await fitted();
+  await shot('20-knowledge-explicit-fit');
   await page.getByRole('button',{name:'Show details panel'}).click();
-  await fitted(true);
+  await defaultView();
   assert.equal(await page.locator('.graph-inspector h2').innerText(),selection);
   await page.setViewportSize({width:1100,height:800});
-  await fitted(true);
+  await defaultView();
   await page.setViewportSize({width:1440,height:1000});
-  await fitted(true);
+  await defaultView();
   await page.getByRole('button',{name:'Zoom in',exact:true}).click();
   await page.getByRole('button',{name:'Close expanded Knowledge Graph',exact:true}).click();
-  assert.deepEqual(await fitted(false),embedded);
+  const returned=await defaultView();
+  assert.equal(returned.cardWidth,embedded.cardWidth);
+  assert.equal(returned.zoom,embedded.zoom);
+  assert.equal(returned.top,16);
   await shot('14-knowledge-returned-embedded');
   await page.goto(`${base}/admin/audit`);
   await page.getByRole('button',{name:'Expand audit record'}).first().waitFor();
