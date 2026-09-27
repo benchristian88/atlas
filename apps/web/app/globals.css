@@ -1394,7 +1394,6 @@ tbody tr:hover { background: var(--surface-muted); }
 /* Entity cards own the hierarchy; requirement markers are subordinate labels. */
 .service-landscape:not(.landscape-compact) .landscape-lane header { padding: 16px 12px; gap: 10px; border-bottom: 1px solid color-mix(in srgb, var(--entity-color) 15%, transparent); }
 .service-landscape:not(.landscape-compact) .landscape-lane h3 { font-size: 13px; font-weight: 700; }
-.service-landscape:not(.landscape-compact) .landscape-node { border-left: 3px solid var(--entity-color); }
 .service-landscape:not(.landscape-compact) .landscape-node strong { font-size: 13px; font-weight: 650; }
 .dependency-presentation { text-align: left; border: 1px dashed var(--border); border-left: 2px solid var(--muted); box-shadow: none; padding: 5px 8px; min-height: 44px; }
 .dependency-presentation strong { font-weight: 500; font-size: 11px; white-space: nowrap; display: block; overflow: hidden; text-overflow: ellipsis; }
