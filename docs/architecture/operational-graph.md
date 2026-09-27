@@ -617,3 +617,72 @@ C2.1 does not prove:
 - that a proposed change is safe.
 
 Those claims require later operational evidence and analysis semantics.
+
+## Dependency impact presentation
+
+Dependency Groups remain explicit, temporal domain objects; the browser does
+not change graph identity, persistence, authorization, traversal or analysis.
+In the normal Knowledge Graph, a group with one distinct relationship in the
+acquired authorized projection renders as its original direct relationship.
+Two or more relationships retain an intermediate group with the recorded ALL or
+ANY strategy. Ungrouped Unknown relationships also remain direct.
+
+The presentation counts members before client filters and lane disclosure, and
+retains that count through normalization. Filtering a known two-member group
+down to one visible relationship therefore does not flatten it. Counts describe
+the acquired authorized projection, not a claim about undisclosed or unacquired
+members. The existing API does not expose global group cardinality; a bounded
+projection containing only one member can consequently appear direct. No hidden
+member count is requested or disclosed to resolve this limitation.
+
+Direct edges retain group ID/name, strategy, requirement, failure effect,
+relationship label, endpoints and stable identity. Select an entity for its
+relationship details, or open **Recorded relationships in this view**, then
+**Dependency impact details**, with mouse, keyboard or touch. That disclosure
+links to the source Service for classification. The canvas prioritizes topology
+without permanently stacking semantic chips on each edge. The compact dashboard
+landscape retains its existing entity-only presentation.
+
+
+### Layout and display names
+
+The three lanes retain their domain meaning. The presentation layout places
+Assets beside their connected Services, keeps members of a requirement together,
+aligns Business Functions with their supporting Services, and packs Services
+without Asset providers into available vertical space. Shared Assets appear once
+with all relationships retained. Ordering and routing are deterministic and do
+not alter semantic direction, edge identity or traversal. Entity cards are
+visually stronger than the smaller dependency-group markers. Restrained cubic curves use side-centred anchors, distributed ports
+for shared endpoints, and separate left-gutter routing for same-lane Service
+dependencies. Group trunks connect the parent Service to its requirement marker;
+member branches start on that marker, while singleton edges remain direct. Narrow viewports retain
+native scrolling instead of shrinking text.
+
+Generated group names now use domain names (for example `DNS Providers` or
+`DNS — AdGuard Home`) with numeric collision suffixes. Historical UUID-style
+names get a friendly display-only fallback derived from the source Service.
+Readable authored names are retained. Persisted names and group history are not
+rewritten merely by viewing them; original names remain available in explicit
+advanced/technical editing and analysis details.
+
+### Dashboard normalization boundary
+
+The graph API supplies `source_key` and `target_key`; its optional `source` field
+is provenance text, not a node. Dashboard data ingestion normalizes the graph
+once before distributing it to widgets. All rendered relationship endpoints
+must resolve to nodes in that authorized response. Null/malformed records and
+dangling endpoints are excluded, never reconstructed from inaccessible data.
+Knowledge Attention counts and links use that same normalized set and consider
+only Service→Asset and Service→Service dependencies. A legacy dependency without
+an explicit failure effect remains Unknown. No backend schema change is involved.
+
+
+Selection adds restrained stroke/opacity emphasis to a node's adjacent edges.
+Selecting a group member also emphasizes the complete visible shared requirement
+and its parent connector. Selecting a group emphasizes that group's branches.
+Other topology remains visible; existing analysis-path highlighting takes
+precedence. Routing and port ordering are deterministic over the authorized
+presentation, with stable edge keys breaking ties. Node positions, card styles,
+relationship directions, normalization and dependency-analysis results are not
+changed by this routing refinement. See the
+[routing validation record](../testing/knowledge-graph-edge-routing.md).

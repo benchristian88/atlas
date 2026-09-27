@@ -28,11 +28,11 @@ test("shared detail contract uses existing operational primitives and accessible
 
 test("Service detail keeps provenance, recovery, completeness actions and typed mutation routes", async () => {
   const page = await read("app/services/[id]/page.js");
-  for (const action of ["AssertionsPanel", "TimelineEvent", "CompletenessPanel compact", "canDefer", "canExcept", "canEvaluate", "recovery_notes", "backup_notes", "runbook_url", "documentation_url", "addAsset", "addService", "addFunction", "addDependencyGroup", "updateDependencyRequirement"]) assert.ok(page.includes(action), action);
+  for (const action of ["AssertionsPanel", "TimelineEvent", "CompletenessPanel compact", "canDefer", "canExcept", "canEvaluate", "recovery_notes", "backup_notes", "runbook_url", "documentation_url", "addAsset", "addService", "addFunction", "DependencyImpact", "updateDependencyRequirement"]) assert.ok(page.includes(action), action);
   assert.match(page, /dependency\.target_label \|\| "Recorded incoming dependency"/);
   assert.match(page, /dependency\.source_service_id === id/);
-  assert.match(page, /Operational consequence unknown/);
-  assert.match(page, /If unsatisfied/);
+  assert.match(page, /Impact not classified/);
+  assert.match(page, /DependencyImpact service=\{service\}/);
   assert.doesNotMatch(page, /<DependencyAnalysisPanel/);
 });
 

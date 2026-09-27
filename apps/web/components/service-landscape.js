@@ -1,9 +1,11 @@
 "use client";
 
-import { landscapeGeometry, fitLandscape } from "../lib/landscape-geometry.mjs";
+import { fitLandscape } from "../lib/landscape-geometry.mjs";
+import { dependencyDetail, dependencyGroupLabel, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
+import { layoutLandscape, landscapeGroupPath, routeLandscape, selectedLandscapeEdges } from "../lib/landscape-layout.mjs";
 import { AssetIcon } from "./asset-icon";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
 import { EntityMark, RecordedStatus } from "./operations-primitives";
 
@@ -16,8 +18,9 @@ function locateNode(viewport, key) {
   viewport.scrollTo({ left: viewport.scrollLeft + target.left - bounds.left - (viewport.clientWidth - target.width) / 2, top: viewport.scrollTop + vertical, behavior: "instant" });
 }
 
-export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
+export function ServiceLandscape({ graph, compact = false, selected = "", selectedGroup = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
   const viewport = useRef(null);
+  const arrowId = `landscape-arrow-${useId().replaceAll(":", "")}`;
   const [expanded, setExpanded] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -38,40 +41,10 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
     return () => { observer.disconnect(); cancelAnimationFrame(frame); };
   }, [expandedView, detailsHidden]);
   const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
-  const layout = useMemo(() => {
-    const geometry = landscapeGeometry(viewportWidth, expandedView);
-    const stepX = compact ? Math.max(222, viewportWidth / 3) : geometry.stepX;
-    const nodeWidth = compact ? stepX - 36 : geometry.nodeWidth;
-    const nodeHeight = compact ? 64 : geometry.nodeHeight;
-    const stepY = compact ? 98 : 140;
-    const positions = new Map();
-    const groupIdsBySource = new Map();
-    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id) {
-      if (!groupIdsBySource.has(edge.source_key)) groupIdsBySource.set(edge.source_key, new Set());
-      groupIdsBySource.get(edge.source_key).add(edge.dependency_group_id);
-    }
-    let height = 300;
-    presentation.lanes.forEach((lane, index) => {
-      let y = 70;
-      lane.nodes.forEach((node) => {
-        positions.set(node.key, { x: index * stepX + 12, y, node });
-        const groupCount = groupIdsBySource.get(node.key)?.size || 0;
-        y += compact ? stepY : Math.max(stepY, groupCount ? nodeHeight + 51 + groupCount * 58 : 0);
-      });
-      height = Math.max(height, y + 50);
-    });
-    const groups = new Map();
-    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id) {
-      const key = `dependency_group:${edge.dependency_group_id}`;
-      if (!groups.has(key)) {
-        const subject = positions.get(edge.source_key);
-        const groupIndex = [...groupIdsBySource.get(edge.source_key)].indexOf(edge.dependency_group_id);
-        groups.set(key, { ...edge, key, x: subject.x + nodeWidth - 135, y: subject.y + nodeHeight + 36 + groupIndex * 58, edges: [] });
-      }
-      groups.get(key).edges.push(edge);
-    }
-    return { nodeWidth, nodeHeight, stepX, positions, groups: [...groups.values()], width: stepX * 3, height };
-  }, [presentation, compact, viewportWidth, expandedView]);
+  const layout = useMemo(() => layoutLandscape(presentation, viewportWidth, expandedView, compact), [presentation, viewportWidth, expandedView, compact]);
+
+  const routes = useMemo(() => routeLandscape(presentation, layout), [presentation, layout]);
+  const selectedEdges = useMemo(() => selectedLandscapeEdges(presentation.edges, selected, selectedGroup), [presentation, selected, selectedGroup]);
 
   // Native CSS-pixel sizing is the readable default. Height never determines
   // card size; the existing viewport owns vertical overflow.
@@ -96,7 +69,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   useEffect(() => {
     if (!centerKey) return;
     locateNode(viewport.current, centerKey);
-  }, [centerKey, graph]);
+  }, [centerKey, graph, viewportWidth]);
 
   useEffect(() => {
     if (!locateRequest) return;
@@ -104,16 +77,10 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   }, [locateRequest]);
 
   const pathKeys = new Set((analysis?.results || []).flatMap((r) => r.paths.flatMap((p) => p.edges.map((e) => e.key))));
-  function edgePath(source, target, sourceWidth = layout.nodeWidth) {
-    if (source.x === target.x) {
-      const x = source.x + layout.nodeWidth;
-      const bend = Math.min(42, Math.max(8, layout.stepX - layout.nodeWidth - 12));
-      return `M${x} ${source.y + layout.nodeHeight / 2} C${x + bend} ${source.y + layout.nodeHeight / 2},${x + bend} ${target.y + layout.nodeHeight / 2},${x} ${target.y + layout.nodeHeight / 2}`;
-    }
-    const right = source.x < target.x;
-    const x1 = source.x + (right ? sourceWidth : 0), x2 = target.x + (right ? 0 : layout.nodeWidth);
-    const mid = (x1 + x2) / 2;
-    return `M${x1} ${source.y + layout.nodeHeight / 2} C${mid} ${source.y + layout.nodeHeight / 2},${mid} ${target.y + layout.nodeHeight / 2},${x2} ${target.y + layout.nodeHeight / 2}`;
+  function edgeClass(edges) {
+    if (analysis) return edges.some(edge => pathKeys.has(edge.key)) ? "consequence-path" : "context-edge";
+    if (!selected && !selectedGroup) return "";
+    return edges.some(edge => selectedEdges.has(edge.key)) ? "selected-relationship" : "background-relationship";
   }
   const drag = useRef(null);
   return <div className={`service-landscape ${compact ? "landscape-compact" : expandedView ? "landscape-expanded" : ""}`}>
@@ -130,13 +97,9 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
             {!lane.total && <p className="lane-empty">No {lane.label.toLowerCase()} in this view.</p>}
           </section>)}
           <svg className="landscape-connectors" width={layout.width} height={layout.height} aria-hidden="true">
-            <defs><marker id={compact ? "overview-arrow" : "graph-arrow"} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="currentColor" /></marker></defs>
-            {presentation.edges.map((edge) => {
-              const group = layout.groups.find((g) => g.dependency_group_id === edge.dependency_group_id);
-              const source = group ? { x: group.x, y: group.y - 10 } : layout.positions.get(edge.source_key), target = layout.positions.get(edge.target_key);
-              return <path key={edge.key} d={edgePath(source, target, group ? 135 : layout.nodeWidth)} markerEnd={`url(#${compact ? "overview-arrow" : "graph-arrow"})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${analysis ? pathKeys.has(edge.key) ? "consequence-path" : "context-edge" : ""}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>;
-            })}
-            {layout.groups.map((group) => { const subject = layout.positions.get(group.source_key); return <path key={group.key} d={`M${subject.x + layout.nodeWidth / 2} ${subject.y + layout.nodeHeight} V${group.y - 8} H${group.x + 67} V${group.y}`} />; })}
+            <defs><marker id={arrowId} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="currentColor" /></marker></defs>
+            {routes.map(({ edge, path }) => <path key={edge.key} data-edge-key={edge.key} d={path} markerEnd={`url(#${arrowId})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${edgeClass([edge])}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>)}
+            {layout.groups.map(group => <path key={group.key} data-group-connector={group.dependency_group_id} className={edgeClass(group.edges)} d={landscapeGroupPath(layout.positions.get(group.source_key), group, layout)} />)}
           </svg>
           {[...layout.positions.values()].map(({ node, x, y }) => {
             const state = analysisState(node, analysis);
@@ -147,12 +110,12 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
               </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}
             </button>;
           })}
-          {layout.groups.map((group) => <button className="dependency-presentation" style={{ left: group.x, top: group.y }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong>{group.dependency_group_name}</strong><small>{group.dependency_strategy === "all" ? "ALL REQUIRED" : "ANY ONE"}</small></button>)}
+          {layout.groups.map((group) => <button className="dependency-presentation" data-group-id={group.dependency_group_id} style={{ left: group.x, top: group.y, width: group.width, height: group.height }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong title={dependencyGroupLabel(group)}>{dependencyGroupLabel(group)}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
         </div>
       </div>
     </div>
     <div className="landscape-disclosure">{presentation.lanes.map((lane) => lane.omitted > 0 ? <button className={`landscape-more entity-${lane.type}`} key={lane.type} type="button" onClick={() => setExpanded((values) => [...values, lane.type])}>+ {lane.omitted} more {lane.label.toLowerCase()}</button> : expanded.includes(lane.type) && lane.total > (compact ? 5 : 8) ? <button className={`landscape-more entity-${lane.type}`} key={lane.type} type="button" onClick={() => setExpanded((values) => values.filter((v) => v !== lane.type))}>Show fewer {lane.label.toLowerCase()}</button> : null)}</div>
     {(presentation.omittedEdges > 0 || presentation.filteredNodes > 0) && <p className="ops-meta" role="status">{presentation.omittedEdges > 0 && `${presentation.omittedEdges} relationships connect collapsed items. Expand their lanes to see them. `}{presentation.filteredNodes > 0 && `${presentation.filteredNodes} items excluded by presentation filters.`}</p>}
-    {!compact && <details className="graph-semantic-list"><summary>Recorded relationships in this view ({presentation.edges.length})</summary><ul>{presentation.edges.map((edge) => <li key={edge.key}><button className="text-button" type="button" onClick={() => onSelect?.(edge.source)}>{edge.source.name}</button> — {edge.label} → <button className="text-button" type="button" onClick={() => onSelect?.(edge.target)}>{edge.target.name}</button>{edge.dependency_group_name && ` · ${edge.dependency_group_name}`}</li>)}</ul></details>}
+    {!compact && <details className="graph-semantic-list"><summary>Recorded relationships in this view ({presentation.edges.length})</summary><ul>{presentation.edges.map((edge) => <li key={edge.key}><button className="text-button" type="button" onClick={() => onSelect?.(edge.source)}>{edge.source.name}</button> — {edge.label} → <button className="text-button" type="button" onClick={() => onSelect?.(edge.target)}>{edge.target.name}</button>{["service_asset", "service_service"].includes(edge.edge_family) && <details><summary>Dependency impact details</summary><p>{dependencyDetail(edge)}</p><a className="text-button" href={`/services/${edge.source.entity_id}#dependency-impact`}>Review on Service page</a></details>}</li>)}</ul></details>}
   </div>;
 }

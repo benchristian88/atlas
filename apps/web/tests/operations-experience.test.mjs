@@ -114,8 +114,8 @@ test("reachable UI provides keyboard nodes, inspector semantics, scenario labels
   assert.match(page, /Exit analysis/);
   assert.match(landscape, /aria-pressed/);
   assert.match(landscape, /Recorded relationships in this view/);
-  assert.match(landscape, /ALL REQUIRED/);
-  assert.match(landscape, /ANY ONE/);
+  assert.match(landscape, /DEPENDENCY_STRATEGY_LABELS/);
+  assert.match(landscape, /layoutLandscape/);
   assert.match(inspector, /Contextual IP/);
   assert.match(inspector, /Contextual VLAN/);
   assert.match(inspector, /Not evaluated for Business Functions/);

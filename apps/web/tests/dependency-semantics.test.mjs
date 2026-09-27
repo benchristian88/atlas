@@ -20,12 +20,11 @@ test("dependency semantics use plain homelab wording and preserve Unknown", () =
 });
 
 test("Service detail exposes editable semantics only with dependency management", async () => {
-  const page = await readFile(new URL("../app/services/[id]/page.js", import.meta.url), "utf8");
-  assert.match(page, /Dependency behaviour/);
+  const page = await readFile(new URL("../components/dependency-impact.js", import.meta.url), "utf8");
+  assert.match(page, /Dependency impact/);
   assert.match(page, /Any one is sufficient/);
-  assert.match(page, /Service unavailable/);
-  assert.match(page, /Service degraded/);
+  assert.match(page, /FAILURE_EFFECT_LABELS/);
   assert.match(page, /Unknown/);
-  assert.match(page, /canManageDependencies/);
+  assert.match(page, /canManage/);
   assert.match(page, /dependency-groups/);
 });

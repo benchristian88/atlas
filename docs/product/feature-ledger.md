@@ -1197,3 +1197,31 @@ record changed field names cannot reconstruct historical before/after values.
 Evidence: topology route/service, topology and Knowledge Graph pages, shared
 DetailsPanelToggle, AuditInvestigation, topology-audit-polish unit tests and
 `check-topology-audit-polish-browser.mjs`. No persisted schema changes.
+
+### Dependency impact UX refinement
+
+Implemented: plain-language singleton classification and editing on Service
+details; ALL/ANY multi-provider controls; advanced group name/membership editing;
+singleton visual collapse in the Knowledge Graph with inspectable semantics;
+plain-language preview explanations with original technical evidence retained;
+and dashboard disclosure linking affected relationships to their Service editor.
+No new failure effects, quorum support, migrations, API contracts or analysis
+outcomes are introduced. Group cardinality is presentation-local to acquired
+authorized knowledge; see [graph presentation rules](../architecture/operational-graph.md#dependency-impact-presentation)
+and [validation record](../testing/dependency-impact-ux.md).
+
+
+Dependency-impact UX follow-up: the dashboard now normalizes raw graph API data
+before rendering dependency attention. Endpoint-resolution regressions, empty and
+legacy responses, and unauthenticated navigation have browser coverage. Graph
+presentation clusters providers by Service, strengthens entity/group hierarchy,
+and replaces generated identifier-style group labels with friendly domain labels
+without rewriting historical group names. See the
+[follow-up validation record](../testing/dependency-presentation-followup.md).
+
+
+Knowledge Graph routing polish: smooth cubic connectors, separate shared-node
+ports, group fan-out and selected-relationship emphasis are implemented on the
+existing layout. Singleton collapse, multi-member grouping, semantic direction,
+analysis behavior and card styling remain unchanged. See
+[routing validation](../testing/knowledge-graph-edge-routing.md).

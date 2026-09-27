@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useWorkspaceContext } from "./workspace-context";
 import { apiRequest } from "../lib/api";
-import { ANALYSIS_CLASSIFICATION_LABELS, ANALYSIS_STATE_LABELS, previewUnavailable } from "../lib/dependency-analysis.mjs";
+import { ANALYSIS_CLASSIFICATION_LABELS, ANALYSIS_STATE_LABELS, explainDependencyReason, previewUnavailable } from "../lib/dependency-analysis.mjs";
 import { DEPENDENCY_REQUIREMENT_LABELS, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
 
 export function DependencyAnalysisPanel({ focusType, focusId }) {
@@ -51,10 +51,10 @@ function AnalysisPreview({ focusType, focusId }) {
               <span>{ANALYSIS_STATE_LABELS[row.state]}</span>
               <small>{row.state === "unaffected" ? "Dependency remains satisfied" : ANALYSIS_CLASSIFICATION_LABELS[row.classification]} · {row.distance} {row.distance === 1 ? "hop" : "hops"}</small>
               {row.reasons.map((reason) => <div key={reason.key}>
-                <strong>{reason.dependency_group_name || "Ungrouped dependency"}</strong>
+                <p>{explainDependencyReason(row.service.name, reason)}</p><details><summary>Technical details</summary><strong>{reason.dependency_group_name || "Ungrouped dependency"}</strong>
                 <p>{[DEPENDENCY_REQUIREMENT_LABELS[reason.dependency_requirement], DEPENDENCY_STRATEGY_LABELS[reason.dependency_strategy]].filter(Boolean).join(" · ")}</p>
                 <p>{reason.summary}</p>
-                <ul>{reason.members.map((member) => <li key={member.edge.key}>{member.entity.name}: {ANALYSIS_STATE_LABELS[member.state]}</li>)}</ul>
+                <ul>{reason.members.map((member) => <li key={member.edge.key}>{member.entity.name}: {ANALYSIS_STATE_LABELS[member.state]}</li>)}</ul><p>Reason: {reason.code}</p></details>
               </div>)}
               <details><summary>Explanation paths</summary>
                 {row.paths.map((path) => <p key={path.edges.map((edge) => edge.key).join("/")}>{path.nodes.map((node, index) => <span key={node.key}>
