@@ -1,6 +1,7 @@
 "use client";
 
 import { landscapeGeometry, fitLandscape } from "../lib/landscape-geometry.mjs";
+import { dependencyDetail, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
 import { AssetIcon } from "./asset-icon";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -46,7 +47,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
     const stepY = compact ? 98 : 140;
     const positions = new Map();
     const groupIdsBySource = new Map();
-    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id) {
+    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id && edge.presentation_group_size > 1) {
       if (!groupIdsBySource.has(edge.source_key)) groupIdsBySource.set(edge.source_key, new Set());
       groupIdsBySource.get(edge.source_key).add(edge.dependency_group_id);
     }
@@ -61,7 +62,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
       height = Math.max(height, y + 50);
     });
     const groups = new Map();
-    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id) {
+    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id && edge.presentation_group_size > 1) {
       const key = `dependency_group:${edge.dependency_group_id}`;
       if (!groups.has(key)) {
         const subject = positions.get(edge.source_key);
@@ -147,12 +148,12 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
               </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}
             </button>;
           })}
-          {layout.groups.map((group) => <button className="dependency-presentation" style={{ left: group.x, top: group.y }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong>{group.dependency_group_name}</strong><small>{group.dependency_strategy === "all" ? "ALL REQUIRED" : "ANY ONE"}</small></button>)}
+          {layout.groups.map((group) => <button className="dependency-presentation" style={{ left: group.x, top: group.y }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong>{group.dependency_group_name}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
         </div>
       </div>
     </div>
     <div className="landscape-disclosure">{presentation.lanes.map((lane) => lane.omitted > 0 ? <button className={`landscape-more entity-${lane.type}`} key={lane.type} type="button" onClick={() => setExpanded((values) => [...values, lane.type])}>+ {lane.omitted} more {lane.label.toLowerCase()}</button> : expanded.includes(lane.type) && lane.total > (compact ? 5 : 8) ? <button className={`landscape-more entity-${lane.type}`} key={lane.type} type="button" onClick={() => setExpanded((values) => values.filter((v) => v !== lane.type))}>Show fewer {lane.label.toLowerCase()}</button> : null)}</div>
     {(presentation.omittedEdges > 0 || presentation.filteredNodes > 0) && <p className="ops-meta" role="status">{presentation.omittedEdges > 0 && `${presentation.omittedEdges} relationships connect collapsed items. Expand their lanes to see them. `}{presentation.filteredNodes > 0 && `${presentation.filteredNodes} items excluded by presentation filters.`}</p>}
-    {!compact && <details className="graph-semantic-list"><summary>Recorded relationships in this view ({presentation.edges.length})</summary><ul>{presentation.edges.map((edge) => <li key={edge.key}><button className="text-button" type="button" onClick={() => onSelect?.(edge.source)}>{edge.source.name}</button> — {edge.label} → <button className="text-button" type="button" onClick={() => onSelect?.(edge.target)}>{edge.target.name}</button>{edge.dependency_group_name && ` · ${edge.dependency_group_name}`}</li>)}</ul></details>}
+    {!compact && <details className="graph-semantic-list"><summary>Recorded relationships in this view ({presentation.edges.length})</summary><ul>{presentation.edges.map((edge) => <li key={edge.key}><button className="text-button" type="button" onClick={() => onSelect?.(edge.source)}>{edge.source.name}</button> — {edge.label} → <button className="text-button" type="button" onClick={() => onSelect?.(edge.target)}>{edge.target.name}</button>{["service_asset", "service_service"].includes(edge.edge_family) && <details><summary>Dependency impact details</summary><p>{dependencyDetail(edge)}</p><a className="text-button" href={`/services/${edge.source.entity_id}#dependency-impact`}>Review on Service page</a></details>}</li>)}</ul></details>}
   </div>;
 }

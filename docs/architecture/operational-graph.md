@@ -617,3 +617,28 @@ C2.1 does not prove:
 - that a proposed change is safe.
 
 Those claims require later operational evidence and analysis semantics.
+
+## Dependency impact presentation
+
+Dependency Groups remain explicit, temporal domain objects; the browser does
+not change graph identity, persistence, authorization, traversal or analysis.
+In the normal Knowledge Graph, a group with one distinct relationship in the
+acquired authorized projection renders as its original direct relationship.
+Two or more relationships retain an intermediate group with the recorded ALL or
+ANY strategy. Ungrouped Unknown relationships also remain direct.
+
+The presentation counts members before client filters and lane disclosure, and
+retains that count through normalization. Filtering a known two-member group
+down to one visible relationship therefore does not flatten it. Counts describe
+the acquired authorized projection, not a claim about undisclosed or unacquired
+members. The existing API does not expose global group cardinality; a bounded
+projection containing only one member can consequently appear direct. No hidden
+member count is requested or disclosed to resolve this limitation.
+
+Direct edges retain group ID/name, strategy, requirement, failure effect,
+relationship label, endpoints and stable identity. Select an entity for its
+relationship details, or open **Recorded relationships in this view**, then
+**Dependency impact details**, with mouse, keyboard or touch. That disclosure
+links to the source Service for classification. The canvas prioritizes topology
+without permanently stacking semantic chips on each edge. The compact dashboard
+landscape retains its existing entity-only presentation.

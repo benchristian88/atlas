@@ -1197,3 +1197,15 @@ record changed field names cannot reconstruct historical before/after values.
 Evidence: topology route/service, topology and Knowledge Graph pages, shared
 DetailsPanelToggle, AuditInvestigation, topology-audit-polish unit tests and
 `check-topology-audit-polish-browser.mjs`. No persisted schema changes.
+
+### Dependency impact UX refinement
+
+Implemented: plain-language singleton classification and editing on Service
+details; ALL/ANY multi-provider controls; advanced group name/membership editing;
+singleton visual collapse in the Knowledge Graph with inspectable semantics;
+plain-language preview explanations with original technical evidence retained;
+and dashboard disclosure linking affected relationships to their Service editor.
+No new failure effects, quorum support, migrations, API contracts or analysis
+outcomes are introduced. Group cardinality is presentation-local to acquired
+authorized knowledge; see [graph presentation rules](../architecture/operational-graph.md#dependency-impact-presentation)
+and [validation record](../testing/dependency-impact-ux.md).

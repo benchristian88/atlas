@@ -149,3 +149,33 @@ plus empty/error/truncation messages. Switching focus or workspace resets it.
 C2.4's dashboard/graph redesign, full Impact Analysis, Business Function impact,
 Asset→Asset failure propagation, minimum/quorum, confidence scoring, recovery
 analysis and change simulation remain deferred.
+
+## Plain-language dependency impact workflow
+
+The Service detail page presents **Dependency impact**. An ungrouped relationship
+asks what happens to the Service if that dependency is unavailable. Choosing
+unavailable, degraded or Unknown uses the existing group creation endpoint to
+create an ALL singleton, with a deterministic name based on relationship kind
+and durable dependency ID. It preserves the relationship's required/optional
+value. Existing singleton groups use the same simple controls; effect edits
+patch only the effect, preserving the stored name, strategy and membership.
+
+For grouped relationships the group's requirement is canonical. Requirement
+edits patch that group, not a competing relationship flag. Ungrouped requirement
+edits retain the existing relationship PATCH. Group changes use existing
+history-preserving replacement semantics. No schema or API change is involved.
+
+Multi-provider groups explain **All required** or **Any one is sufficient** and
+ask what happens if that requirement cannot be met. **Combine providers for the
+same capability** creates groups from ungrouped relationships; **Advanced
+configuration** preserves editing of names, membership, strategy, requirement
+and effect, including existing singleton groups. Removing a group retains the
+existing confirmation and history workflow. Quorum/MINIMUM, warning-only and
+no-operational-impact remain unsupported and are not offered.
+
+Preview descriptions are derived only from the engine's reason satisfaction,
+consequence, member states and codes. A satisfied HA requirement is explained
+without claiming the whole Service is available: another independent requirement
+may still fail. Unknown and unresolved knowledge remain explicit. Technical
+details retain original engine summaries, member states and reason codes;
+explanation paths remain available. The engine and its results are unchanged.

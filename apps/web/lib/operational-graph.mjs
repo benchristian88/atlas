@@ -34,6 +34,18 @@ export function normalizeOperationalGraph(graph = {}) {
       target: nodesByKey[targetKey] || null,
     };
   }).filter((edge) => edge.source && edge.target);
+  // Count distinct authorized relationships before presentation filtering. Retain
+  // this size through repeated normalization so a hidden lane cannot flatten HA.
+  const groupMembers = new Map();
+  for (const edge of edges) if (edge.dependency_group_id) {
+    const key = `${edge.source_key}:${edge.dependency_group_id}`;
+    if (!groupMembers.has(key)) groupMembers.set(key, new Set());
+    groupMembers.get(key).add(edge.key);
+  }
+  for (const edge of edges) if (edge.dependency_group_id) {
+    edge.presentation_group_size = Math.max(edge.presentation_group_size || 0,
+      groupMembers.get(`${edge.source_key}:${edge.dependency_group_id}`).size);
+  }
   return {
     ...graph,
     nodes,

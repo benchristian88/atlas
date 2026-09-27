@@ -25,3 +25,23 @@ export function dependencySemanticsLabels(dependency = {}) {
     failureEffect: FAILURE_EFFECT_LABELS[dependency.failure_effect || "unknown"] || "Unknown",
   };
 }
+
+// Group state is canonical once a relationship belongs to a group.
+export function singletonImpactRequest(serviceId, dependency, kind, group, changes) {
+  if (group) return { path: `/dependency-groups/${group.id}`, method: "PATCH", body: changes };
+  return {
+    path: `/services/${serviceId}/dependency-groups`, method: "POST",
+    body: {
+      name: `Dependency ${kind} ${dependency.id}`, strategy: "all",
+      requirement: dependency.required_for_operation ? "required" : "optional",
+      failure_effect: "unknown", asset_dependency_ids: [], service_dependency_ids: [],
+      [kind === "asset" ? "asset_dependency_ids" : "service_dependency_ids"]: [dependency.id],
+      ...changes,
+    },
+  };
+}
+
+export function dependencyDetail(edge) {
+  const labels = dependencySemanticsLabels(edge);
+  return `${labels.requirement} · If unavailable: ${labels.failureEffect}${edge.dependency_group_name ? ` · ${edge.dependency_group_name} · ${labels.strategy}` : " · Impact not classified"}`;
+}
