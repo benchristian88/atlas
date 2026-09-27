@@ -581,6 +581,7 @@ unchanged.
 
 | Feature | Status | Release | Concrete evidence |
 |---------|--------|---------|-------------------|
+| Service and Business Function catalogues | **Implemented** | UI refinement | Shared responsive linked rows show identity, descriptions and relationship counts; Services show recorded operational health and type. Search uses existing scoped APIs, Service filters remain available under More filters, and Business Functions default to active with Show archived available. |
 | First-class Service records | **Implemented** | C1      | Migration, routes and full list/create/detail/edit UI exist. |
 | Service archive/restore | **Implemented** | C1      | API supports both. |
 | Service Types | **Implemented** | C1      | Managed reference records and admin UI exist. |
