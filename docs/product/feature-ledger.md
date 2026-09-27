@@ -581,6 +581,7 @@ unchanged.
 
 | Feature | Status | Release | Concrete evidence |
 |---------|--------|---------|-------------------|
+| Service and Business Function catalogues | **Implemented** | UI refinement | Shared responsive linked rows show identity, descriptions and relationship counts; Services show recorded operational health and type. Compact shared search/filter controls use a 300 ms automatic search debounce and immediate discrete filters over existing scoped APIs. Services preserve URL filters, compact quick filters and an archived-only view; Business Functions default to active with Include archived available. Both retain results during filtering and ignore superseded responses. |
 | First-class Service records | **Implemented** | C1      | Migration, routes and full list/create/detail/edit UI exist. |
 | Service archive/restore | **Implemented** | C1      | API supports both. |
 | Service Types | **Implemented** | C1      | Managed reference records and admin UI exist. |
