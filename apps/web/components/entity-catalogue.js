@@ -8,7 +8,7 @@ export function relationshipCount(count, singular) {
 export function EntityCatalogue({ label, count, loading, error, onRefresh, empty, children }) {
   return <section className="table-card entity-catalogue" aria-label={label} aria-busy={loading}>
     <div className="table-meta"><span role="status">{loading ? `Loading ${label}…` : error ? `${label} could not be loaded.` : `${count} ${label}`}</span><button className="text-button" disabled={loading} onClick={onRefresh} type="button">Refresh</button></div>
-    {!loading && !error && (count ? <ul className="catalogue-list">{children}</ul> : <div className="empty-state">{empty}</div>)}
+    {count ? <ul className="catalogue-list">{children}</ul> : !loading && !error && <div className="empty-state">{empty}</div>}
   </section>;
 }
 

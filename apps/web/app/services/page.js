@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
 import { PageHeader } from "../../components/page-header";
 import { EntityCatalogue, ServiceCatalogueRow } from "../../components/entity-catalogue";
-import { FilterToolbar } from "../../components/filter-toolbar";
+import { CatalogueFilters, useCatalogueSearch } from "../../components/catalogue-filters";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
 import { parseServiceListFilters, serviceListFiltersHref } from "../../lib/service-list-filters.mjs";
@@ -27,14 +27,15 @@ export default function ServicesPage() {
   const [types, setTypes] = useState([]);
   const [levels, setLevels] = useState([]);
   const [businessFunctions, setBusinessFunctions] = useState([]);
-  const [searchDraft, setSearchDraft] = useState(filters.search);
+  const loadVersion = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const canView = hasPermissionInContext("services.view", workspace.customerId, workspace.siteId);
   const canCreate = hasPermissionInContext("services.create", workspace.customerId, workspace.siteId);
 
-  useEffect(() => setSearchDraft(filters.search), [filters.search]);
+  const search = useCatalogueSearch(filters.search, (value) => router.replace(serviceListFiltersHref({ ...filters, search: value }), { scroll: false }), filterKey);
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     if (!canView) return;
     setLoading(true);
     setError("");
@@ -56,21 +57,26 @@ export default function ServicesPage() {
         apiRequest("/criticality-levels"),
         apiRequest("/business-functions?active_only=true"),
       ]);
+      if (version !== loadVersion.current) return;
       setServices(rows);
       setSummary(counts);
       setTypes(serviceTypes);
       setLevels(criticality);
       setBusinessFunctions(functions);
     } catch (requestError) {
+      if (version !== loadVersion.current) return;
       setError(requestError.message || "Atlas could not load Services.");
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [canView, filterKey, workspace.reloadKey]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => { loadVersion.current += 1; }; }, [load]);
+  useEffect(() => { setServices([]); setSummary(null); }, [workspace.reloadKey]);
   if (!canView) return <AccessDenied />;
-  const update = (patch) => router.push(serviceListFiltersHref({ ...filters, ...patch }));
+  const update = (patch) => { search.cancel(); router.push(serviceListFiltersHref({ ...filters, search: search.draft.trim(), ...patch }), { scroll: false }); };
+  const clear = () => { search.reset(); router.push("/services", { scroll: false }); };
+  const activeCount = Object.entries(filters).filter(([key, value]) => key !== "search" && Boolean(value)).length;
 
   return <>
     <div className="page-heading-row">
@@ -78,18 +84,16 @@ export default function ServicesPage() {
       {canCreate && <Link className="button button-primary" href="/services/new">Add Service</Link>}
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}
-    <FilterToolbar gridClassName="catalogue-filter-grid" onSubmit={(event) => { event.preventDefault(); update({ search: searchDraft.trim() }); }} actions={<><button className="button button-secondary" type="submit">Apply search</button><button className="text-button" onClick={() => router.push("/services")} type="button">Clear</button></>}>
-        <label className="field"><span>Search</span><input placeholder="Name or description" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} /></label>
-        <label className="field"><span>Service type</span><select value={filters.serviceTypeId} onChange={(event) => update({ serviceTypeId: event.target.value })}><option value="">All types</option>{types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <details className="catalogue-more-filters" open={Boolean(filters.criticalityLevelId || filters.businessFunctionId || filters.lifecycleStatus || filters.operationalStatus || filters.completeness || filters.attention || filters.archived) || undefined}>
-        <summary>More filters{filters.attention ? ` · ${filters.attention.replaceAll("_", " ")}` : ""}</summary>
-    {summary && <section className="summary-grid compact-summary-grid" aria-label="Service summary">
-      <button className="asset-type-filter selector-control-text" onClick={() => router.push("/services")} type="button"><span>All Services</span><strong>{summary.total}</strong></button>
-      <button className="asset-type-filter selector-control-text" onClick={() => update({ criticalityLevelId: levels.find((item) => item.key === "critical")?.id || "" })} type="button"><span>Critical</span><strong>{summary.critical}</strong></button>
-      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "missing_owner" })} type="button"><span>Missing owner</span><strong>{summary.missing_owner}</strong></button>
-      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "missing_dependencies" })} type="button"><span>Missing dependencies</span><strong>{summary.missing_dependencies}</strong></button>
-      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "missing_recovery_targets" })} type="button"><span>Missing recovery targets</span><strong>{summary.missing_recovery_targets}</strong></button>
-      <button className="asset-type-filter selector-control-text" onClick={() => update({ attention: "incomplete" })} type="button"><span>Incomplete</span><strong>{summary.incomplete}</strong></button>
+    <CatalogueFilters label="Search services" search={search} activeCount={activeCount} onClear={clear} primary={
+      <label className="field"><span className="sr-only">Service type</span><select value={filters.serviceTypeId} onChange={(event) => update({ serviceTypeId: event.target.value })}><option value="">All types</option>{types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+    }>
+    {summary && <section className="catalogue-quick-filters" aria-label="Service summary">
+      <button className="catalogue-quick-filter" aria-pressed={activeCount === 0 && !filters.search} onClick={clear} type="button"><span>All</span><strong>{summary.total}</strong></button>
+      <button className="catalogue-quick-filter" aria-pressed={Boolean(filters.criticalityLevelId) && filters.criticalityLevelId === levels.find((item) => item.key === "critical")?.id} onClick={() => update({ criticalityLevelId: levels.find((item) => item.key === "critical")?.id || "" })} type="button"><span>Critical</span><strong>{summary.critical}</strong></button>
+      <button className="catalogue-quick-filter" aria-pressed={filters.attention === "missing_owner"} onClick={() => update({ attention: "missing_owner" })} type="button"><span>Missing owner</span><strong>{summary.missing_owner}</strong></button>
+      <button className="catalogue-quick-filter" aria-pressed={filters.attention === "missing_dependencies"} onClick={() => update({ attention: "missing_dependencies" })} type="button"><span>Missing dependencies</span><strong>{summary.missing_dependencies}</strong></button>
+      <button className="catalogue-quick-filter" aria-pressed={filters.attention === "missing_recovery_targets"} onClick={() => update({ attention: "missing_recovery_targets" })} type="button"><span>Missing recovery</span><strong>{summary.missing_recovery_targets}</strong></button>
+      <button className="catalogue-quick-filter" aria-pressed={filters.attention === "incomplete"} onClick={() => update({ attention: "incomplete" })} type="button"><span>Incomplete</span><strong>{summary.incomplete}</strong></button>
     </section>}
         <div className="catalogue-advanced-grid">
         <label className="field"><span>Criticality</span><select value={filters.criticalityLevelId} onChange={(event) => update({ criticalityLevelId: event.target.value })}><option value="">All levels</option>{levels.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -97,10 +101,9 @@ export default function ServicesPage() {
         <label className="field"><span>Lifecycle</span><select value={filters.lifecycleStatus} onChange={(event) => update({ lifecycleStatus: event.target.value })}><option value="">All lifecycle states</option>{LIFECYCLE_STATES.map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
         <label className="field"><span>Operational status</span><select value={filters.operationalStatus} onChange={(event) => update({ operationalStatus: event.target.value })}><option value="">All operational states</option>{OPERATIONAL_STATES.map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
         {hasPermission("knowledge_gaps.view") && <label className="field"><span>Completeness</span><select value={filters.completeness} onChange={(event) => update({ completeness: event.target.value })}><option value="">All states</option><option value="critical_gaps">Critical gaps</option><option value="incomplete">Incomplete</option><option value="operationally_complete">Operationally complete</option><option value="complete">Complete</option><option value="not_evaluated">Not evaluated</option></select></label>}
-        <label className="field checkbox-field"><span>Archived</span><input checked={filters.archived} type="checkbox" onChange={(event) => update({ archived: event.target.checked })} /></label>
+        <label className="field checkbox-field"><span>Archived only</span><input checked={filters.archived} type="checkbox" onChange={(event) => update({ archived: event.target.checked })} /></label>
         </div>
-      </details>
-    </FilterToolbar>
+    </CatalogueFilters>
     <EntityCatalogue label="Services" count={services.length} loading={loading} error={error} onRefresh={load} empty={<>No Services match the current filters. {canCreate && <Link href="/services/new">Create the first Service.</Link>}</>}>
       {services.map((service) => <ServiceCatalogueRow key={service.id} service={service} />)}
     </EntityCatalogue>
