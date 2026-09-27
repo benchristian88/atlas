@@ -2,10 +2,10 @@
 
 import { fitLandscape } from "../lib/landscape-geometry.mjs";
 import { dependencyDetail, dependencyGroupLabel, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
-import { layoutLandscape, landscapeEdgePath } from "../lib/landscape-layout.mjs";
+import { layoutLandscape, landscapeGroupPath, routeLandscape, selectedLandscapeEdges } from "../lib/landscape-layout.mjs";
 import { AssetIcon } from "./asset-icon";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
 import { EntityMark, RecordedStatus } from "./operations-primitives";
 
@@ -18,8 +18,9 @@ function locateNode(viewport, key) {
   viewport.scrollTo({ left: viewport.scrollLeft + target.left - bounds.left - (viewport.clientWidth - target.width) / 2, top: viewport.scrollTop + vertical, behavior: "instant" });
 }
 
-export function ServiceLandscape({ graph, compact = false, selected = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
+export function ServiceLandscape({ graph, compact = false, selected = "", selectedGroup = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
   const viewport = useRef(null);
+  const arrowId = `landscape-arrow-${useId().replaceAll(":", "")}`;
   const [expanded, setExpanded] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -41,6 +42,9 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   }, [expandedView, detailsHidden]);
   const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
   const layout = useMemo(() => layoutLandscape(presentation, viewportWidth, expandedView, compact), [presentation, viewportWidth, expandedView, compact]);
+
+  const routes = useMemo(() => routeLandscape(presentation, layout), [presentation, layout]);
+  const selectedEdges = useMemo(() => selectedLandscapeEdges(presentation.edges, selected, selectedGroup), [presentation, selected, selectedGroup]);
 
   // Native CSS-pixel sizing is the readable default. Height never determines
   // card size; the existing viewport owns vertical overflow.
@@ -73,6 +77,11 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   }, [locateRequest]);
 
   const pathKeys = new Set((analysis?.results || []).flatMap((r) => r.paths.flatMap((p) => p.edges.map((e) => e.key))));
+  function edgeClass(edges) {
+    if (analysis) return edges.some(edge => pathKeys.has(edge.key)) ? "consequence-path" : "context-edge";
+    if (!selected && !selectedGroup) return "";
+    return edges.some(edge => selectedEdges.has(edge.key)) ? "selected-relationship" : "background-relationship";
+  }
   const drag = useRef(null);
   return <div className={`service-landscape ${compact ? "landscape-compact" : expandedView ? "landscape-expanded" : ""}`}>
     {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
@@ -88,13 +97,9 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
             {!lane.total && <p className="lane-empty">No {lane.label.toLowerCase()} in this view.</p>}
           </section>)}
           <svg className="landscape-connectors" width={layout.width} height={layout.height} aria-hidden="true">
-            <defs><marker id={compact ? "overview-arrow" : "graph-arrow"} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="currentColor" /></marker></defs>
-            {presentation.edges.map((edge, index) => {
-              const group = layout.groups.find((g) => g.dependency_group_id === edge.dependency_group_id);
-              const source = group || layout.positions.get(edge.source_key), target = layout.positions.get(edge.target_key);
-              return <path key={edge.key} d={landscapeEdgePath(source, target, layout, index)} markerEnd={`url(#${compact ? "overview-arrow" : "graph-arrow"})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${analysis ? pathKeys.has(edge.key) ? "consequence-path" : "context-edge" : ""}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>;
-            })}
-            {layout.groups.map((group) => { const subject = layout.positions.get(group.source_key); return <path key={group.key} d={`M${subject.x + 14} ${subject.y + layout.nodeHeight} V${group.y - 8} H${group.x + 14} V${group.y}`} />; })}
+            <defs><marker id={arrowId} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="currentColor" /></marker></defs>
+            {routes.map(({ edge, path }) => <path key={edge.key} data-edge-key={edge.key} d={path} markerEnd={`url(#${arrowId})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${edgeClass([edge])}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>)}
+            {layout.groups.map(group => <path key={group.key} data-group-connector={group.dependency_group_id} className={edgeClass(group.edges)} d={landscapeGroupPath(layout.positions.get(group.source_key), group, layout)} />)}
           </svg>
           {[...layout.positions.values()].map(({ node, x, y }) => {
             const state = analysisState(node, analysis);
@@ -105,7 +110,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
               </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}
             </button>;
           })}
-          {layout.groups.map((group) => <button className="dependency-presentation" style={{ left: group.x, top: group.y, width: group.width, height: group.height }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong title={dependencyGroupLabel(group)}>{dependencyGroupLabel(group)}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
+          {layout.groups.map((group) => <button className="dependency-presentation" data-group-id={group.dependency_group_id} style={{ left: group.x, top: group.y, width: group.width, height: group.height }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong title={dependencyGroupLabel(group)}>{dependencyGroupLabel(group)}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
         </div>
       </div>
     </div>

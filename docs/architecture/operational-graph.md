@@ -652,8 +652,10 @@ aligns Business Functions with their supporting Services, and packs Services
 without Asset providers into available vertical space. Shared Assets appear once
 with all relationships retained. Ordering and routing are deterministic and do
 not alter semantic direction, edge identity or traversal. Entity cards are
-visually stronger than the smaller dependency-group markers; orthogonal routing
-uses separate space for same-lane Service dependencies. Narrow viewports retain
+visually stronger than the smaller dependency-group markers. Restrained cubic curves use side-centred anchors, distributed ports
+for shared endpoints, and separate left-gutter routing for same-lane Service
+dependencies. Group trunks connect the parent Service to its requirement marker;
+member branches start on that marker, while singleton edges remain direct. Narrow viewports retain
 native scrolling instead of shrinking text.
 
 Generated group names now use domain names (for example `DNS Providers` or
@@ -673,3 +675,14 @@ dangling endpoints are excluded, never reconstructed from inaccessible data.
 Knowledge Attention counts and links use that same normalized set and consider
 only Service→Asset and Service→Service dependencies. A legacy dependency without
 an explicit failure effect remains Unknown. No backend schema change is involved.
+
+
+Selection adds restrained stroke/opacity emphasis to a node's adjacent edges.
+Selecting a group member also emphasizes the complete visible shared requirement
+and its parent connector. Selecting a group emphasizes that group's branches.
+Other topology remains visible; existing analysis-path highlighting takes
+precedence. Routing and port ordering are deterministic over the authorized
+presentation, with stable edge keys breaking ties. Node positions, card styles,
+relationship directions, normalization and dependency-analysis results are not
+changed by this routing refinement. See the
+[routing validation record](../testing/knowledge-graph-edge-routing.md).

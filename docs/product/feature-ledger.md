@@ -1218,3 +1218,10 @@ presentation clusters providers by Service, strengthens entity/group hierarchy,
 and replaces generated identifier-style group labels with friendly domain labels
 without rewriting historical group names. See the
 [follow-up validation record](../testing/dependency-presentation-followup.md).
+
+
+Knowledge Graph routing polish: smooth cubic connectors, separate shared-node
+ports, group fan-out and selected-relationship emphasis are implemented on the
+existing layout. Singleton collapse, multi-member grouping, semantic direction,
+analysis behavior and card styling remain unchanged. See
+[routing validation](../testing/knowledge-graph-edge-routing.md).

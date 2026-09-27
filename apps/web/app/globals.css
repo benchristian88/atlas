@@ -1401,3 +1401,8 @@ tbody tr:hover { background: var(--surface-muted); }
 .landscape-connectors > path { stroke-linejoin: round; opacity: .65; }
 .graph-semantic-list > ul { list-style: none; padding-left: 0; }
 .graph-semantic-list > ul > li { margin: 0; padding: 10px 0; border-bottom: 1px solid var(--border); }
+
+/* Selection traces relationships without hiding the surrounding topology. */
+.landscape-connectors > path { stroke-linecap: round; }
+.landscape-connectors > path.selected-relationship { stroke-width: 1.6; opacity: 1; }
+.landscape-connectors > path.background-relationship { opacity: .32; }
