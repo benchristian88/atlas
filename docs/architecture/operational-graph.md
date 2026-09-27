@@ -642,3 +642,34 @@ relationship details, or open **Recorded relationships in this view**, then
 links to the source Service for classification. The canvas prioritizes topology
 without permanently stacking semantic chips on each edge. The compact dashboard
 landscape retains its existing entity-only presentation.
+
+
+### Layout and display names
+
+The three lanes retain their domain meaning. The presentation layout places
+Assets beside their connected Services, keeps members of a requirement together,
+aligns Business Functions with their supporting Services, and packs Services
+without Asset providers into available vertical space. Shared Assets appear once
+with all relationships retained. Ordering and routing are deterministic and do
+not alter semantic direction, edge identity or traversal. Entity cards are
+visually stronger than the smaller dependency-group markers; orthogonal routing
+uses separate space for same-lane Service dependencies. Narrow viewports retain
+native scrolling instead of shrinking text.
+
+Generated group names now use domain names (for example `DNS Providers` or
+`DNS — AdGuard Home`) with numeric collision suffixes. Historical UUID-style
+names get a friendly display-only fallback derived from the source Service.
+Readable authored names are retained. Persisted names and group history are not
+rewritten merely by viewing them; original names remain available in explicit
+advanced/technical editing and analysis details.
+
+### Dashboard normalization boundary
+
+The graph API supplies `source_key` and `target_key`; its optional `source` field
+is provenance text, not a node. Dashboard data ingestion normalizes the graph
+once before distributing it to widgets. All rendered relationship endpoints
+must resolve to nodes in that authorized response. Null/malformed records and
+dangling endpoints are excluded, never reconstructed from inaccessible data.
+Knowledge Attention counts and links use that same normalized set and consider
+only Service→Asset and Service→Service dependencies. A legacy dependency without
+an explicit failure effect remains Unknown. No backend schema change is involved.

@@ -1390,3 +1390,15 @@ tbody tr:hover { background: var(--surface-muted); }
 .graph-semantic-list li { margin-block: 12px; overflow-wrap: anywhere; }
 .dependency-impact-row select { min-height: 44px; max-width: 100%; padding: 8px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .dependency-impact-row > label:not(.impact-requirement) { display: grid; gap: 8px; }
+
+/* Entity cards own the hierarchy; requirement markers are subordinate labels. */
+.service-landscape:not(.landscape-compact) .landscape-lane header { padding: 16px 12px; gap: 10px; border-bottom: 1px solid color-mix(in srgb, var(--entity-color) 15%, transparent); }
+.service-landscape:not(.landscape-compact) .landscape-lane h3 { font-size: 13px; font-weight: 700; }
+.service-landscape:not(.landscape-compact) .landscape-node { border-left: 3px solid var(--entity-color); }
+.service-landscape:not(.landscape-compact) .landscape-node strong { font-size: 13px; font-weight: 650; }
+.dependency-presentation { text-align: left; border: 1px dashed var(--border); border-left: 2px solid var(--muted); box-shadow: none; padding: 5px 8px; min-height: 44px; }
+.dependency-presentation strong { font-weight: 500; font-size: 11px; white-space: nowrap; display: block; overflow: hidden; text-overflow: ellipsis; }
+.dependency-presentation small { font-size: 10px; color: var(--muted); }
+.landscape-connectors > path { stroke-linejoin: round; opacity: .65; }
+.graph-semantic-list > ul { list-style: none; padding-left: 0; }
+.graph-semantic-list > ul > li { margin: 0; padding: 10px 0; border-bottom: 1px solid var(--border); }

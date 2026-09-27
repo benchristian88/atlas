@@ -1209,3 +1209,12 @@ No new failure effects, quorum support, migrations, API contracts or analysis
 outcomes are introduced. Group cardinality is presentation-local to acquired
 authorized knowledge; see [graph presentation rules](../architecture/operational-graph.md#dependency-impact-presentation)
 and [validation record](../testing/dependency-impact-ux.md).
+
+
+Dependency-impact UX follow-up: the dashboard now normalizes raw graph API data
+before rendering dependency attention. Endpoint-resolution regressions, empty and
+legacy responses, and unauthenticated navigation have browser coverage. Graph
+presentation clusters providers by Service, strengthens entity/group hierarchy,
+and replaces generated identifier-style group labels with friendly domain labels
+without rewriting historical group names. See the
+[follow-up validation record](../testing/dependency-presentation-followup.md).

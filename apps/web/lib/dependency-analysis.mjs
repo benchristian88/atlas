@@ -1,3 +1,5 @@
+import { dependencyGroupLabel } from "./dependency-semantics.mjs";
+
 export const ANALYSIS_STATE_LABELS = {
   unavailable: "Unavailable",
   degraded: "Degraded",
@@ -23,7 +25,7 @@ export function explainDependencyReason(serviceName, reason) {
   const members = reason.members || [];
   const unavailable = members.filter(member => member.state === "unavailable").map(member => member.entity.name);
   const available = members.filter(member => member.state === "unaffected").map(member => member.entity.name);
-  const requirement = reason.dependency_group_name || "this dependency requirement";
+  const requirement = reason.dependency_group_name ? dependencyGroupLabel(reason, serviceName) : "this dependency requirement";
   if (reason.satisfaction === "satisfied") return `${available.join(", ") || "An alternative provider"} can still satisfy ${requirement} in this scenario. This requirement does not affect ${serviceName}.`;
   if (reason.code === "ungrouped_consequence_unknown") return `${serviceName} depends on ${members.map(member => member.entity.name).join(", ")}, but the effect of losing this dependency has not been classified.`;
   if (reason.satisfaction !== "unsatisfied") return `Atlas cannot determine whether ${requirement} can still be met for ${serviceName} from the available dependency knowledge.`;

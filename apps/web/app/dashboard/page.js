@@ -10,6 +10,8 @@ import { ServiceLandscape } from "../../components/service-landscape";
 import { CompletenessLine, EntityMark, RecordedStatus } from "../../components/operations-primitives";
 import { NavigationIcon } from "../../components/navigation-icon.mjs";
 import { WIDGETS, graphHref } from "../../lib/operations-experience.mjs";
+import { normalizeOperationalGraph } from "../../lib/operational-graph.mjs";
+import { dependencyAttention } from "../../lib/dependency-attention.mjs";
 import { apiRequest } from "../../lib/api";
 import { useRouter } from "next/navigation";
 
@@ -52,14 +54,13 @@ function EnvironmentOverview({ graph, graphError, workspace, hasPermission }) {
 }
 
 function Attention({ graph, summary, hasPermission }) {
-  const unknown = graph?.edges.filter((e) => e.failure_effect === "unknown").length;
-  const ungrouped = graph?.edges.filter((e) => ["service_asset", "service_service"].includes(e.edge_family) && !e.dependency_group_id).length;
+  const { unknown, ungrouped, relationships } = dependencyAttention(graph);
   const items = [
     { label: "Unknown dependency effects", icon: "discovery", count: unknown, href: "/knowledge-graph", text: "Recorded dependencies with an unknown failure effect." },
     { label: "Ungrouped dependencies", icon: "knowledge-graph", count: ungrouped, href: "/knowledge-graph", text: "Review whether these dependencies need explicit behaviour." },
     ...(hasPermission("knowledge_gaps.view") ? [{ label: "Knowledge gaps", icon: "knowledge-gaps", count: summary?.open_knowledge_gap_count, href: "/knowledge-gaps", text: "Required or conditional knowledge that needs attention." }, { label: "Critical Services with gaps", icon: "services", count: graph?.nodes.filter((n) => n.entity_type === "service" && n.criticality_rank >= 75 && n.open_gap_count > 0).length, href: "/services?attention=required_gaps", text: "High criticality Services with recorded knowledge gaps." }] : []),
   ];
-  return <section className="ops-card"><header className="ops-section-header"><div><h2>Knowledge attention</h2><p>What Atlas needs you to review.</p></div></header>{items.map((item) => <Link className="ops-attention-row" href={item.href} key={item.label}><span className="ops-icon-tile"><NavigationIcon name={item.icon} /></span><div><strong>{item.label}</strong><small>{item.text}</small></div><span className="ops-badge">{item.count ?? "—"}{graph?.truncated && item.href === "/knowledge-graph" ? "+" : ""}</span><span aria-hidden="true">›</span></Link>)}<details className="graph-semantic-list"><summary>Relationships needing dependency-impact classification</summary><ul>{graph?.edges.filter(edge => ["service_asset", "service_service"].includes(edge.edge_family) && (!edge.dependency_group_id || edge.failure_effect === "unknown")).map(edge => <li key={edge.key}><Link href={`/services/${edge.source.entity_id}#dependency-impact`}>{edge.source.name} — {edge.label} → {edge.target.name}</Link><small> · {!edge.dependency_group_id ? "Impact not classified" : "Unknown effect"}</small></li>)}</ul>{graph?.truncated && <p>Showing relationships within this bounded overview. Other Services may also need review.</p>}</details><p className="ops-meta">Knowledge quality based on recorded data.</p></section>;
+  return <section className="ops-card"><header className="ops-section-header"><div><h2>Knowledge attention</h2><p>What Atlas needs you to review.</p></div></header>{items.map((item) => <Link className="ops-attention-row" href={item.href} key={item.label}><span className="ops-icon-tile"><NavigationIcon name={item.icon} /></span><div><strong>{item.label}</strong><small>{item.text}</small></div><span className="ops-badge">{item.count ?? "—"}{graph?.truncated && item.href === "/knowledge-graph" ? "+" : ""}</span><span aria-hidden="true">›</span></Link>)}<details className="graph-semantic-list"><summary>Relationships needing dependency-impact classification</summary><ul>{relationships.map(edge => <li key={edge.key}><Link href={`/services/${edge.source.entity_id}#dependency-impact`}>{edge.source.name} — {edge.label} → {edge.target.name}</Link><small> · {!edge.dependency_group_id ? "Impact not classified" : "Unknown effect"}</small></li>)}</ul>{graph && !relationships.length && <p>No visible dependencies need classification.</p>}{graph?.truncated && <p>Showing relationships within this bounded overview. Other Services may also need review.</p>}</details><p className="ops-meta">Knowledge quality based on recorded data.</p></section>;
 }
 
 function CriticalServices({ graph, graphError }) {
@@ -105,7 +106,7 @@ export default function DashboardPage() {
     let active = true;
     setData(canGraph ? {} : { graphError: true }); setError("");
     const requests = [["summary", "/dashboard/summary?include_customer_wide=true"], ...(canGraph ? [["graph", "/operational-graph/landscape"]] : []), ...(hasPermission("changes.view") ? [["changes", "/changes?limit=6&offset=0&include_customer_wide=true"]] : [])];
-    Promise.all(requests.map(async ([key, path]) => { try { const response = await apiRequest(path); if (active) setData((old) => ({ ...old, [key]: key === "changes" ? response.items : response })); } catch (e) { if (active) { setError(e.message || "Atlas could not load this dashboard."); setData((old) => ({ ...old, [`${key}Error`]: true })); } } }));
+    Promise.all(requests.map(async ([key, path]) => { try { const response = await apiRequest(path); if (active) setData((old) => ({ ...old, [key]: key === "graph" ? normalizeOperationalGraph(response) : key === "changes" ? response.items : response })); } catch (e) { if (active) { setError(e.message || "Atlas could not load this dashboard."); setData((old) => ({ ...old, [`${key}Error`]: true })); } } }));
     return () => { active = false; };
   }, [canView, canGraph, hasPermission, workspace.customerId, workspace.siteId, retry]);
   if (!canView) return <AccessDenied />;

@@ -89,7 +89,7 @@ test("UI uses the shared projection for layout and inspector fallback", async ()
   assert.match(page, /GraphInspector key=\{selectedNode\?\.key/);
   assert.doesNotMatch(page, /selectedRecord/);
   assert.match(landscape, /presentLandscape\(graph, \{[^\n]*focus: centerKey, analysis: Boolean\(analysis\)/);
-  assert.match(landscape, /for \(const edge of presentation.edges\) if \(edge.dependency_group_id && edge.presentation_group_size > 1\)/);
+  assert.match(landscape, /layoutLandscape\(presentation, viewportWidth, expandedView, compact\)/);
 });
 
 test("depth 3 structural chain prunes third-hop orphans and stale inspector selection", () => {

@@ -13,13 +13,14 @@ function legacyEndpointType(edgeType, endpoint) {
 }
 
 export function normalizeOperationalGraph(graph = {}) {
-  const nodes = (graph.nodes || []).map((node) => ({
+  graph = graph || {};
+  const nodes = (Array.isArray(graph.nodes) ? graph.nodes : []).filter(node => node && ["asset", "service", "business_function"].includes(node.entity_type) && (typeof node.entity_id === "string" || typeof node.id === "string" || (typeof node.key === "string" && node.key.includes(":"))) && typeof node.name === "string").map((node) => ({
     ...node,
     key: node.key || `${node.entity_type}:${node.entity_id || node.id}`,
-    entity_id: node.entity_id || node.id,
+    entity_id: node.entity_id || node.id || node.key.split(":").slice(1).join(":"),
   }));
   const nodesByKey = Object.fromEntries(nodes.map((node) => [node.key, node]));
-  const edges = (graph.edges || []).map((edge) => {
+  const edges = (Array.isArray(graph.edges) ? graph.edges : []).filter(edge => edge && [edge.key, edge.edge_id, edge.id].some(value => typeof value === "string" && value)).map((edge) => {
     const family = edge.edge_family || EDGE_FAMILY_BY_LEGACY_TYPE[edge.edge_type] || edge.edge_type;
     const sourceKey = edge.source_key || `${legacyEndpointType(edge.edge_type, "source")}:${edge.source_id}`;
     const targetKey = edge.target_key || `${legacyEndpointType(edge.edge_type, "target")}:${edge.target_id}`;
@@ -27,6 +28,7 @@ export function normalizeOperationalGraph(graph = {}) {
       ...edge,
       key: edge.key || `${family}:${edge.edge_id || edge.id}`,
       edge_family: family,
+      label: edge.label || edge.relationship_type_name || "Recorded relationship",
       edge_id: edge.edge_id || edge.id,
       source_key: sourceKey,
       target_key: targetKey,

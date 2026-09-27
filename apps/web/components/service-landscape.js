@@ -1,7 +1,8 @@
 "use client";
 
-import { landscapeGeometry, fitLandscape } from "../lib/landscape-geometry.mjs";
-import { dependencyDetail, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
+import { fitLandscape } from "../lib/landscape-geometry.mjs";
+import { dependencyDetail, dependencyGroupLabel, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
+import { layoutLandscape, landscapeEdgePath } from "../lib/landscape-layout.mjs";
 import { AssetIcon } from "./asset-icon";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -39,40 +40,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
     return () => { observer.disconnect(); cancelAnimationFrame(frame); };
   }, [expandedView, detailsHidden]);
   const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
-  const layout = useMemo(() => {
-    const geometry = landscapeGeometry(viewportWidth, expandedView);
-    const stepX = compact ? Math.max(222, viewportWidth / 3) : geometry.stepX;
-    const nodeWidth = compact ? stepX - 36 : geometry.nodeWidth;
-    const nodeHeight = compact ? 64 : geometry.nodeHeight;
-    const stepY = compact ? 98 : 140;
-    const positions = new Map();
-    const groupIdsBySource = new Map();
-    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id && edge.presentation_group_size > 1) {
-      if (!groupIdsBySource.has(edge.source_key)) groupIdsBySource.set(edge.source_key, new Set());
-      groupIdsBySource.get(edge.source_key).add(edge.dependency_group_id);
-    }
-    let height = 300;
-    presentation.lanes.forEach((lane, index) => {
-      let y = 70;
-      lane.nodes.forEach((node) => {
-        positions.set(node.key, { x: index * stepX + 12, y, node });
-        const groupCount = groupIdsBySource.get(node.key)?.size || 0;
-        y += compact ? stepY : Math.max(stepY, groupCount ? nodeHeight + 51 + groupCount * 58 : 0);
-      });
-      height = Math.max(height, y + 50);
-    });
-    const groups = new Map();
-    if (!compact) for (const edge of presentation.edges) if (edge.dependency_group_id && edge.presentation_group_size > 1) {
-      const key = `dependency_group:${edge.dependency_group_id}`;
-      if (!groups.has(key)) {
-        const subject = positions.get(edge.source_key);
-        const groupIndex = [...groupIdsBySource.get(edge.source_key)].indexOf(edge.dependency_group_id);
-        groups.set(key, { ...edge, key, x: subject.x + nodeWidth - 135, y: subject.y + nodeHeight + 36 + groupIndex * 58, edges: [] });
-      }
-      groups.get(key).edges.push(edge);
-    }
-    return { nodeWidth, nodeHeight, stepX, positions, groups: [...groups.values()], width: stepX * 3, height };
-  }, [presentation, compact, viewportWidth, expandedView]);
+  const layout = useMemo(() => layoutLandscape(presentation, viewportWidth, expandedView, compact), [presentation, viewportWidth, expandedView, compact]);
 
   // Native CSS-pixel sizing is the readable default. Height never determines
   // card size; the existing viewport owns vertical overflow.
@@ -97,7 +65,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   useEffect(() => {
     if (!centerKey) return;
     locateNode(viewport.current, centerKey);
-  }, [centerKey, graph]);
+  }, [centerKey, graph, viewportWidth]);
 
   useEffect(() => {
     if (!locateRequest) return;
@@ -105,17 +73,6 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
   }, [locateRequest]);
 
   const pathKeys = new Set((analysis?.results || []).flatMap((r) => r.paths.flatMap((p) => p.edges.map((e) => e.key))));
-  function edgePath(source, target, sourceWidth = layout.nodeWidth) {
-    if (source.x === target.x) {
-      const x = source.x + layout.nodeWidth;
-      const bend = Math.min(42, Math.max(8, layout.stepX - layout.nodeWidth - 12));
-      return `M${x} ${source.y + layout.nodeHeight / 2} C${x + bend} ${source.y + layout.nodeHeight / 2},${x + bend} ${target.y + layout.nodeHeight / 2},${x} ${target.y + layout.nodeHeight / 2}`;
-    }
-    const right = source.x < target.x;
-    const x1 = source.x + (right ? sourceWidth : 0), x2 = target.x + (right ? 0 : layout.nodeWidth);
-    const mid = (x1 + x2) / 2;
-    return `M${x1} ${source.y + layout.nodeHeight / 2} C${mid} ${source.y + layout.nodeHeight / 2},${mid} ${target.y + layout.nodeHeight / 2},${x2} ${target.y + layout.nodeHeight / 2}`;
-  }
   const drag = useRef(null);
   return <div className={`service-landscape ${compact ? "landscape-compact" : expandedView ? "landscape-expanded" : ""}`}>
     {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
@@ -132,12 +89,12 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
           </section>)}
           <svg className="landscape-connectors" width={layout.width} height={layout.height} aria-hidden="true">
             <defs><marker id={compact ? "overview-arrow" : "graph-arrow"} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="currentColor" /></marker></defs>
-            {presentation.edges.map((edge) => {
+            {presentation.edges.map((edge, index) => {
               const group = layout.groups.find((g) => g.dependency_group_id === edge.dependency_group_id);
-              const source = group ? { x: group.x, y: group.y - 10 } : layout.positions.get(edge.source_key), target = layout.positions.get(edge.target_key);
-              return <path key={edge.key} d={edgePath(source, target, group ? 135 : layout.nodeWidth)} markerEnd={`url(#${compact ? "overview-arrow" : "graph-arrow"})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${analysis ? pathKeys.has(edge.key) ? "consequence-path" : "context-edge" : ""}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>;
+              const source = group || layout.positions.get(edge.source_key), target = layout.positions.get(edge.target_key);
+              return <path key={edge.key} d={landscapeEdgePath(source, target, layout, index)} markerEnd={`url(#${compact ? "overview-arrow" : "graph-arrow"})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${analysis ? pathKeys.has(edge.key) ? "consequence-path" : "context-edge" : ""}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>;
             })}
-            {layout.groups.map((group) => { const subject = layout.positions.get(group.source_key); return <path key={group.key} d={`M${subject.x + layout.nodeWidth / 2} ${subject.y + layout.nodeHeight} V${group.y - 8} H${group.x + 67} V${group.y}`} />; })}
+            {layout.groups.map((group) => { const subject = layout.positions.get(group.source_key); return <path key={group.key} d={`M${subject.x + 14} ${subject.y + layout.nodeHeight} V${group.y - 8} H${group.x + 14} V${group.y}`} />; })}
           </svg>
           {[...layout.positions.values()].map(({ node, x, y }) => {
             const state = analysisState(node, analysis);
@@ -148,7 +105,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", onSele
               </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}
             </button>;
           })}
-          {layout.groups.map((group) => <button className="dependency-presentation" style={{ left: group.x, top: group.y }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong>{group.dependency_group_name}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
+          {layout.groups.map((group) => <button className="dependency-presentation" style={{ left: group.x, top: group.y, width: group.width, height: group.height }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong title={dependencyGroupLabel(group)}>{dependencyGroupLabel(group)}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
         </div>
       </div>
     </div>

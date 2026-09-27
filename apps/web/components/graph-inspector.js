@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { ANALYSIS_CLASSIFICATION_LABELS, ANALYSIS_STATE_LABELS, explainDependencyReason } from "../lib/dependency-analysis.mjs";
-import { DEPENDENCY_REQUIREMENT_LABELS, DEPENDENCY_STRATEGY_LABELS, dependencyDetail } from "../lib/dependency-semantics.mjs";
+import { DEPENDENCY_REQUIREMENT_LABELS, DEPENDENCY_STRATEGY_LABELS, dependencyDetail, dependencyGroupLabel } from "../lib/dependency-semantics.mjs";
 import { normalizeOperationalGraph } from "../lib/operational-graph.mjs";
 import { CompletenessLine, EntityMark, RecordedStatus } from "./operations-primitives";
 
@@ -24,7 +24,7 @@ export function GraphInspector({ selected, group, graph, analysis, analysisActiv
   const relationships = (detail || graph).edges.filter((e) => e.source_key === node?.key || e.target_key === node?.key);
   const result = analysis?.results.find((r) => r.service.key === node?.key);
   return <aside className="ops-card graph-inspector" aria-label="Graph inspector" aria-live="polite">
-    {group ? <><p className="ops-meta">Dependency behaviour</p><h2>{group.dependency_group_name}</h2><dl className="ops-definition"><dt>Requirement</dt><dd>{DEPENDENCY_REQUIREMENT_LABELS[group.dependency_requirement]}</dd><dt>Strategy</dt><dd>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</dd><dt>If unsatisfied</dt><dd>{ANALYSIS_STATE_LABELS[group.failure_effect]}</dd></dl><h3>Visible members</h3><ul>{group.edges.map((edge) => <li key={edge.key}><button type="button" className="text-button" onClick={() => onSelect(edge.target)}>{edge.target.name}</button></li>)}</ul><p className="ops-meta">Existing dependency-group semantics. This group represents recorded relationships.</p></> : !node ? <div className="ops-guided"><h2>Explore your environment</h2><p>Select an entity to inspect its recorded knowledge. Double click or choose Focus to explore its neighbourhood.</p><p>Use Tab and Enter to select nodes with the keyboard.</p></div> : <>
+    {group ? <><p className="ops-meta">Dependency behaviour</p><h2>{dependencyGroupLabel(group)}</h2><dl className="ops-definition"><dt>Requirement</dt><dd>{DEPENDENCY_REQUIREMENT_LABELS[group.dependency_requirement]}</dd><dt>Strategy</dt><dd>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</dd><dt>If unsatisfied</dt><dd>{ANALYSIS_STATE_LABELS[group.failure_effect]}</dd></dl><h3>Visible members</h3><ul>{group.edges.map((edge) => <li key={edge.key}><button type="button" className="text-button" onClick={() => onSelect(edge.target)}>{edge.target.name}</button></li>)}</ul><p className="ops-meta">Existing dependency-group semantics. This group represents recorded relationships.</p></> : !node ? <div className="ops-guided"><h2>Explore your environment</h2><p>Select an entity to inspect its recorded knowledge. Double click or choose Focus to explore its neighbourhood.</p><p>Use Tab and Enter to select nodes with the keyboard.</p></div> : <>
       <header className="inspector-identity">{node.entity_type === "asset" ? <AssetIcon asset={node} size={32} /> : <EntityMark type={node.entity_type} />}<div><h2>{node.name}</h2><p>{node.subtitle || node.entity_type.replaceAll("_", " ")}</p></div></header>
       {node.site_id && node.site_id !== siteId && <p className="site-badge">{node.site_name || "Another authorized Site"}</p>}
       {analysisActive ? <>

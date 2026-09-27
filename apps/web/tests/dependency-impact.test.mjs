@@ -15,7 +15,7 @@ test("classification creates singleton semantics with canonical requirement and 
     assert.equal(request.body.failure_effect, "degraded");
     assert.equal(request.body.strategy, "all");
     assert.deepEqual(request.body[`${kind}_dependency_ids`], ["provider"]);
-    assert.equal(request.body.name, `Dependency ${kind} provider`);
+    assert.equal(request.body.name, "Service — Provider");
   }
 });
 test("existing singleton edit patches only chosen effect, preserving ANY and group requirement", () => {

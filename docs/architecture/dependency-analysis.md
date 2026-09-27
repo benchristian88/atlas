@@ -155,8 +155,8 @@ analysis and change simulation remain deferred.
 The Service detail page presents **Dependency impact**. An ungrouped relationship
 asks what happens to the Service if that dependency is unavailable. Choosing
 unavailable, degraded or Unknown uses the existing group creation endpoint to
-create an ALL singleton, with a deterministic name based on relationship kind
-and durable dependency ID. It preserves the relationship's required/optional
+create an ALL singleton, with a human-readable name based on the Service and
+dependency names. A deterministic numeric suffix avoids active-name collisions. It preserves the relationship's required/optional
 value. Existing singleton groups use the same simple controls; effect edits
 patch only the effect, preserving the stored name, strategy and membership.
 
