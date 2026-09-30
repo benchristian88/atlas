@@ -56,3 +56,70 @@ export function showcaseFixture(size = "medium") {
   asset("Archive Server", "server");
   return data;
 }
+
+// Distinct branch shapes matter more than repeating hundreds of workload leaves.
+function structuralBuilder() {
+  const data = showcaseFixture("small");
+  data.assets = []; data.relationships = []; data.platform_links = []; data.structural_edges = [];
+  data.asset_types.push({ ...data.asset_types.find(t => t.key === "platform"), id: id(40), key: "container_host", name: "Container Host", topology_position: { id: id(740), key: "container_host", name: "Container host", sort_order: 45 } });
+  data.asset_types.push({ ...data.asset_types.find(t => t.key === "server"), id: id(41), key: "appliance", name: "Storage Appliance", topology_position: { id: id(741), key: "infrastructure", name: "Infrastructure appliance", sort_order: 46 } });
+  const add = (name, type, parent, hosted = false) => {
+    const asset = { id: id(100 + data.assets.length), name, asset_type: type, site_id: id(2), customer_id: id(1), status: "active", ip_address: "192.0.2.99", hostname: "private.example.test" };
+    data.assets.push(asset);
+    if (parent) {
+      const relationship = { id: id(10000 + data.relationships.length), source_asset_id: asset.id, target_asset_id: parent.id, relationship_type: hosted ? "runs_on" : "connects_to" };
+      data.relationships.push(relationship);
+      if (hosted) data.platform_links.push({ relationship_id: relationship.id, parent_id: parent.id, child_id: asset.id });
+      data.structural_edges.push({ key: `relationship:${relationship.id}`, source_key: `asset:${asset.id}`, target_key: `asset:${parent.id}`, platform_parent_key: hosted ? `asset:${parent.id}` : null, topology_class: hosted ? "platform" : "physical_network", kind: "relationship", directional: hosted, label: hosted ? "Runs on" : "Connects to" });
+    }
+    return asset;
+  };
+  return { data, add };
+}
+
+function realShapeFixture({ workloads, accessPoints, sideBranch }) {
+  const { data, add } = structuralBuilder();
+  const gateway = add("Gateway", "gateway"), aggregation = add("Aggregation Switch", "core", gateway);
+  const distribution = add("Distribution Switch", "switch", aggregation);
+  const access = add("Access Switch A", "switch", distribution); add("Access Switch B", "switch", distribution);
+  for (let i = 0; i < accessPoints; i++) add(`Wireless ${i + 1}`, "ap", access);
+  if (sideBranch) {
+    const sideHost = add("Office Platform", "platform", access);
+    add("Office Automation", "home", sideHost, true);
+  }
+  const hosts = ["A", "B", "C"].map(letter => add(`Platform Host ${letter}`, "platform", distribution));
+  add("Storage Appliance", "appliance", distribution); add("Backup Appliance", "appliance", distribution);
+  for (let i = 0; i < workloads; i++) add(`Workload ${String(i + 1).padStart(2, "0")}`, ["infra", "media", "home"][i % 3], hosts[0], true);
+  for (const letter of ["A", "B"]) {
+    const container = add(`Container Host ${letter}`, "container_host", hosts[0], true);
+    add(`Photo Library ${letter}`, "media", container, true); add(`Auth Service ${letter}`, "infra", container, true);
+  }
+  for (const host of hosts.slice(1)) for (let i = 0; i < 3; i++) add(`${host.name.at(-1)} Service ${i + 1}`, i ? "media" : "infra", host, true);
+  for (const letter of ["A", "B"]) {
+    const physical = add(`Physical Host ${letter}`, "server", aggregation);
+    const platform = add(`Isolated Platform ${letter}`, "platform", physical, true);
+    add(`DNS Service ${letter}`, "infra", platform, true);
+  }
+  add("Archive Server", "server");
+  return data;
+}
+
+export function showcaseRealShapeFixture() {
+  return realShapeFixture({ workloads: 16, accessPoints: 5, sideBranch: false });
+}
+
+export function showcaseReferenceFixture() {
+  return realShapeFixture({ workloads: 10, accessPoints: 3, sideBranch: true });
+}
+
+export function showcasePosterFixture(branches, extraSpine = 0) {
+  const { data, add } = structuralBuilder();
+  let gateway = add("Gateway", "gateway");
+  for (let i = 0; i < extraSpine; i++) gateway = add(`Gateway Transit ${i + 1}`, "gateway", gateway);
+  const core = add("Aggregation Switch", "core", gateway);
+  for (let i = 0; i < branches; i++) {
+    const host = add(`Host ${String(i + 1).padStart(3, "0")}`, "platform", core);
+    add(`Service ${String(i + 1).padStart(3, "0")}`, "infra", host, true);
+  }
+  return data;
+}

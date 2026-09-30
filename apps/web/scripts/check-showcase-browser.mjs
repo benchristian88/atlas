@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { showcaseFixture, id } from "../tests/fixtures/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, id } from "../tests/fixtures/showcase.mjs";
+import { showcaseLayout, showcaseModel } from "../lib/showcase.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3110";
 const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-showcase-browser";
@@ -11,8 +12,12 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const permissions = ["assets.view", "relationships.view", "networks.view", "customers.view", "sites.view"];
 const reports = [];
 try {
-  for (const [size, theme] of [["small", "light"], ["medium", "light"], ["large", "light"], ["medium", "dark"]]) {
-    const data = showcaseFixture(size), site = data.sites[0], customer = data.customers[0];
+  for (const [size, theme] of [["small", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["medium", "dark"], ["adaptive", "dark"]]) {
+    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcasePosterFixture(50) : size === "maximum" ? showcasePosterFixture(50, 2) : showcaseFixture(size);
+    const layout = showcaseLayout(showcaseModel(data, id(2))), exportHeight = layout.sceneHeight * 2;
+    assert.ok(layout.complete);
+    if (["reference", "real-shape"].includes(size)) { assert.equal(layout.sceneHeight, 1080); assert.equal(layout.scale, 1); }
+    const site = data.sites[0], customer = data.customers[0];
     // Exercise optional cached-icon and type-icon failure without blocking export.
     data.assets[0].cached_icon_url = `/api/assets/${data.assets[0].id}/icon`;
     data.assets[1].cached_icon_url = `/api/assets/${data.assets[1].id}/icon`;
@@ -48,12 +53,27 @@ try {
     const scene = page.locator(".showcase-scene"), button = page.getByRole("button", { name: "Export PNG", exact: true });
     await scene.waitFor(); await button.waitFor();
     await page.waitForFunction(() => !document.querySelector(".showcase-actions button")?.disabled);
-    assert.equal(await scene.getAttribute("viewBox"), "0 0 1920 1080");
+    assert.equal(await scene.getAttribute("viewBox"), `0 0 1920 ${layout.sceneHeight}`);
     assert.equal(await scene.evaluate(el => getComputedStyle(el).colorScheme), "light");
     assert.equal(await scene.locator("image").count(), 2 + data.assets.filter(a => a.asset_type === "platform").length, "Logo, cached Asset icon and Type fallback images are embedded");
     // Platform was visited above; only Showcase's resource preparation is
     // constrained to one fetch per URL. Its embedded previews share that result.
-    assert.ok(await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.every(tile => [...tile.querySelectorAll(":scope > text")].every(text => text.getComputedTextLength() <= (Number(text.getAttribute("x")) === 35 ? 89.5 : 154.5)))), "Tile labels respect fixed text budgets");
+    const tiles = await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => ({
+      id: tile.getAttribute("data-showcase-asset"), title: tile.querySelector(":scope > title").textContent,
+      labels: [...tile.querySelectorAll(":scope > text")].map(text => ({ text: text.textContent, length: text.getComputedTextLength() })),
+      budget: Number(tile.getAttribute("data-text-width")), artworkWidth: Number(tile.querySelector("image, svg")?.getAttribute("width")), icons: tile.querySelectorAll("image, path, circle, rect").length,
+    })));
+    for (const tile of tiles) {
+      const asset = data.assets.find(a => a.id === tile.id);
+      assert.equal(tile.title, asset.name, "Accessible title contains the full name only");
+      assert.equal(tile.labels.length, 1, "Every structural/workload/endpoint tile contains one name line, no Type or metadata");
+      assert.ok(tile.labels[0].length <= tile.budget + .5, "Names respect their measured text budget");
+      assert.ok(tile.icons > 0);
+      assert.equal(tile.artworkWidth, 20, "Compact artwork retains a 20px viewport");
+    }
+    assert.equal(await scene.locator("[data-showcase-item] [data-showcase-position]").count(), 0, "Positions are outside Asset tiles");
+    const previewRatio = await scene.evaluate(el => el.getBoundingClientRect().width / el.getBoundingClientRect().height);
+    assert.ok(Math.abs(previewRatio - 1920 / layout.sceneHeight) < .001, "Preview preserves the selected aspect ratio");
     const text = await scene.textContent();
     assert.ok(text.includes(site.name));
     for (const hidden of ["192.0.2.99", "private.example.test", "Recorded:", "Export PNG", "Cluster"]) assert.ok(!text.includes(hidden), hidden);
@@ -66,9 +86,9 @@ try {
     await page.setViewportSize({ width: 1800, height: 1200 });
     await page.screenshot({ path: `${output}/${size}-${theme}.png`, fullPage: true });
     await scene.screenshot({ path: `${output}/${size}-${theme}-scene.png` });
-    if (size !== "small") {
+    if (["medium", "large", "real-shape"].includes(size)) {
       const media = page.locator('[data-showcase-kind="category"]').filter({ hasText: "Media & Photos" });
-      assert.equal(await media.count(), 2);
+      assert.equal(await media.count(), size === "real-shape" ? 5 : 2);
       await media.first().screenshot({ path: `${output}/${size}-${theme}-host-local-category.png` });
       const ap = page.locator('[data-showcase-kind="type"]').filter({ hasText: "Wireless Access Point" });
       assert.match(await ap.textContent(), /5 devices/); assert.match(await ap.textContent(), /\+1/);
@@ -80,19 +100,19 @@ try {
     assert.equal(download.suggestedFilename(), "the-workshop-atlas-showcase.png");
     const path = `${output}/${size}-${theme}-export.png`; await download.saveAs(path);
     const png = await readFile(path);
-    assert.equal(png.subarray(1, 4).toString(), "PNG"); assert.equal(png.readUInt32BE(16), 3840); assert.equal(png.readUInt32BE(20), 2160);
+    assert.equal(png.subarray(1, 4).toString(), "PNG"); assert.equal(png.readUInt32BE(16), 3840); assert.equal(png.readUInt32BE(20), exportHeight);
     assert.equal(networkRequests.length, beforeExport, "Export makes no network requests and works offline");
     await context.setOffline(false);
     let parity;
-    if (size === "medium" && theme === "light") {
-      await page.setViewportSize({ width: 4300, height: 2800 });
+    if (["medium", "real-shape", "reference", "adaptive", "maximum"].includes(size) && theme === "light") {
+      await page.setViewportSize({ width: 4300, height: exportHeight + 640 });
       await page.locator(".showcase-frame").evaluate(frame => { frame.style.width = "3840px"; frame.style.border = "0"; frame.style.borderRadius = "0"; });
-      const preview = await scene.screenshot({ path: `${output}/preview-at-export-resolution.png` });
-      parity = await page.evaluate(async ([first, second]) => {
+      const preview = await scene.screenshot({ path: `${output}/${size}-preview-at-export-resolution.png` });
+      parity = await page.evaluate(async ([first, second, exportHeight]) => {
         const pixels = async data => {
           const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode();
-          const canvas = document.createElement("canvas"); canvas.width = 3840; canvas.height = 2160;
-          const ctx = canvas.getContext("2d"); ctx.drawImage(image, 0, 0); return ctx.getImageData(0, 0, 3840, 2160).data;
+          const canvas = document.createElement("canvas"); canvas.width = 3840; canvas.height = exportHeight;
+          const ctx = canvas.getContext("2d"); ctx.drawImage(image, 0, 0); return ctx.getImageData(0, 0, 3840, exportHeight).data;
         };
         const [a, b] = await Promise.all([pixels(first), pixels(second)]);
         let difference = 0, changed = 0;
@@ -100,8 +120,8 @@ try {
           const delta = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
           difference += delta; if (delta > 120) changed++;
         }
-        return { meanChannelDifference: difference / (3840 * 2160 * 3), changedPixelFraction: changed / (3840 * 2160) };
-      }, [preview.toString("base64"), png.toString("base64")]);
+        return { meanChannelDifference: difference / (3840 * exportHeight * 3), changedPixelFraction: changed / (3840 * exportHeight) };
+      }, [preview.toString("base64"), png.toString("base64"), exportHeight]);
       assert.ok(parity.meanChannelDifference < 2 && parity.changedPixelFraction < .02, JSON.stringify(parity));
     }
     assert.deepEqual(errors, []);
@@ -109,7 +129,7 @@ try {
     assert.deepEqual(await page.locator(".topology-platform-section").allTextContents(), platformBefore);
     const exported = await context.newPage(); await exported.setContent(`<img style="width:100%;height:auto" src="data:image/png;base64,${png.toString("base64")}" />`);
     await exported.locator("img").waitFor(); await exported.screenshot({ path: `${output}/${size}-${theme}-export-opened.png` });
-    reports.push({ size, theme, assets: data.assets.length, dimensions: [3840, 2160], parity, errors });
+    reports.push({ size, theme, assets: data.assets.length, logicalDimensions: [1920, layout.sceneHeight], dimensions: [3840, exportHeight], scale: layout.scale, diagnostics: layout.diagnostics, parity, errors });
     if (size === "small") {
       // No partial or empty export when the complete current-site source empties.
       data.assets = []; data.structural_edges = []; data.platform_links = [];
@@ -119,10 +139,21 @@ try {
       await page.getByText("No Assets recorded for this site yet.", { exact: true }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Export PNG", exact: true }).count(), 0);
     }
+    if (size === "maximum") {
+      Object.assign(data, showcasePosterFixture(60));
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await page.getByRole("button", { name: "Showcase", exact: true }).click();
+      await page.getByText(/Showcase incomplete:/).waitFor();
+      assert.equal(await page.getByRole("button", { name: "Export PNG", exact: true }).count(), 0);
+      assert.equal(await page.locator(".showcase-scene").count(), 0);
+      assert.ok(!(await page.locator(".main-content").count()) || !(await page.locator(".main-content").textContent()).includes("requiredScale"));
+      await page.screenshot({ path: `${output}/oversized-incomplete.png`, fullPage: true });
+    }
     await context.close();
   }
   // Both themes must yield exactly the same composition pixels.
   assert.deepEqual(await readFile(`${output}/medium-light-export.png`), await readFile(`${output}/medium-dark-export.png`));
+  assert.deepEqual(await readFile(`${output}/adaptive-light-export.png`), await readFile(`${output}/adaptive-dark-export.png`));
   await writeFile(`${output}/report.json`, JSON.stringify(reports, null, 2));
   console.log(JSON.stringify(reports));
 } finally { await browser.close(); }

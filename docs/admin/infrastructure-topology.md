@@ -4,7 +4,7 @@ Open **Knowledge → Topology**. The page is named **Infrastructure Topology**. 
 which recorded Networks it belongs to, and its recorded connections. The
 Knowledge Graph remains the place for Service and Business Function context.
 Both views use Atlas knowledge; topology adds no separate truth store.
-The fifth tab, [Showcase](showcase.md), exports a light, fixed 16:9 view of the
+The fifth tab, [Showcase](showcase.md), exports a light poster (16:9 preferred, with bounded adaptive height) of the
 whole current Site as a 3840×2160 PNG. It has its own presentation grouping and
 does not change Platform or Connectivity.
 

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { showcaseModel, showcaseLayout, showcaseFilename, SHOWCASE_MIN_SCALE } from "../lib/showcase.mjs";
-import { showcaseFixture, id } from "./fixtures/showcase.mjs";
+import { showcaseModel, showcaseLayout, showcaseFilename, SHOWCASE_MIN_SCALE, SHOWCASE_CONTENT_TOP, SHOWCASE_MAX_HEIGHT } from "../lib/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, id } from "./fixtures/showcase.mjs";
 import { topologyPresentation, connectivityLayout } from "../lib/infrastructure-topology.mjs";
 
 for (const size of ["small", "medium", "large"]) test(`${size}: complete, bounded, deterministic, host-local presentation`, () => {
@@ -13,9 +13,9 @@ for (const size of ["small", "medium", "large"]) test(`${size}: complete, bounde
   assert.ok(layout.scale >= SHOWCASE_MIN_SCALE);
   for (const item of layout.items) {
     assert.ok(layout.x + item.x * layout.scale >= 0);
-    assert.ok(layout.y + item.y * layout.scale >= 130);
+    assert.ok(layout.y + item.y * layout.scale >= SHOWCASE_CONTENT_TOP);
     assert.ok(layout.x + (item.x + item.cardWidth) * layout.scale <= 1920);
-    assert.ok(layout.y + (item.y + item.cardHeight) * layout.scale <= 1080);
+    assert.ok(layout.y + (item.y + item.cardHeight) * layout.scale <= layout.sceneHeight);
   }
   for (const [index, a] of layout.items.entries()) for (const b of layout.items.slice(index + 1)) {
     assert.ok(a.x + a.cardWidth <= b.x || b.x + b.cardWidth <= a.x || a.y + a.cardHeight <= b.y || b.y + b.cardHeight <= a.y, `overlap ${a.name}/${b.name}`);
@@ -119,4 +119,109 @@ test("default AP and disconnected endpoint groups retain counts; structural leav
   assert.equal(loose.members.length, 8); assert.equal(loose.hiddenCount, 4);
   assert.ok(!layout.edges.some(e => e.source_key === loose.key || e.target_key === loose.key));
   for (const a of data.assets.filter(a => ["platform", "server", "switch", "core", "gateway"].includes(a.asset_type))) assert.ok(layout.items.some(n => n.kind === "asset" && n.asset?.id === a.id));
+});
+
+function checkPoster(data) {
+  const model = showcaseModel(data, id(2)), layout = showcaseLayout(model);
+  assert.ok(layout.complete, JSON.stringify(layout.diagnostics));
+  assert.equal(layout.sceneWidth, 1920);
+  assert.ok(layout.sceneHeight >= 1080 && layout.sceneHeight <= SHOWCASE_MAX_HEIGHT);
+  assert.ok(layout.scale >= .86);
+  assert.deepEqual(layout.representedAssetIds, data.assets.map(a => a.id).sort());
+  const shuffled = { ...data, assets: [...data.assets].reverse(), structural_edges: [...data.structural_edges].reverse(), asset_types: [...data.asset_types].reverse(), categories: [...data.categories].reverse() };
+  assert.deepEqual(showcaseLayout(showcaseModel(shuffled, id(2))), layout);
+  const boxes = [...layout.items.map(n => ({ ...n, width: n.cardWidth, height: n.cardHeight })), ...layout.positionLabels];
+  if (layout.footer) boxes.push(layout.footer);
+  for (const box of boxes) {
+    assert.ok(layout.x + box.x * layout.scale >= 0);
+    assert.ok(layout.y + box.y * layout.scale >= SHOWCASE_CONTENT_TOP);
+    assert.ok(layout.x + (box.x + box.width) * layout.scale <= layout.sceneWidth);
+    assert.ok(layout.y + (box.y + box.height) * layout.scale <= layout.sceneHeight);
+  }
+  for (const [i, a] of boxes.entries()) for (const b of boxes.slice(i + 1)) {
+    if (a === layout.footer || b === layout.footer) continue;
+    assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y, `overlap ${a.name}/${b.name}`);
+  }
+  for (const route of layout.routes) for (let i = 1; i < route.points.length; i++) {
+    const p = route.points[i - 1], q = route.points[i];
+    assert.ok(p[0] === q[0] || p[1] === q[1]);
+    for (const [x, y] of [p, q]) {
+      assert.ok(layout.x + x * layout.scale >= 0 && layout.x + x * layout.scale <= layout.sceneWidth);
+      assert.ok(layout.y + y * layout.scale >= SHOWCASE_CONTENT_TOP && layout.y + y * layout.scale <= layout.sceneHeight);
+    }
+    for (const box of boxes) {
+      if (box === layout.footer) continue;
+      const crosses = p[0] === q[0] ? p[0] > box.x && p[0] < box.x + box.width && Math.max(p[1], q[1]) > box.y && Math.min(p[1], q[1]) < box.y + box.height : p[1] > box.y && p[1] < box.y + box.height && Math.max(p[0], q[0]) > box.x && Math.min(p[0], q[0]) < box.x + box.width;
+      assert.equal(crosses, false, `route crosses ${box.name}`);
+    }
+  }
+  assert.deepEqual(layout.routes.flatMap(r => r.relationshipKeys).sort(), data.structural_edges.map(e => e.key).sort());
+  for (const node of layout.items.filter(n => n.kind === "asset")) {
+    assert.equal(node.cardWidth, 204); assert.equal(node.cardHeight, 44);
+  }
+  return { layout, model };
+}
+
+test("real homelab shape: all 50 Assets and actual nested host branches fit compactly", () => {
+  const data = showcaseRealShapeFixture(), { layout, model } = checkPoster(data);
+  assert.equal(data.assets.length, 50);
+  assert.equal(layout.sceneHeight, 1080);
+  assert.equal(layout.scale, 1, "The larger real-shape variant also fits without global shrinking");
+  const byName = name => layout.items.find(n => n.name === name);
+  for (const [parent, child] of [["Gateway", "Aggregation Switch"], ["Aggregation Switch", "Distribution Switch"], ["Distribution Switch", "Access Switch A"], ["Distribution Switch", "Platform Host A"], ["Platform Host A", "Container Host A"], ["Platform Host A", "Container Host B"], ["Aggregation Switch", "Physical Host A"], ["Physical Host A", "Isolated Platform A"]]) {
+    assert.equal(model.parents.get(byName(child).key), byName(parent).key);
+    assert.ok(byName(child).y > byName(parent).y);
+  }
+  for (const group of layout.items.filter(n => n.kind === "category")) for (const member of group.members) assert.equal(model.parents.get(member.key), group.parent);
+  assert.equal(layout.items.filter(n => n.kind === "category" && n.name === "Media & Photos").length, 5);
+  const ap = layout.items.find(n => n.kind === "type");
+  assert.equal(ap.members.length, 5); assert.equal(ap.preview.length, 4); assert.equal(ap.hiddenCount, 1);
+  assert.equal(layout.routes.filter(r => r.source_key === ap.key || r.target_key === ap.key).length, 1);
+  assert.ok(layout.footer.width < layout.sceneWidth / 2, "Disconnected region follows its actual content");
+  assert.ok(layout.positionLabels.length < layout.items.filter(n => n.kind === "asset").length);
+  assert.ok(layout.positionLabels.every(label => label.height === 14));
+});
+
+test("Connectivity-shaped 44-Asset reference fits 16:9 at native scale, including the office side branch", () => {
+  const data = showcaseReferenceFixture(), { layout, model } = checkPoster(data);
+  assert.equal(data.assets.length, 44);
+  assert.equal(layout.sceneHeight, 1080);
+  assert.equal(layout.scale, 1);
+  const byName = name => layout.items.find(n => n.name === name);
+  assert.equal(model.parents.get(byName("Office Platform").key), byName("Access Switch A").key);
+  const office = layout.items.find(n => n.kind === "category" && n.members.some(m => m.name === "Office Automation"));
+  assert.equal(office.parent, byName("Office Platform").key);
+  assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.hiddenCount === 0), "All workloads fit, with no forced four-member truncation");
+  assert.ok(layout.items.some(n => n.kind === "category" && n.memberColumns >= 3));
+  assert.ok(layout.items.some(n => n.kind === "category" && n.memberColumns === 4));
+  for (const node of layout.items.filter(n => n.kind === "asset")) assert.ok(node.members.length === 1);
+});
+
+for (const [name, data, height] of [
+  ["small", showcaseFixture("small"), 1080],
+  ["large grouped", showcaseFixture("large"), 1080],
+  ["adaptive", showcasePosterFixture(50), 1237],
+  ["near maximum", showcasePosterFixture(50, 2), 1354],
+]) test(`${name}: preferred/minimal adaptive dimensions, readable complete geometry`, () => {
+  const { layout } = checkPoster(data);
+  assert.equal(layout.sceneHeight, height);
+  if (height > 1080) {
+    assert.equal(layout.diagnostics.attempts.length, 5);
+    assert.ok(layout.diagnostics.attempts.every(a => a.requiredScale < .86));
+    assert.ok((height - 1 - SHOWCASE_CONTENT_TOP - 32) / layout.diagnostics.sceneHeight < .86, "One pixel less height would breach the scale floor");
+  }
+});
+
+test("pathological structure still refuses export and explains the fit in internal diagnostics", () => {
+  const data = showcasePosterFixture(60), layout = showcaseLayout(showcaseModel(data, id(2)));
+  assert.equal(layout.complete, false);
+  assert.match(layout.reason, /Showcase incomplete/);
+  assert.equal(layout.items, undefined, "No partial scene is returned");
+  const d = layout.diagnostics;
+  assert.equal(d.assetCount, 122); assert.equal(d.structuralNodeCount, 62);
+  assert.equal(d.collapsedGroupCount, 60); assert.equal(d.workloadCategoryCount, 60);
+  assert.equal(d.rootCount, 1); assert.equal(d.chosenPosterHeight, 1358);
+  assert.equal(d.readabilityFloor, .86); assert.equal(d.failureReason, "height");
+  assert.ok(d.sceneWidth > 0 && d.sceneHeight > 1358);
+  assert.ok(d.requiredScale < d.readabilityFloor);
 });

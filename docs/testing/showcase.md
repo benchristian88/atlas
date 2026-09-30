@@ -1,5 +1,9 @@
 # Showcase v1 implementation and acceptance
 
+Historical implementation record. The compact renderer and adaptive poster
+correction supersede the fixed geometry and name/Type presentation below; see
+[the current correction and validation record](showcase-compact-poster.md).
+
 Validated on 30 September 2026, on `feature/topology-showcase` at base HEAD
 `15a696e871558a4241b0098ae45dacbd22ddb24f`. Work is uncommitted; no push or merge.
 

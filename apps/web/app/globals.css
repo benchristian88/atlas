@@ -1441,9 +1441,9 @@ tbody tr:hover { background: var(--surface-muted); }
   .catalogue-secondary { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; text-align: left; gap: 8px 16px; }
 }
 
-/* Showcase owns one light, fixed-coordinate scene; viewport size only scales it. */
+/* Showcase chooses its poster height from data; viewport size only scales it. */
 .showcase { min-width: 0; }
 .showcase-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .showcase-actions p { margin: 0; color: var(--muted); }
-.showcase-frame { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #fff; color-scheme: light; }
+.showcase-frame { width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #fff; color-scheme: light; }
 .showcase-scene .nav-icon { width: 24px; height: 24px; }

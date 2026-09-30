@@ -49,24 +49,51 @@ identical actual neighbour signatures, preserving multihoming/shared-host truth.
 Category ordering and colors use managed category metadata. Disconnected Type
 groups never get connectors or global workload-category grouping.
 
-Each increasingly compact attempt measures complete subtree rectangles and packs
-children deterministically. Stages are: endpoint grouping; four-member workload
-previews; other repetitive Automatic leaf grouping; tighter spacing and local
-category packing; smaller card padding and up to 14% uniform scale reduction.
+Each increasingly compact attempt measures occupied subtree contours and packs
+children deterministically, following Connectivity’s geometry approach. Short
+side branches can share horizontal space with deeper branches at different
+heights; empty bounding rectangles do not reserve entire columns. Managed
+ordering and actual parentage remain authoritative. Stages are: endpoint
+grouping; four-member workload previews; other repetitive Automatic leaf grouping; tighter spacing and local
+category packing; wider packing and up to 14% uniform scale reduction.
+Structural tiles are 204×44, with 17px name text. Workload/endpoint members use
+150px columns, 32px rows (28px when tightened), 22px icons and 15px name text.
+Single-member groups are 204px wide. Larger groups use two through five 150px
+columns as their membership permits (3–5 for dense categories), with 8px gaps
+and 12px side insets. Host-local packing uses a bounded width, allowing category
+grids and intermediate host branches to occupy different vertical depths. Every
+individual Asset tile is icon/name only. Type metadata still drives the existing grouping
+and fallback rules. Position headings reserve only 18px at local position
+transitions and are shared within sibling rows. They are outside Asset tiles and
+participate in routing obstacles. The header ends at y=84, content starts at
+y=100, and the disconnected region wraps its actual content.
 Text starts at 14 logical pixels, giving a 12.04px minimum after scaling.
-No stage removes a branch. If geometry cannot fit, export is unavailable with an
-explicit incomplete state. This is a readability boundary, not a data-fetch cap.
+No stage removes a branch. All stages first try the preferred 1920×1080 poster.
+If height prevents a readable fit, the renderer chooses the smallest integer
+height across eligible compact layouts, up to 1358; width remains 1920. Measured
+route extents participate in fit calculations. Height cannot compensate for an
+excessively wide scene. The same data and metadata select identical dimensions.
+If geometry still cannot fit, export is unavailable with an explicit incomplete
+state. Internal diagnostics record Asset/explicit-node/group/category/root
+counts, measured content width/height, poster height, required scale, readability
+floor, fit reason and each attempted stage. Development logs expose failure
+diagnostics; production UI retains a concise message. This is a readability
+boundary, not a data-fetch cap.
 
 The existing Connectivity `orthogonalDetour` function is exported unchanged for
 obstacle routing. Showcase owns its card sizes, packing and connector
 consolidation. Routes retain their underlying edge IDs. Tests verify orthogonal
-segments, node non-overlap, bounds and complete Asset representation.
+segments, node non-overlap, bounds and complete Asset representation. Both the
+44-Asset Connectivity-shaped reference (including the office-side platform) and
+a 50-Asset variant fit 1920×1080 at native scale. Adaptive height remains for
+structures that genuinely need more depth.
 
 ## Rendering and export
 
-`components/showcase.js` draws one light-only SVG with fixed `viewBox="0 0 1920
-1080"`. Only its CSS size changes on browser resize. Layout is memoized by data
-and Site, not viewport. Managed category palette variables resolve under
+`components/showcase.js` draws one light-only SVG with a deterministic
+`viewBox="0 0 1920 H"`, where H is the selected height from 1080 through 1358.
+The preview frame uses that same aspect ratio. Only its CSS size changes on
+browser resize. Layout is memoized by data and Site, not viewport. Managed category palette variables resolve under
 `color-scheme: light`. Labels use fixed measured text budgets and Arial, shared
 by preview and rasterization. The existing light Atlas SVG is embedded in the
 header; Site name supplies the title.
@@ -82,10 +109,13 @@ managed local SVG artwork.
 
 Export waits for fonts, clones the displayed SVG, freezes its computed SVG
 presentation styles, verifies all image references are data URLs, and rasterizes
-the clone to a 3840×2160 canvas. A data URL avoids the application's image CSP
+the clone to a canvas exactly twice its logical viewBox dimensions: 3840×2160
+for 16:9, up to 3840×2716 for the tallest allowed poster. It never stretches a
+taller scene back to 16:9. A data URL avoids the application's image CSP
 restriction on blob image sources. The downloadable PNG uses an object URL that
 is revoked after use. There is no hidden second renderer, alternative layout,
 external request during export, or theme-dependent export mode.
 
-See [operator guidance](../admin/showcase.md) and
-[validation evidence](../testing/showcase.md).
+See [operator guidance](../admin/showcase.md),
+[compact poster validation](../testing/showcase-compact-poster.md) and the
+[original implementation record](../testing/showcase.md).
