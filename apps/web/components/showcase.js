@@ -42,7 +42,7 @@ function Tile({ node, resources, x = 0, y = 0, compact = false, width = 184 }) {
 function Scene({ layout, site, resources, svgRef }) {
   return <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${layout.sceneWidth} ${layout.sceneHeight}`} width={layout.sceneWidth} height={layout.sceneHeight} role="img" aria-label={`${site.name} — Atlas Showcase`} className="showcase-scene" style={{ display: "block", width: "100%", height: "auto", colorScheme: "light", background: "#ffffff", fontFamily: "Arial, sans-serif", color: "#17283e", fill: "#17283e" }} data-stage={layout.stage}>
     <title>{site.name} — Atlas Showcase</title>
-    <desc>Whole-site infrastructure. Asset relationships determine branches. Category groups stay with their hosts. Dashed connectors indicate recorded Network membership.</desc>
+    <desc>Whole-site infrastructure. Asset relationships determine branches. Category groups stay with their hosts. Logical Networks and interface memberships are excluded.</desc>
     <rect width={layout.sceneWidth} height={layout.sceneHeight} fill="#ffffff" />
     {resources?.logo ? <image href={resources.logo} x="26" y="10" width="164" height="62" /> : <text x="32" y="52" fontSize="26" fontWeight="700">Atlas Impact</text>}
     <path d="M222 23V63" stroke="#cbd5e1" strokeWidth="1.5" />
@@ -51,7 +51,7 @@ function Scene({ layout, site, resources, svgRef }) {
     <g transform={`translate(${layout.x} ${layout.y}) scale(${layout.scale})`}>
       {layout.footer && <g><rect {...layout.footer} rx="10" fill="#fafbfc" stroke="#e1e7ee" strokeDasharray="4 4" /><text x={layout.footer.x + 12} y={layout.footer.y + 20} fontSize="14" fontWeight="600">Unconnected / Other</text></g>}
       <g fill="none" stroke="#64788f" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
-        {layout.routes.map(route => <path key={route.key} d={route.path} strokeDasharray={route.kind === "membership" ? "5 5" : undefined} data-showcase-connector={route.key} />)}
+        {layout.routes.map(route => <path key={route.key} d={route.path} data-showcase-connector={route.key} />)}
       </g>
       {layout.positionLabels.map(label => <text key={label.key} x={label.x + 4} y={label.y + 12} fontSize="14" fill="#617185" data-showcase-position={label.positionId}><title>{label.name}</title>{fitted(label.name, label.width - 8, 14)}</text>)}
       {layout.items.map(item => <g key={item.key} transform={`translate(${item.x} ${item.y})`} data-showcase-item={item.key} data-showcase-kind={item.kind} {...presentationAttributes(item.category || item.network)}>
@@ -61,7 +61,7 @@ function Scene({ layout, site, resources, svgRef }) {
         </> : <>
           <rect width={item.cardWidth} height={item.cardHeight} rx="10" style={{ fill: "var(--identity-tint)", stroke: "var(--identity-border)" }} />
           <text x="12" y="21" fontSize="16" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}><title>{item.name}</title>{fitted(item.name, item.cardWidth - 24, 16, 600)}</text>
-          <text x="12" y={item.cardHeight - 10} fontSize="14" fill="#526477">{item.members.length} {item.kind === "category" ? (item.members.length === 1 ? "workload" : "workloads") : (item.members.length === 1 ? "device" : "devices")}</text>
+          {item.kind === "type" && <text x="12" y={item.cardHeight - 10} fontSize="14" fill="#526477">{item.members.length} devices</text>}
           {item.preview.map((node, index) => <Tile key={node.key} node={node} resources={resources} compact width={item.memberColumns === 1 ? item.cardWidth - 24 : item.memberWidth} x={12 + (index % item.memberColumns) * (item.memberWidth + 8)} y={item.memberTop + Math.floor(index / item.memberColumns) * item.memberRow} />)}
           {item.hiddenCount > 0 && <g><rect x={item.cardWidth - 65} y={item.cardHeight - 25} width="51" height="20" rx="10" style={{ fill: "var(--identity-tile)" }} /><text x={item.cardWidth - 39} y={item.cardHeight - 10} textAnchor="middle" fontSize="14" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}>+{item.hiddenCount}</text></g>}
         </>}

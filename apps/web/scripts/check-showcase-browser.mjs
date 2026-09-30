@@ -13,7 +13,7 @@ const permissions = ["assets.view", "relationships.view", "networks.view", "cust
 const reports = [];
 try {
   for (const [size, theme] of [["small", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["medium", "dark"], ["adaptive", "dark"]]) {
-    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcasePosterFixture(50) : size === "maximum" ? showcasePosterFixture(50, 2) : showcaseFixture(size);
+    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcasePosterFixture(50) : size === "maximum" ? showcasePosterFixture(50, 4) : showcaseFixture(size);
     const layout = showcaseLayout(showcaseModel(data, id(2))), exportHeight = layout.sceneHeight * 2;
     assert.ok(layout.complete);
     if (["reference", "real-shape"].includes(size)) { assert.equal(layout.sceneHeight, 1080); assert.equal(layout.scale, 1); }
@@ -74,7 +74,15 @@ try {
     assert.equal(await scene.locator("[data-showcase-item] [data-showcase-position]").count(), 0, "Positions are outside Asset tiles");
     const previewRatio = await scene.evaluate(el => el.getBoundingClientRect().width / el.getBoundingClientRect().height);
     assert.ok(Math.abs(previewRatio - 1920 / layout.sceneHeight) < .001, "Preview preserves the selected aspect ratio");
+    assert.equal(await scene.locator("[data-showcase-connector][stroke-dasharray]").count(), 0);
+    for (const group of layout.items.filter(n => n.kind === "category")) assert.ok(group.members.length >= 2);
+    for (const group of await scene.locator('[data-showcase-kind="category"]').all()) assert.ok(!/\b\d+ workloads?\b/.test(await group.textContent()));
+    for (const group of layout.items.filter(n => n.kind === "category" && n.hiddenCount)) {
+      const element = scene.locator("[data-showcase-item]").filter({ has: page.locator("title", { hasText: group.name }) });
+      assert.ok((await element.allTextContents()).some(text => text.includes(`+${group.hiddenCount}`)));
+    }
     const text = await scene.textContent();
+    for (const network of data.networks) assert.ok(!text.includes(network.name), "Logical Networks never enter Showcase");
     assert.ok(text.includes(site.name));
     for (const hidden of ["192.0.2.99", "private.example.test", "Recorded:", "Export PNG", "Cluster"]) assert.ok(!text.includes(hidden), hidden);
     for (const forbidden of ["Focus", "Filters", "Refresh", "Hide details panel", "Expand Infrastructure Topology"]) assert.equal(await page.getByRole("button", { name: forbidden, exact: true }).count(), 0);
@@ -88,7 +96,7 @@ try {
     await scene.screenshot({ path: `${output}/${size}-${theme}-scene.png` });
     if (["medium", "large", "real-shape"].includes(size)) {
       const media = page.locator('[data-showcase-kind="category"]').filter({ hasText: "Media & Photos" });
-      assert.equal(await media.count(), size === "real-shape" ? 5 : 2);
+      assert.equal(await media.count(), size === "real-shape" ? 3 : size === "medium" ? 1 : 2);
       await media.first().screenshot({ path: `${output}/${size}-${theme}-host-local-category.png` });
       const ap = page.locator('[data-showcase-kind="type"]').filter({ hasText: "Wireless Access Point" });
       assert.match(await ap.textContent(), /5 devices/); assert.match(await ap.textContent(), /\+1/);
@@ -140,7 +148,7 @@ try {
       assert.equal(await page.getByRole("button", { name: "Export PNG", exact: true }).count(), 0);
     }
     if (size === "maximum") {
-      Object.assign(data, showcasePosterFixture(60));
+      Object.assign(data, showcasePosterFixture(70));
       await page.getByRole("button", { name: "Refresh", exact: true }).click();
       await page.getByRole("button", { name: "Showcase", exact: true }).click();
       await page.getByText(/Showcase incomplete:/).waitFor();

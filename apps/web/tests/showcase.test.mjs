@@ -35,7 +35,8 @@ for (const size of ["small", "medium", "large"]) test(`${size}: complete, bounde
   if (size === "large") assert.ok(layout.stage >= 1);
   if (size !== "small") {
     const categories = layout.items.filter(n => n.kind === "category" && n.name === "Media & Photos");
-    assert.equal(categories.length, 2); assert.notEqual(categories[0].parent, categories[1].parent);
+    assert.equal(categories.length, size === "large" ? 2 : 1);
+    if (size === "large") assert.notEqual(categories[0].parent, categories[1].parent);
     for (const group of categories) for (const member of group.members) assert.equal(model.parents.get(member.key), group.parent);
     const wireless = layout.items.find(n => n.kind === "type" && n.name === "Wireless Access Point");
     assert.equal(wireless.members.length, 5); assert.equal(wireless.preview.length, 4); assert.equal(wireless.hiddenCount, 1);
@@ -58,7 +59,7 @@ test("all authorized categories, foreign-site defence and no unsupported edge le
   assert.ok(layout.items.some(n => n.name === "Wireless Access Point"));
 });
 
-test("cycles, multi-parent hosting, membership and parallel connections are retained", () => {
+test("cycles, multi-parent hosting and parallel structural connections survive Networks-off filtering", () => {
   const data = showcaseFixture("small");
   const [gateway, core, host, photo, dns] = data.assets;
   data.structural_edges.push({ key: "cycle", source_key: `asset:${gateway.id}`, target_key: `asset:${host.id}`, platform_parent_key: `asset:${host.id}`, kind: "relationship", topology_class: "platform", directional: true });
@@ -70,7 +71,7 @@ test("cycles, multi-parent hosting, membership and parallel connections are reta
   assert.equal(layout.representedAssetIds.length, data.assets.length);
   assert.ok(layout.routes.some(r => r.relationshipKeys.includes("shared")));
   assert.ok(layout.routes.some(r => r.relationshipKeys.includes("cycle")));
-  assert.equal(layout.routes.filter(r => r.kind === "membership").length, 2);
+  assert.equal(layout.routes.filter(r => r.kind === "membership").length, 0);
 });
 
 test("managed names and sort order, empty, missing context and unsupported fit", () => {
@@ -155,7 +156,7 @@ function checkPoster(data) {
       assert.equal(crosses, false, `route crosses ${box.name}`);
     }
   }
-  assert.deepEqual(layout.routes.flatMap(r => r.relationshipKeys).sort(), data.structural_edges.map(e => e.key).sort());
+  assert.deepEqual(layout.routes.flatMap(r => r.relationshipKeys).sort(), data.structural_edges.filter(e => e.kind !== "membership").map(e => e.key).sort());
   for (const node of layout.items.filter(n => n.kind === "asset")) {
     assert.equal(node.cardWidth, 204); assert.equal(node.cardHeight, 44);
   }
@@ -173,7 +174,7 @@ test("real homelab shape: all 50 Assets and actual nested host branches fit comp
     assert.ok(byName(child).y > byName(parent).y);
   }
   for (const group of layout.items.filter(n => n.kind === "category")) for (const member of group.members) assert.equal(model.parents.get(member.key), group.parent);
-  assert.equal(layout.items.filter(n => n.kind === "category" && n.name === "Media & Photos").length, 5);
+  assert.equal(layout.items.filter(n => n.kind === "category" && n.name === "Media & Photos").length, 3);
   const ap = layout.items.find(n => n.kind === "type");
   assert.equal(ap.members.length, 5); assert.equal(ap.preview.length, 4); assert.equal(ap.hiddenCount, 1);
   assert.equal(layout.routes.filter(r => r.source_key === ap.key || r.target_key === ap.key).length, 1);
@@ -189,8 +190,9 @@ test("Connectivity-shaped 44-Asset reference fits 16:9 at native scale, includin
   assert.equal(layout.scale, 1);
   const byName = name => layout.items.find(n => n.name === name);
   assert.equal(model.parents.get(byName("Office Platform").key), byName("Access Switch A").key);
-  const office = layout.items.find(n => n.kind === "category" && n.members.some(m => m.name === "Office Automation"));
-  assert.equal(office.parent, byName("Office Platform").key);
+  const office = byName("Office Automation");
+  assert.equal(office.kind, "asset");
+  assert.equal(model.parents.get(office.key), byName("Office Platform").key);
   assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.hiddenCount === 0), "All workloads fit, with no forced four-member truncation");
   assert.ok(layout.items.some(n => n.kind === "category" && n.memberColumns >= 3));
   assert.ok(layout.items.some(n => n.kind === "category" && n.memberColumns === 4));
@@ -200,8 +202,8 @@ test("Connectivity-shaped 44-Asset reference fits 16:9 at native scale, includin
 for (const [name, data, height] of [
   ["small", showcaseFixture("small"), 1080],
   ["large grouped", showcaseFixture("large"), 1080],
-  ["adaptive", showcasePosterFixture(50), 1237],
-  ["near maximum", showcasePosterFixture(50, 2), 1354],
+  ["adaptive", showcasePosterFixture(50), 1113],
+  ["near maximum", showcasePosterFixture(50, 4), 1347],
 ]) test(`${name}: preferred/minimal adaptive dimensions, readable complete geometry`, () => {
   const { layout } = checkPoster(data);
   assert.equal(layout.sceneHeight, height);
@@ -213,15 +215,44 @@ for (const [name, data, height] of [
 });
 
 test("pathological structure still refuses export and explains the fit in internal diagnostics", () => {
-  const data = showcasePosterFixture(60), layout = showcaseLayout(showcaseModel(data, id(2)));
+  const data = showcasePosterFixture(70), layout = showcaseLayout(showcaseModel(data, id(2)));
   assert.equal(layout.complete, false);
   assert.match(layout.reason, /Showcase incomplete/);
   assert.equal(layout.items, undefined, "No partial scene is returned");
   const d = layout.diagnostics;
-  assert.equal(d.assetCount, 122); assert.equal(d.structuralNodeCount, 62);
-  assert.equal(d.collapsedGroupCount, 60); assert.equal(d.workloadCategoryCount, 60);
+  assert.equal(d.assetCount, 142); assert.equal(d.structuralNodeCount, 142);
+  assert.equal(d.collapsedGroupCount, 0); assert.equal(d.workloadCategoryCount, 0);
   assert.equal(d.rootCount, 1); assert.equal(d.chosenPosterHeight, 1358);
   assert.equal(d.readabilityFloor, .86); assert.equal(d.failureReason, "height");
   assert.ok(d.sceneWidth > 0 && d.sceneHeight > 1358);
   assert.ok(d.requiredScale < d.readabilityFloor);
+});
+
+
+test("Networks off removes only logical entities/membership, with no layout reservations or input mutation", () => {
+  const data = showcaseReferenceFixture(), before = structuredClone(data);
+  const layout = showcaseLayout(showcaseModel(data, id(2)));
+  const assetOnly = { ...data, networks: [], asset_interfaces: [], structural_edges: data.structural_edges.filter(e => e.kind !== "membership") };
+  assert.deepEqual(layout, showcaseLayout(showcaseModel(assetOnly, id(2))));
+  assert.deepEqual(data, before);
+  assert.ok(layout.items.every(n => !n.network));
+  assert.ok(layout.routes.every(e => e.kind !== "membership"));
+  for (const name of ["Gateway", "Aggregation Switch", "Distribution Switch", "Access Switch A", "Physical Host A", "Isolated Platform A"]) assert.ok(layout.items.some(n => n.name === name));
+  data.assets[0].name = "Default"; // Names never decide entity eligibility.
+  assert.ok(showcaseLayout(showcaseModel(data, id(2))).items.some(n => n.name === "Default" && n.asset));
+});
+
+test("singleton categories stay directly under their own hosts; multiple members remain locally grouped", () => {
+  const data = showcaseFixture("medium"), model = showcaseModel(data, id(2)), layout = showcaseLayout(model);
+  const hosts = data.assets.filter(a => a.asset_type === "platform");
+  const groups = layout.items.filter(n => n.kind === "category" && n.name === "Media & Photos");
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].parent, `asset:${hosts[0].id}`);
+  assert.equal(groups[0].members.length, 6);
+  const singleton = layout.items.find(n => n.asset?.asset_type === "media" && model.parents.get(n.key) === `asset:${hosts[1].id}`);
+  assert.equal(singleton.kind, "asset");
+  assert.ok(layout.routes.some(e => [e.source_key, e.target_key].includes(singleton.key) && [e.source_key, e.target_key].includes(`asset:${hosts[1].id}`)));
+  assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.members.length >= 2));
+  const large = showcaseLayout(showcaseModel(showcaseFixture("large"), id(2)));
+  for (const group of large.items.filter(n => n.kind === "category")) assert.equal(group.preview.length + group.hiddenCount, group.members.length);
 });

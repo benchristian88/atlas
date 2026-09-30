@@ -28,12 +28,9 @@ export function showcaseModel(data, siteId) {
     category: categories.get(types.get(asset.asset_type)?.category_id),
   })).sort(order);
   const byKey = new Map(nodes.map(n => [n.key, n]));
-  const networkKeys = new Set(data.structural_edges.filter(e => e.kind === "membership" && byKey.has(e.source_key)).map(e => e.target_key));
-  for (const network of data.networks || []) if (networkKeys.has(`network:${network.id}`)) {
-    const node = { key: `network:${network.id}`, id: network.id, name: network.name, network };
-    nodes.push(node); byKey.set(node.key, node);
-  }
-  const edges = data.structural_edges.filter(e => byKey.has(e.source_key) && byKey.has(e.target_key)).sort((a, b) => a.key.localeCompare(b.key));
+  // Match Connectivity's show_networks=False branch: only Asset nodes and
+  // accepted Asset-to-Asset structural edges; never interface membership.
+  const edges = data.structural_edges.filter(e => e.kind !== "membership" && byKey.has(e.source_key) && byKey.has(e.target_key)).sort((a, b) => a.key.localeCompare(b.key));
   const adjacent = new Map(nodes.map(n => [n.key, []]));
   for (const edge of edges) {
     adjacent.get(edge.source_key).push(edge);
@@ -65,11 +62,6 @@ export function showcaseModel(data, siteId) {
         visited.add(next); queue.push(next); attach(next, key, edge);
       }
     }
-  }
-  // Membership is never used to manufacture Asset-to-Asset parentage.
-  for (const node of nodes.filter(n => n.network)) {
-    const candidates = adjacent.get(node.key).sort((a, b) => order(byKey.get(other(a, node.key)), byKey.get(other(b, node.key))));
-    if (candidates.length) attach(node.key, other(candidates[0], node.key), candidates[0]);
   }
   const children = new Map(nodes.map(n => [n.key, []]));
   for (const [child, parent] of parents) children.get(parent).push(byKey.get(child));
@@ -104,6 +96,7 @@ function presentation(model, stage) {
       groups.get(key).members.push(child);
     }
     for (const group of groups.values()) {
+      if (group.kind === "category" && group.members.length < 2) continue;
       if (group.kind === "type" && group.members.length < (stage >= 2 ? 3 : 2)) continue;
       group.members.sort(byName);
       group.name = group.kind === "category" ? group.category?.name || "Uncategorized" : group.type?.name || "Assets";
@@ -177,7 +170,7 @@ function arrange(projection, stage) {
     item.cardWidth = item.kind === "asset" || item.memberColumns === 1 ? SHOWCASE_NODE_WIDTH : item.memberColumns * (item.memberWidth + 8) + 16;
     item.memberTop = 32;
     item.memberRow = stage >= 3 ? 28 : 32;
-    item.cardHeight = item.kind === "asset" ? SHOWCASE_NODE_HEIGHT : item.memberTop + Math.ceil(item.preview.length / item.memberColumns) * item.memberRow + 26;
+    item.cardHeight = item.kind === "asset" ? SHOWCASE_NODE_HEIGHT : item.memberTop + Math.ceil(item.preview.length / item.memberColumns) * item.memberRow + (item.kind === "type" || item.hiddenCount ? 26 : 8);
     const parentPosition = projection.items.get(item.layoutParentKey)?.position?.id;
     item.labelHeight = item.kind === "asset" && item.position && item.position.id !== parentPosition ? 18 : 0;
     const childWidth = item.children.some(n => n.kind === "category") ? (stage >= 3 ? 1000 : 1100) : item.children.some(n => n.kind === "type") ? 900 : maxWidth;

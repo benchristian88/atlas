@@ -33,17 +33,22 @@ nodes, without large position containers. Names that exceed a fixed text budget
 are ellipsized; the full name is available in the SVG's accessible title. No IPs, hostnames,
 status, telemetry, timestamps, evidence or source metadata appear in the image.
 
-Recorded relationships determine the branches. Platform and physical/network
-classes supply structure; dashed connections represent actual interface-to-Network
-membership. Network membership never implies a physical Asset-to-Asset connection.
+Recorded Asset-to-Asset relationships determine the branches. Platform and
+physical/network classes supply structure. Showcase always uses Networks-off
+semantics: logical Network/VLAN entities and interface-membership edges are
+excluded before layout. Gateway, router, switch and other network-device Assets
+remain eligible. There is no Showcase Networks toggle; the operational
+Connectivity toggle is unchanged.
 The diagram adds no Internet node unless Atlas already records it as an Asset.
 Disconnected Assets appear in **Unconnected / Other**, without an invented link.
 
 Hosting relationships take priority over compactness. Physical hosts, platform
 hosts, intermediate container hosts and their children retain their actual
 branches. Workload leaves use their Asset Type's managed Asset Category inside
-that specific host's branch. Two hosts with the same category have separate
-category groups. Dense category grids use three to five compact icon/name tiles
+that specific host's branch when two or more eligible workloads share the local
+category. A singleton appears directly under its actual host, without a category
+wrapper. Two hosts with the same category remain separate; a singleton never
+moves into another host's group. Dense category grids use three to five compact icon/name tiles
 per row where membership permits. Branches pack around occupied geometry, using
 space beside deeper branches instead of forcing every sibling into one wide
 row. Categories do not define domain parentage. No cluster membership
@@ -57,6 +62,10 @@ for the remaining members. Relationships into the same presentation group share
 a connector; individual accepted relationships are unchanged. Extra or shared
 connections remain represented, and differently connected leaves are not merged.
 Disconnected endpoints may share a Type group in Unconnected / Other.
+
+Category groups omit redundant workload-count footers. Collapsed category groups
+retain **+N** for the members outside the visible preview; endpoint Type groups
+retain their existing truthful device totals.
 
 When needed, Showcase progressively collapses large workload categories,
 then repetitive Automatic leaf siblings, then tightens spacing and applies

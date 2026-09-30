@@ -109,7 +109,15 @@ export function showcaseRealShapeFixture() {
 }
 
 export function showcaseReferenceFixture() {
-  return realShapeFixture({ workloads: 10, accessPoints: 3, sideBranch: true });
+  const data = realShapeFixture({ workloads: 10, accessPoints: 3, sideBranch: true });
+  data.networks = ["Default", "Apps VLAN", "IoT VLAN"].map((name, i) => ({ id: id(900 + i), name, site_id: id(2), customer_id: id(1) }));
+  for (const [i, asset] of data.assets.entries()) {
+    const network = data.networks[i % data.networks.length];
+    const iface = { id: id(950 + i), asset_id: asset.id, network_id: network.id, name: "eth0", ip_address: "192.0.2.99" };
+    data.asset_interfaces.push(iface);
+    data.structural_edges.push({ key: `interface:${iface.id}`, source_key: `asset:${asset.id}`, target_key: `network:${network.id}`, kind: "membership", topology_class: "physical_network", directional: false });
+  }
+  return data;
 }
 
 export function showcasePosterFixture(branches, extraSpine = 0) {

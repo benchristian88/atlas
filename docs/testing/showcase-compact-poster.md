@@ -1,5 +1,10 @@
 # Showcase compact poster correction
 
+Historical validation of the compact-layout change. Subsequent Networks-off and
+singleton-category corrections supersede its Network handling, singleton groups,
+footer counts and affected fixture dimensions; see the [current guide](../admin/showcase.md) and
+[focused correction acceptance](showcase-networks-off.md).
+
 Validated on 30 September 2026 on `feature/topology-showcase`, starting from
 `2410259c9256776dcb75e795a16b92c40b75df4d`. This is a presentation correction to
 [Showcase v1](showcase.md), with no database migration, API/domain changes,

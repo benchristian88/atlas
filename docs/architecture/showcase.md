@@ -36,10 +36,19 @@ ordering and edge identity break ties. Physical adjacency determines hierarchy
 within the same position. Iterative visited sets and parent-cycle checks bound
 work to the returned data. Cycle and secondary/shared-parent edges remain
 cross-links; the presentation forest never replaces domain relationships.
-Membership may anchor a recorded Network card, but never parents peer Assets.
+Showcase follows the eligibility rule in backend Connectivity
+`show_networks=False`: construct only Asset nodes and retain accepted structural
+edges between those Assets. It never adds Network/VLAN nodes or interface
+membership edges. This uses the existing typed `membership` edge kind and durable
+Asset keys, not labels or vendor heuristics. Filtering happens before parentage,
+neighbour signatures, grouping and layout, so excluded Networks reserve no space.
+The complete topology API and Connectivity toggle remain unchanged; the Python
+query/traversal is not duplicated or coupled to the JavaScript layout.
 
 Only hosted leaves assigned to the managed Workload position, or Automatic
-hosted leaves, become host-local category groups. Intermediate hosts remain
+hosted leaves, become host-local category groups when at least two eligible
+members share the parent/category/neighbour signature. Singleton workloads remain
+explicit Asset tiles under their actual parent. Intermediate hosts remain
 explicit. Endpoint-position leaves and the existing built-in `access_point` key
 can become branch-local Type groups; this stable built-in key accounts for its
 existing Access Network default. No type display name or vendor is matched.
@@ -58,9 +67,11 @@ grouping; four-member workload previews; other repetitive Automatic leaf groupin
 category packing; wider packing and up to 14% uniform scale reduction.
 Structural tiles are 204×44, with 17px name text. Workload/endpoint members use
 150px columns, 32px rows (28px when tightened), 22px icons and 15px name text.
-Single-member groups are 204px wide. Larger groups use two through five 150px
+Category groups use two through five 150px
 columns as their membership permits (3–5 for dense categories), with 8px gaps
-and 12px side insets. Host-local packing uses a bounded width, allowing category
+and 12px side insets. Fully visible categories use 8px bottom padding, with no
+redundant workload-count footer; collapsed categories retain 26px for +N. Endpoint
+Type-group totals remain unchanged. Host-local packing uses a bounded width, allowing category
 grids and intermediate host branches to occupy different vertical depths. Every
 individual Asset tile is icon/name only. Type metadata still drives the existing grouping
 and fallback rules. Position headings reserve only 18px at local position
