@@ -10,7 +10,7 @@ from app.models import Asset, AssetInterface, AssetRelationship, Customer, Netwo
 from app.presenters import topology_asset_responses
 from app.routes.asset_relationships import relationship_response
 from app.schemas import TopologyResponse, AssetCategoryResponse, AssetTypeResponse, AssetInterfaceResponse, NetworkResponse, RelationshipTypeResponse, ConnectivityResponse
-from app.services.infrastructure_topology import MAX_CONNECTIVITY_NODES, connectivity, platform_links
+from app.services.infrastructure_topology import MAX_CONNECTIVITY_NODES, connectivity, platform_links, structural_edges
 
 router = APIRouter(prefix="/topology", tags=["topology"])
 
@@ -110,6 +110,7 @@ def get_topology(
         "asset_types": [{**AssetTypeResponse.model_validate(t).model_dump(), "category": t.category_record.name, "category_id": t.category_id, "category_key": t.category_record.key} for t in types.values()],
         "relationship_types": [RelationshipTypeResponse.model_validate(t).model_dump() for t in definitions],
         "platform_links": platform_links(relationships),
+        "structural_edges": structural_edges(assets, relationships, [RelationshipTypeResponse.model_validate(t).model_dump() for t in definitions], networks, interfaces),
         "customers": customers,
         "sites": sites,
         "assets": topology_asset_responses(db, assets, types),

@@ -1959,6 +1959,7 @@ class ConnectivityResponse(BaseModel):
 
 
 class TopologyResponse(BaseModel):
+    structural_edges: list[ConnectivityEdge] = Field(default_factory=list)
     categories: list[AssetCategoryResponse] = Field(default_factory=list)
     asset_types: list[AssetTypeResponse] = Field(default_factory=list)
     relationship_types: list[RelationshipTypeResponse] = Field(default_factory=list)

@@ -29,6 +29,41 @@ def platform_links(relationships):
     return links
 
 
+def structural_edges(assets, relationships, definitions, networks=(), interfaces=()):
+    """Complete structural projection over authorized records, without traversal.
+
+    Keep legacy Platform's parent projection unchanged. Hosted on has explicit
+    child-to-host semantics here; managed classes alone never imply containment.
+    """
+    asset_keys = {str(a.id) if hasattr(a, "id") else str(a["id"]) for a in assets}
+    network_keys = {str(n.id) if hasattr(n, "id") else str(n["id"]) for n in networks}
+    types = {t["key"]: t for t in definitions}
+    parent_endpoints = {**PLATFORM_PARENT_ENDPOINT, "hosted_on": "target"}
+    result = []
+    for edge in relationships:
+        source, target = str(edge["source_asset_id"]), str(edge["target_asset_id"])
+        definition = types.get(edge["relationship_type"], {})
+        topology_class = definition.get("topology_class")
+        if source not in asset_keys or target not in asset_keys or topology_class not in {"platform", "physical_network"}:
+            continue
+        parent = parent_endpoints.get(edge["relationship_type"]) if topology_class == "platform" else None
+        result.append({
+            "key": f"relationship:{edge['id']}", "source_key": f"asset:{source}",
+            "target_key": f"asset:{target}", "label": definition.get("source_label", ""),
+            "kind": "relationship", "directional": definition.get("directional", False),
+            "topology_class": topology_class,
+            "platform_parent_key": f"asset:{source if parent == 'source' else target}" if parent and source != target else None,
+        })
+    for interface in interfaces:
+        asset, network = str(interface["asset_id"]), str(interface["network_id"])
+        if asset in asset_keys and network in network_keys:
+            result.append({"key": f"interface:{interface['id']}", "source_key": f"asset:{asset}",
+                           "target_key": f"network:{network}", "label": "Network membership",
+                           "kind": "membership", "directional": False, "topology_class": "physical_network",
+                           "platform_parent_key": None})
+    return sorted(result, key=lambda edge: edge["key"])
+
+
 def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=True, limit=MAX_CONNECTIVITY_NODES, focus_network_id=None, topology_classes=None):
     """Bounded, path-aware neighbourhood over authorized records only."""
     if hops not in (1, 2, 3) or not 1 <= limit <= MAX_CONNECTIVITY_NODES:

@@ -387,7 +387,7 @@ function groupRelationships(group, edges) {
 // to retain canonical arrows, independently of vertical presentation direction.
 // Bounded rectilinear visibility search for dense overlays when one exterior
 // track is insufficient. Coordinates come only from obstacle boundaries/ports.
-function orthogonalDetour(start, end, rectangles) {
+export function orthogonalDetour(start, end, rectangles) {
   const xs = [...new Set([start[0], end[0], ...rectangles.flatMap(r => [r.left - 16, r.right + 16])])].sort((a, b) => a - b);
   const ys = [...new Set([start[1], end[1], ...rectangles.flatMap(r => [r.top - 16, r.bottom + 16])])].sort((a, b) => a - b);
   const point = key => [xs[key % xs.length], ys[Math.floor(key / xs.length)]];
