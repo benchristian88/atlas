@@ -166,8 +166,7 @@ function checkPoster(data) {
 test("real homelab shape: all 50 Assets and actual nested host branches fit compactly", () => {
   const data = showcaseRealShapeFixture(), { layout, model } = checkPoster(data);
   assert.equal(data.assets.length, 50);
-  assert.equal(layout.sceneHeight, 1080);
-  assert.equal(layout.scale, 1, "The larger real-shape variant also fits without global shrinking");
+  assertPositionBands(layout);
   const byName = name => layout.items.find(n => n.name === name);
   for (const [parent, child] of [["Gateway", "Aggregation Switch"], ["Aggregation Switch", "Distribution Switch"], ["Distribution Switch", "Access Switch A"], ["Distribution Switch", "Platform Host A"], ["Platform Host A", "Container Host A"], ["Platform Host A", "Container Host B"], ["Aggregation Switch", "Physical Host A"], ["Physical Host A", "Isolated Platform A"]]) {
     assert.equal(model.parents.get(byName(child).key), byName(parent).key);
@@ -183,27 +182,25 @@ test("real homelab shape: all 50 Assets and actual nested host branches fit comp
   assert.ok(layout.positionLabels.every(label => label.height === 14));
 });
 
-test("Connectivity-shaped 44-Asset reference fits 16:9 at native scale, including the office side branch", () => {
+test("Connectivity-shaped 44-Asset reference fits readable Position bands, including the office side branch", () => {
   const data = showcaseReferenceFixture(), { layout, model } = checkPoster(data);
   assert.equal(data.assets.length, 44);
-  assert.equal(layout.sceneHeight, 1080);
-  assert.equal(layout.scale, 1);
+  assertPositionBands(layout);
   const byName = name => layout.items.find(n => n.name === name);
   assert.equal(model.parents.get(byName("Office Platform").key), byName("Access Switch A").key);
   const office = byName("Office Automation");
   assert.equal(office.kind, "asset");
   assert.equal(model.parents.get(office.key), byName("Office Platform").key);
   assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.hiddenCount === 0), "All workloads fit, with no forced four-member truncation");
-  assert.ok(layout.items.some(n => n.kind === "category" && n.memberColumns >= 3));
-  assert.ok(layout.items.some(n => n.kind === "category" && n.memberColumns === 4));
+  assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.memberColumns === 1));
   for (const node of layout.items.filter(n => n.kind === "asset")) assert.ok(node.members.length === 1);
 });
 
 for (const [name, data, height] of [
   ["small", showcaseFixture("small"), 1080],
-  ["large grouped", showcaseFixture("large"), 1080],
-  ["adaptive", showcasePosterFixture(50), 1113],
-  ["near maximum", showcasePosterFixture(50, 4), 1347],
+  ["large grouped", showcaseFixture("large"), 1109],
+  ["adaptive", showcasePosterFixture(50, 2), 1109],
+  ["near maximum", showcasePosterFixture(50, 6), 1343],
 ]) test(`${name}: preferred/minimal adaptive dimensions, readable complete geometry`, () => {
   const { layout } = checkPoster(data);
   assert.equal(layout.sceneHeight, height);
@@ -215,12 +212,12 @@ for (const [name, data, height] of [
 });
 
 test("pathological structure still refuses export and explains the fit in internal diagnostics", () => {
-  const data = showcasePosterFixture(70), layout = showcaseLayout(showcaseModel(data, id(2)));
+  const data = showcasePosterFixture(90), layout = showcaseLayout(showcaseModel(data, id(2)));
   assert.equal(layout.complete, false);
   assert.match(layout.reason, /Showcase incomplete/);
   assert.equal(layout.items, undefined, "No partial scene is returned");
   const d = layout.diagnostics;
-  assert.equal(d.assetCount, 142); assert.equal(d.structuralNodeCount, 142);
+  assert.equal(d.assetCount, 182); assert.equal(d.structuralNodeCount, 182);
   assert.equal(d.collapsedGroupCount, 0); assert.equal(d.workloadCategoryCount, 0);
   assert.equal(d.rootCount, 1); assert.equal(d.chosenPosterHeight, 1358);
   assert.equal(d.readabilityFloor, .86); assert.equal(d.failureReason, "height");
@@ -255,4 +252,124 @@ test("singleton categories stay directly under their own hosts; multiple members
   assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.members.length >= 2));
   const large = showcaseLayout(showcaseModel(showcaseFixture("large"), id(2)));
   for (const group of large.items.filter(n => n.kind === "category")) assert.equal(group.preview.length + group.hiddenCount, group.members.length);
+});
+
+function assertPositionBands(layout) {
+  const bands = layout.positionBands;
+  for (const [i, band] of bands.entries()) {
+    const items = layout.items.filter(n => (n.position?.id || "automatic") === band.key);
+    for (const item of items) {
+      assert.ok(item.y >= band.y);
+      assert.ok(item.y + item.cardHeight <= band.y + band.height);
+    }
+    if (i) {
+      assert.ok(bands[i - 1].y + bands[i - 1].height < band.y);
+      assert.ok((bands[i - 1].position?.sort_order ?? Infinity) <= (band.position?.sort_order ?? Infinity));
+    }
+    const structuralPeers = items.filter(n => n.kind === "asset" && n.position?.key !== "workload" && n.positionDepth === 0 && n.wrapRow === 0);
+    assert.ok(new Set(structuralPeers.map(n => n.y)).size <= 1, `Misaligned ${band.position?.name}`);
+  }
+  assert.ok(layout.items.filter(n => n.kind === "category").every(n => n.memberColumns <= 2));
+}
+
+test("global Physical and Platform bands span different branches and unconnected Assets", () => {
+  const data = showcaseReferenceFixture();
+  // Put the second physical host under the deeper access branch.
+  const physical = data.assets.find(a => a.name === "Physical Host B");
+  const access = data.assets.find(a => a.name === "Access Switch B");
+  data.structural_edges.find(e => e.source_key === `asset:${physical.id}` && !e.platform_parent_key).target_key = `asset:${access.id}`;
+  const { layout } = checkPoster(data);
+  assertPositionBands(layout);
+  for (const key of ["physical_host", "platform"]) {
+    const items = layout.items.filter(n => n.position?.key === key);
+    assert.ok(items.length >= 3);
+    assert.equal(new Set(items.map(n => n.y)).size, 1);
+  }
+  const hosts = layout.items.filter(n => n.position?.key === "platform");
+  const workloads = layout.items.filter(n => n.position?.key === "workload");
+  assert.ok(Math.min(...workloads.map(n => n.y)) > Math.max(...hosts.map(n => n.y + n.cardHeight)));
+});
+
+test("managed Position identity, order and display names control bands; unused positions reserve no space", () => {
+  const data = showcaseReferenceFixture(), before = showcaseLayout(showcaseModel(data, id(2)));
+  for (const type of data.asset_types) if (type.topology_position) {
+    type.topology_position.sort_order *= 100;
+    type.topology_position.name = `Managed ${type.topology_position.id}`;
+  }
+  data.asset_types.push({ key: "unused", topology_position: { id: id(888), key: "unused", name: "Unused", sort_order: 1500 } });
+  const layout = showcaseLayout(showcaseModel(data, id(2)));
+  assert.deepEqual(layout.items.map(n => [n.key, n.x, n.y]), before.items.map(n => [n.key, n.x, n.y]));
+  assert.ok(!layout.positionBands.some(b => b.key === id(888)));
+  assert.ok(layout.positionLabels.every(l => l.name === `Managed ${l.positionId}`));
+  const physical = data.asset_types.find(t => t.key === "server").topology_position;
+  physical.sort_order = 99999; // Deliberately unconventional managed ordering.
+  const reordered = showcaseLayout(showcaseModel(data, id(2)));
+  assert.ok(reordered.complete);
+  assert.equal(reordered.positionBands.at(-1).key, physical.id);
+  assertPositionBands(reordered);
+});
+
+test("same-position switch chain has deterministic subdepth wholly above the next Position", () => {
+  const { layout } = checkPoster(showcaseReferenceFixture());
+  const node = name => layout.items.find(n => n.name === name);
+  assert.equal(node("Distribution Switch").positionDepth, 0);
+  assert.equal(node("Access Switch A").positionDepth, 1);
+  assert.equal(node("Access Switch B").y, node("Access Switch A").y);
+  assert.ok(node("Access Switch A").y > node("Distribution Switch").y);
+  assert.ok(node("Access Switch A").y + node("Access Switch A").cardHeight < node("Physical Host A").y);
+});
+
+function categoryFixture(count) {
+  const data = showcaseFixture("small"), host = data.assets.find(a => a.asset_type === "platform");
+  data.assets = data.assets.filter(a => !["media", "infra"].includes(a.asset_type));
+  const keys = new Set(data.assets.map(a => `asset:${a.id}`));
+  data.structural_edges = data.structural_edges.filter(e => keys.has(e.source_key) && keys.has(e.target_key));
+  for (let i = 0; i < count; i++) {
+    const asset = { ...host, id: id(3000 + i), name: `Workload ${String(i + 1).padStart(2, "0")}`, asset_type: "media" };
+    data.assets.push(asset);
+    data.structural_edges.push({ key: `test:${i}`, source_key: `asset:${asset.id}`, target_key: `asset:${host.id}`, platform_parent_key: `asset:${host.id}`, kind: "relationship", topology_class: "platform", directional: true });
+  }
+  return data;
+}
+for (const count of [1, 2, 3, 4, 5, 8, 16, 20]) test(`category ${count}: deterministic one/two-column row-wise grid`, () => {
+  const data = categoryFixture(count), { layout } = checkPoster(data);
+  const group = layout.items.find(n => n.kind === "category");
+  if (count === 1) {
+    assert.equal(group, undefined);
+    assert.equal(layout.items.find(n => n.name === "Workload 01").kind, "asset");
+    return;
+  }
+  assert.equal(layout.stage, 0, "These categories fit fully expanded");
+  assert.equal(group.memberColumns, count < 5 ? 1 : 2);
+  assert.equal(group.cardWidth, count < 5 ? 204 : 332);
+  assert.equal(group.cardHeight, 32 + Math.ceil(count / group.memberColumns) * 32 + 8);
+  assert.deepEqual(group.preview.map(n => n.name), Array.from({ length: count }, (_, i) => `Workload ${String(i + 1).padStart(2, "0")}`));
+  assertPositionBands(layout);
+});
+
+test("overflow rows compact whole bands and retain every Asset in a wide forest", () => {
+  const { layout } = checkPoster(showcasePosterFixture(70));
+  assertPositionBands(layout);
+  const hosts = layout.items.filter(n => n.position?.key === "platform");
+  const workloads = layout.items.filter(n => n.position?.key === "workload");
+  assert.ok(new Set(hosts.map(n => n.y)).size > 1);
+  assert.ok(Math.max(...hosts.map(n => n.y + n.cardHeight)) < Math.min(...workloads.map(n => n.y)));
+});
+
+test("unconnected-only band and caption fit within the poster", () => {
+  const data = showcaseFixture("small");
+  data.structural_edges = [];
+  const { layout } = checkPoster(data);
+  assertPositionBands(layout);
+});
+
+test("stacked categories share short side trunks without backtracking through other bands", () => {
+  const { layout } = checkPoster(showcaseReferenceFixture());
+  for (const group of layout.items.filter(n => n.kind === "category")) {
+    const route = layout.routes.find(r => r.source_key === group.key || r.target_key === group.key);
+    assert.equal(route.points.length, 5);
+    assert.equal(route.points[1][0], group.x - 8);
+    assert.equal(route.points[2][0], group.x - 8);
+    for (let i = 1; i < route.points.length; i++) assert.ok(route.points[i][1] >= route.points[i - 1][1]);
+  }
 });

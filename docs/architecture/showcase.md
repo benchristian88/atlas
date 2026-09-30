@@ -58,26 +58,37 @@ identical actual neighbour signatures, preserving multihoming/shared-host truth.
 Category ordering and colors use managed category metadata. Disconnected Type
 groups never get connectors or global workload-category grouping.
 
-Each increasingly compact attempt measures occupied subtree contours and packs
-children deterministically, following Connectivity’s geometry approach. Short
-side branches can share horizontal space with deeper branches at different
-heights; empty bounding rectangles do not reserve entire columns. Managed
-ordering and actual parentage remain authoritative. Stages are: endpoint
-grouping; four-member workload previews; other repetitive Automatic leaf grouping; tighter spacing and local
-category packing; wider packing and up to 14% uniform scale reduction.
-Structural tiles are 204×44, with 17px name text. Workload/endpoint members use
-150px columns, 32px rows (28px when tightened), 22px icons and 15px name text.
-Category groups use two through five 150px
-columns as their membership permits (3–5 for dense categories), with 8px gaps
-and 12px side insets. Fully visible categories use 8px bottom padding, with no
-redundant workload-count footer; collapsed categories retain 26px for +N. Endpoint
-Type-group totals remain unchanged. Host-local packing uses a bounded width, allowing category
-grids and intermediate host branches to occupy different vertical depths. Every
-individual Asset tile is icon/name only. Type metadata still drives the existing grouping
-and fallback rules. Position headings reserve only 18px at local position
-transitions and are shared within sibling rows. They are outside Asset tiles and
-participate in routing obstacles. The header ends at y=84, content starts at
-y=100, and the disconnected region wraps its actual content.
+Managed Topology Position IDs define global vertical bands, ordered by managed
+`sort_order` and captioned with the managed display name. Numeric sort-order gaps
+and unused positions reserve no height. Automatic/unassigned items follow the
+explicit bands. The cycle-safe presentation forest retains relationship-derived
+same-position depth as local subrows. Structural peers align across different
+parents, including unconnected Assets. The complete occupied band height is
+measured before placing the next band; compaction cannot move a branch into a
+different Position.
+
+Within each band, workload/category and endpoint-group siblings stack under their
+own parent. Horizontal subtree-contour packing retains actual branch ownership
+but never changes Y. Very wide sibling sets use deterministic overflow rows
+inside their band; descendants inherit the overflow row so branches can reuse
+columns. Unconnected Assets occupy a separate side region aligned to their
+assigned bands, without invented links.
+
+Stages remain: endpoint grouping; four-member workload previews; other repetitive
+Automatic leaf grouping; tighter spacing; wider packing and up to 14% uniform
+scale reduction. Structural tiles remain 204×44, with 17px name text. Category
+membership determines the grid: one Asset stays direct, 2–4 use one 204px card
+column, and 5+ use exactly two 150px member columns in a 332px card. No category
+uses more than two columns, including collapsed previews. Member order is the
+existing name/ID order, filled row-wise left-to-right. Rows are 32px high (28px
+when tightened), with 22px icons and 15px name text. Fully visible categories use
+8px bottom padding; collapsed categories retain 26px for +N. Endpoint Type-group
+preview columns and totals remain unchanged.
+
+Each occupied managed band reserves an 18px caption above its content. There are
+no decorative Position containers. Captions participate in routing obstacles.
+The header ends at y=84 and content starts at y=100. Individual Asset tiles remain
+icon/name only. Type metadata still drives grouping and fallback rules.
 Text starts at 14 logical pixels, giving a 12.04px minimum after scaling.
 No stage removes a branch. All stages first try the preferred 1920×1080 poster.
 If height prevents a readable fit, the renderer chooses the smallest integer
@@ -93,11 +104,13 @@ boundary, not a data-fetch cap.
 
 The existing Connectivity `orthogonalDetour` function is exported unchanged for
 obstacle routing. Showcase owns its card sizes, packing and connector
-consolidation. Routes retain their underlying edge IDs. Tests verify orthogonal
-segments, node non-overlap, bounds and complete Asset representation. Both the
-44-Asset Connectivity-shaped reference (including the office-side platform) and
-a 50-Asset variant fit 1920×1080 at native scale. Adaptive height remains for
-structures that genuinely need more depth.
+consolidation. Routes use destination-row distribution rails and short drops;
+stacked groups prefer a shared side trunk before obstacle detours. Routes retain
+their underlying edge IDs. Tests verify orthogonal segments, node/caption
+avoidance, global band ordering, bounds and complete Asset representation. The
+44-Asset reference (including the office-side platform) uses 1920×1220; the
+50-Asset variant uses 1920×1170, both above the unchanged 0.86 readability floor.
+These taller posters preserve semantic alignment and bounded category widths.
 
 ## Rendering and export
 
@@ -128,5 +141,5 @@ is revoked after use. There is no hidden second renderer, alternative layout,
 external request during export, or theme-dependent export mode.
 
 See [operator guidance](../admin/showcase.md),
-[compact poster validation](../testing/showcase-compact-poster.md) and the
+[Position-band validation](../testing/showcase-position-bands.md) and the
 [original implementation record](../testing/showcase.md).

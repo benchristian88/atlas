@@ -28,8 +28,10 @@ it never exports a partial diagram.
 
 All individual tiles show only an icon and Asset name. Asset Type remains
 internal to grouping, classification and icon fallback; it is not a second line
-in the tile. Managed Topology Position names provide small local headings outside
-nodes, without large position containers. Names that exceed a fixed text budget
+in the tile. Managed Topology Positions define shared horizontal bands in their configured
+order, with small headings outside nodes and no large position containers.
+Physical and platform hosts align across branches; explicit same-position chains
+retain local subrows. Empty positions reserve no space. Names that exceed a fixed text budget
 are ellipsized; the full name is available in the SVG's accessible title. No IPs, hostnames,
 status, telemetry, timestamps, evidence or source metadata appear in the image.
 
@@ -40,7 +42,8 @@ excluded before layout. Gateway, router, switch and other network-device Assets
 remain eligible. There is no Showcase Networks toggle; the operational
 Connectivity toggle is unchanged.
 The diagram adds no Internet node unless Atlas already records it as an Asset.
-Disconnected Assets appear in **Unconnected / Other**, without an invented link.
+Disconnected Assets appear in **Unconnected / Other**, aligned to their Position
+bands without an invented link.
 
 Hosting relationships take priority over compactness. Physical hosts, platform
 hosts, intermediate container hosts and their children retain their actual
@@ -48,10 +51,12 @@ branches. Workload leaves use their Asset Type's managed Asset Category inside
 that specific host's branch when two or more eligible workloads share the local
 category. A singleton appears directly under its actual host, without a category
 wrapper. Two hosts with the same category remain separate; a singleton never
-moves into another host's group. Dense category grids use three to five compact icon/name tiles
-per row where membership permits. Branches pack around occupied geometry, using
-space beside deeper branches instead of forcing every sibling into one wide
-row. Categories do not define domain parentage. No cluster membership
+moves into another host's group. Categories with 2–4 Assets use one column;
+5+ use exactly two, filled in stable name order row-wise from left to right.
+Categories stack within their host's workload band, preferring a taller poster to
+wide strips. Relationships determine horizontal branch placement; compaction
+moves entire bands while preserving their order. Very wide sets of peers can
+occupy multiple rows within their band. Categories do not define domain parentage. No cluster membership
 or cluster containers are inferred.
 
 Repetitive endpoints are grouped by Asset Type within the same actual branch.

@@ -13,10 +13,14 @@ const permissions = ["assets.view", "relationships.view", "networks.view", "cust
 const reports = [];
 try {
   for (const [size, theme] of [["small", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["medium", "dark"], ["adaptive", "dark"]]) {
-    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcasePosterFixture(50) : size === "maximum" ? showcasePosterFixture(50, 4) : showcaseFixture(size);
+    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcasePosterFixture(50, 2) : size === "maximum" ? showcasePosterFixture(50, 6) : showcaseFixture(size);
     const layout = showcaseLayout(showcaseModel(data, id(2))), exportHeight = layout.sceneHeight * 2;
     assert.ok(layout.complete);
-    if (["reference", "real-shape"].includes(size)) { assert.equal(layout.sceneHeight, 1080); assert.equal(layout.scale, 1); }
+    if (["reference", "real-shape"].includes(size)) {
+      for (const position of ["physical_host", "platform"]) assert.equal(new Set(layout.items.filter(n => n.position?.key === position).map(n => n.y)).size, 1);
+      const hosts = layout.items.filter(n => n.position?.key === "platform"), workloads = layout.items.filter(n => n.position?.key === "workload");
+      assert.ok(Math.max(...hosts.map(n => n.y + n.cardHeight)) < Math.min(...workloads.map(n => n.y)));
+    }
     const site = data.sites[0], customer = data.customers[0];
     // Exercise optional cached-icon and type-icon failure without blocking export.
     data.assets[0].cached_icon_url = `/api/assets/${data.assets[0].id}/icon`;
@@ -75,7 +79,13 @@ try {
     const previewRatio = await scene.evaluate(el => el.getBoundingClientRect().width / el.getBoundingClientRect().height);
     assert.ok(Math.abs(previewRatio - 1920 / layout.sceneHeight) < .001, "Preview preserves the selected aspect ratio");
     assert.equal(await scene.locator("[data-showcase-connector][stroke-dasharray]").count(), 0);
-    for (const group of layout.items.filter(n => n.kind === "category")) assert.ok(group.members.length >= 2);
+    for (const group of layout.items.filter(n => n.kind === "category")) {
+      assert.ok(group.members.length >= 2);
+      assert.equal(group.memberColumns, group.members.length < 5 ? 1 : 2);
+      const rendered = scene.locator(`[data-showcase-item="${group.key}"]`);
+      const transforms = await rendered.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => tile.getAttribute("transform")));
+      assert.deepEqual(transforms, group.preview.map((_, i) => `translate(${12 + (i % group.memberColumns) * (group.memberWidth + 8)} ${group.memberTop + Math.floor(i / group.memberColumns) * group.memberRow})`));
+    }
     for (const group of await scene.locator('[data-showcase-kind="category"]').all()) assert.ok(!/\b\d+ workloads?\b/.test(await group.textContent()));
     for (const group of layout.items.filter(n => n.kind === "category" && n.hiddenCount)) {
       const element = scene.locator("[data-showcase-item]").filter({ has: page.locator("title", { hasText: group.name }) });
@@ -148,7 +158,7 @@ try {
       assert.equal(await page.getByRole("button", { name: "Export PNG", exact: true }).count(), 0);
     }
     if (size === "maximum") {
-      Object.assign(data, showcasePosterFixture(70));
+      Object.assign(data, showcasePosterFixture(90));
       await page.getByRole("button", { name: "Refresh", exact: true }).click();
       await page.getByRole("button", { name: "Showcase", exact: true }).click();
       await page.getByText(/Showcase incomplete:/).waitFor();
