@@ -1,5 +1,8 @@
 # Showcase v1 implementation and acceptance
 
+> Historical acceptance record. Layout descriptions and measurements below are
+> superseded by [shared Connectivity geometry](showcase-shared-geometry.md).
+
 Historical implementation record. The compact renderer and adaptive poster
 correction supersede the fixed geometry and name/Type presentation below; see
 [the current correction and validation record](showcase-compact-poster.md).

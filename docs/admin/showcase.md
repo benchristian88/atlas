@@ -26,60 +26,40 @@ unreadable composition has no export action. A site with too many independent
 structural branches for the readability floor shows **Showcase incomplete**;
 it never exports a partial diagram.
 
-All individual tiles show only an icon and Asset name. Asset Type remains
-internal to grouping, classification and icon fallback; it is not a second line
-in the tile. Managed Topology Positions define shared horizontal bands in their configured
-order, with small headings outside nodes and no large position containers.
-Physical and platform hosts align across branches; explicit same-position chains
-retain local subrows. Empty positions reserve no space. Names that exceed a fixed text budget
-are ellipsized; the full name is available in the SVG's accessible title. No IPs, hostnames,
-status, telemetry, timestamps, evidence or source metadata appear in the image.
+All individual tiles show only an icon and Asset name. Names exceeding their
+fixed text budget use a middle ellipsis to preserve distinguishing endings,
+with the full name in the SVG's accessible
+title. No Asset Type, IP, hostname, status, count or secondary line appears in an
+individual tile.
 
-Recorded Asset-to-Asset relationships determine the branches. Platform and
-physical/network classes supply structure. Showcase always uses Networks-off
-semantics: logical Network/VLAN entities and interface-membership edges are
-excluded before layout. Gateway, router, switch and other network-device Assets
-remain eligible. There is no Showcase Networks toggle; the operational
-Connectivity toggle is unchanged.
-The diagram adds no Internet node unless Atlas already records it as an Asset.
-Disconnected Assets appear in **Unconnected / Other**, aligned to their Position
-bands without an invented link.
+Showcase uses the same topology geometry as Connectivity, with smaller cards.
+Managed Topology Position controls broad order; recorded relationships determine
+branch ownership and same-position hierarchy. Placement remains branch-local,
+so independent branches can compact vertically without changing their Position
+or parent. Operational Position containers and global poster bands are omitted.
 
-Hosting relationships take priority over compactness. Physical hosts, platform
-hosts, intermediate container hosts and their children retain their actual
-branches. Workload leaves use their Asset Type's managed Asset Category inside
-that specific host's branch when two or more eligible workloads share the local
-category. A singleton appears directly under its actual host, without a category
-wrapper. Two hosts with the same category remain separate; a singleton never
-moves into another host's group. Categories with 2–4 Assets use one column;
-5+ use exactly two, filled in stable name order row-wise from left to right.
-Categories stack within their host's workload band, preferring a taller poster to
-wide strips. Relationships determine horizontal branch placement; compaction
-moves entire bands while preserving their order. Very wide sets of peers can
-occupy multiple rows within their band. Categories do not define domain parentage. No cluster membership
-or cluster containers are inferred.
+Showcase permanently uses Networks-off semantics. Logical Network/VLAN entities
+and interface memberships are absent; gateways, routers, switches, access points
+and other network-device Assets remain. There is no Networks toggle. Disconnected
+Assets remain independent roots with no invented connections.
 
-Repetitive endpoints are grouped by Asset Type within the same actual branch.
-This includes the managed Endpoint position and the existing built-in access
-point type (which defaults to Access Network). Structural parents remain named.
-A group shows its authorized total, up to four compact icon/name previews, and **+N**
-for the remaining members. Relationships into the same presentation group share
-a connector; individual accepted relationships are unchanged. Extra or shared
-connections remain represented, and differently connected leaves are not merged.
-Disconnected endpoints may share a Type group in Unconnected / Other.
+Physical hosts, platform hosts, container hosts and their child workloads retain
+the same branches as Connectivity. Category wrappers organize hosted workload
+leaves locally after topology ownership is established. A singleton stays direct;
+2–4 members use one column and 5+ use two, in stable name order. Categories never
+move a workload to another host or combine different hosts' children. The future
+category stacking enhancement is not included.
 
-Category groups omit redundant workload-count footers. Collapsed category groups
-retain **+N** for the members outside the visible preview; endpoint Type groups
-retain their existing truthful device totals.
-
-When needed, Showcase progressively collapses large workload categories,
-then repetitive Automatic leaf siblings, then tightens spacing and applies
-modest scale compaction. It tries 16:9 before allowing extra poster height;
-**Showcase incomplete** is the final fallback if the complete scene still cannot
-fit. No Assets are silently omitted. The minimum scale remains 0.86: workload
-names stay at least 12.9 logical pixels, structural names 14.62, and secondary
-headings/counts 12.04. The preview naturally appears smaller on a narrow browser;
-its logical composition remains identical.
+Normal-size sites show all current Assets, including every workload and access
+point. The 44- and 50-Asset reference shapes fit 16:9 with no **+N** roll-ups.
+Showcase first attempts complete compact geometry, then the bounded taller
+poster if needed. Only genuinely enormous sites (over 100 Assets) may try
+four-member workload previews after complete geometry fails. Those local groups
+show **+N** for every represented member outside the preview; shared or mixed
+connections remain explicit. Unreadable structures show **Showcase incomplete**
+and disable export. The unchanged 0.86 scale floor keeps 15px Asset names at
+least 12.9 logical pixels. Narrow-browser preview scaling does not alter the
+logical poster or export.
 
 Cached Asset icons take priority, followed by the existing safe Asset Type icon
 source and managed category/generic artwork. Optional images have a bounded
@@ -89,5 +69,6 @@ makes no external requests and works offline once the preview is ready.
 
 Showcase has no filters, focus, hops, inspector, fullscreen, drill-down, manual
 layout, editing, cluster inference, title settings or saved diagram state.
-Platform and Connectivity remain unchanged. PostgreSQL remains the system of
+Platform remains unchanged. Connectivity retains its controls and card styling;
+same-position network hierarchy is corrected in the shared geometry engine. PostgreSQL remains the system of
 record; no Showcase entities, relationships, coordinates or migrations are added.

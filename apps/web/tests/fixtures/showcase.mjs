@@ -131,3 +131,13 @@ export function showcasePosterFixture(branches, extraSpine = 0) {
   }
   return data;
 }
+
+// Tall category exercises the retained poster fallback without widening branches.
+export function showcaseTallFixture(workloads = 60) {
+  const { data, add } = structuralBuilder();
+  const gateway = add("Gateway", "gateway"), core = add("Aggregation Switch", "core", gateway);
+  const host = add("Platform Host", "platform", core);
+  for (let i = 0; i < workloads; i++) add(`Task ${String(i + 1).padStart(2, "0")}`, "media", host, true);
+  add("Archive Server", "server");
+  return data;
+}

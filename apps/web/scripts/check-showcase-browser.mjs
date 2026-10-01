@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, id } from "../tests/fixtures/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, showcaseTallFixture, id } from "../tests/fixtures/showcase.mjs";
 import { showcaseLayout, showcaseModel } from "../lib/showcase.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3110";
@@ -13,13 +13,13 @@ const permissions = ["assets.view", "relationships.view", "networks.view", "cust
 const reports = [];
 try {
   for (const [size, theme] of [["small", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["medium", "dark"], ["adaptive", "dark"]]) {
-    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcasePosterFixture(50, 2) : size === "maximum" ? showcasePosterFixture(50, 6) : showcaseFixture(size);
+    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcaseTallFixture(60) : size === "maximum" ? showcaseTallFixture(74) : showcaseFixture(size);
     const layout = showcaseLayout(showcaseModel(data, id(2))), exportHeight = layout.sceneHeight * 2;
     assert.ok(layout.complete);
     if (["reference", "real-shape"].includes(size)) {
-      for (const position of ["physical_host", "platform"]) assert.equal(new Set(layout.items.filter(n => n.position?.key === position).map(n => n.y)).size, 1);
-      const hosts = layout.items.filter(n => n.position?.key === "platform"), workloads = layout.items.filter(n => n.position?.key === "workload");
-      assert.ok(Math.max(...hosts.map(n => n.y + n.cardHeight)) < Math.min(...workloads.map(n => n.y)));
+      assert.equal(layout.sceneHeight, 1080);
+      assert.equal(layout.diagnostics.collapsedGroupCount, 0);
+      assert.ok(layout.items.every(n => !n.hiddenCount));
     }
     const site = data.sites[0], customer = data.customers[0];
     // Exercise optional cached-icon and type-icon failure without blocking export.
@@ -47,12 +47,49 @@ try {
         assert.equal(route.request().headers()["x-atlas-customer-id"], customer.id);
         body = data;
       }
+      if (url.pathname === "/api/topology/connectivity") {
+        // Complete authorized renderer fixture, deliberately without the API's
+        // neighbourhood cap. The separate regression harness exercises the real
+        // Python traversal for 1/2/3 hops, classes, focus and Networks controls.
+        const enabled = new Set(url.searchParams.getAll("category_ids"));
+        const types = new Map(data.asset_types.map(t => [t.key, t]));
+        const assets = data.assets.filter(a => enabled.has(types.get(a.asset_type).category_id));
+        const nodes = assets.map(a => ({ key: `asset:${a.id}`, entity_type: "asset", entity_id: a.id,
+          name: a.name, topology_position: types.get(a.asset_type).topology_position, distance: 2,
+          eligible_child_count: data.structural_edges.filter(e => e.platform_parent_key === `asset:${a.id}`).length }));
+        if (url.searchParams.get("show_networks") === "true") nodes.push(...data.networks.map(n => ({ key: `network:${n.id}`, name: n.name, entity_type: "network", entity_id: n.id, distance: 2 })));
+        const keys = new Set(nodes.map(n => n.key));
+        const edges = data.structural_edges.filter(e => keys.has(e.source_key) && keys.has(e.target_key));
+        body = { nodes, edges, focus_key: `asset:${url.searchParams.get("focus_asset_id")}`, truncated: false, node_limit: 100, edge_limit: 500 };
+      }
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
     await page.goto(`${base}/topology`);
     await page.getByRole("button", { name: "Platform", exact: true }).click();
     await page.locator(".topology-platform-card").first().waitFor();
     const platformBefore = await page.locator(".topology-platform-section").allTextContents();
+    if (["reference", "real-shape"].includes(size)) {
+      await page.getByRole("button", { name: "Connectivity", exact: true }).click();
+      await page.getByRole("button", { name: /^Filters/ }).click();
+      await page.getByRole("checkbox", { name: /^Edge Devices/ }).check();
+      await page.keyboard.press("Escape");
+      await page.getByRole("checkbox", { name: "Networks", exact: true }).uncheck();
+      await page.getByRole("button", { name: "Expand Infrastructure Topology", exact: true }).click();
+      await page.getByRole("button", { name: "3 hops", exact: true }).click();
+      await page.getByRole("button", { name: "Hide details panel", exact: true }).click();
+      await page.locator("[data-node-key]").first().waitFor();
+      for (let i = 0; i < data.assets.length * 2; i++) {
+        const controls = page.locator(".topology-disclosure-badge, .topology-disclosure-more");
+        if (!await controls.count()) break;
+        await controls.first().click();
+      }
+      assert.equal(await page.locator("[data-node-key]").count(), data.assets.length);
+      assert.equal(await page.locator('[data-node-key^="network:"]').count(), 0);
+      assert.equal(await page.locator(".topology-disclosure-badge, .topology-disclosure-more").count(), 0);
+      await page.getByRole("button", { name: "Fit", exact: true }).click();
+      await page.screenshot({ path: `${output}/${size}-connectivity-networks-off-expanded.png`, fullPage: true });
+      await page.getByRole("button", { name: "Close expanded Infrastructure Topology", exact: true }).click();
+    }
     await page.getByRole("button", { name: "Showcase", exact: true }).click();
     const scene = page.locator(".showcase-scene"), button = page.getByRole("button", { name: "Export PNG", exact: true });
     await scene.waitFor(); await button.waitFor();
@@ -75,7 +112,12 @@ try {
       assert.ok(tile.icons > 0);
       assert.equal(tile.artworkWidth, 20, "Compact artwork retains a 20px viewport");
     }
-    assert.equal(await scene.locator("[data-showcase-item] [data-showcase-position]").count(), 0, "Positions are outside Asset tiles");
+    if (["reference", "real-shape"].includes(size)) {
+      assert.equal(tiles.length, data.assets.length, "Every normal-size-site Asset has an explicit tile");
+      assert.equal(new Set(tiles.map(tile => tile.labels[0].text)).size, data.assets.length,
+        "Compact numbered hosts/workloads retain distinguishable name endings");
+      assert.ok(!(await scene.textContent()).match(/\+\d+/), "No workload/endpoint roll-up in a normal Showcase");
+    }
     const previewRatio = await scene.evaluate(el => el.getBoundingClientRect().width / el.getBoundingClientRect().height);
     assert.ok(Math.abs(previewRatio - 1920 / layout.sceneHeight) < .001, "Preview preserves the selected aspect ratio");
     assert.equal(await scene.locator("[data-showcase-connector][stroke-dasharray]").count(), 0);
@@ -84,7 +126,7 @@ try {
       assert.equal(group.memberColumns, group.members.length < 5 ? 1 : 2);
       const rendered = scene.locator(`[data-showcase-item="${group.key}"]`);
       const transforms = await rendered.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => tile.getAttribute("transform")));
-      assert.deepEqual(transforms, group.preview.map((_, i) => `translate(${12 + (i % group.memberColumns) * (group.memberWidth + 8)} ${group.memberTop + Math.floor(i / group.memberColumns) * group.memberRow})`));
+      assert.deepEqual(transforms, group.preview.map((_, i) => `translate(${12 + (i % group.memberColumns) * (group.memberWidth + group.memberGap)} ${group.memberTop + Math.floor(i / group.memberColumns) * group.memberRow})`));
     }
     for (const group of await scene.locator('[data-showcase-kind="category"]').all()) assert.ok(!/\b\d+ workloads?\b/.test(await group.textContent()));
     for (const group of layout.items.filter(n => n.kind === "category" && n.hiddenCount)) {
@@ -108,9 +150,6 @@ try {
       const media = page.locator('[data-showcase-kind="category"]').filter({ hasText: "Media & Photos" });
       assert.equal(await media.count(), size === "real-shape" ? 3 : size === "medium" ? 1 : 2);
       await media.first().screenshot({ path: `${output}/${size}-${theme}-host-local-category.png` });
-      const ap = page.locator('[data-showcase-kind="type"]').filter({ hasText: "Wireless Access Point" });
-      assert.match(await ap.textContent(), /5 devices/); assert.match(await ap.textContent(), /\+1/);
-      await ap.screenshot({ path: `${output}/${size}-${theme}-wireless-group.png` });
     }
     const beforeExport = networkRequests.length;
     await context.setOffline(true);

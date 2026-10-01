@@ -1,5 +1,8 @@
 # Showcase compact poster correction
 
+> Historical acceptance record. Layout descriptions and measurements below are
+> superseded by [shared Connectivity geometry](showcase-shared-geometry.md).
+
 Historical validation of the compact-layout change. Subsequent Networks-off and
 singleton-category corrections supersede its Network handling, singleton groups,
 footer counts and affected fixture dimensions; see the [current guide](../admin/showcase.md) and

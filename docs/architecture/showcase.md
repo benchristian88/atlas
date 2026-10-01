@@ -28,89 +28,78 @@ relationships do not acquire inferred containment semantics. AssetRelationship
 has no temporal validity columns; this continues to project accepted recorded
 rows, without interpreting observations or temporal Service relationships.
 
-## Deterministic layout
+## Shared Connectivity geometry
 
-`web/lib/showcase.mjs` builds a temporary presentation forest, prioritizing
-server-projected hosting edges. Managed position sort order, existing name/ID
-ordering and edge identity break ties. Physical adjacency determines hierarchy
-within the same position. Iterative visited sets and parent-cycle checks bound
-work to the returned data. Cycle and secondary/shared-parent edges remain
-cross-links; the presentation forest never replaces domain relationships.
-Showcase follows the eligibility rule in backend Connectivity
-`show_networks=False`: construct only Asset nodes and retain accepted structural
-edges between those Assets. It never adds Network/VLAN nodes or interface
-membership edges. This uses the existing typed `membership` edge kind and durable
-Asset keys, not labels or vendor heuristics. Filtering happens before parentage,
-neighbour signatures, grouping and layout, so excluded Networks reserve no space.
-The complete topology API and Connectivity toggle remain unchanged; the Python
-query/traversal is not duplicated or coupled to the JavaScript layout.
+`web/lib/topology-geometry.mjs` is the single pure topology placement and routing
+implementation. It was extracted from Connectivity, retaining its default card
+metrics, position containers, contour packing, focus-origin handling and routing.
+`infrastructure-topology.mjs` re-exports the existing operational API; its Platform
+preparation, search and progressive disclosure remain separate and unchanged.
+Neither view imports React UI or another view's interaction state for geometry.
 
-Only hosted leaves assigned to the managed Workload position, or Automatic
-hosted leaves, become host-local category groups when at least two eligible
-members share the parent/category/neighbour signature. Singleton workloads remain
-explicit Asset tiles under their actual parent. Intermediate hosts remain
-explicit. Endpoint-position leaves and the existing built-in `access_point` key
-can become branch-local Type groups; this stable built-in key accounts for its
-existing Access Network default. No type display name or vendor is matched.
-Later stages may group repetitive Automatic leaves, but named structural
-positions and Types with children remain explicit. Grouping also requires
-identical actual neighbour signatures, preserving multihoming/shared-host truth.
-Category ordering and colors use managed category metadata. Disconnected Type
-groups never get connectors or global workload-category grouping.
+`buildTopologyLayoutModel` resolves managed ranks, Automatic positions and primary
+recorded upper anchors. Topology Position IDs and sort orders are authoritative;
+labels, vendor names, categories, focus and traversal arrival do not choose parents.
+Same-rank physical chains use local distance from recorded upper neighbours.
+This shared correction fixes the formerly unanchored distribution-to-access-switch
+chain without changing its managed rank. Closed unanchored cycles remain level;
+anchored cycles and bidirectional/parallel records terminate deterministically.
+Secondary relationships remain cross-links, with canonical edge endpoints intact.
 
-Managed Topology Position IDs define global vertical bands, ordered by managed
-`sort_order` and captioned with the managed display name. Numeric sort-order gaps
-and unused positions reserve no height. Automatic/unassigned items follow the
-explicit bands. The cycle-safe presentation forest retains relationship-derived
-same-position depth as local subrows. Structural peers align across different
-parents, including unconnected Assets. The complete occupied band height is
-measured before placing the next band; compaction cannot move a branch into a
-different Position.
+`calculateTopologyGeometry` performs Connectivity's branch-local vertical
+clearance, sibling grids, subtree contour packing, ancestor centering and collision
+avoidance. `routeTopologyEdges` reuses its trunks, rails, drops, shared group
+connectors, exterior tracks and bounded `orthogonalDetour` search.
+`topologyBounds` measures both nodes and route extents. Connectivity compatibility
+wrappers retain 180×88 cards, four-column grids, operational position containers,
+focus origin, preview controls and Fit behavior. All 29 existing Connectivity
+layout tests remain unchanged.
 
-Within each band, workload/category and endpoint-group siblings stack under their
-own parent. Horizontal subtree-contour packing retains actual branch ownership
-but never changes Y. Very wide sibling sets use deterministic overflow rows
-inside their band; descendants inherit the overflow row so branches can reuse
-columns. Unconnected Assets occupy a separate side region aligned to their
-assigned bands, without invented links.
+Showcase passes the complete current-site Asset graph without a focus or hop
+limit. `topologyGraphEligibility(..., false)` keeps Asset nodes and edges with
+eligible Asset endpoints and rejects typed `membership` edges. Networks/VLANs and
+interface nodes never enter layout; network device Assets remain. Backend
+Connectivity already applies the same Networks-off domain eligibility before its
+bounded traversal; its API, toggle and authorization remain unchanged.
 
-Stages remain: endpoint grouping; four-member workload previews; other repetitive
-Automatic leaf grouping; tighter spacing; wider packing and up to 14% uniform
-scale reduction. Structural tiles remain 204×44, with 17px name text. Category
-membership determines the grid: one Asset stays direct, 2–4 use one 204px card
-column, and 5+ use exactly two 150px member columns in a 332px card. No category
-uses more than two columns, including collapsed previews. Member order is the
-existing name/ID order, filled row-wise left-to-right. Rows are 32px high (28px
-when tightened), with 22px icons and 15px name text. Fully visible categories use
-8px bottom padding; collapsed categories retain 26px for +N. Endpoint Type-group
-preview columns and totals remain unchanged.
+`showcase.mjs` owns only site input adaptation, local category presentation,
+compact metrics, poster fitting and last-resort preview policy. Categories are
+assigned **after** complete-site ranks and branch ownership are established.
+Only hosted workload/Automatic leaves sharing their actual parent, position,
+category and neighbour signature can share a wrapper. One member stays a direct
+tile, 2–4 use one column, and 5+ use two columns. All intermediate hosts stay
+individual; a category never changes parentage. Geometry receives the original
+ownership model even for an enormous-site preview. The planned two-category
+stacking enhancement is not implemented.
 
-Each occupied managed band reserves an 18px caption above its content. There are
-no decorative Position containers. Captions participate in routing obstacles.
-The header ends at y=84 and content starts at y=100. Individual Asset tiles remain
-icon/name only. Type metadata still drives grouping and fallback rules.
-Text starts at 14 logical pixels, giving a 12.04px minimum after scaling.
-No stage removes a branch. All stages first try the preferred 1920×1080 poster.
-If height prevents a readable fit, the renderer chooses the smallest integer
-height across eligible compact layouts, up to 1358; width remains 1920. Measured
-route extents participate in fit calculations. Height cannot compensate for an
-excessively wide scene. The same data and metadata select identical dimensions.
-If geometry still cannot fit, export is unavailable with an explicit incomplete
-state. Internal diagnostics record Asset/explicit-node/group/category/root
-counts, measured content width/height, poster height, required scale, readability
-floor, fit reason and each attempted stage. Development logs expose failure
-diagnostics; production UI retains a concise message. This is a readability
-boundary, not a data-fetch cap.
+Compact Asset tiles are 124×32, with a 22px icon and one 15px name line. Category
+members use 112×22 tiles, 4px column spacing and 32px row spacing. Repetitive
+terminal Asset siblings use a one-column grid; structural branch owners retain
+Connectivity's four-column policy. Smaller footprints may share unused contour
+space across positions, using the same packer. Showcase omits operational
+Position containers and does not impose separate global Y bands. Managed ranks,
+local same-position depth, parent ownership and horizontal branch order are the
+same as Connectivity; pixel coordinates and leaf presentation may differ.
 
-The existing Connectivity `orthogonalDetour` function is exported unchanged for
-obstacle routing. Showcase owns its card sizes, packing and connector
-consolidation. Routes use destination-row distribution rails and short drops;
-stacked groups prefer a shared side trunk before obstacle detours. Routes retain
-their underlying edge IDs. Tests verify orthogonal segments, node/caption
-avoidance, global band ordering, bounds and complete Asset representation. The
-44-Asset reference (including the office-side platform) uses 1920×1220; the
-50-Asset variant uses 1920×1170, both above the unchanged 0.86 readability floor.
-These taller posters preserve semantic alignment and bounded category widths.
+All Assets are attempted first. Normal sites never use workload or endpoint
+roll-ups. The generic 44-Asset and 50-Asset fixtures fit 1920×1080 with all current
+workloads explicitly visible. The first platform host's two container hosts and
+their children retain their real ownership. Both physical-server/platform-host
+branches match Connectivity. Node and category rectangles are routing obstacles;
+category headers have reserved space and shared incoming group connectors retain
+all accepted edge identities.
+
+Poster fitting first tries 1920×1080 at the existing 0.86 readability floor, then
+the minimum integer taller height up to 1358. Only sites exceeding 100 Assets may
+attempt four-member workload previews, after the complete compact geometry fails
+at every allowed height. A preview requires uniform hosting semantics and no
+secondary neighbours; mixed or multihomed groups remain explicit. If geometry
+still cannot fit, export is unavailable and no partial scene is returned.
+Internal diagnostics record explicit/group/Asset counts, measured route-inclusive
+bounds, required scale, chosen height, stage attempts and failure reason.
+
+See [shared-geometry acceptance](../testing/showcase-shared-geometry.md). Earlier
+independent packers and global bands are preserved in historical test records.
 
 ## Rendering and export
 
@@ -119,7 +108,8 @@ These taller posters preserve semantic alignment and bounded category widths.
 The preview frame uses that same aspect ratio. Only its CSS size changes on
 browser resize. Layout is memoized by data and Site, not viewport. Managed category palette variables resolve under
 `color-scheme: light`. Labels use fixed measured text budgets and Arial, shared
-by preview and rasterization. The existing light Atlas SVG is embedded in the
+by preview and rasterization. Long Asset names preserve both ends around a
+middle ellipsis, keeping numbered peer names distinguishable. The existing light Atlas SVG is embedded in the
 header; Site name supplies the title.
 
 `lib/showcase-export.mjs` reuses `assetIconSources` for cached/type URL validation.
@@ -141,5 +131,5 @@ is revoked after use. There is no hidden second renderer, alternative layout,
 external request during export, or theme-dependent export mode.
 
 See [operator guidance](../admin/showcase.md),
-[Position-band validation](../testing/showcase-position-bands.md) and the
+[shared-geometry validation](../testing/showcase-shared-geometry.md) and the
 [original implementation record](../testing/showcase.md).

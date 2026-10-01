@@ -1,5 +1,8 @@
 # Showcase global Topology Position bands
 
+> Historical acceptance record. Layout descriptions and measurements below are
+> superseded by [shared Connectivity geometry](showcase-shared-geometry.md).
+
 Layout-only correction on `feature/topology-showcase`, starting from
 `d51cd5ffd881d863ff65b9f1140390e54c2559bc`. No commit or push. This supersedes the
 branch-local geometry and three-to-five-column category descriptions in the

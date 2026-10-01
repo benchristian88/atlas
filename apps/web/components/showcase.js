@@ -9,17 +9,29 @@ import { showcaseResources, exportShowcasePng } from "../lib/showcase-export.mjs
 // Fixed SVG text budgets are independent of browser width. Full names remain in
 // accessible SVG titles; no operational properties enter the scene.
 let textMeasure;
-function fitted(value, width, size, weight = 400) {
+function fitted(value, width, size, weight = 400, keepSuffix = false) {
   const letters = Array.from(value || "");
   if (typeof document === "undefined") return value;
   textMeasure ||= document.createElement("canvas").getContext("2d");
   if (!textMeasure) return value;
   textMeasure.font = `${weight} ${size}px Arial`;
   if (textMeasure.measureText(value || "").width <= width) return value;
+  // Compact Assets must remain distinguishable in the exported image, including
+  // numbered host/workload peers. Preserve both ends when the name is too long.
+  if (keepSuffix) {
+    let count = letters.length;
+    while (count > 1) {
+      const tail = Math.max(1, Math.floor(count / 3)), head = count - tail;
+      const label = `${letters.slice(0, head).join("")}…${letters.slice(-tail).join("")}`;
+      if (textMeasure.measureText(label).width <= width) return label;
+      count--;
+    }
+    return "…";
+  }
   while (letters.length && textMeasure.measureText(`${letters.join("")}…`).width > width) letters.pop();
   return `${letters.join("")}…`;
 }
-function Icon({ node, resources, x, y, size = 40 }) {
+function Icon({ node, resources, x, y, size = 22 }) {
   const record = node.category || node.network;
   const source = resources?.icons[node.key];
   const inset = size <= 24 ? 1 : 4;
@@ -30,12 +42,12 @@ function Icon({ node, resources, x, y, size = 40 }) {
   </g>;
 }
 function Tile({ node, resources, x = 0, y = 0, compact = false, width = 184 }) {
-  const iconSize = compact ? 22 : 28, textX = iconSize + 8, fontSize = compact ? 15 : 17;
+  const iconSize = 22, textX = iconSize + 6, fontSize = 15;
   const textWidth = width - textX;
   return <g transform={`translate(${x} ${y})`} data-showcase-asset={node.asset?.id} data-text-width={textWidth}>
     <title>{node.name}</title>
     <Icon node={node} resources={resources} x={0} y={0} size={iconSize} />
-    <text x={textX} y={compact ? 16 : 20} fontSize={fontSize} fontWeight="600">{fitted(node.name, textWidth, fontSize, 600)}</text>
+    <text x={textX} y={compact ? 16 : 20} fontSize={fontSize} fontWeight="600">{fitted(node.name, textWidth, fontSize, 600, true)}</text>
   </g>;
 }
 
@@ -57,12 +69,12 @@ function Scene({ layout, site, resources, svgRef }) {
       {layout.items.map(item => <g key={item.key} transform={`translate(${item.x} ${item.y})`} data-showcase-item={item.key} data-showcase-kind={item.kind} {...presentationAttributes(item.category || item.network)}>
         {item.kind === "asset" ? <>
           <rect width={item.cardWidth} height={item.cardHeight} rx="8" fill="#ffffff" stroke="#d8e2ee" />
-          <Tile node={item} resources={resources} x={10} y={8} width={item.cardWidth - 20} />
+          <Tile node={item} resources={resources} x={8} y={5} width={item.cardWidth - 16} />
         </> : <>
           <rect width={item.cardWidth} height={item.cardHeight} rx="10" style={{ fill: "var(--identity-tint)", stroke: "var(--identity-border)" }} />
           <text x="12" y="21" fontSize="16" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}><title>{item.name}</title>{fitted(item.name, item.cardWidth - 24, 16, 600)}</text>
           {item.kind === "type" && <text x="12" y={item.cardHeight - 10} fontSize="14" fill="#526477">{item.members.length} devices</text>}
-          {item.preview.map((node, index) => <Tile key={node.key} node={node} resources={resources} compact width={item.memberColumns === 1 ? item.cardWidth - 24 : item.memberWidth} x={12 + (index % item.memberColumns) * (item.memberWidth + 8)} y={item.memberTop + Math.floor(index / item.memberColumns) * item.memberRow} />)}
+          {item.preview.map((node, index) => <Tile key={node.key} node={node} resources={resources} compact width={item.memberColumns === 1 ? item.cardWidth - 24 : item.memberWidth} x={12 + (index % item.memberColumns) * (item.memberWidth + item.memberGap)} y={item.memberTop + Math.floor(index / item.memberColumns) * item.memberRow} />)}
           {item.hiddenCount > 0 && <g><rect x={item.cardWidth - 65} y={item.cardHeight - 25} width="51" height="20" rx="10" style={{ fill: "var(--identity-tile)" }} /><text x={item.cardWidth - 39} y={item.cardHeight - 10} textAnchor="middle" fontSize="14" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}>+{item.hiddenCount}</text></g>}
         </>}
       </g>)}

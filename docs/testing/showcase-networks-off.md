@@ -1,5 +1,8 @@
 # Showcase Networks-off and singleton correction
 
+> Historical acceptance record. Layout descriptions and measurements below are
+> superseded by [shared Connectivity geometry](showcase-shared-geometry.md).
+
 Presentation-only correction on `feature/topology-showcase`, based on
 `b5d1aa58137ce10c1fd95bc9dae9c8928af22967`. No migration, persisted data, API,
 authorization, Platform, Connectivity, aspect-selection or layout-engine change.
