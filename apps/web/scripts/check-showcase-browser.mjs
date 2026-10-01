@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseTallFixture, showcaseWideFixture, showcaseUltrawideFixture, showcaseExteriorRoutingFixture, showcaseDenseRoutingFixture, showcaseLiveRoutingFixture, id } from "../tests/fixtures/showcase.mjs";
-import { showcaseLayout, showcaseModel } from "../lib/showcase.mjs";
+import { showcaseLayout, showcaseModel, SHOWCASE_MAX_UPSCALE, SHOWCASE_CONTENT_TOP } from "../lib/showcase.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3110";
 const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-showcase-browser";
@@ -23,7 +23,7 @@ try {
     }
     if (["exterior", "dense-routing", "live-routing"].includes(size)) {
       assert.ok(layout.diagnostics.fallbackRouteCount > 0);
-      assert.equal(layout.scale, 1); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
+      assert.ok(layout.scale > 1 && layout.scale <= SHOWCASE_MAX_UPSCALE); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
       assert.equal(layout.diagnostics.visibleAssetTileCount, data.assets.length);
       assert.equal(layout.diagnostics.workloadCollapseAttempted, false);
     }
@@ -107,7 +107,7 @@ try {
     // constrained to one fetch per URL. Its embedded previews share that result.
     const tiles = await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => ({
       id: tile.getAttribute("data-showcase-asset"), title: tile.querySelector(":scope > title").textContent,
-      labels: [...tile.querySelectorAll(":scope > text")].map(text => ({ text: text.textContent, length: text.getComputedTextLength() })),
+      labels: [...tile.querySelectorAll(":scope > text")].map(text => ({ text: text.textContent, length: text.getComputedTextLength(), fontSize: text.getAttribute("font-size") })),
       budget: Number(tile.getAttribute("data-text-width")), artworkWidth: Number(tile.querySelector("image, svg")?.getAttribute("width")), icons: tile.querySelectorAll("image, path, circle, rect").length,
     })));
     for (const tile of tiles) {
@@ -115,6 +115,11 @@ try {
       assert.equal(tile.title, asset.name, "Accessible title contains the full name only");
       assert.equal(tile.labels.length, 1, "Every structural/workload/endpoint tile contains one name line, no Type or metadata");
       assert.ok(tile.labels[0].length <= tile.budget + .5, "Names respect their measured text budget");
+      assert.equal(Number(tile.labels[0].fontSize), 15, "Asset font size stays unchanged before uniform scene scaling");
+      if (tile.labels[0].text.includes("…")) {
+        const [head, tail] = tile.labels[0].text.split("…");
+        assert.ok(head && tail && asset.name.startsWith(head) && asset.name.endsWith(tail), "Middle ellipsis retains both name ends");
+      }
       assert.ok(tile.icons > 0);
       assert.equal(tile.artworkWidth, 20, "Compact artwork retains a 20px viewport");
     }
@@ -125,6 +130,20 @@ try {
       assert.ok(!(await scene.textContent()).match(/\+\d+/), "No workload/endpoint roll-up in a normal Showcase");
     }
     assert.equal(await page.getByLabel("Showcase diagnostics", { exact: true }).count(), 0, "Production pages do not expose detailed diagnostics");
+    const content = scene.locator(":scope > g");
+    assert.equal(await content.getAttribute("transform"), `translate(${layout.x} ${layout.y}) scale(${layout.scale})`);
+    const contentBounds = await content.evaluate(el => {
+      const b = el.getBBox(), m = el.ownerSVGElement.getCTM().inverse().multiply(el.getCTM());
+      return { left: m.e + b.x * m.a, top: m.f + b.y * m.d,
+        right: m.e + (b.x + b.width) * m.a, bottom: m.f + (b.y + b.height) * m.d };
+    });
+    assert.ok(contentBounds.left >= 32 - .5 && contentBounds.right <= layout.sceneWidth - 32 + .5);
+    assert.ok(contentBounds.top >= SHOWCASE_CONTENT_TOP - .5 && contentBounds.bottom <= layout.sceneHeight - 32 + .5);
+    if (size === "live-routing") {
+      assert.ok(layout.scale > 1);
+      assert.ok(contentBounds.top < SHOWCASE_CONTENT_TOP + 24, "Shallow graph sits beneath the header");
+      assert.ok(tiles.some(tile => tile.labels[0].text.includes("…")), "44-Asset acceptance exercises middle ellipsis");
+    }
     for (const route of layout.routes) assert.equal(await scene.locator(`[data-showcase-connector="${route.key}"]`).getAttribute("d"), route.path);
     if (["exterior", "dense-routing", "live-routing"].includes(size)) {
       const rendered = await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => {

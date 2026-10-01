@@ -12,6 +12,7 @@ export const SHOWCASE_NODE_WIDTH = 124;
 export const SHOWCASE_NODE_HEIGHT = 32;
 export const SHOWCASE_MEMBER_WIDTH = 112;
 export const SHOWCASE_MIN_SCALE = 0.86;
+export const SHOWCASE_MAX_UPSCALE = 1.30;
 export const SHOWCASE_PREVIEW_COUNT = 4;
 const other = (edge, key) => edge.source_key === key ? edge.target_key : edge.source_key;
 
@@ -114,7 +115,7 @@ export function showcaseLayout(model) {
     }
   }
   const fit = (bounds, diagnostic) => {
-    const initialRequiredScale = Math.min(1, CONTENT_WIDTH / bounds.width,
+    const initialRequiredScale = Math.min(SHOWCASE_MAX_UPSCALE, CONTENT_WIDTH / bounds.width,
       (SHOWCASE_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height);
     // The floor supplies the minimum independent integer extent on each axis.
     // Routing participates in the bounds; poster fitting never moves geometry.
@@ -122,24 +123,23 @@ export function showcaseLayout(model) {
     const requiredHeight = Math.max(SHOWCASE_HEIGHT, Math.ceil(bounds.height * SHOWCASE_MIN_SCALE + SHOWCASE_CONTENT_TOP + POSTER_MARGIN));
     const posterWidth = Math.min(requiredWidth, SHOWCASE_MAX_WIDTH);
     const posterHeight = Math.min(requiredHeight, SHOWCASE_MAX_HEIGHT);
-    const scale = Math.min(1, (posterWidth - POSTER_MARGIN * 2) / bounds.width,
+    const scale = Math.min(SHOWCASE_MAX_UPSCALE, (posterWidth - POSTER_MARGIN * 2) / bounds.width,
       (posterHeight - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height);
     Object.assign(diagnostic, { sceneWidth: bounds.width, sceneHeight: bounds.height,
       naturalContentWidth: bounds.width, naturalContentHeight: bounds.height, initialRequiredScale,
       requiredPosterWidth: requiredWidth, requiredPosterHeight: requiredHeight,
       maximumSupportedWidth: SHOWCASE_MAX_WIDTH, maximumSupportedHeight: SHOWCASE_MAX_HEIGHT,
       // Diagnostic only: this does not participate in poster selection or fitting.
-      scaleAtMaximumDimensions: Math.min(1, (SHOWCASE_MAX_WIDTH - POSTER_MARGIN * 2) / bounds.width,
+      scaleAtMaximumDimensions: Math.min(SHOWCASE_MAX_UPSCALE, (SHOWCASE_MAX_WIDTH - POSTER_MARGIN * 2) / bounds.width,
         (SHOWCASE_MAX_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height),
       chosenPosterWidth: posterWidth, chosenPosterHeight: posterHeight, requiredScale: scale, finalScale: scale });
     return { posterWidth, posterHeight, scale, requiredWidth, requiredHeight };
   };
   const finish = (candidate, posterWidth, posterHeight, scale) => {
     const { layout, bounds, diagnostic, stage } = candidate;
-    const contentHeight = posterHeight - SHOWCASE_CONTENT_TOP - POSTER_MARGIN;
     return { ...layout, complete: true, stage, scale, sceneWidth: posterWidth, sceneHeight: posterHeight,
       x: (posterWidth - bounds.width * scale) / 2 - bounds.minX * scale,
-      y: SHOWCASE_CONTENT_TOP + (contentHeight - bounds.height * scale) / 2 - bounds.minY * scale,
+      y: SHOWCASE_CONTENT_TOP - bounds.minY * scale,
       representedAssetIds: layout.items.flatMap(n => n.members.map(m => m.id)).sort(), assetCount: model.assetCount,
       diagnostics: { ...diagnostic, workloadCollapseAttempted: stage > 0, failureReason: null, attempts } };
   };

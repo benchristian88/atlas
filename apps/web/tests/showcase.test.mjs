@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { showcaseModel, showcaseLayout, showcaseFilename, SHOWCASE_MIN_SCALE, SHOWCASE_CONTENT_TOP, SHOWCASE_MAX_HEIGHT, SHOWCASE_MAX_WIDTH, SHOWCASE_NODE_WIDTH, SHOWCASE_NODE_HEIGHT } from "../lib/showcase.mjs";
-import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, showcaseWideFixture, showcaseUltrawideFixture, id } from "./fixtures/showcase.mjs";
+import { showcaseModel, showcaseLayout, showcaseFilename, SHOWCASE_MIN_SCALE, SHOWCASE_MAX_UPSCALE, SHOWCASE_CONTENT_TOP, SHOWCASE_MAX_HEIGHT, SHOWCASE_MAX_WIDTH, SHOWCASE_NODE_WIDTH, SHOWCASE_NODE_HEIGHT } from "../lib/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseLiveRoutingFixture, showcasePosterFixture, showcaseWideFixture, showcaseUltrawideFixture, id } from "./fixtures/showcase.mjs";
 import { topologyPresentation, connectivityLayout, connectivityRoutes, connectivityPreview } from "../lib/infrastructure-topology.mjs";
 import { buildTopologyLayoutModel, calculateTopologyGeometry, topologyBounds } from "../lib/topology-geometry.mjs";
 
@@ -19,11 +19,15 @@ function checkPoster(data) {
   assert.ok(layout.sceneWidth >= 1920 && layout.sceneWidth <= SHOWCASE_MAX_WIDTH);
   assert.ok(layout.sceneHeight >= 1080 && layout.sceneHeight <= SHOWCASE_MAX_HEIGHT);
   assert.ok(layout.scale >= SHOWCASE_MIN_SCALE);
+  assert.ok(layout.scale <= SHOWCASE_MAX_UPSCALE);
   const measured = topologyBounds(layout.geometry, Object.fromEntries(layout.routes.map(r => [r.key, r])),
     layout.items.filter(n => n.kind === "category"), { nodeWidth: SHOWCASE_NODE_WIDTH, nodeHeight: SHOWCASE_NODE_HEIGHT });
   assert.equal(layout.diagnostics.naturalContentWidth, measured.width);
   assert.equal(layout.diagnostics.naturalContentHeight, measured.height);
   assert.equal(layout.diagnostics.boundsIncludeRoutes, true);
+  assert.equal(layout.y + measured.minY * layout.scale, SHOWCASE_CONTENT_TOP, "Measured scene starts beneath the header");
+  assert.ok(measured.width * layout.scale <= layout.sceneWidth - 64 + 1e-9);
+  assert.ok(measured.height * layout.scale <= layout.sceneHeight - SHOWCASE_CONTENT_TOP - 32 + 1e-9);
   for (const [i, a] of layout.items.entries()) {
     assert.ok(layout.x + a.x * layout.scale >= 0);
     assert.ok(layout.y + a.y * layout.scale >= SHOWCASE_CONTENT_TOP);
@@ -215,6 +219,40 @@ test("taller fallback remains minimal and complete after trying 16:9", async () 
 test("small site keeps preferred 1920×1080 dimensions", () => {
   const { layout } = checkPoster(showcaseFixture("small"));
   assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
+});
+
+test("small scene enlarges to the presentation cap and stays close beneath the header", () => {
+  const { layout } = checkPoster(showcaseFixture("small"));
+  assert.equal(SHOWCASE_MAX_UPSCALE, 1.30);
+  assert.equal(layout.scale, SHOWCASE_MAX_UPSCALE);
+  assert.ok(layout.scale > 1);
+  assert.equal(layout.diagnostics.finalScale, layout.scale);
+  assert.equal(layout.diagnostics.workloadCollapseAttempted, false);
+});
+
+test("near-poster 44-Asset scene enlarges only to its route-inclusive available width", () => {
+  const layout = showcaseLayout(showcaseModel(showcaseLiveRoutingFixture(), id(2)));
+  assert.ok(layout.complete);
+  const bounds = topologyBounds(layout.geometry, Object.fromEntries(layout.routes.map(r => [r.key, r])),
+    layout.items.filter(n => n.kind === "category"), { nodeWidth: SHOWCASE_NODE_WIDTH, nodeHeight: SHOWCASE_NODE_HEIGHT });
+  assert.equal(layout.y + bounds.minY * layout.scale, SHOWCASE_CONTENT_TOP);
+  assert.ok(bounds.height * layout.scale <= layout.sceneHeight - SHOWCASE_CONTENT_TOP - 32);
+  assert.equal(layout.assetCount, 44);
+  assert.ok(layout.scale > 1 && layout.scale < SHOWCASE_MAX_UPSCALE);
+  assert.equal(layout.scale, (layout.sceneWidth - 64) / layout.diagnostics.naturalContentWidth);
+  assert.equal(layout.diagnostics.naturalContentWidth, 1776);
+  assert.equal(layout.diagnostics.naturalContentHeight, 494);
+  assert.equal(layout.stage, 0); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
+});
+
+test("large scenes retain the previous shrink scales and collapse decisions", () => {
+  const cases = [[showcaseReferenceFixture(), 1856 / 1924, 0], [showcaseRealShapeFixture(), 1856 / 2144, 0],
+    [showcaseWideFixture(), 2292 / 2664, 0], [showcaseFixture("large"), 1034 / 1202, 1]];
+  for (const [data, previousScale, stage] of cases) {
+    const { layout } = checkPoster(data);
+    assert.equal(layout.scale, previousScale);
+    assert.equal(layout.stage, stage);
+  }
 });
 
 for (const [name, branches] of [["wide", 18], ["near 2.8:1", 23]]) test(`${name}: complete measured minimum width, unchanged Connectivity ownership`, () => {

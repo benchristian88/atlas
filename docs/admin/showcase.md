@@ -21,6 +21,11 @@ rasterizes that same SVG scene at 2× resolution, including its header, grouping
 icons, text and connectors. It is always light, including when the surrounding Atlas application is dark. App
 navigation and the Export button are outside the image.
 
+Smaller topologies enlarge uniformly by up to 1.30× within the poster's existing
+margins. The graph sits beneath the header, with spare space below shallow
+structures. Asset names and icons enlarge together in both preview and PNG;
+larger topologies retain the existing readability floor and dimension limits.
+
 Every authorized Asset in the current Site is represented individually or in a
 truthfully counted local group. Showcase includes categories hidden by default
 in the operational topology views. It does not use Connectivity's hop, 100-node

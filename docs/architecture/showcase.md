@@ -140,7 +140,13 @@ The 64px horizontal allowance is two 32px margins; the vertical allowance is the
 height stays 1080 unless the measured vertical extent independently requires it.
 The supported envelope reaches 2.8:1 at 3024×1080. Both dimensions may adapt,
 without stretching, moving or repacking the shared geometry. Final scale is the
-minimum of 1 and the two available-content/natural-extent ratios.
+minimum of `SHOWCASE_MAX_UPSCALE` (1.30) and the two available-content/natural-extent
+ratios. Small scenes enlarge uniformly within the existing content area; large
+scenes retain their previous shrink scale and readability rules. The scene is
+centred horizontally and aligned at the 100px content top beneath the header,
+leaving spare space below shallow graphs. Node fonts, icon sizes, text budgets
+and middle-ellipsis measurement stay unchanged; preview and PNG use the same
+scene transform. See [presentation acceptance](../testing/showcase-upscale.md).
 
 Only sites exceeding 100 Assets may attempt four-member workload previews,
 after complete compact geometry exhausts the entire width/height envelope.

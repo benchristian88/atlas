@@ -81,7 +81,7 @@ for (const [name, fixture, count] of [["forced exterior", showcaseExteriorRoutin
   const data = fixture(), original = structuredClone(data), model = showcaseModel(data, id(2)), layout = showcaseLayout(model);
   assert.ok(layout.complete, JSON.stringify(layout.diagnostics));
   assert.equal(layout.assetCount, count); assert.equal(layout.diagnostics.visibleAssetTileCount, count);
-  assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080); assert.equal(layout.scale, 1);
+  assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080); assert.ok(layout.scale > 1);
   assert.equal(layout.stage, 0); assert.equal(layout.diagnostics.workloadCollapseAttempted, false);
   assert.ok(layout.diagnostics.fallbackRouteCount > 0);
   const groups = layout.items.filter(n => n.kind === "category");
