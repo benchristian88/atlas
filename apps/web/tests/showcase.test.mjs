@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { showcaseModel, showcaseLayout, showcaseFilename, SHOWCASE_MIN_SCALE, SHOWCASE_CONTENT_TOP, SHOWCASE_MAX_HEIGHT, SHOWCASE_NODE_WIDTH, SHOWCASE_NODE_HEIGHT } from "../lib/showcase.mjs";
-import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, id } from "./fixtures/showcase.mjs";
+import { showcaseModel, showcaseLayout, showcaseFilename, SHOWCASE_MIN_SCALE, SHOWCASE_CONTENT_TOP, SHOWCASE_MAX_HEIGHT, SHOWCASE_MAX_WIDTH, SHOWCASE_NODE_WIDTH, SHOWCASE_NODE_HEIGHT } from "../lib/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcasePosterFixture, showcaseWideFixture, showcaseUltrawideFixture, id } from "./fixtures/showcase.mjs";
 import { topologyPresentation, connectivityLayout, connectivityRoutes, connectivityPreview } from "../lib/infrastructure-topology.mjs";
-import { buildTopologyLayoutModel, calculateTopologyGeometry } from "../lib/topology-geometry.mjs";
+import { buildTopologyLayoutModel, calculateTopologyGeometry, topologyBounds } from "../lib/topology-geometry.mjs";
 
 function intersects(p, q, box) {
   return p[0] === q[0]
@@ -16,13 +16,18 @@ function checkPoster(data) {
   assert.deepEqual(data, before);
   assert.deepEqual(layout.representedAssetIds, data.assets.map(a => a.id).sort());
   assert.equal(new Set(layout.representedAssetIds).size, data.assets.length);
-  assert.equal(layout.sceneWidth, 1920);
+  assert.ok(layout.sceneWidth >= 1920 && layout.sceneWidth <= SHOWCASE_MAX_WIDTH);
   assert.ok(layout.sceneHeight >= 1080 && layout.sceneHeight <= SHOWCASE_MAX_HEIGHT);
   assert.ok(layout.scale >= SHOWCASE_MIN_SCALE);
+  const measured = topologyBounds(layout.geometry, Object.fromEntries(layout.routes.map(r => [r.key, r])),
+    layout.items.filter(n => n.kind === "category"), { nodeWidth: SHOWCASE_NODE_WIDTH, nodeHeight: SHOWCASE_NODE_HEIGHT });
+  assert.equal(layout.diagnostics.naturalContentWidth, measured.width);
+  assert.equal(layout.diagnostics.naturalContentHeight, measured.height);
+  assert.equal(layout.diagnostics.boundsIncludeRoutes, true);
   for (const [i, a] of layout.items.entries()) {
     assert.ok(layout.x + a.x * layout.scale >= 0);
     assert.ok(layout.y + a.y * layout.scale >= SHOWCASE_CONTENT_TOP);
-    assert.ok(layout.x + (a.x + a.cardWidth) * layout.scale <= 1920);
+    assert.ok(layout.x + (a.x + a.cardWidth) * layout.scale <= layout.sceneWidth);
     assert.ok(layout.y + (a.y + a.cardHeight) * layout.scale <= layout.sceneHeight);
     for (const b of layout.items.slice(i + 1)) assert.ok(a.x + a.cardWidth <= b.x || b.x + b.cardWidth <= a.x || a.y + a.cardHeight <= b.y || b.y + b.cardHeight <= a.y, `${a.name} overlaps ${b.name}`);
     if (a.kind === "asset") {
@@ -34,7 +39,7 @@ function checkPoster(data) {
     assert.ok(p[0] === q[0] || p[1] === q[1]);
     for (const box of layout.items) assert.equal(intersects(p, q, box), false, `route ${route.key} crosses ${box.name}`);
     for (const [x, y] of [p, q]) {
-      assert.ok(layout.x + x * layout.scale >= 0 && layout.x + x * layout.scale <= 1920);
+      assert.ok(layout.x + x * layout.scale >= 0 && layout.x + x * layout.scale <= layout.sceneWidth);
       assert.ok(layout.y + y * layout.scale >= SHOWCASE_CONTENT_TOP && layout.y + y * layout.scale <= layout.sceneHeight);
     }
   }
@@ -56,7 +61,7 @@ for (const size of ["small", "medium", "large"]) test(`${size}: complete, determ
 
 for (const [name, fixture, count] of [["reference", showcaseReferenceFixture, 44], ["real shape", showcaseRealShapeFixture, 50]]) test(`${name}: complete 16:9, all workloads and nested hosts visible`, () => {
   const data = fixture(), { model, layout } = checkPoster(data);
-  assert.equal(data.assets.length, count); assert.equal(layout.sceneHeight, 1080); assert.equal(layout.stage, 0);
+  assert.equal(data.assets.length, count); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080); assert.equal(layout.stage, 0);
   assert.equal(layout.diagnostics.collapsedGroupCount, 0);
   assert.ok(layout.items.every(n => !n.hiddenCount));
   assert.deepEqual(layout.items.flatMap(n => n.kind === "asset" ? n.members : n.preview).map(n => n.id).sort(), data.assets.map(a => a.id).sort());
@@ -178,7 +183,7 @@ test("missing/empty context and pathological structures refuse partial export", 
   assert.equal(showcaseLayout(showcaseModel({ ...data, structural_edges: undefined }, id(2))).complete, false);
   const layout = showcaseLayout(showcaseModel(showcasePosterFixture(90), id(2)));
   assert.equal(layout.complete, false); assert.match(layout.reason, /Showcase incomplete/); assert.equal(layout.items, undefined);
-  assert.equal(layout.diagnostics.failureReason, "width");
+  assert.equal(layout.diagnostics.failureReason, "width and height");
 });
 
 test("Platform content and Connectivity disclosure/inspector inputs remain unchanged", () => {
@@ -205,4 +210,50 @@ test("taller fallback remains minimal and complete after trying 16:9", async () 
   assert.equal(layout.stage, 0); assert.ok(layout.sceneHeight > 1080);
   assert.equal(layout.sceneHeight, Math.ceil(layout.diagnostics.sceneHeight * SHOWCASE_MIN_SCALE + SHOWCASE_CONTENT_TOP + 32));
   assert.ok(layout.items.every(n => !n.hiddenCount));
+});
+
+test("small site keeps preferred 1920×1080 dimensions", () => {
+  const { layout } = checkPoster(showcaseFixture("small"));
+  assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
+});
+
+for (const [name, branches] of [["wide", 18], ["near 2.8:1", 23]]) test(`${name}: complete measured minimum width, unchanged Connectivity ownership`, () => {
+  const data = branches === 23 ? showcaseUltrawideFixture() : showcaseWideFixture(branches), { layout, model } = checkPoster(data), d = layout.diagnostics;
+  assert.ok(d.initialRequiredScale < SHOWCASE_MIN_SCALE);
+  assert.ok(layout.sceneWidth > 1920); assert.equal(layout.sceneHeight, 1080);
+  assert.equal(layout.sceneWidth, Math.ceil(d.naturalContentWidth * SHOWCASE_MIN_SCALE + 64));
+  assert.ok((layout.sceneWidth - 1 - 64) / d.naturalContentWidth < SHOWCASE_MIN_SCALE, "One fewer pixel would violate the floor");
+  assert.equal(layout.stage, 0); assert.equal(d.workloadCollapseAttempted, false);
+  assert.equal(d.collapsedGroupCount, 0); assert.equal(d.visibleAssetTileCount, data.assets.length);
+  assert.equal(d.componentCount, Math.ceil(branches / 4) + 1); assert.equal(d.rootCount, d.componentCount);
+  assert.equal(d.finalScale, layout.scale); assert.equal(d.chosenPosterWidth, layout.sceneWidth);
+  assert.equal(d.chosenPosterHeight, layout.sceneHeight); assert.equal(d.failureReason, null);
+  assert.ok(layout.geometry.every(n => n.entity_type === "asset"));
+  assert.ok(layout.routes.every(e => e.kind !== "membership"));
+  const connectivity = connectivityLayout({ ...model, focus_key: model.nodes[0].key });
+  for (const node of layout.geometry) {
+    const reference = connectivity.find(n => n.key === node.key);
+    assert.equal(node.rank, reference.rank); assert.equal(node.positionDepth, reference.positionDepth);
+    assert.equal(node.layout_parent_key, reference.layout_parent_key);
+  }
+  if (branches === 23) assert.ok(layout.sceneWidth / layout.sceneHeight > 2.79);
+});
+
+test("both dimensions adapt independently before enormous-site collapse", () => {
+  const { layout } = checkPoster(showcaseWideFixture(18, 70)), d = layout.diagnostics;
+  assert.ok(layout.sceneWidth > 1920); assert.ok(layout.sceneHeight > 1080);
+  assert.equal(layout.sceneWidth, Math.ceil(d.naturalContentWidth * SHOWCASE_MIN_SCALE + 64));
+  assert.equal(layout.sceneHeight, Math.ceil(d.naturalContentHeight * SHOWCASE_MIN_SCALE + SHOWCASE_CONTENT_TOP + 32));
+  assert.equal(layout.stage, 0); assert.equal(d.workloadCollapseAttempted, false);
+  assert.equal(d.visibleAssetTileCount, layout.assetCount);
+  assert.ok(layout.items.every(n => !n.hiddenCount));
+});
+
+test("normal-size forest beyond the maximum width refuses export without collapse", () => {
+  const data = showcaseWideFixture(28), layout = showcaseLayout(showcaseModel(data, id(2))), d = layout.diagnostics;
+  assert.equal(data.assets.length, 93); assert.equal(layout.complete, false); assert.equal(layout.items, undefined);
+  assert.equal(d.chosenPosterWidth, SHOWCASE_MAX_WIDTH); assert.equal(d.chosenPosterHeight, 1080);
+  assert.equal(d.failureReason, "width"); assert.equal(d.workloadCollapseAttempted, false);
+  assert.equal(d.attempts.length, 1); assert.ok(d.finalScale < SHOWCASE_MIN_SCALE);
+  assert.ok(d.naturalContentWidth * SHOWCASE_MIN_SCALE + 64 > SHOWCASE_MAX_WIDTH);
 });

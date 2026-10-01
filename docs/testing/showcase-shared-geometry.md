@@ -1,5 +1,9 @@
 # Showcase shared Connectivity geometry
 
+The fixed-width envelope recorded here is superseded by
+[adaptive-width acceptance](showcase-adaptive-width.md). Shared geometry and
+node/category presentation remain unchanged.
+
 Focused correction on `feature/topology-showcase`, starting from
 `85b5b5153eca6daf5d8601a04134693d3f08b34c`. The initial working tree was clean.
 No commit, push or merge. This supersedes the independent Showcase geometry in

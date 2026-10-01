@@ -3,6 +3,7 @@ import { topologyGraphEligibility, buildTopologyLayoutModel, calculateTopologyGe
 
 export const SHOWCASE_WIDTH = 1920;
 export const SHOWCASE_HEIGHT = 1080;
+export const SHOWCASE_MAX_WIDTH = 3024;
 export const SHOWCASE_MAX_HEIGHT = 1358;
 export const SHOWCASE_CONTENT_TOP = 100;
 const POSTER_MARGIN = 32;
@@ -101,17 +102,44 @@ export function showcaseLayout(model) {
   if (model.error) return { complete: false, reason: model.error };
   if (!model.assetCount) return { complete: false, reason: "No Assets recorded for this site yet." };
   const attempts = [];
-  const finish = (candidate, posterHeight, scale) => {
+  const visited = new Set();
+  let componentCount = 0;
+  for (const node of model.nodes) {
+    if (visited.has(node.key)) continue;
+    componentCount++;
+    const queue = [node.key]; visited.add(node.key);
+    for (let i = 0; i < queue.length; i++) for (const edge of model.adjacent.get(queue[i])) {
+      const next = other(edge, queue[i]);
+      if (!visited.has(next)) { visited.add(next); queue.push(next); }
+    }
+  }
+  const fit = (bounds, diagnostic) => {
+    const initialRequiredScale = Math.min(1, CONTENT_WIDTH / bounds.width,
+      (SHOWCASE_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height);
+    // The floor supplies the minimum independent integer extent on each axis.
+    // Routing participates in the bounds; poster fitting never moves geometry.
+    const requiredWidth = Math.max(SHOWCASE_WIDTH, Math.ceil(bounds.width * SHOWCASE_MIN_SCALE + POSTER_MARGIN * 2));
+    const requiredHeight = Math.max(SHOWCASE_HEIGHT, Math.ceil(bounds.height * SHOWCASE_MIN_SCALE + SHOWCASE_CONTENT_TOP + POSTER_MARGIN));
+    const posterWidth = Math.min(requiredWidth, SHOWCASE_MAX_WIDTH);
+    const posterHeight = Math.min(requiredHeight, SHOWCASE_MAX_HEIGHT);
+    const scale = Math.min(1, (posterWidth - POSTER_MARGIN * 2) / bounds.width,
+      (posterHeight - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height);
+    Object.assign(diagnostic, { sceneWidth: bounds.width, sceneHeight: bounds.height,
+      naturalContentWidth: bounds.width, naturalContentHeight: bounds.height, initialRequiredScale,
+      chosenPosterWidth: posterWidth, chosenPosterHeight: posterHeight, requiredScale: scale, finalScale: scale });
+    return { posterWidth, posterHeight, scale, requiredWidth, requiredHeight };
+  };
+  const finish = (candidate, posterWidth, posterHeight, scale) => {
     const { layout, bounds, diagnostic, stage } = candidate;
     const contentHeight = posterHeight - SHOWCASE_CONTENT_TOP - POSTER_MARGIN;
-    return { ...layout, complete: true, stage, scale, sceneWidth: SHOWCASE_WIDTH, sceneHeight: posterHeight,
-      x: (SHOWCASE_WIDTH - bounds.width * scale) / 2 - bounds.minX * scale,
+    return { ...layout, complete: true, stage, scale, sceneWidth: posterWidth, sceneHeight: posterHeight,
+      x: (posterWidth - bounds.width * scale) / 2 - bounds.minX * scale,
       y: SHOWCASE_CONTENT_TOP + (contentHeight - bounds.height * scale) / 2 - bounds.minY * scale,
       representedAssetIds: layout.items.flatMap(n => n.members.map(m => m.id)).sort(), assetCount: model.assetCount,
-      diagnostics: { ...diagnostic, chosenPosterHeight: posterHeight, requiredScale: scale, failureReason: null, attempts } };
+      diagnostics: { ...diagnostic, workloadCollapseAttempted: stage > 0, failureReason: null, attempts } };
   };
-  // Always attempt all Assets first. A 40–50 Asset site never uses roll-ups.
-  // Taller complete posters precede the last-resort enormous-site preview.
+  // Exhaust the supported width/height envelope with all Assets first.
+  // Normal sites never use roll-ups solely to fit a wide topology.
   for (const stage of model.assetCount > 100 ? [0, 1] : [0]) {
     const projection = categoryPresentation(model, stage > 0);
     const metrics = { nodeWidth: SHOWCASE_NODE_WIDTH, nodeHeight: SHOWCASE_NODE_HEIGHT,
@@ -128,19 +156,18 @@ export function showcaseLayout(model) {
     ].sort((a, b) => a.key.localeCompare(b.key));
     const diagnostic = { stage, assetCount: model.assetCount, structuralNodeCount: items.filter(n => n.kind === "asset").length,
       collapsedGroupCount: boxes.filter(g => g.hiddenCount).length, workloadCategoryCount: boxes.length,
-      rootCount: model.roots.length, readabilityFloor: SHOWCASE_MIN_SCALE, chosenPosterHeight: SHOWCASE_HEIGHT, failureReason: null };
+      rootCount: model.roots.length, componentCount,
+      visibleAssetTileCount: items.reduce((count, item) => count + (item.kind === "asset" ? 1 : item.preview.length), 0),
+      readabilityFloor: SHOWCASE_MIN_SCALE, workloadCollapseAttempted: stage > 0, failureReason: null };
     attempts.push(diagnostic);
-    const initialBounds = topologyBounds(geometry, {}, boxes, metrics);
-    Object.assign(diagnostic, { sceneWidth: initialBounds.width, sceneHeight: initialBounds.height,
-      requiredScale: Math.min(1, CONTENT_WIDTH / initialBounds.width,
-        (SHOWCASE_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / initialBounds.height) });
-    if (CONTENT_WIDTH / initialBounds.width < SHOWCASE_MIN_SCALE) { diagnostic.failureReason = "width"; continue; }
-    if ((SHOWCASE_MAX_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / initialBounds.height < SHOWCASE_MIN_SCALE) {
-      diagnostic.failureReason = "height"; continue;
-    }
     let routed;
     try { routed = routeTopologyEdges(geometry, projection.edges, boxes, metrics); }
-    catch (error) { diagnostic.failureReason = "routing"; diagnostic.routingError = error.message; continue; }
+    catch (error) {
+      const bounds = topologyBounds(geometry, {}, boxes, metrics);
+      fit(bounds, diagnostic);
+      Object.assign(diagnostic, { boundsIncludeRoutes: false, failureReason: "routing", routingError: error.message });
+      continue;
+    }
     const routes = projection.edges.filter(e => routed[e.key]?.render !== false).map(edge => {
       const route = routed[edge.key], group = boxes.find(g => g.key === route.group_key);
       const relationshipKeys = group ? model.edges.filter(e =>
@@ -149,21 +176,18 @@ export function showcaseLayout(model) {
         path: route.points.map(([x, y], i) => `${i ? "L" : "M"}${x},${y}`).join(" ") };
     });
     const bounds = topologyBounds(geometry, routed, boxes, metrics);
-    const scale = Math.min(1, CONTENT_WIDTH / bounds.width, (SHOWCASE_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height);
-    Object.assign(diagnostic, { sceneWidth: bounds.width, sceneHeight: bounds.height, requiredScale: scale });
+    const { posterWidth, posterHeight, scale, requiredWidth, requiredHeight } = fit(bounds, diagnostic);
+    diagnostic.boundsIncludeRoutes = true;
     const candidate = { layout: { items, routes, edges: model.edges, geometry, positionLabels: [], footer: null }, bounds, diagnostic, stage };
-    if (scale >= SHOWCASE_MIN_SCALE) return finish(candidate, SHOWCASE_HEIGHT, scale);
-    diagnostic.failureReason = CONTENT_WIDTH / bounds.width < SHOWCASE_MIN_SCALE ? "width" : "height";
-    const posterHeight = Math.max(SHOWCASE_HEIGHT, Math.ceil(bounds.height * SHOWCASE_MIN_SCALE + SHOWCASE_CONTENT_TOP + POSTER_MARGIN));
-    if (CONTENT_WIDTH / bounds.width >= SHOWCASE_MIN_SCALE && posterHeight <= SHOWCASE_MAX_HEIGHT) {
-      // Complete representation takes priority over previews at any allowed height.
-      return finish(candidate, posterHeight, Math.min(1, CONTENT_WIDTH / bounds.width,
-        (posterHeight - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height));
+    if (requiredWidth <= SHOWCASE_MAX_WIDTH && requiredHeight <= SHOWCASE_MAX_HEIGHT) {
+      return finish(candidate, posterWidth, posterHeight, scale);
     }
+    diagnostic.failureReason = requiredWidth > SHOWCASE_MAX_WIDTH
+      ? requiredHeight > SHOWCASE_MAX_HEIGHT ? "width and height" : "width" : "height";
   }
   const diagnostic = attempts.at(-1);
   return { complete: false, reason: "Showcase incomplete: this site's structure exceeds the readable poster size, even after compaction. No partial image will be exported.",
-    diagnostics: { ...diagnostic, chosenPosterHeight: SHOWCASE_MAX_HEIGHT, attempts } };
+    diagnostics: { ...diagnostic, workloadCollapseAttempted: attempts.length > 1, attempts } };
 }
 
 export function showcaseFilename(name) {

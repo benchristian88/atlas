@@ -141,3 +141,37 @@ export function showcaseTallFixture(workloads = 60) {
   add("Archive Server", "server");
   return data;
 }
+
+// Many parallel hosting branches, plus an independent root: horizontal forest
+// pressure comes from recorded ownership, rather than a large workload count.
+export function showcaseWideFixture(branches = 18, tallWorkloads = 0, firstBranchWorkloads = 2) {
+  const { data, add } = structuralBuilder();
+  const gateway = add("Gateway", "gateway");
+  let core;
+  for (let i = 0; i < branches; i++) {
+    const suffix = String(i + 1).padStart(2, "0");
+    // Independent recorded fabrics with four host branches apiece. No invented
+    // link joins disconnected components just to make a poster-wide forest.
+    if (i % 4 === 0) core = add(`Fabric ${String(i / 4 + 1).padStart(2, "0")}`, "core", i === 0 ? gateway : null);
+    const host = add(`Host ${suffix}`, "platform", core);
+    for (let j = 0; j < (i === 0 ? firstBranchWorkloads : 2); j++) add(`Task ${suffix} ${String.fromCharCode(65 + j)}`, "media", host, true);
+  }
+  add("Archive Server", "server");
+  if (tallWorkloads) {
+    const host = add("Tall Host", "platform");
+    for (let i = 0; i < tallWorkloads; i++) add(`Tall Task ${String(i + 1).padStart(2, "0")}`, "media", host, true);
+  }
+  data.networks = [{ id: id(900), name: "Apps VLAN", site_id: id(2), customer_id: id(1) }];
+  for (const [i, asset] of data.assets.entries()) {
+    const iface = { id: id(950 + i), asset_id: asset.id, network_id: id(900), name: "eth0" };
+    data.asset_interfaces.push(iface);
+    data.structural_edges.push({ key: `interface:${iface.id}`, source_key: `asset:${asset.id}`, target_key: `network:${id(900)}`, kind: "membership", topology_class: "physical_network", directional: false });
+  }
+  return data;
+}
+
+// A five-member category changes one branch footprint naturally; the routed
+// forest comes within three logical pixels of the supported width ceiling.
+export function showcaseUltrawideFixture() {
+  return showcaseWideFixture(23, 0, 5);
+}

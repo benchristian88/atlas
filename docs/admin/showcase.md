@@ -6,13 +6,16 @@ knowledge. Its subject and title are the current Site, with the existing Atlas
 light-background logo. **Export PNG** produces an image at exactly twice the
 poster dimensions, named from the Site, for example `the-workshop-atlas-showcase.png`.
 
-The preferred composition is 1920×1080 (16:9), exporting at 3840×2160. If compact
-grouping still needs more vertical space, Showcase selects the minimum readable
-height up to 1358 logical pixels, approximately A3 landscape proportions. Width
-stays 1920. For example, a 1920×1240 poster exports at 3840×2480.
+The preferred composition is 1920×1080 (16:9), exporting at 3840×2160. Wide site
+structures select the minimum readable width up to 3024 logical
+pixels, allowing an ultrawide poster up to 2.8:1 at the preferred height. Height
+stays 1080 unless the structure also needs vertical space; it may increase to
+1358. For example, 2400×1080 exports at 4800×2160, and 2400×1240 exports at
+4800×2480. Width and height adapt independently only when needed.
 
-The complete composition scales proportionally to the browser width; taller
-posters have taller previews, with no internal scrolling or cropping. Resizing
+The complete composition scales proportionally to the browser width; wider
+and taller posters preserve their selected proportions, with no internal
+scrolling or cropping. Resizing
 does not rearrange the diagram or change its selected dimensions. The PNG
 rasterizes that same SVG scene at 2× resolution, including its header, grouping,
 icons, text and connectors. It is always light, including when the surrounding Atlas application is dark. App
@@ -52,9 +55,11 @@ category stacking enhancement is not included.
 
 Normal-size sites show all current Assets, including every workload and access
 point. The 44- and 50-Asset reference shapes fit 16:9 with no **+N** roll-ups.
-Showcase first attempts complete compact geometry, then the bounded taller
-poster if needed. Only genuinely enormous sites (over 100 Assets) may try
-four-member workload previews after complete geometry fails. Those local groups
+Showcase first attempts complete compact geometry, widening the poster and
+adding bounded height only as needed. Only genuinely enormous sites (over 100
+Assets) may try
+four-member workload previews after complete geometry fails throughout the
+supported width and height envelope. Those local groups
 show **+N** for every represented member outside the preview; shared or mixed
 connections remain explicit. Unreadable structures show **Showcase incomplete**
 and disable export. The unchanged 0.86 scale floor keeps 15px Asset names at

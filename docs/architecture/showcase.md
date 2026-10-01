@@ -89,22 +89,41 @@ branches match Connectivity. Node and category rectangles are routing obstacles;
 category headers have reserved space and shared incoming group connectors retain
 all accepted edge identities.
 
-Poster fitting first tries 1920×1080 at the existing 0.86 readability floor, then
-the minimum integer taller height up to 1358. Only sites exceeding 100 Assets may
-attempt four-member workload previews, after the complete compact geometry fails
-at every allowed height. A preview requires uniform hosting semantics and no
-secondary neighbours; mixed or multihomed groups remain explicit. If geometry
-still cannot fit, export is unavailable and no partial scene is returned.
-Internal diagnostics record explicit/group/Asset counts, measured route-inclusive
-bounds, required scale, chosen height, stage attempts and failure reason.
+Poster fitting prefers 1920×1080 at the existing 0.86 readability floor.
+After routing, `topologyBounds` measures the actual node, category and connector
+extents. Each axis independently selects its minimum integer logical size:
 
-See [shared-geometry acceptance](../testing/showcase-shared-geometry.md). Earlier
+- Width: `max(1920, ceil(naturalWidth × 0.86 + 64))`, capped at 3024.
+- Height: `max(1080, ceil(naturalHeight × 0.86 + 132))`, capped at 1358.
+
+The 64px horizontal allowance is two 32px margins; the vertical allowance is the
+100px content top plus the 32px bottom margin. Width adapts only when necessary;
+height stays 1080 unless the measured vertical extent independently requires it.
+The supported envelope reaches 2.8:1 at 3024×1080. Both dimensions may adapt,
+without stretching, moving or repacking the shared geometry. Final scale is the
+minimum of 1 and the two available-content/natural-extent ratios.
+
+Only sites exceeding 100 Assets may attempt four-member workload previews,
+after complete compact geometry exhausts the entire width/height envelope.
+A preview requires uniform hosting semantics and no secondary neighbours; mixed
+or multihomed groups remain explicit. Unsupported geometry disables export and
+returns no partial scene.
+
+Internal diagnostics record Asset and visible tile counts (including category
+previews), structural component/root counts, measured natural bounds, initial
+16:9 scale, chosen width/height, final scale, floor, collapse attempts and failure
+reason. Successful bounds include routes. If routing itself fails, diagnostics
+explicitly mark node/group-only bounds. Development/test logging includes both
+successful and incomplete layouts; production UI has no diagnostic clutter.
+
+See [adaptive-width acceptance](../testing/showcase-adaptive-width.md) and
+[shared-geometry acceptance](../testing/showcase-shared-geometry.md). Earlier
 independent packers and global bands are preserved in historical test records.
 
 ## Rendering and export
 
 `components/showcase.js` draws one light-only SVG with a deterministic
-`viewBox="0 0 1920 H"`, where H is the selected height from 1080 through 1358.
+`viewBox="0 0 W H"`, with width 1920–3024 and height 1080–1358.
 The preview frame uses that same aspect ratio. Only its CSS size changes on
 browser resize. Layout is memoized by data and Site, not viewport. Managed category palette variables resolve under
 `color-scheme: light`. Labels use fixed measured text budgets and Arial, shared
@@ -124,8 +143,8 @@ managed local SVG artwork.
 Export waits for fonts, clones the displayed SVG, freezes its computed SVG
 presentation styles, verifies all image references are data URLs, and rasterizes
 the clone to a canvas exactly twice its logical viewBox dimensions: 3840×2160
-for 16:9, up to 3840×2716 for the tallest allowed poster. It never stretches a
-taller scene back to 16:9. A data URL avoids the application's image CSP
+for 16:9, 6048×2160 at maximum width, and up to 6048×2716 if both axes
+require the maximum envelope. It preserves the selected aspect ratio. A data URL avoids the application's image CSP
 restriction on blob image sources. The downloadable PNG uses an object URL that
 is revoked after use. There is no hidden second renderer, alternative layout,
 external request during export, or theme-dependent export mode.
