@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseTallFixture, showcaseWideFixture, showcaseUltrawideFixture, showcaseExteriorRoutingFixture, showcaseDenseRoutingFixture, showcaseLiveRoutingFixture, showcaseReadableFixture, id } from "../tests/fixtures/showcase.mjs";
 import { showcaseLayout, showcaseModel, showcaseFilename, SHOWCASE_MAX_UPSCALE, SHOWCASE_CONTENT_TOP } from "../lib/showcase.mjs";
+import { SHOWCASE_TEXT_PROPERTIES } from "../lib/showcase-text.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3110";
 const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-showcase-browser";
@@ -11,8 +12,24 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, executablePath: process.env.ATLAS_CHROME_PATH });
 const permissions = ["assets.view", "relationships.view", "networks.view", "customers.view", "sites.view"];
 const reports = [];
+// Capture logical metrics at the real preview size, rather than only comparing
+// two scenes already rendered at export size (which hides scale-dependent text).
+function typographySnapshot(svg, properties) {
+  return {
+    viewBox: svg.getAttribute("viewBox"),
+    geometry: [...svg.querySelectorAll("rect, path, [data-showcase-item], [data-showcase-asset]")].map(el =>
+      [el.tagName, ...["x", "y", "width", "height", "d", "transform"].map(name => el.getAttribute(name))]),
+    text: [...svg.querySelectorAll("text, tspan")].map(el => {
+      const box = el.getBBox(), style = el.ownerDocument.defaultView.getComputedStyle(el);
+      return { value: el.textContent, x: el.getAttribute("x"), y: el.getAttribute("y"), dy: el.getAttribute("dy"),
+        length: el.getComputedTextLength(), bounds: [box.x, box.y, box.width, box.height],
+        style: Object.fromEntries(properties.map(name => [name, style.getPropertyValue(name)])) };
+    }),
+  };
+}
+const selected = process.env.ATLAS_BROWSER_CASES?.split(",");
 try {
-  for (const [size, theme] of [["small", "light"], ["readable", "light"], ["exterior", "light"], ["dense-routing", "light"], ["live-routing", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["wide", "light"], ["ultrawide", "light"], ["both", "light"], ["wide", "dark"], ["medium", "dark"], ["adaptive", "dark"]]) {
+  for (const [size, theme] of [["small", "light"], ["readable", "light"], ["exterior", "light"], ["dense-routing", "light"], ["live-routing", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["wide", "light"], ["ultrawide", "light"], ["both", "light"], ["wide", "dark"], ["medium", "dark"], ["adaptive", "dark"]].filter(([size]) => !selected || selected.includes(size))) {
     const data = size === "readable" ? showcaseReadableFixture() : size === "exterior" ? showcaseExteriorRoutingFixture() : size === "dense-routing" ? showcaseDenseRoutingFixture() : size === "live-routing" ? showcaseLiveRoutingFixture() : size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcaseTallFixture(60) : size === "maximum" ? showcaseTallFixture(74) : size === "wide" ? showcaseWideFixture() : size === "ultrawide" ? showcaseUltrawideFixture() : size === "both" ? showcaseWideFixture(18, 70) : showcaseFixture(size);
     const layout = showcaseLayout(showcaseModel(data, id(2))), exportWidth = layout.sceneWidth * 2, exportHeight = layout.sceneHeight * 2;
     assert.ok(layout.complete);
@@ -33,7 +50,7 @@ try {
     data.assets[1].cached_icon_url = `/api/assets/${data.assets[1].id}/icon`;
     data.asset_types[0].default_icon_url = "https://icons.example.test/missing.png";
     data.asset_types.find(t => t.key === "platform").default_icon_url = "https://icons.example.test/type.png";
-    const context = await browser.newContext({ viewport: { width: 1800, height: 1200 }, colorScheme: theme, reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width: 1800, height: 1200 }, deviceScaleFactor: Number(process.env.ATLAS_BROWSER_DPR || 1), colorScheme: theme, reducedMotion: "reduce" });
     const page = await context.newPage(), errors = [], requests = [], networkRequests = [];
     page.on("request", request => { if (request.url().startsWith("http")) networkRequests.push(request.url()); });
     page.on("pageerror", e => errors.push(e.message));
@@ -224,6 +241,17 @@ try {
       assert.equal(await media.count(), size === "real-shape" ? 3 : size === "medium" ? 1 : 2);
       await media.first().screenshot({ path: `${output}/${size}-${theme}-host-local-category.png` });
     }
+    await page.evaluate(() => document.fonts.ready);
+    const typographyBefore = await scene.evaluate(typographySnapshot, SHOWCASE_TEXT_PROPERTIES);
+    // Observe the actual SVG passed to image decoding, without using another
+    // renderer or reproducing the export implementation in the test.
+    await page.evaluate(() => {
+      window.showcaseOriginalReader = FileReader.prototype.readAsDataURL;
+      FileReader.prototype.readAsDataURL = function(blob) {
+        if (blob.type.startsWith("image/svg+xml")) window.showcaseSerializedExport = blob.text();
+        return window.showcaseOriginalReader.call(this, blob);
+      };
+    });
     const beforeExport = networkRequests.length;
     await context.setOffline(true);
     const downloadPromise = page.waitForEvent("download"); await button.click(); const download = await downloadPromise;
@@ -233,11 +261,47 @@ try {
     assert.equal(png.subarray(1, 4).toString(), "PNG"); assert.equal(png.readUInt32BE(16), exportWidth); assert.equal(png.readUInt32BE(20), exportHeight);
     assert.equal(networkRequests.length, beforeExport, "Export makes no network requests and works offline");
     await context.setOffline(false);
+    const serializedExport = await page.evaluate(async () => {
+      FileReader.prototype.readAsDataURL = window.showcaseOriginalReader;
+      return await window.showcaseSerializedExport;
+    });
+    await page.evaluate(async source => {
+      const frame = document.createElement("iframe"); frame.dataset.showcaseExportCheck = "true";
+      frame.style.cssText = "position:absolute;left:-10000px;width:7000px;height:4000px";
+      document.body.append(frame);
+      const loaded = new Promise(resolve => { frame.onload = resolve; });
+      frame.srcdoc = source; await loaded; await frame.contentDocument.fonts.ready;
+    }, serializedExport);
+    const exportedSvg = page.frameLocator('[data-showcase-export-check]').locator("svg.showcase-scene");
+    const typographyAfter = await exportedSvg.evaluate(typographySnapshot, SHOWCASE_TEXT_PROPERTIES);
+    assert.deepEqual(typographyAfter.geometry, typographyBefore.geometry, "Export retains every node rectangle, padding, icon transform and route");
+    assert.equal(typographyAfter.viewBox, typographyBefore.viewBox);
+    assert.equal(typographyAfter.text.length, typographyBefore.text.length);
+    let maximumMetricDelta = 0;
+    for (const [index, before] of typographyBefore.text.entries()) {
+      const after = typographyAfter.text[index];
+      for (const key of ["value", "x", "y", "dy", "style"]) assert.deepEqual(after[key], before[key], `Same exported ${key}: ${before.value}`);
+      const deltas = [Math.abs(after.length - before.length), ...after.bounds.map((n, i) => Math.abs(n - before.bounds[i]))];
+      maximumMetricDelta = Math.max(maximumMetricDelta, ...deltas);
+      // SVG's centered badge metrics can quantize by 1/64px at different
+      // scales. Allow at most two units; the old near-1px font drift fails.
+      assert.ok(deltas.every(n => n <= 1 / 32 + 1e-6), `Scale-independent text metrics: ${before.value} ${deltas}`);
+    }
+    const typography = { textElements: typographyBefore.text.length, maximumMetricDelta, devicePixelRatio: Number(process.env.ATLAS_BROWSER_DPR || 1) };
+    await writeFile(`${output}/${size}-${theme}-typography.json`, JSON.stringify({ before: typographyBefore, after: typographyAfter }, null, 2));
+    await page.locator('[data-showcase-export-check]').evaluate(el => el.remove());
+    if (size === "readable") {
+      // Inspect the PNG at exactly the CSS width occupied by the live scene.
+      const box = await scene.boundingBox(), pngPage = await context.newPage();
+      await pngPage.setContent(`<body style="margin:0"><img style="display:block;width:${box.width}px;height:auto" src="data:image/png;base64,${png.toString("base64")}" /></body>`);
+      await pngPage.locator("img").screenshot({ path: `${output}/readable-export-at-preview-width.png` });
+      await pngPage.close();
+    }
     let parity;
     if (["medium", "real-shape", "reference", "adaptive", "maximum", "wide", "ultrawide", "both", "exterior", "dense-routing", "live-routing", "readable"].includes(size) && theme === "light") {
       await page.setViewportSize({ width: exportWidth + 460, height: exportHeight + 640 });
       await page.locator(".showcase-frame").evaluate((frame, width) => { frame.style.width = `${width}px`; frame.style.border = "0"; frame.style.borderRadius = "0"; }, exportWidth);
-      const preview = await scene.screenshot({ path: `${output}/${size}-preview-at-export-resolution.png` });
+      const preview = await scene.screenshot({ path: `${output}/${size}-preview-at-export-resolution.png`, scale: "css" });
       parity = await page.evaluate(async ([first, second, exportWidth, exportHeight]) => {
         const pixels = async data => {
           const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode();
@@ -259,7 +323,7 @@ try {
     assert.deepEqual(await page.locator(".topology-platform-section").allTextContents(), platformBefore);
     const exported = await context.newPage(); await exported.setContent(`<img style="width:100%;height:auto" src="data:image/png;base64,${png.toString("base64")}" />`);
     await exported.locator("img").waitFor(); await exported.screenshot({ path: `${output}/${size}-${theme}-export-opened.png` });
-    reports.push({ size, theme, assets: data.assets.length, logicalDimensions: [layout.sceneWidth, layout.sceneHeight], dimensions: [exportWidth, exportHeight], scale: layout.scale, diagnostics: layout.diagnostics, parity, errors });
+    reports.push({ size, theme, assets: data.assets.length, logicalDimensions: [layout.sceneWidth, layout.sceneHeight], dimensions: [exportWidth, exportHeight], scale: layout.scale, diagnostics: layout.diagnostics, typography, parity, errors });
     if (size === "small") {
       // No partial or empty export when the complete current-site source empties.
       data.assets = []; data.structural_edges = []; data.platform_links = [];
@@ -287,9 +351,8 @@ try {
     await context.close();
   }
   // Both themes must yield exactly the same composition pixels.
-  assert.deepEqual(await readFile(`${output}/wide-light-export.png`), await readFile(`${output}/wide-dark-export.png`));
-  assert.deepEqual(await readFile(`${output}/medium-light-export.png`), await readFile(`${output}/medium-dark-export.png`));
-  assert.deepEqual(await readFile(`${output}/adaptive-light-export.png`), await readFile(`${output}/adaptive-dark-export.png`));
+  for (const size of ["wide", "medium", "adaptive"]) if (!selected || selected.includes(size))
+    assert.deepEqual(await readFile(`${output}/${size}-light-export.png`), await readFile(`${output}/${size}-dark-export.png`));
   await writeFile(`${output}/report.json`, JSON.stringify(reports, null, 2));
   console.log(JSON.stringify(reports));
 } finally { await browser.close(); }

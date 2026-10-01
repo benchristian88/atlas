@@ -1,8 +1,21 @@
 // Showcase uses the same Arial/600 canvas measurement for sizing and labels.
 // Server tests use the same font's glyph metrics; Unicode falls back conservatively.
 import { SHOWCASE_FONT_METRICS } from "./showcase-font-metrics.mjs";
+export const SHOWCASE_FONT_FAMILY = "Arial, sans-serif";
+export const SHOWCASE_FONT_WEIGHT = 600;
+export const SHOWCASE_TEXT_RENDERING = "geometricPrecision";
 export const SHOWCASE_NAME_FONT_SIZE = 15;
 export const SHOWCASE_NAME_LINE_HEIGHT = 18;
+export const SHOWCASE_TITLE_FONT_SIZE = 32;
+export const SHOWCASE_CATEGORY_FONT_SIZE = 16;
+// Preserve the preview's complete text context in the standalone exported SVG.
+export const SHOWCASE_TEXT_PROPERTIES = Object.freeze([
+  "font-family", "font-size", "font-weight", "font-style", "font-stretch",
+  "font-kerning", "font-feature-settings", "font-variation-settings", "font-variant",
+  "font-optical-sizing", "font-synthesis", "line-height", "letter-spacing", "word-spacing",
+  "text-rendering", "text-size-adjust", "-webkit-text-size-adjust", "-webkit-font-smoothing",
+  "text-anchor", "dominant-baseline",
+]);
 export const SHOWCASE_NAME_MAX_LINES = 2;
 export const SHOWCASE_MAX_NODE_WIDTH = 240;
 export const SHOWCASE_MAX_MEMBER_WIDTH = 220;
@@ -12,7 +25,7 @@ export function measureShowcaseName(value) {
   if (typeof document !== "undefined") {
     context ||= document.createElement("canvas").getContext("2d");
     if (context) {
-      context.font = `600 ${SHOWCASE_NAME_FONT_SIZE}px Arial`;
+      context.font = `${SHOWCASE_FONT_WEIGHT} ${SHOWCASE_NAME_FONT_SIZE}px ${SHOWCASE_FONT_FAMILY}`;
       return context.measureText(value).width;
     }
   }

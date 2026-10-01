@@ -207,13 +207,24 @@ frozen to a decoded PNG, including animated Type fallbacks. Missing images use
 managed local SVG artwork.
 
 Export waits for fonts, clones the displayed SVG, freezes its computed SVG
-presentation styles, verifies all image references are data URLs, and rasterizes
+presentation styles (including the full font, spacing, line-height and text-rendering
+context), verifies all image references are data URLs, and rasterizes
 the clone to a canvas exactly twice its logical viewBox dimensions: 3840×2160
 for 16:9, 6048×2160 at maximum width, and up to 6048×2716 if both axes
 require the maximum envelope. It preserves the selected aspect ratio. A data URL avoids the application's image CSP
 restriction on blob image sources. The downloadable PNG uses an object URL that
 is revoked after use. There is no hidden second renderer, alternative layout,
 external request during export, or theme-dependent export mode.
+
+Showcase's existing text module supplies the same font family, weight, sizes and
+18px name-line advance to measurement and rendering. The scene uses
+`text-rendering: geometricPrecision` in both preview and export: automatic SVG
+text rendering otherwise changes glyph metrics slightly at different viewport
+scales. PNG density stays exactly 2× independently of device pixel ratio, with
+the same logical viewBox, text coordinates, line breaks, rectangles and routes.
+Acceptance compares computed typography and logical text bounds at the actual
+preview size with the serialized export in an isolated document, as well as PNG
+pixels at equal poster size. See [typography parity](../testing/showcase-typography-parity.md).
 
 See [operator guidance](../admin/showcase.md),
 [visual-correctness acceptance](../testing/showcase-visual-correctness.md),

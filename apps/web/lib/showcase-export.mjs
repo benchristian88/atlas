@@ -1,5 +1,6 @@
 import { assetIconSources, GENERIC_ICON } from "./asset-icon.mjs";
 import { showcaseFilename } from "./showcase.mjs";
+import { SHOWCASE_TEXT_PROPERTIES } from "./showcase-text.mjs";
 
 export const SHOWCASE_LOGO = "/branding/lockups/atlas-impact-lockup-light.svg";
 const asDataUrl = blob => new Promise((resolve, reject) => {
@@ -67,12 +68,14 @@ export async function exportShowcasePng(svg, siteName) {
   // Freeze the existing Atlas managed identity palette and SVG typography.
   // No other DOM, layout, theme rules, or external styles enter the export.
   const originals = [svg, ...svg.querySelectorAll("*")], copies = [clone, ...clone.querySelectorAll("*")];
-  const properties = ["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "opacity", "color", "font-family", "font-size", "font-weight", "letter-spacing", "text-anchor", "dominant-baseline"];
+  const properties = ["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "opacity", "color", ...SHOWCASE_TEXT_PROPERTIES];
   originals.forEach((original, index) => {
     const computed = getComputedStyle(original);
     for (const property of properties) copies[index].style.setProperty(property, computed.getPropertyValue(property));
   });
   const { width: logicalWidth, height: logicalHeight } = svg.viewBox.baseVal;
+  // Resolution changes only the raster density. Keep the cloned viewBox, text
+  // sizes, tspans and scene transform exactly as displayed; never apply DPR.
   const width = logicalWidth * 2, height = logicalHeight * 2;
   clone.setAttribute("width", String(width)); clone.setAttribute("height", String(height));
   clone.style.width = `${width}px`; clone.style.height = `${height}px`;

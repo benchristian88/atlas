@@ -6,6 +6,8 @@ import { presentationAttributes, presentationIcon } from "../lib/presentation.mj
 import { showcaseLayout, showcaseModel } from "../lib/showcase.mjs";
 import { showcaseResources, exportShowcasePng } from "../lib/showcase-export.mjs";
 import { assertShowcaseRouteEndpoints } from "../lib/showcase-routes.mjs";
+import { SHOWCASE_FONT_FAMILY, SHOWCASE_FONT_WEIGHT, SHOWCASE_TEXT_RENDERING, SHOWCASE_NAME_FONT_SIZE,
+  SHOWCASE_NAME_LINE_HEIGHT, SHOWCASE_TITLE_FONT_SIZE, SHOWCASE_CATEGORY_FONT_SIZE } from "../lib/showcase-text.mjs";
 
 // Header/category budgets are independent of browser width. Asset name lines
 // are measured with their local rectangles before shared placement and routing.
@@ -15,7 +17,7 @@ function fitted(value, width, size, weight = 400, keepSuffix = false) {
   if (typeof document === "undefined") return value;
   textMeasure ||= document.createElement("canvas").getContext("2d");
   if (!textMeasure) return value;
-  textMeasure.font = `${weight} ${size}px Arial`;
+  textMeasure.font = `${weight} ${size}px ${SHOWCASE_FONT_FAMILY}`;
   if (textMeasure.measureText(value || "").width <= width) return value;
   // Compact Assets must remain distinguishable in the exported image, including
   // numbered host/workload peers. Preserve both ends when the name is too long.
@@ -43,27 +45,27 @@ function Icon({ node, resources, x, y, size = 22 }) {
   </g>;
 }
 function Tile({ node, resources, x = 0, y = 0, compact = false, width = 184, height = 22 }) {
-  const iconSize = 22, textX = iconSize + 6, fontSize = 15;
+  const iconSize = 22, textX = iconSize + 6, fontSize = SHOWCASE_NAME_FONT_SIZE;
   const textWidth = width - textX;
   return <g transform={`translate(${x} ${y})`} data-showcase-asset={node.asset?.id} data-text-width={textWidth}>
     <title>{node.name}</title>
     {compact && <rect width={width} height={height} rx="4" fill="#ffffff" fillOpacity=".65" stroke="none" />}
     <Icon node={node} resources={resources} x={0} y={(height - iconSize) / 2} size={iconSize} />
-    <text x={textX} y={node.nameLayout.lines.length > 1 ? 16 : compact ? 16 + (height - 22) / 2 : 20} fontSize={fontSize} fontWeight="600">
-      {node.nameLayout.lines.map((line, index) => <tspan key={index} x={textX} dy={index ? 18 : 0}>{line}</tspan>)}
+    <text x={textX} y={node.nameLayout.lines.length > 1 ? 16 : compact ? 16 + (height - 22) / 2 : 20} fontSize={fontSize} fontWeight={SHOWCASE_FONT_WEIGHT}>
+      {node.nameLayout.lines.map((line, index) => <tspan key={index} x={textX} dy={index ? SHOWCASE_NAME_LINE_HEIGHT : 0}>{line}</tspan>)}
     </text>
   </g>;
 }
 
 function Scene({ layout, site, resources, svgRef }) {
   assertShowcaseRouteEndpoints(layout);
-  return <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${layout.sceneWidth} ${layout.sceneHeight}`} width={layout.sceneWidth} height={layout.sceneHeight} role="img" aria-label={`${site.name} — Atlas Showcase`} className="showcase-scene" style={{ display: "block", width: "100%", height: "auto", colorScheme: "light", background: "#ffffff", fontFamily: "Arial, sans-serif", color: "#17283e", fill: "#17283e" }} data-stage={layout.stage}>
+  return <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${layout.sceneWidth} ${layout.sceneHeight}`} width={layout.sceneWidth} height={layout.sceneHeight} role="img" aria-label={`${site.name} — Atlas Showcase`} className="showcase-scene" style={{ display: "block", width: "100%", height: "auto", colorScheme: "light", background: "#ffffff", fontFamily: SHOWCASE_FONT_FAMILY, textRendering: SHOWCASE_TEXT_RENDERING, color: "#17283e", fill: "#17283e" }} data-stage={layout.stage}>
     <title>{site.name} — Atlas Showcase</title>
     <desc>Whole-site infrastructure. Asset relationships determine branches. Category groups stay with their hosts. Logical Networks and interface memberships are excluded.</desc>
     <rect width={layout.sceneWidth} height={layout.sceneHeight} fill="#ffffff" />
     {resources?.logo ? <image href={resources.logo} x="26" y="10" width="164" height="62" /> : <text x="32" y="52" fontSize="26" fontWeight="700">Atlas Impact</text>}
     <path d="M222 23V63" stroke="#cbd5e1" strokeWidth="1.5" />
-    <text x="248" y="55" fontSize="32" fontWeight="600"><title>{site.name}</title>{fitted(site.name, layout.sceneWidth - 288, 32, 600)}</text>
+    <text x="248" y="55" fontSize={SHOWCASE_TITLE_FONT_SIZE} fontWeight={SHOWCASE_FONT_WEIGHT}><title>{site.name}</title>{fitted(site.name, layout.sceneWidth - 288, SHOWCASE_TITLE_FONT_SIZE, SHOWCASE_FONT_WEIGHT)}</text>
     <path d={`M32 84H${layout.sceneWidth - 32}`} stroke="#e4eaf0" />
     <g transform={`translate(${layout.x} ${layout.y}) scale(${layout.scale})`}>
       {layout.footer && <g><rect {...layout.footer} rx="10" fill="#fafbfc" stroke="#e1e7ee" strokeDasharray="4 4" /><text x={layout.footer.x + 12} y={layout.footer.y + 20} fontSize="14" fontWeight="600">Unconnected / Other</text></g>}
@@ -78,7 +80,7 @@ function Scene({ layout, site, resources, svgRef }) {
           <Tile node={item} resources={resources} x={8} y={5} width={item.cardWidth - 16} height={item.cardHeight - 10} />
         </> : <>
           <rect width={item.cardWidth} height={item.cardHeight} rx="10" style={{ fill: "var(--identity-tint)", stroke: "var(--identity-border)" }} />
-          <text x="12" y="21" fontSize="16" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}><title>{item.name}</title>{fitted(item.name, item.cardWidth - 24, 16, 600)}</text>
+          <text x="12" y="21" fontSize={SHOWCASE_CATEGORY_FONT_SIZE} fontWeight={SHOWCASE_FONT_WEIGHT} style={{ fill: "var(--identity-foreground)" }}><title>{item.name}</title>{fitted(item.name, item.cardWidth - 24, SHOWCASE_CATEGORY_FONT_SIZE, SHOWCASE_FONT_WEIGHT)}</text>
           {item.kind === "type" && <text x="12" y={item.cardHeight - 10} fontSize="14" fill="#526477">{item.members.length} devices</text>}
           {item.preview.map((node, index) => <Tile key={node.key} node={node} resources={resources} compact width={item.memberWidth} height={item.memberHeight} x={12 + (index % item.memberColumns) * (item.memberWidth + item.memberGap)} y={item.memberTop + Math.floor(index / item.memberColumns) * item.memberRow} />)}
           {item.hiddenCount > 0 && <g><rect x={item.cardWidth - 65} y={item.cardHeight - 25} width="51" height="20" rx="10" style={{ fill: "var(--identity-tile)" }} /><text x={item.cardWidth - 39} y={item.cardHeight - 10} textAnchor="middle" fontSize="14" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}>+{item.hiddenCount}</text></g>}
