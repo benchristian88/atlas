@@ -173,7 +173,10 @@ export function showcaseWideFixture(branches = 18, tallWorkloads = 0, firstBranc
 // A five-member category changes one branch footprint naturally; the routed
 // forest comes within three logical pixels of the supported width ceiling.
 export function showcaseUltrawideFixture() {
-  return showcaseWideFixture(23, 0, 5);
+  const data = showcaseWideFixture(23, 0, 5);
+  // Isolate near-limit structural width from the independent root's label width.
+  data.assets.find(n => n.name === "Archive Server").name = "Archive";
+  return data;
 }
 
 function routingLink(data, source, target) {
@@ -229,5 +232,34 @@ export function showcaseExteriorRoutingFixture() {
   const workloads = Array.from({ length: 6 }, (_, i) => add(`Task ${i + 1}`, "media", host, true));
   const client = add("Media Client", "device", core);
   for (const workload of workloads) routingLink(data, workload, client);
+  return data;
+}
+
+// The supplied 44-Asset poster's structural shape, using synthetic IDs and
+// explicit recorded links. Names are fixture data, never production heuristics.
+export function showcaseReadableFixture() {
+  const { data, add } = structuralBuilder();
+  data.sites[0].name = "Homelab";
+  data.categories[0].name = "Compute";
+  const gateway = add("UDM-Pro", "gateway"), aggregation = add("USW-Aggregation", "core", gateway);
+  const distribution = add("USW-16-POE (Rack)", "switch", aggregation);
+  const office = add("US-8-60W (Office)", "switch", distribution);
+  add("USW-16-POE (Garage)", "switch", distribution);
+  const proxmox = add("Proxmox", "platform", office);
+  add("homeassistant", "home", proxmox, true);
+  const hosts = ["PVE1", "PVE2", "PVE3"].map(name => add(name, "platform", distribution));
+  add("pbs01", "platform", distribution); add("synology-nas", "appliance", distribution);
+  const apps = add("Docker Apps", "container_host", hosts[0], true);
+  const infrastructure = add("Docker Inf", "container_host", hosts[0], true);
+  add("homebox", "infra", apps, true); add("Music Assistant", "infra", apps, true);
+  add("Homarr", "media", infrastructure, true); add("unpoller", "infra", infrastructure, true);
+  for (const name of ["AdGuard Home", "authentik", "cloudflared", "esphome", "grafana", "immich", "influxdb", "Mealie",
+    "N8N", "Netbox", "Nginx Proxy Manager", "outline", "paperless", "Patchmon", "Proxmox Data Center Manager", "Uptime Kuma"]) add(name, "infra", hosts[0], true);
+  for (const [index, names] of [[1, ["AdGuard Home 2", "Atlas DNS", "scrypted"]], [2, ["Atlas Impact", "HCR Website", "Roadcycling"]]])
+    for (const name of names) add(name, "infra", hosts[index], true);
+  for (const number of [1, 2]) {
+    const physical = add(`Dell Server ${number}`, "server", aggregation);
+    add(`Proxmox Dell ${number}`, "platform", physical, true);
+  }
   return data;
 }

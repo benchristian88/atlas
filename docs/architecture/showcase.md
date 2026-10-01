@@ -72,9 +72,17 @@ individual; a category never changes parentage. Geometry receives the original
 ownership model even for an enormous-site preview. The planned two-category
 stacking enhancement is not implemented.
 
-Compact Asset tiles are 124×32, with a 22px icon and one 15px name line. Category
-members use 112×22 tiles, 4px column spacing and 32px row spacing. Repetitive
-terminal Asset siblings use a one-column grid; structural branch owners retain
+Asset names retain a 15px Arial/600 font and 22px icon. Local standalone widths
+range from 124 to 240px; category cell widths range from 112 to 220px. Native
+canvas measurement supplies the smallest useful bounded width, attempting the
+complete name on one line, then two lines, then a final-line ellipsis only when
+both lines are exhausted. Node/test rendering uses calibrated Arial glyph and
+kerning metrics as its deterministic fallback; unknown characters are measured
+conservatively. A two-line standalone tile is 46px high rather than 32px.
+Each category uses the maximum useful cell width and height among its visible
+members, with 22px or 40px cells, 4px column spacing and 10px row gaps.
+Actual rectangles enter the unchanged shared engine before placement/routing.
+Repetitive terminal Asset siblings use a one-column grid; structural branch owners retain
 Connectivity's four-column policy. Smaller footprints may share unused contour
 space across positions, using the same packer. Showcase omits operational
 Position containers and does not impose separate global Y bands. Managed ranks,
@@ -82,8 +90,10 @@ local same-position depth, parent ownership and horizontal branch order are the
 same as Connectivity; pixel coordinates and leaf presentation may differ.
 
 All Assets are attempted first. Normal sites never use workload or endpoint
-roll-ups. The generic 44-Asset and 50-Asset fixtures fit 1920×1080 with all current
-workloads explicitly visible. The first platform host's two container hosts and
+roll-ups. The realistic named 44-Asset fixture fits 1920×1080 with every Asset
+explicitly visible. The generic 44-Asset and 50-Asset shapes select 2008×1080 and
+2196×1080 after accommodating complete names through the existing adaptive rules.
+The first platform host's two container hosts and
 their children retain their real ownership. Both physical-server/platform-host
 branches match Connectivity. Node and category rectangles are routing obstacles;
 category headers have reserved space and shared incoming group connectors retain
@@ -115,9 +125,19 @@ wins, with stable point-sequence tie-breaking. Relationship lines may cross;
 card/label obscuration is never permitted.
 
 Routes retain canonical endpoints and direction, existing group member/edge
-identities, and all individual physical/mixed relationships. `topologyBounds`
-includes every fallback point before the unchanged poster-fitting step. If no
-safe route exists, the result has a distinct routing failure message and diagnostic
+identities, and all individual physical/mixed relationships. A Showcase-only
+presentation adapter resolves each terminal to its visible Asset tile or existing
+shared category boundary. It connects the router's eight-pixel clearance port to
+that boundary and removes collinear out-and-back spurs from the existing path;
+it does not choose new tracks or change the shared routing strategy. The original
+router points remain available for diagnostics. Shared group connectors still
+deduplicate the same hosted relationships and retain all underlying IDs.
+Every displayed connector must resolve both endpoints and terminate on their
+rendered boundaries. Missing/hidden endpoints and stale pre-group attachments
+fail with relationship, canonical endpoint and presentation endpoint diagnostics.
+This invariant is checked before SVG rendering and in browser acceptance.
+`topologyBounds` includes the actual displayed routes before the unchanged
+poster-fitting step. If no safe route exists, the result has a distinct routing failure message and diagnostic
 reason; it is never described as an oversized poster. Deliberately overlapping
 or trapped geometry is not repaired by moving nodes or crossing cards.
 
@@ -144,9 +164,9 @@ minimum of `SHOWCASE_MAX_UPSCALE` (1.30) and the two available-content/natural-e
 ratios. Small scenes enlarge uniformly within the existing content area; large
 scenes retain their previous shrink scale and readability rules. The scene is
 centred horizontally and aligned at the 100px content top beneath the header,
-leaving spare space below shallow graphs. Node fonts, icon sizes, text budgets
-and middle-ellipsis measurement stay unchanged; preview and PNG use the same
-scene transform. See [presentation acceptance](../testing/showcase-upscale.md).
+leaving spare space below shallow graphs. Node fonts and icon sizes stay
+unchanged; the local name policy above determines text budgets. Preview and PNG
+use the same scene transform. See [presentation acceptance](../testing/showcase-upscale.md).
 
 Only sites exceeding 100 Assets may attempt four-member workload previews,
 after complete compact geometry exhausts the entire width/height envelope.
@@ -171,9 +191,10 @@ independent packers and global bands are preserved in historical test records.
 `viewBox="0 0 W H"`, with width 1920–3024 and height 1080–1358.
 The preview frame uses that same aspect ratio. Only its CSS size changes on
 browser resize. Layout is memoized by data and Site, not viewport. Managed category palette variables resolve under
-`color-scheme: light`. Labels use fixed measured text budgets and Arial, shared
-by preview and rasterization. Long Asset names preserve both ends around a
-middle ellipsis, keeping numbered peer names distinguishable. The existing light Atlas SVG is embedded in the
+`color-scheme: light`. Labels use local measured text budgets and Arial, shared
+by preview and rasterization. Common Asset names are complete; unusually long
+names use at most two lines with ellipsis only after their capacity is exhausted.
+The existing light Atlas SVG is embedded in the
 header; Site name supplies the title.
 
 `lib/showcase-export.mjs` reuses `assetIconSources` for cached/type URL validation.
@@ -195,5 +216,6 @@ is revoked after use. There is no hidden second renderer, alternative layout,
 external request during export, or theme-dependent export mode.
 
 See [operator guidance](../admin/showcase.md),
+[visual-correctness acceptance](../testing/showcase-visual-correctness.md),
 [shared-geometry validation](../testing/showcase-shared-geometry.md) and the
 [original implementation record](../testing/showcase.md).

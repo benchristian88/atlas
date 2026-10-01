@@ -1,5 +1,7 @@
 import { byName } from "./infrastructure-topology.mjs";
 import { topologyGraphEligibility, buildTopologyLayoutModel, calculateTopologyGeometry, routeTopologyEdges, topologyBounds } from "./topology-geometry.mjs";
+import { showcaseNameLayout, measureShowcaseName } from "./showcase-text.mjs";
+import { showcasePresentationRoutes } from "./showcase-routes.mjs";
 
 export const SHOWCASE_WIDTH = 1920;
 export const SHOWCASE_HEIGHT = 1080;
@@ -46,7 +48,7 @@ export function showcaseModel(data, siteId) {
 
 // Category is local presentation after structural ownership is established.
 // Identical neighbours prevent shared/multihomed leaves from being consolidated.
-function categoryPresentation(model, collapse) {
+function categoryPresentation(model, collapse, measureName) {
   const groups = new Map();
   for (const node of model.nodes) {
     const parent = model.parents.get(node.key);
@@ -68,25 +70,30 @@ function categoryPresentation(model, collapse) {
       JSON.stringify([e.label, e.relationship_type, e.directional, e.source_key === group.parent]))));
     const preview = collapse && families.size === 1 && group.members.every(n => model.adjacent.get(n.key).every(e =>
       e.platform_parent_key === group.parent && other(e, n.key) === group.parent));
+    group.members = group.members.map(n => ({ ...n, nameLayout: showcaseNameLayout(n.name, true, measureName) }));
     group.preview = preview ? group.members.slice(0, SHOWCASE_PREVIEW_COUNT) : group.members;
     group.hiddenCount = group.members.length - group.preview.length;
     group.memberColumns = group.members.length >= 5 ? 2 : 1;
-    group.memberWidth = SHOWCASE_MEMBER_WIDTH;
-    group.memberTop = 32; group.memberRow = 32; group.memberGap = 4;
+    group.memberWidth = Math.max(...group.preview.map(n => n.nameLayout.width));
+    group.memberHeight = Math.max(...group.preview.map(n => n.nameLayout.height));
+    group.memberTop = 32; group.memberRow = group.memberHeight + 10; group.memberGap = 4;
     for (const node of group.preview) membership.set(node.key, group);
     for (const node of group.members.slice(group.preview.length)) hidden.add(node.key);
   }
-  const nodes = model.nodes.filter(n => !hidden.has(n.key)).map(n => ({ ...n,
-    ...(membership.has(n.key) ? { presentation_group_key: membership.get(n.key).key,
-      geometry_width: SHOWCASE_MEMBER_WIDTH, geometry_height: 22 } : {}) }));
+  const nodes = model.nodes.filter(n => !hidden.has(n.key)).map(n => {
+    const group = membership.get(n.key), nameLayout = showcaseNameLayout(n.name, Boolean(group), measureName);
+    return { ...n, nameLayout, geometry_width: group?.memberWidth || nameLayout.width,
+      geometry_height: group?.memberHeight || nameLayout.height,
+      ...(group ? { presentation_group_key: group.key } : {}) };
+  });
   const edges = model.edges.filter(e => !hidden.has(e.source_key) && !hidden.has(e.target_key));
   const boxes = placed => [...groups.values()].flatMap(group => {
     const members = placed.filter(n => membership.get(n.key) === group);
     if (members.length < 2) return [];
-    const left = Math.min(...members.map(n => n.x - SHOWCASE_MEMBER_WIDTH / 2)) - 12;
-    const top = Math.min(...members.map(n => n.y - 11)) - group.memberTop;
-    const right = Math.max(...members.map(n => n.x + SHOWCASE_MEMBER_WIDTH / 2)) + 12;
-    const bottom = Math.max(...members.map(n => n.y + 11)) + (group.hiddenCount ? 26 : 8);
+    const left = Math.min(...members.map(n => n.x - n.geometry_width / 2)) - 12;
+    const top = Math.min(...members.map(n => n.y - n.geometry_height / 2)) - group.memberTop;
+    const right = Math.max(...members.map(n => n.x + n.geometry_width / 2)) + 12;
+    const bottom = Math.max(...members.map(n => n.y + n.geometry_height / 2)) + (group.hiddenCount ? 26 : 8);
     return [{ ...group, left, top, width: right - left, height: bottom - top,
       parent_key: group.parent, node_keys: members.map(n => n.key), disclosure_keys: [],
       labelTop: 8, labelWidth: right - left - 24 }];
@@ -99,7 +106,7 @@ function categoryPresentation(model, collapse) {
   return { nodes, edges, layoutModel, groups, membership, boxes };
 }
 
-export function showcaseLayout(model) {
+export function showcaseLayout(model, { measureName = measureShowcaseName } = {}) {
   if (model.error) return { complete: false, reason: model.error };
   if (!model.assetCount) return { complete: false, reason: "No Assets recorded for this site yet." };
   const attempts = [];
@@ -146,7 +153,7 @@ export function showcaseLayout(model) {
   // Exhaust the supported width/height envelope with all Assets first.
   // Normal sites never use roll-ups solely to fit a wide topology.
   for (const stage of model.assetCount > 100 ? [0, 1] : [0]) {
-    const projection = categoryPresentation(model, stage > 0);
+    const projection = categoryPresentation(model, stage > 0, measureName);
     const metrics = { nodeWidth: SHOWCASE_NODE_WIDTH, nodeHeight: SHOWCASE_NODE_HEIGHT,
       columnGap: 4, rowGap: cluster => cluster[0].presentation_group_key ? 10 : 32, railGap: 16, footprintPadding: 4, groupTop: 32, groupBottom: stage ? 26 : 8,
       groups: projection.boxes, columns: cluster => projection.membership.get(cluster[0].key)?.memberColumns || (cluster.every(n => !model.children.get(n.key).length) ? 1 : 4) };
@@ -155,8 +162,8 @@ export function showcaseLayout(model) {
     const boxes = projection.boxes(geometry), grouped = new Set(boxes.flatMap(g => g.node_keys));
     const items = [
       ...geometry.filter(n => !grouped.has(n.key)).map(n => ({ ...n, kind: "asset", members: [model.byKey.get(n.key)],
-        x: n.x - SHOWCASE_NODE_WIDTH / 2, y: n.y - SHOWCASE_NODE_HEIGHT / 2,
-        cardWidth: SHOWCASE_NODE_WIDTH, cardHeight: SHOWCASE_NODE_HEIGHT, layoutParentKey: n.layout_parent_key })),
+        x: n.x - n.geometry_width / 2, y: n.y - n.geometry_height / 2,
+        cardWidth: n.geometry_width, cardHeight: n.geometry_height, layoutParentKey: n.layout_parent_key })),
       ...boxes.map(g => ({ ...g, x: g.left, y: g.top, cardWidth: g.width, cardHeight: g.height, layoutParentKey: g.parent })),
     ].sort((a, b) => a.key.localeCompare(b.key));
     const diagnostic = { stage, assetCount: model.assetCount, structuralNodeCount: items.filter(n => n.kind === "asset").length,
@@ -165,22 +172,19 @@ export function showcaseLayout(model) {
       visibleAssetTileCount: items.reduce((count, item) => count + (item.kind === "asset" ? 1 : item.preview.length), 0),
       readabilityFloor: SHOWCASE_MIN_SCALE, workloadCollapseAttempted: stage > 0, failureReason: null };
     attempts.push(diagnostic);
-    let routed;
-    try { routed = routeTopologyEdges(geometry, projection.edges, boxes, { ...metrics, allowExteriorFallback: true }); }
+    let routed, routes;
+    try {
+      routed = routeTopologyEdges(geometry, projection.edges, boxes, { ...metrics, allowExteriorFallback: true });
+      routes = showcasePresentationRoutes(projection.edges, routed, items, geometry, model.edges);
+    }
     catch (error) {
       const bounds = topologyBounds(geometry, {}, boxes, metrics);
       fit(bounds, diagnostic);
-      Object.assign(diagnostic, { boundsIncludeRoutes: false, failureReason: "routing", routingError: error.message, routingFailure: error.routingDiagnostic || null });
+      Object.assign(diagnostic, { boundsIncludeRoutes: false, failureReason: "routing", routingError: error.message,
+        routingFailure: error.routingDiagnostic || null, presentationFailure: error.presentationDiagnostic || null });
       continue;
     }
-    const routes = projection.edges.filter(e => routed[e.key]?.render !== false).map(edge => {
-      const route = routed[edge.key], group = boxes.find(g => g.key === route.group_key);
-      const relationshipKeys = group ? model.edges.filter(e =>
-        e.platform_parent_key === group.parent && group.members.some(n => n.key === other(e, group.parent))).map(e => e.key) : [edge.key];
-      return { ...edge, ...route, relationshipKeys,
-        path: route.points.map(([x, y], i) => `${i ? "L" : "M"}${x},${y}`).join(" ") };
-    });
-    const bounds = topologyBounds(geometry, routed, boxes, metrics);
+    const bounds = topologyBounds(geometry, Object.fromEntries(routes.map(r => [r.key, r])), boxes, metrics);
     const { posterWidth, posterHeight, scale, requiredWidth, requiredHeight } = fit(bounds, diagnostic);
     diagnostic.boundsIncludeRoutes = true;
     diagnostic.fallbackRouteCount = Object.values(routed).filter(r => r.fallback_routing && r.render !== false).length;

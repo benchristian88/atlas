@@ -89,12 +89,12 @@ for (const [name, fixture, count] of [["forced exterior", showcaseExteriorRoutin
   const routes = routedWithEdges(layout.geometry, model.edges, groups, { ...metrics, allowExteriorFallback: true });
   checkRoutes(layout.geometry, routes, groups);
   for (const route of layout.routes) {
-    assert.deepEqual(route.points, routes[route.key].points);
+    assert.deepEqual(route.routerPoints, routes[route.key].points, "Presentation retains the shared router's geometry for traceability");
     assert.equal(route.source_key, routes[route.key].edge.source_key); assert.equal(route.target_key, routes[route.key].edge.target_key);
   }
   assert.deepEqual(layout.representedAssetIds, data.assets.map(n => n.id).sort());
   assert.deepEqual(layout.routes.flatMap(r => r.relationshipKeys).sort(), model.edges.map(e => e.key).sort());
-  const bounds = topologyBounds(layout.geometry, routes, groups, metrics);
+  const bounds = topologyBounds(layout.geometry, Object.fromEntries(layout.routes.map(r => [r.key, r])), groups, metrics);
   assert.equal(layout.diagnostics.naturalContentWidth, bounds.width); assert.equal(layout.diagnostics.naturalContentHeight, bounds.height);
   assert.deepEqual(showcaseLayout(showcaseModel({ ...data, assets: [...data.assets].reverse(), structural_edges: [...data.structural_edges].reverse() }, id(2))), layout);
   assert.deepEqual(data, original);

@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseTallFixture, showcaseWideFixture, showcaseUltrawideFixture, showcaseExteriorRoutingFixture, showcaseDenseRoutingFixture, showcaseLiveRoutingFixture, id } from "../tests/fixtures/showcase.mjs";
-import { showcaseLayout, showcaseModel, SHOWCASE_MAX_UPSCALE, SHOWCASE_CONTENT_TOP } from "../lib/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseTallFixture, showcaseWideFixture, showcaseUltrawideFixture, showcaseExteriorRoutingFixture, showcaseDenseRoutingFixture, showcaseLiveRoutingFixture, showcaseReadableFixture, id } from "../tests/fixtures/showcase.mjs";
+import { showcaseLayout, showcaseModel, showcaseFilename, SHOWCASE_MAX_UPSCALE, SHOWCASE_CONTENT_TOP } from "../lib/showcase.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3110";
 const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-showcase-browser";
@@ -12,11 +12,11 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const permissions = ["assets.view", "relationships.view", "networks.view", "customers.view", "sites.view"];
 const reports = [];
 try {
-  for (const [size, theme] of [["small", "light"], ["exterior", "light"], ["dense-routing", "light"], ["live-routing", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["wide", "light"], ["ultrawide", "light"], ["both", "light"], ["wide", "dark"], ["medium", "dark"], ["adaptive", "dark"]]) {
-    const data = size === "exterior" ? showcaseExteriorRoutingFixture() : size === "dense-routing" ? showcaseDenseRoutingFixture() : size === "live-routing" ? showcaseLiveRoutingFixture() : size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcaseTallFixture(60) : size === "maximum" ? showcaseTallFixture(74) : size === "wide" ? showcaseWideFixture() : size === "ultrawide" ? showcaseUltrawideFixture() : size === "both" ? showcaseWideFixture(18, 70) : showcaseFixture(size);
+  for (const [size, theme] of [["small", "light"], ["readable", "light"], ["exterior", "light"], ["dense-routing", "light"], ["live-routing", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["wide", "light"], ["ultrawide", "light"], ["both", "light"], ["wide", "dark"], ["medium", "dark"], ["adaptive", "dark"]]) {
+    const data = size === "readable" ? showcaseReadableFixture() : size === "exterior" ? showcaseExteriorRoutingFixture() : size === "dense-routing" ? showcaseDenseRoutingFixture() : size === "live-routing" ? showcaseLiveRoutingFixture() : size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcaseTallFixture(60) : size === "maximum" ? showcaseTallFixture(74) : size === "wide" ? showcaseWideFixture() : size === "ultrawide" ? showcaseUltrawideFixture() : size === "both" ? showcaseWideFixture(18, 70) : showcaseFixture(size);
     const layout = showcaseLayout(showcaseModel(data, id(2))), exportWidth = layout.sceneWidth * 2, exportHeight = layout.sceneHeight * 2;
     assert.ok(layout.complete);
-    if (["reference", "real-shape", "wide", "ultrawide"].includes(size)) {
+    if (["reference", "real-shape", "wide", "ultrawide", "readable"].includes(size)) {
       assert.equal(layout.sceneHeight, 1080);
       assert.equal(layout.diagnostics.collapsedGroupCount, 0);
       assert.ok(layout.items.every(n => !n.hiddenCount));
@@ -74,7 +74,7 @@ try {
     await page.getByRole("button", { name: "Platform", exact: true }).click();
     await page.locator(".topology-platform-card").first().waitFor();
     const platformBefore = await page.locator(".topology-platform-section").allTextContents();
-    if (["reference", "real-shape", "wide", "ultrawide"].includes(size)) {
+    if (["reference", "real-shape", "wide", "ultrawide", "readable"].includes(size)) {
       await page.getByRole("button", { name: "Connectivity", exact: true }).click();
       await page.getByRole("button", { name: /^Filters/ }).click();
       await page.getByRole("checkbox", { name: /^Edge Devices/ }).check();
@@ -107,27 +107,32 @@ try {
     // constrained to one fetch per URL. Its embedded previews share that result.
     const tiles = await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => ({
       id: tile.getAttribute("data-showcase-asset"), title: tile.querySelector(":scope > title").textContent,
-      labels: [...tile.querySelectorAll(":scope > text")].map(text => ({ text: text.textContent, length: text.getComputedTextLength(), fontSize: text.getAttribute("font-size") })),
+      labels: [...tile.querySelectorAll(":scope > text")].map(text => ({ text: text.textContent,
+        lines: [...text.querySelectorAll("tspan")].map(line => ({ text: line.textContent, length: line.getComputedTextLength() })),
+        fontSize: text.getAttribute("font-size") })),
       budget: Number(tile.getAttribute("data-text-width")), artworkWidth: Number(tile.querySelector("image, svg")?.getAttribute("width")), icons: tile.querySelectorAll("image, path, circle, rect").length,
     })));
     for (const tile of tiles) {
       const asset = data.assets.find(a => a.id === tile.id);
       assert.equal(tile.title, asset.name, "Accessible title contains the full name only");
-      assert.equal(tile.labels.length, 1, "Every structural/workload/endpoint tile contains one name line, no Type or metadata");
-      assert.ok(tile.labels[0].length <= tile.budget + .5, "Names respect their measured text budget");
+      assert.equal(tile.labels.length, 1, "Every tile contains one Asset name, no Type or metadata");
+      assert.ok(tile.labels[0].lines.length >= 1 && tile.labels[0].lines.length <= 2);
+      assert.ok(tile.labels[0].lines.every(line => line.length <= tile.budget + .5), "Every name line respects its measured text budget");
       assert.equal(Number(tile.labels[0].fontSize), 15, "Asset font size stays unchanged before uniform scene scaling");
-      if (tile.labels[0].text.includes("…")) {
-        const [head, tail] = tile.labels[0].text.split("…");
-        assert.ok(head && tail && asset.name.startsWith(head) && asset.name.endsWith(tail), "Middle ellipsis retains both name ends");
-      }
+      if (tile.labels[0].text.includes("…")) assert.ok(tile.labels[0].lines.length === 2 && tile.labels[0].lines[1].text.endsWith("…"), "Ellipsis is only used after the two-line capacity is exhausted");
       assert.ok(tile.icons > 0);
       assert.equal(tile.artworkWidth, 20, "Compact artwork retains a 20px viewport");
     }
-    if (["reference", "real-shape", "wide", "ultrawide", "exterior", "dense-routing", "live-routing"].includes(size)) {
+    if (["reference", "real-shape", "wide", "ultrawide", "exterior", "dense-routing", "live-routing", "readable"].includes(size)) {
       assert.equal(tiles.length, data.assets.length, "Every normal-size-site Asset has an explicit tile");
       assert.equal(new Set(tiles.map(tile => tile.labels[0].text)).size, data.assets.length,
         "Compact numbered hosts/workloads retain distinguishable name endings");
       assert.ok(!(await scene.textContent()).match(/\+\d+/), "No workload/endpoint roll-up in a normal Showcase");
+    }
+    if (size === "readable") {
+      assert.equal(tiles.length, 44);
+      for (const tile of tiles) assert.equal(tile.labels[0].lines.map(line => line.text).join(" "), tile.title, "Realistic common names remain complete, including two-line names");
+      assert.ok(tiles.some(tile => tile.labels[0].lines.length === 2));
     }
     assert.equal(await page.getByLabel("Showcase diagnostics", { exact: true }).count(), 0, "Production pages do not expose detailed diagnostics");
     const content = scene.locator(":scope > g");
@@ -142,9 +147,31 @@ try {
     if (size === "live-routing") {
       assert.ok(layout.scale > 1);
       assert.ok(contentBounds.top < SHOWCASE_CONTENT_TOP + 24, "Shallow graph sits beneath the header");
-      assert.ok(tiles.some(tile => tile.labels[0].text.includes("…")), "44-Asset acceptance exercises middle ellipsis");
     }
     for (const route of layout.routes) assert.equal(await scene.locator(`[data-showcase-connector="${route.key}"]`).getAttribute("d"), route.path);
+    const invalidEndpoints = await scene.evaluate(svg => {
+      const rectangles = new Map(), matrixFor = el => svg.getCTM().inverse().multiply(el.getCTM());
+      const boxFor = el => {
+        const b = el.getBBox(), m = matrixFor(el);
+        return { left: m.e + b.x * m.a, right: m.e + (b.x + b.width) * m.a,
+          top: m.f + b.y * m.d, bottom: m.f + (b.y + b.height) * m.d };
+      };
+      for (const group of svg.querySelectorAll('[data-showcase-kind="category"]')) rectangles.set(group.dataset.showcaseItem, boxFor(group.querySelector(":scope > rect")));
+      for (const tile of svg.querySelectorAll("[data-showcase-asset]")) {
+        const rectangle = tile.parentElement.dataset.showcaseKind === "asset" ? tile.parentElement.querySelector(":scope > rect") : tile.querySelector(":scope > rect");
+        rectangles.set(`asset:${tile.dataset.showcaseAsset}`, boxFor(rectangle));
+      }
+      const invalid = [];
+      for (const path of svg.querySelectorAll("[data-showcase-connector]")) for (const role of ["source", "target"]) {
+        const key = path.dataset[role === "source" ? "showcaseSource" : "showcaseTarget"], b = rectangles.get(key);
+        const p = path.getPointAtLength(role === "source" ? 0 : path.getTotalLength()), m = matrixFor(path);
+        const x = m.e + p.x * m.a, y = m.f + p.y * m.d;
+        if (!b || !((Math.abs(x - b.left) < .1 || Math.abs(x - b.right) < .1) && y >= b.top - .1 && y <= b.bottom + .1 ||
+          (Math.abs(y - b.top) < .1 || Math.abs(y - b.bottom) < .1) && x >= b.left - .1 && x <= b.right + .1)) invalid.push({ relationship: path.dataset.showcaseConnector, role, key, x, y });
+      }
+      return invalid;
+    });
+    assert.deepEqual(invalidEndpoints, [], "Every SVG connector terminates on a visible tile or legitimate group boundary");
     if (["exterior", "dense-routing", "live-routing"].includes(size)) {
       const rendered = await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => {
         const box = tile.getBBox(), matrix = tile.ownerSVGElement.getCTM().inverse().multiply(tile.getCTM());
@@ -187,6 +214,11 @@ try {
     await page.setViewportSize({ width: 1800, height: 1200 });
     await page.screenshot({ path: `${output}/${size}-${theme}.png`, fullPage: true });
     await scene.screenshot({ path: `${output}/${size}-${theme}-scene.png` });
+    if (size === "readable") {
+      const member = data.assets.find(n => n.name === "Proxmox Data Center Manager");
+      await scene.locator('[data-showcase-kind="category"]').filter({ has: page.locator(`[data-showcase-asset="${member.id}"]`) })
+        .screenshot({ path: `${output}/readable-workload-names.png` });
+    }
     if (["medium", "large", "real-shape"].includes(size)) {
       const media = page.locator('[data-showcase-kind="category"]').filter({ hasText: "Media & Photos" });
       assert.equal(await media.count(), size === "real-shape" ? 3 : size === "medium" ? 1 : 2);
@@ -195,14 +227,14 @@ try {
     const beforeExport = networkRequests.length;
     await context.setOffline(true);
     const downloadPromise = page.waitForEvent("download"); await button.click(); const download = await downloadPromise;
-    assert.equal(download.suggestedFilename(), "the-workshop-atlas-showcase.png");
+    assert.equal(download.suggestedFilename(), showcaseFilename(site.name));
     const path = `${output}/${size}-${theme}-export.png`; await download.saveAs(path);
     const png = await readFile(path);
     assert.equal(png.subarray(1, 4).toString(), "PNG"); assert.equal(png.readUInt32BE(16), exportWidth); assert.equal(png.readUInt32BE(20), exportHeight);
     assert.equal(networkRequests.length, beforeExport, "Export makes no network requests and works offline");
     await context.setOffline(false);
     let parity;
-    if (["medium", "real-shape", "reference", "adaptive", "maximum", "wide", "ultrawide", "both", "exterior", "dense-routing", "live-routing"].includes(size) && theme === "light") {
+    if (["medium", "real-shape", "reference", "adaptive", "maximum", "wide", "ultrawide", "both", "exterior", "dense-routing", "live-routing", "readable"].includes(size) && theme === "light") {
       await page.setViewportSize({ width: exportWidth + 460, height: exportHeight + 640 });
       await page.locator(".showcase-frame").evaluate((frame, width) => { frame.style.width = `${width}px`; frame.style.border = "0"; frame.style.borderRadius = "0"; }, exportWidth);
       const preview = await scene.screenshot({ path: `${output}/${size}-preview-at-export-resolution.png` });

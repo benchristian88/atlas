@@ -35,7 +35,9 @@ function checkPoster(data) {
     assert.ok(layout.y + (a.y + a.cardHeight) * layout.scale <= layout.sceneHeight);
     for (const b of layout.items.slice(i + 1)) assert.ok(a.x + a.cardWidth <= b.x || b.x + b.cardWidth <= a.x || a.y + a.cardHeight <= b.y || b.y + b.cardHeight <= a.y, `${a.name} overlaps ${b.name}`);
     if (a.kind === "asset") {
-      assert.equal(a.cardWidth, SHOWCASE_NODE_WIDTH); assert.equal(a.cardHeight, SHOWCASE_NODE_HEIGHT);
+      assert.ok(a.cardWidth >= SHOWCASE_NODE_WIDTH && a.cardWidth <= 240);
+      assert.equal(a.cardHeight, a.nameLayout.height);
+      assert.ok(a.nameLayout.lines.length <= 2);
     }
   }
   for (const route of layout.routes) for (let i = 1; i < route.points.length; i++) {
@@ -63,9 +65,9 @@ for (const size of ["small", "medium", "large"]) test(`${size}: complete, determ
   assert.ok(layout.items.filter(n => n.kind === "category").every(n => size === "large" || n.hiddenCount === 0));
 });
 
-for (const [name, fixture, count] of [["reference", showcaseReferenceFixture, 44], ["real shape", showcaseRealShapeFixture, 50]]) test(`${name}: complete 16:9, all workloads and nested hosts visible`, () => {
+for (const [name, fixture, count] of [["reference", showcaseReferenceFixture, 44], ["real shape", showcaseRealShapeFixture, 50]]) test(`${name}: complete, all workloads and nested hosts visible`, () => {
   const data = fixture(), { model, layout } = checkPoster(data);
-  assert.equal(data.assets.length, count); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080); assert.equal(layout.stage, 0);
+  assert.equal(data.assets.length, count); assert.ok(layout.sceneWidth >= 1920); assert.equal(layout.sceneHeight, 1080); assert.equal(layout.stage, 0);
   assert.equal(layout.diagnostics.collapsedGroupCount, 0);
   assert.ok(layout.items.every(n => !n.hiddenCount));
   assert.deepEqual(layout.items.flatMap(n => n.kind === "asset" ? n.members : n.preview).map(n => n.id).sort(), data.assets.map(a => a.id).sort());
@@ -156,7 +158,7 @@ for (const count of [1, 2, 4, 5, 8, 16, 20]) test(`category ${count}: singleton/
   for (const [i, node] of group.preview.entries()) {
     const geometry = layout.geometry.find(n => n.key === node.key);
     assert.equal(geometry.x - group.memberWidth / 2, group.x + 12 + i % group.memberColumns * (group.memberWidth + group.memberGap));
-    assert.equal(geometry.y - 11, group.y + group.memberTop + Math.floor(i / group.memberColumns) * group.memberRow);
+    assert.equal(geometry.y - group.memberHeight / 2, group.y + group.memberTop + Math.floor(i / group.memberColumns) * group.memberRow);
     assert.equal(model.parents.get(node.key), group.parent);
   }
 });
@@ -240,18 +242,19 @@ test("near-poster 44-Asset scene enlarges only to its route-inclusive available 
   assert.equal(layout.assetCount, 44);
   assert.ok(layout.scale > 1 && layout.scale < SHOWCASE_MAX_UPSCALE);
   assert.equal(layout.scale, (layout.sceneWidth - 64) / layout.diagnostics.naturalContentWidth);
-  assert.equal(layout.diagnostics.naturalContentWidth, 1776);
-  assert.equal(layout.diagnostics.naturalContentHeight, 494);
+  assert.equal(layout.diagnostics.naturalContentWidth, bounds.width);
+  assert.equal(layout.diagnostics.naturalContentHeight, bounds.height);
   assert.equal(layout.stage, 0); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
 });
 
-test("large scenes retain the previous shrink scales and collapse decisions", () => {
-  const cases = [[showcaseReferenceFixture(), 1856 / 1924, 0], [showcaseRealShapeFixture(), 1856 / 2144, 0],
-    [showcaseWideFixture(), 2292 / 2664, 0], [showcaseFixture("large"), 1034 / 1202, 1]];
-  for (const [data, previousScale, stage] of cases) {
+test("large responsive scenes retain the shrink floor and collapse decisions", () => {
+  const cases = [[showcaseReferenceFixture(), 0], [showcaseRealShapeFixture(), 0],
+    [showcaseWideFixture(), 0], [showcaseFixture("large"), 1]];
+  for (const [data, stage] of cases) {
     const { layout } = checkPoster(data);
-    assert.equal(layout.scale, previousScale);
+    assert.ok(layout.scale < 1 && layout.scale >= SHOWCASE_MIN_SCALE);
     assert.equal(layout.stage, stage);
+    if (stage) assert.equal(layout.scale, 1034 / 1202, "Retained height-limited shrink scale");
   }
 });
 

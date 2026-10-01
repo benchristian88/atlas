@@ -40,11 +40,13 @@ or leave their own category box while avoiding names and cards. If a safe route
 cannot be constructed, the message identifies a routing problem rather than
 claiming that the poster is too large.
 
-All individual tiles show only an icon and Asset name. Names exceeding their
-fixed text budget use a middle ellipsis to preserve distinguishing endings,
-with the full name in the SVG's accessible
-title. No Asset Type, IP, hostname, status, count or secondary line appears in an
-individual tile.
+All individual tiles show only an icon and Asset name. Tiles use locally measured,
+bounded widths to show the full name on one line when possible, or at most two
+lines at the same font size. Only names exceeding both lines' capacity use a
+final-line ellipsis; the SVG's accessible title always contains the full name.
+No Asset Type, IP, hostname, status, count or other metadata appears in an
+individual tile. Category cells use consistent local widths and row heights,
+so complete names remain aligned without changing their host or category.
 
 Showcase uses the same topology geometry as Connectivity, with smaller cards.
 Managed Topology Position controls broad order; recorded relationships determine
@@ -65,7 +67,8 @@ move a workload to another host or combine different hosts' children. The future
 category stacking enhancement is not included.
 
 Normal-size sites show all current Assets, including every workload and access
-point. The 44- and 50-Asset reference shapes fit 16:9 with no **+N** roll-ups.
+point. The realistic named 44-Asset fixture fits 16:9; wider reference shapes
+can use adaptive width to preserve complete names, with no **+N** roll-ups.
 Showcase first attempts complete compact geometry, widening the poster and
 adding bounded height only as needed. Only genuinely enormous sites (over 100
 Assets) may try

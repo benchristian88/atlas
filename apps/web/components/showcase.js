@@ -5,9 +5,10 @@ import { NavigationIcon } from "./navigation-icon.mjs";
 import { presentationAttributes, presentationIcon } from "../lib/presentation.mjs";
 import { showcaseLayout, showcaseModel } from "../lib/showcase.mjs";
 import { showcaseResources, exportShowcasePng } from "../lib/showcase-export.mjs";
+import { assertShowcaseRouteEndpoints } from "../lib/showcase-routes.mjs";
 
-// Fixed SVG text budgets are independent of browser width. Full names remain in
-// accessible SVG titles; no operational properties enter the scene.
+// Header/category budgets are independent of browser width. Asset name lines
+// are measured with their local rectangles before shared placement and routing.
 let textMeasure;
 function fitted(value, width, size, weight = 400, keepSuffix = false) {
   const letters = Array.from(value || "");
@@ -41,17 +42,21 @@ function Icon({ node, resources, x, y, size = 22 }) {
       <svg x={inset} y={inset} width={size - inset * 2} height={size - inset * 2} viewBox="0 0 24 24" style={{ color: "var(--identity-foreground)" }}><NavigationIcon name={presentationIcon(record?.icon_key, node.network ? "network" : "infrastructure").navigation} /></svg>}
   </g>;
 }
-function Tile({ node, resources, x = 0, y = 0, compact = false, width = 184 }) {
+function Tile({ node, resources, x = 0, y = 0, compact = false, width = 184, height = 22 }) {
   const iconSize = 22, textX = iconSize + 6, fontSize = 15;
   const textWidth = width - textX;
   return <g transform={`translate(${x} ${y})`} data-showcase-asset={node.asset?.id} data-text-width={textWidth}>
     <title>{node.name}</title>
-    <Icon node={node} resources={resources} x={0} y={0} size={iconSize} />
-    <text x={textX} y={compact ? 16 : 20} fontSize={fontSize} fontWeight="600">{fitted(node.name, textWidth, fontSize, 600, true)}</text>
+    {compact && <rect width={width} height={height} rx="4" fill="#ffffff" fillOpacity=".65" stroke="none" />}
+    <Icon node={node} resources={resources} x={0} y={(height - iconSize) / 2} size={iconSize} />
+    <text x={textX} y={node.nameLayout.lines.length > 1 ? 16 : compact ? 16 + (height - 22) / 2 : 20} fontSize={fontSize} fontWeight="600">
+      {node.nameLayout.lines.map((line, index) => <tspan key={index} x={textX} dy={index ? 18 : 0}>{line}</tspan>)}
+    </text>
   </g>;
 }
 
 function Scene({ layout, site, resources, svgRef }) {
+  assertShowcaseRouteEndpoints(layout);
   return <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${layout.sceneWidth} ${layout.sceneHeight}`} width={layout.sceneWidth} height={layout.sceneHeight} role="img" aria-label={`${site.name} — Atlas Showcase`} className="showcase-scene" style={{ display: "block", width: "100%", height: "auto", colorScheme: "light", background: "#ffffff", fontFamily: "Arial, sans-serif", color: "#17283e", fill: "#17283e" }} data-stage={layout.stage}>
     <title>{site.name} — Atlas Showcase</title>
     <desc>Whole-site infrastructure. Asset relationships determine branches. Category groups stay with their hosts. Logical Networks and interface memberships are excluded.</desc>
@@ -63,18 +68,19 @@ function Scene({ layout, site, resources, svgRef }) {
     <g transform={`translate(${layout.x} ${layout.y}) scale(${layout.scale})`}>
       {layout.footer && <g><rect {...layout.footer} rx="10" fill="#fafbfc" stroke="#e1e7ee" strokeDasharray="4 4" /><text x={layout.footer.x + 12} y={layout.footer.y + 20} fontSize="14" fontWeight="600">Unconnected / Other</text></g>}
       <g fill="none" stroke="#64788f" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
-        {layout.routes.map(route => <path key={route.key} d={route.path} data-showcase-connector={route.key} />)}
+        {layout.routes.map(route => <path key={route.key} d={route.path} data-showcase-connector={route.key}
+          data-showcase-source={route.sourceEndpoint.key} data-showcase-target={route.targetEndpoint.key} />)}
       </g>
       {layout.positionLabels.map(label => <text key={label.key} x={label.x + 4} y={label.y + 12} fontSize="14" fill="#617185" data-showcase-position={label.positionId}><title>{label.name}</title>{fitted(label.name, label.width - 8, 14)}</text>)}
       {layout.items.map(item => <g key={item.key} transform={`translate(${item.x} ${item.y})`} data-showcase-item={item.key} data-showcase-kind={item.kind} {...presentationAttributes(item.category || item.network)}>
         {item.kind === "asset" ? <>
           <rect width={item.cardWidth} height={item.cardHeight} rx="8" fill="#ffffff" stroke="#d8e2ee" />
-          <Tile node={item} resources={resources} x={8} y={5} width={item.cardWidth - 16} />
+          <Tile node={item} resources={resources} x={8} y={5} width={item.cardWidth - 16} height={item.cardHeight - 10} />
         </> : <>
           <rect width={item.cardWidth} height={item.cardHeight} rx="10" style={{ fill: "var(--identity-tint)", stroke: "var(--identity-border)" }} />
           <text x="12" y="21" fontSize="16" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}><title>{item.name}</title>{fitted(item.name, item.cardWidth - 24, 16, 600)}</text>
           {item.kind === "type" && <text x="12" y={item.cardHeight - 10} fontSize="14" fill="#526477">{item.members.length} devices</text>}
-          {item.preview.map((node, index) => <Tile key={node.key} node={node} resources={resources} compact width={item.memberColumns === 1 ? item.cardWidth - 24 : item.memberWidth} x={12 + (index % item.memberColumns) * (item.memberWidth + item.memberGap)} y={item.memberTop + Math.floor(index / item.memberColumns) * item.memberRow} />)}
+          {item.preview.map((node, index) => <Tile key={node.key} node={node} resources={resources} compact width={item.memberWidth} height={item.memberHeight} x={12 + (index % item.memberColumns) * (item.memberWidth + item.memberGap)} y={item.memberTop + Math.floor(index / item.memberColumns) * item.memberRow} />)}
           {item.hiddenCount > 0 && <g><rect x={item.cardWidth - 65} y={item.cardHeight - 25} width="51" height="20" rx="10" style={{ fill: "var(--identity-tile)" }} /><text x={item.cardWidth - 39} y={item.cardHeight - 10} textAnchor="middle" fontSize="14" fontWeight="600" style={{ fill: "var(--identity-foreground)" }}>+{item.hiddenCount}</text></g>}
         </>}
       </g>)}
@@ -122,6 +128,7 @@ export function Showcase({ data, site }) {
           ...(layout.diagnostics.routingError ? [["Routing error", layout.diagnostics.routingError]] : []),
           ["Any collapse attempted", layout.diagnostics.workloadCollapseAttempted],
           ...(layout.diagnostics.routingFailure ? [["Routing failure detail", JSON.stringify(layout.diagnostics.routingFailure)]] : []),
+          ...(layout.diagnostics.presentationFailure ? [["Presentation endpoint failure", JSON.stringify(layout.diagnostics.presentationFailure)]] : []),
         ].map(([label, value]) => `${label}: ${value ?? "Unavailable"}`).join("\n")}
       </pre>}
   </>;
