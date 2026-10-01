@@ -101,7 +101,7 @@ export function Showcase({ data, site }) {
   if (!layout.complete) return <>
     <p className="empty-state" role="status">{layout.reason}</p>
     {/* Temporary test-environment diagnostics. Remove this block after investigation. */}
-    {layout.reason.startsWith("Showcase incomplete") && layout.diagnostics &&
+    {process.env.NODE_ENV !== "production" && layout.reason.startsWith("Showcase incomplete") && layout.diagnostics &&
       <pre aria-label="Showcase diagnostics" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
         {[
           ["Authorised Asset count", layout.diagnostics.assetCount],
@@ -121,6 +121,7 @@ export function Showcase({ data, site }) {
           ["Incomplete/failure reason", layout.diagnostics.failureReason || layout.reason],
           ...(layout.diagnostics.routingError ? [["Routing error", layout.diagnostics.routingError]] : []),
           ["Any collapse attempted", layout.diagnostics.workloadCollapseAttempted],
+          ...(layout.diagnostics.routingFailure ? [["Routing failure detail", JSON.stringify(layout.diagnostics.routingFailure)]] : []),
         ].map(([label, value]) => `${label}: ${value ?? "Unavailable"}`).join("\n")}
       </pre>}
   </>;

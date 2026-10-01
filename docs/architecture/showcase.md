@@ -89,6 +89,45 @@ branches match Connectivity. Node and category rectangles are routing obstacles;
 category headers have reserved space and shared incoming group connectors retain
 all accepted edge identities.
 
+### Showcase routing fallback
+
+Showcase opts into `routeTopologyEdges(..., { allowExteriorFallback: true })`.
+Connectivity uses the unchanged default. Successful ordinary routes keep exactly
+their previous geometry. The opt-in activates only after the fixed-port rail,
+external-track and bounded internal searches cannot construct a clear path.
+
+Fixed attachment points can sit inside a neighbouring card's six-pixel clearance
+or inside a category title. A different exterior rail cannot repair a blocked
+endpoint if every candidate still uses that same point. Fallback chooses clear
+attachment candidates on the existing card sides or the existing shared category
+connector boundary. It never moves cards, category boxes or recorded ownership.
+
+The fallback retains all inflated card rectangles and category title obstacles.
+Only the endpoint's own presentation container may be entered/exited; unrelated
+containers remain obstacles. A port blocked by its own category title first gets
+a bounded local port repair, keeping the title protected. Otherwise the router
+compares left/right/top/bottom gutters beyond all occupied card/group bounds by
+at least 16px. Existing `orthogonalDetour` supplies clear access legs where a
+straight access leg is blocked. For fallback access only, its visibility grid
+also includes already-padded obstacle boundaries, preserving clearance while
+finding narrow corridors omitted by the default 16px-offset grid. The shortest valid candidate by Manhattan length
+wins, with stable point-sequence tie-breaking. Relationship lines may cross;
+card/label obscuration is never permitted.
+
+Routes retain canonical endpoints and direction, existing group member/edge
+identities, and all individual physical/mixed relationships. `topologyBounds`
+includes every fallback point before the unchanged poster-fitting step. If no
+safe route exists, the result has a distinct routing failure message and diagnostic
+reason; it is never described as an oversized poster. Deliberately overlapping
+or trapped geometry is not repaired by moving nodes or crossing cards.
+
+Internal diagnostics record the failing relationship key/type, canonical endpoint
+keys/names and managed positions, endpoint group membership, fixed ports/rails,
+candidate count, blocking rectangles and preferred-path rejections. Successful
+fallbacks record their mode/direction and count. Development/test logging and the
+temporary incomplete-state diagnostic panel expose these details; production UI
+hides the panel. See [routing acceptance](../testing/showcase-routing.md).
+
 Poster fitting prefers 1920×1080 at the existing 0.86 readability floor.
 After routing, `topologyBounds` measures the actual node, category and connector
 extents. Each axis independently selects its minimum integer logical size:

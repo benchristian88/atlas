@@ -296,9 +296,11 @@ function groupRelationships(group, edges) {
 // to retain canonical arrows, independently of vertical presentation direction.
 // Bounded rectilinear visibility search for dense overlays when one exterior
 // track is insufficient. Coordinates come only from obstacle boundaries/ports.
-export function orthogonalDetour(start, end, rectangles) {
-  const xs = [...new Set([start[0], end[0], ...rectangles.flatMap(r => [r.left - 16, r.right + 16])])].sort((a, b) => a - b);
-  const ys = [...new Set([start[1], end[1], ...rectangles.flatMap(r => [r.top - 16, r.bottom + 16])])].sort((a, b) => a - b);
+export function orthogonalDetour(start, end, rectangles, options = {}) {
+  // Opt-in tracks use already-inflated boundaries: keep full card clearance
+  // while finding narrow corridors omitted by the default 16px offset grid.
+  const xs = [...new Set([start[0], end[0], ...rectangles.flatMap(r => [...(options.includeBoundaryTracks ? [r.left, r.right] : []), r.left - 16, r.right + 16])])].sort((a, b) => a - b);
+  const ys = [...new Set([start[1], end[1], ...rectangles.flatMap(r => [...(options.includeBoundaryTracks ? [r.top, r.bottom] : []), r.top - 16, r.bottom + 16])])].sort((a, b) => a - b);
   const point = key => [xs[key % xs.length], ys[Math.floor(key / xs.length)]];
   const first = ys.indexOf(start[1]) * xs.length + xs.indexOf(start[0]);
   const last = ys.indexOf(end[1]) * xs.length + xs.indexOf(end[0]);
@@ -350,6 +352,85 @@ export function orthogonalDetour(start, end, rectangles) {
   return null;
 }
 
+
+// Showcase opt-in only. Keep real cards and labels protected while permitting
+// an endpoint to enter/leave its own presentation container.
+function safeFallbackRoute(upper, lower, connection, sourceGroup, targetGroup, start, end, obstacles, containers, metrics) {
+  const occupied = [...obstacles, ...containers];
+  const barriers = [...obstacles, ...containers.filter(r => r.key !== sourceGroup?.key && r.key !== targetGroup?.key)];
+  const inside = (point, r) => point[0] > r.left && point[0] < r.right && point[1] > r.top && point[1] < r.bottom;
+  const clear = points => points.slice(1).every((p, i) => !barriers.some(r => p[0] === points[i][0]
+    ? p[0] > r.left && p[0] < r.right && Math.max(p[1], points[i][1]) > r.top && Math.min(p[1], points[i][1]) < r.bottom
+    : p[1] > r.top && p[1] < r.bottom && Math.max(p[0], points[i][0]) > r.left && Math.min(p[0], points[i][0]) < r.right));
+  const length = points => points.slice(1).reduce((sum, p, i) => sum + Math.abs(p[0] - points[i][0]) + Math.abs(p[1] - points[i][1]), 0);
+  const ports = (node, group, preferred) => {
+    const left = group ? group.left : node.x - nodeWidth(node, metrics) / 2 - 8;
+    const right = group ? group.left + group.width : node.x + nodeWidth(node, metrics) / 2 + 8;
+    const top = group ? group.top : node.y - nodeHalfHeight(node, metrics) - 8;
+    const bottom = group ? group.top + group.height : node.y + nodeHalfHeight(node, metrics) + 8;
+    const x = group ? (left + right) / 2 : node.x, y = group ? (top + bottom) / 2 : node.y;
+    const xs = group ? [x, left + 24, right - 24] : [x, node.x - nodeWidth(node, metrics) / 4, node.x + nodeWidth(node, metrics) / 4];
+    const ys = group ? [y, top + 24, bottom - 24] : [y, node.y - nodeHalfHeight(node, metrics) / 2, node.y + nodeHalfHeight(node, metrics) / 2];
+    return [...new Map([preferred, ...xs.flatMap(x => [[x, top], [x, bottom]]), ...ys.flatMap(y => [[left, y], [right, y]])]
+      .filter(p => !barriers.some(r => inside(p, r))).map(p => [p.join(","), p])).values()];
+  };
+  const starts = ports(upper, null, start), ends = ports(lower, connection, end);
+  const pick = candidates => candidates.sort((a, b) => length(a.points) - length(b.points) ||
+    JSON.stringify(a.points).localeCompare(JSON.stringify(b.points)))[0];
+  // A fixed member port can land in its own group's title. Repair that port
+  // locally before considering an exterior detour; keep the title an obstacle.
+  const headerBlocked = obstacles.some(r => (r.key === sourceGroup?.key && inside(start, r)) ||
+    (r.key === targetGroup?.key && inside(end, r)));
+  if (headerBlocked) {
+    const candidates = [];
+    for (const from of starts) for (const to of ends) {
+      const points = orthogonalDetour(from, to, barriers, { includeBoundaryTracks: true });
+      if (points && clear(points)) candidates.push({ points, fallback_routing: "group-port" });
+    }
+    if (candidates.length) return pick(candidates);
+  }
+  const gutter = Math.max(16, metrics.railGap);
+  const directions = [
+    ["left", 0, Math.min(...occupied.map(r => r.left)) - gutter],
+    ["right", 0, Math.max(...occupied.map(r => r.right)) + gutter],
+    ["top", 1, Math.min(...occupied.map(r => r.top)) - gutter],
+    ["bottom", 1, Math.max(...occupied.map(r => r.bottom)) + gutter],
+  ];
+  const candidates = [];
+  for (const [direction, axis, coordinate] of directions) {
+    // Cache each access leg within this edge; pairwise candidates reuse it.
+    const access = port => {
+      const outside = [...port]; outside[axis] = coordinate;
+      const direct = [port, outside];
+      return clear(direct) ? direct : orthogonalDetour(port, outside, barriers, { includeBoundaryTracks: true });
+    };
+    const exits = starts.map(access).filter(Boolean), entries = ends.map(access).filter(Boolean);
+    for (const exit of exits) for (const entry of entries) {
+      const points = [...exit, ...[...entry].reverse()];
+      if (clear(points)) candidates.push({ points, fallback_routing: "exterior", exterior_direction: direction });
+    }
+  }
+  return pick(candidates) || null;
+}
+
+function routingFailureDetail(edge, source, target, sourceGroup, targetGroup, start, end, exitY, entryY, rectangles, candidateCount, membership, preferredPath) {
+  const describe = node => ({ key: node.key, name: node.name, topologyPosition: node.topology_position?.id || null,
+    topologyPositionName: node.topology_position?.name || null, topologyPositionKey: node.topology_position?.key || null, x: node.x, y: node.y });
+  const inside = point => rectangles.filter(r => point[0] > r.left && point[0] < r.right && point[1] > r.top && point[1] < r.bottom).map(r => r.key);
+  return { relationshipKey: edge.key, relationshipType: edge.relationship_type || edge.label || null,
+    source: describe(source), target: describe(target), sourceGroupKey: membership.get(source.key)?.key || null, targetGroupKey: membership.get(target.key)?.key || null,
+    startGroupKey: sourceGroup?.key || null, endGroupKey: targetGroup?.key || null,
+    start, end, exitY, entryY, candidateCount,
+    startBlockedBy: inside(start), endBlockedBy: inside(end),
+    preferredPathRejections: preferredPath.slice(1).flatMap((point, index, tail) => {
+      const previous = index ? tail[index - 1] : start;
+      const blocked = rectangles.filter(r => point[0] === previous[0]
+        ? point[0] > r.left && point[0] < r.right && Math.max(point[1], previous[1]) > r.top && Math.min(point[1], previous[1]) < r.bottom
+        : point[1] > r.top && point[1] < r.bottom && Math.max(point[0], previous[0]) > r.left && Math.min(point[0], previous[0]) < r.right);
+      return blocked.length ? [{ segment: [previous, point], obstacles: blocked }] : [];
+    }),
+    reason: "Fixed attachment/rail candidates and bounded visibility search could not clear card, label and container obstacles." };
+}
 
 export function routeTopologyEdges(nodes, edges, groups, options = {}) {
   const metrics = { ...CONNECTIVITY_METRICS, ...options };
@@ -410,7 +491,7 @@ export function routeTopologyEdges(nodes, edges, groups, options = {}) {
       : [start, [upper.x, exitY], [lower.x, exitY], end];
     // A direct drop is preferred for the first row, including a shared parent
     // trunk/rail. A later row or skipped band must first pass obstacle checks.
-    let points = simple, internalRouting = false;
+    let points = simple, internalRouting = false, fallback;
     if (!clear(simple)) {
       const candidates = [...new Set([lower.x, upper.x,
         ...[...obstacles, ...containers].flatMap(r => [r.left - 16, r.right + 16]),
@@ -436,14 +517,29 @@ export function routeTopologyEdges(nodes, edges, groups, options = {}) {
           // through its card gaps; unrelated containers remain obstacles.
           const internal = orthogonalDetour(start, end, [...obstacles,
             ...containers.filter(r => r.key !== sourceGroup?.key && r.key !== targetGroup?.key)]);
-          if (!internal) throw new Error(`Connectivity layout has no clear orthogonal track: ${edge.key}`);
-          points = internal; internalRouting = true;
+          if (internal) { points = internal; internalRouting = true; }
+          else {
+            const detail = routingFailureDetail(edge, source, target, sourceGroup, targetGroup, start, end, exitY, entryY,
+              [...obstacles, ...containers.filter(r => r.key !== sourceGroup?.key && r.key !== targetGroup?.key)], candidates.length, containerByNode, simple);
+            if (metrics.allowExteriorFallback) fallback = safeFallbackRoute(upper, actualLower, connection, sourceGroup, targetGroup,
+              start, end, obstacles, containers, metrics);
+            if (!fallback) {
+              const error = new Error(`Connectivity layout has no clear orthogonal track: ${edge.key}`);
+              error.routingDiagnostic = detail;
+              throw error;
+            }
+            points = fallback.points;
+            fallback.diagnostic = detail;
+          }
         }
       }
     }
     points = points.filter((point, i) => !i || point[0] !== points[i - 1][0] || point[1] !== points[i - 1][1]);
     routes[edge.key] = { points: reverse ? points.reverse() : points,
       ...(internalRouting ? { internal_routing: true } : {}),
+      ...(fallback ? { fallback_routing: fallback.fallback_routing,
+        ...(fallback.exterior_direction ? { exterior_direction: fallback.exterior_direction } : {}),
+        routing_diagnostic: fallback.diagnostic } : {}),
       ...(connection ? { group_key: connection.key, member_keys: connection.node_keys,
         render: !renderedGroups.has(connection.key) } : {}) };
     if (connection) renderedGroups.add(connection.key);

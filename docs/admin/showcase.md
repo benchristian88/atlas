@@ -29,6 +29,12 @@ unreadable composition has no export action. A site with too many independent
 structural branches for the readability floor shows **Showcase incomplete**;
 it never exports a partial diagram.
 
+Difficult connections can use an outer gutter around the recorded topology,
+keeping every Asset in its existing position. Category-connected edges can enter
+or leave their own category box while avoiding names and cards. If a safe route
+cannot be constructed, the message identifies a routing problem rather than
+claiming that the poster is too large.
+
 All individual tiles show only an icon and Asset name. Names exceeding their
 fixed text budget use a middle ellipsis to preserve distinguishing endings,
 with the full name in the SVG's accessible

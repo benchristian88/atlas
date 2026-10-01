@@ -166,11 +166,11 @@ export function showcaseLayout(model) {
       readabilityFloor: SHOWCASE_MIN_SCALE, workloadCollapseAttempted: stage > 0, failureReason: null };
     attempts.push(diagnostic);
     let routed;
-    try { routed = routeTopologyEdges(geometry, projection.edges, boxes, metrics); }
+    try { routed = routeTopologyEdges(geometry, projection.edges, boxes, { ...metrics, allowExteriorFallback: true }); }
     catch (error) {
       const bounds = topologyBounds(geometry, {}, boxes, metrics);
       fit(bounds, diagnostic);
-      Object.assign(diagnostic, { boundsIncludeRoutes: false, failureReason: "routing", routingError: error.message });
+      Object.assign(diagnostic, { boundsIncludeRoutes: false, failureReason: "routing", routingError: error.message, routingFailure: error.routingDiagnostic || null });
       continue;
     }
     const routes = projection.edges.filter(e => routed[e.key]?.render !== false).map(edge => {
@@ -183,6 +183,9 @@ export function showcaseLayout(model) {
     const bounds = topologyBounds(geometry, routed, boxes, metrics);
     const { posterWidth, posterHeight, scale, requiredWidth, requiredHeight } = fit(bounds, diagnostic);
     diagnostic.boundsIncludeRoutes = true;
+    diagnostic.fallbackRouteCount = Object.values(routed).filter(r => r.fallback_routing && r.render !== false).length;
+    diagnostic.routingFallbacks = Object.entries(routed).filter(([, r]) => r.fallback_routing && r.render !== false)
+      .map(([key, route]) => ({ key, mode: route.fallback_routing, exteriorDirection: route.exterior_direction || null, ...route.routing_diagnostic }));
     const candidate = { layout: { items, routes, edges: model.edges, geometry, positionLabels: [], footer: null }, bounds, diagnostic, stage };
     if (requiredWidth <= SHOWCASE_MAX_WIDTH && requiredHeight <= SHOWCASE_MAX_HEIGHT) {
       return finish(candidate, posterWidth, posterHeight, scale);
@@ -191,7 +194,9 @@ export function showcaseLayout(model) {
       ? requiredHeight > SHOWCASE_MAX_HEIGHT ? "width and height" : "width" : "height";
   }
   const diagnostic = attempts.at(-1);
-  return { complete: false, reason: "Showcase incomplete: this site's structure exceeds the readable poster size, even after compaction. No partial image will be exported.",
+  return { complete: false, reason: diagnostic.failureReason === "routing"
+    ? "Showcase incomplete: a relationship could not be routed safely around the recorded Assets. No partial image will be exported."
+    : "Showcase incomplete: this site's structure exceeds the readable poster size, even after compaction. No partial image will be exported.",
     diagnostics: { ...diagnostic, workloadCollapseAttempted: attempts.length > 1, attempts } };
 }
 

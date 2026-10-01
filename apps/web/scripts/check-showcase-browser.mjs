@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseTallFixture, showcaseWideFixture, showcaseUltrawideFixture, id } from "../tests/fixtures/showcase.mjs";
+import { showcaseFixture, showcaseRealShapeFixture, showcaseReferenceFixture, showcaseTallFixture, showcaseWideFixture, showcaseUltrawideFixture, showcaseExteriorRoutingFixture, showcaseDenseRoutingFixture, showcaseLiveRoutingFixture, id } from "../tests/fixtures/showcase.mjs";
 import { showcaseLayout, showcaseModel } from "../lib/showcase.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 const base = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3110";
@@ -12,14 +12,20 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const permissions = ["assets.view", "relationships.view", "networks.view", "customers.view", "sites.view"];
 const reports = [];
 try {
-  for (const [size, theme] of [["small", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["wide", "light"], ["ultrawide", "light"], ["both", "light"], ["wide", "dark"], ["medium", "dark"], ["adaptive", "dark"]]) {
-    const data = size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcaseTallFixture(60) : size === "maximum" ? showcaseTallFixture(74) : size === "wide" ? showcaseWideFixture() : size === "ultrawide" ? showcaseUltrawideFixture() : size === "both" ? showcaseWideFixture(18, 70) : showcaseFixture(size);
+  for (const [size, theme] of [["small", "light"], ["exterior", "light"], ["dense-routing", "light"], ["live-routing", "light"], ["medium", "light"], ["large", "light"], ["real-shape", "light"], ["reference", "light"], ["adaptive", "light"], ["maximum", "light"], ["wide", "light"], ["ultrawide", "light"], ["both", "light"], ["wide", "dark"], ["medium", "dark"], ["adaptive", "dark"]]) {
+    const data = size === "exterior" ? showcaseExteriorRoutingFixture() : size === "dense-routing" ? showcaseDenseRoutingFixture() : size === "live-routing" ? showcaseLiveRoutingFixture() : size === "reference" ? showcaseReferenceFixture() : size === "real-shape" ? showcaseRealShapeFixture() : size === "adaptive" ? showcaseTallFixture(60) : size === "maximum" ? showcaseTallFixture(74) : size === "wide" ? showcaseWideFixture() : size === "ultrawide" ? showcaseUltrawideFixture() : size === "both" ? showcaseWideFixture(18, 70) : showcaseFixture(size);
     const layout = showcaseLayout(showcaseModel(data, id(2))), exportWidth = layout.sceneWidth * 2, exportHeight = layout.sceneHeight * 2;
     assert.ok(layout.complete);
     if (["reference", "real-shape", "wide", "ultrawide"].includes(size)) {
       assert.equal(layout.sceneHeight, 1080);
       assert.equal(layout.diagnostics.collapsedGroupCount, 0);
       assert.ok(layout.items.every(n => !n.hiddenCount));
+    }
+    if (["exterior", "dense-routing", "live-routing"].includes(size)) {
+      assert.ok(layout.diagnostics.fallbackRouteCount > 0);
+      assert.equal(layout.scale, 1); assert.equal(layout.sceneWidth, 1920); assert.equal(layout.sceneHeight, 1080);
+      assert.equal(layout.diagnostics.visibleAssetTileCount, data.assets.length);
+      assert.equal(layout.diagnostics.workloadCollapseAttempted, false);
     }
     const site = data.sites[0], customer = data.customers[0];
     // Exercise optional cached-icon and type-icon failure without blocking export.
@@ -112,11 +118,22 @@ try {
       assert.ok(tile.icons > 0);
       assert.equal(tile.artworkWidth, 20, "Compact artwork retains a 20px viewport");
     }
-    if (["reference", "real-shape", "wide", "ultrawide"].includes(size)) {
+    if (["reference", "real-shape", "wide", "ultrawide", "exterior", "dense-routing", "live-routing"].includes(size)) {
       assert.equal(tiles.length, data.assets.length, "Every normal-size-site Asset has an explicit tile");
       assert.equal(new Set(tiles.map(tile => tile.labels[0].text)).size, data.assets.length,
         "Compact numbered hosts/workloads retain distinguishable name endings");
       assert.ok(!(await scene.textContent()).match(/\+\d+/), "No workload/endpoint roll-up in a normal Showcase");
+    }
+    assert.equal(await page.getByLabel("Showcase diagnostics", { exact: true }).count(), 0, "Production pages do not expose detailed diagnostics");
+    for (const route of layout.routes) assert.equal(await scene.locator(`[data-showcase-connector="${route.key}"]`).getAttribute("d"), route.path);
+    if (["exterior", "dense-routing", "live-routing"].includes(size)) {
+      const rendered = await scene.locator("[data-showcase-asset]").evaluateAll(tiles => tiles.map(tile => {
+        const box = tile.getBBox(), matrix = tile.ownerSVGElement.getCTM().inverse().multiply(tile.getCTM());
+        return { left: matrix.e + box.x * matrix.a, top: matrix.f + box.y * matrix.d,
+          right: matrix.e + (box.x + box.width) * matrix.a, bottom: matrix.f + (box.y + box.height) * matrix.d };
+      }));
+      assert.equal(rendered.length, data.assets.length);
+      assert.ok(rendered.every(r => r.left >= 0 && r.top >= 100 && r.right <= layout.sceneWidth && r.bottom <= layout.sceneHeight));
     }
     const previewRatio = await scene.evaluate(el => el.getBoundingClientRect().width / el.getBoundingClientRect().height);
     assert.ok(Math.abs(previewRatio - layout.sceneWidth / layout.sceneHeight) < .001, "Preview preserves the selected aspect ratio");
@@ -166,7 +183,7 @@ try {
     assert.equal(networkRequests.length, beforeExport, "Export makes no network requests and works offline");
     await context.setOffline(false);
     let parity;
-    if (["medium", "real-shape", "reference", "adaptive", "maximum", "wide", "ultrawide", "both"].includes(size) && theme === "light") {
+    if (["medium", "real-shape", "reference", "adaptive", "maximum", "wide", "ultrawide", "both", "exterior", "dense-routing", "live-routing"].includes(size) && theme === "light") {
       await page.setViewportSize({ width: exportWidth + 460, height: exportHeight + 640 });
       await page.locator(".showcase-frame").evaluate((frame, width) => { frame.style.width = `${width}px`; frame.style.border = "0"; frame.style.borderRadius = "0"; }, exportWidth);
       const preview = await scene.screenshot({ path: `${output}/${size}-preview-at-export-resolution.png` });
@@ -212,6 +229,7 @@ try {
       await page.getByText(/Showcase incomplete:/).waitFor();
       assert.equal(await page.getByRole("button", { name: "Export PNG", exact: true }).count(), 0);
       assert.equal(await page.locator(".showcase-scene").count(), 0);
+      assert.equal(await page.getByLabel("Showcase diagnostics", { exact: true }).count(), 0);
       assert.ok(!(await page.locator(".main-content").count()) || !(await page.locator(".main-content").textContent()).includes("requiredScale"));
       await page.screenshot({ path: `${output}/oversized-incomplete.png`, fullPage: true });
     }

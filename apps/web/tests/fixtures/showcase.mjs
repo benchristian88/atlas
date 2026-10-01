@@ -175,3 +175,59 @@ export function showcaseWideFixture(branches = 18, tallWorkloads = 0, firstBranc
 export function showcaseUltrawideFixture() {
   return showcaseWideFixture(23, 0, 5);
 }
+
+function routingLink(data, source, target) {
+  const relationship = { id: id(10000 + data.relationships.length), source_asset_id: source.id, target_asset_id: target.id, relationship_type: "connects_to" };
+  data.relationships.push(relationship);
+  data.structural_edges.push({ key: `relationship:${relationship.id}`, source_key: `asset:${source.id}`, target_key: `asset:${target.id}`,
+    topology_class: "physical_network", kind: "relationship", directional: false, relationship_type: "connects_to", label: "Connects to" });
+}
+
+// Grouped workloads have legitimate secondary links. Their fixed bottom ports
+// land in the next member's six-pixel clearance, although the cards don't touch.
+export function showcaseDenseRoutingFixture() {
+  const { data, add } = structuralBuilder();
+  const gateway = add("Gateway", "gateway"), core = add("Core Switch", "core", gateway);
+  const workloads = [];
+  for (const letter of ["A", "B", "C", "D"]) {
+    const host = add(`Host ${letter}`, "platform", core);
+    for (let i = 0; i < 8; i++) {
+      const node = add(`Task ${letter} ${i + 1}`, "media", host, true);
+      if (letter === "A") workloads.push(node);
+    }
+  }
+  const client = add("Media Client", "device", core);
+  for (const workload of workloads) routingLink(data, workload, client);
+  return data;
+}
+
+export function showcaseLiveRoutingFixture() {
+  const { data, add } = structuralBuilder();
+  const gateway = add("Gateway", "gateway"), core = add("Core Switch", "core", gateway);
+  const distribution = add("Distribution", "switch", core), access = add("Access Switch", "switch", distribution);
+  const hosts = ["A", "B", "C"].map(letter => add(`Platform ${letter}`, "platform", distribution));
+  add("Storage", "appliance", distribution); add("Backup", "appliance", distribution);
+  const container = add("Container Host", "container_host", hosts[0], true);
+  const clients = [add("Media Client", "device", access), add("Office Client", "device", access)];
+  add("Wireless 1", "ap", access); add("Wireless 2", "ap", access);
+  const media = [];
+  for (const [index, host] of hosts.entries()) for (let i = 0; i < [12, 8, 6][index]; i++) {
+    const type = i < 6 ? "media" : i < 9 ? "infra" : "home";
+    const node = add(`Task ${String.fromCharCode(65 + index)} ${String(i + 1).padStart(2, "0")}`, type, host, true);
+    if (index === 0 && type === "media") media.push(node);
+  }
+  for (let i = 0; i < 4; i++) add(`Container Task ${i + 1}`, "infra", container, true);
+  for (const workload of media) routingLink(data, workload, clients[0]);
+  return data;
+}
+
+
+export function showcaseExteriorRoutingFixture() {
+  const { data, add } = structuralBuilder();
+  const gateway = add("Gateway", "gateway"), core = add("Core Switch", "core", gateway);
+  const host = add("Platform Host", "platform", core);
+  const workloads = Array.from({ length: 6 }, (_, i) => add(`Task ${i + 1}`, "media", host, true));
+  const client = add("Media Client", "device", core);
+  for (const workload of workloads) routingLink(data, workload, client);
+  return data;
+}

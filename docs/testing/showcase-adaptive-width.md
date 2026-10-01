@@ -1,5 +1,9 @@
 # Showcase adaptive width acceptance
 
+The routing failures noted here are addressed by the subsequent
+[routing correction](showcase-routing.md). Poster fitting and node placement
+remain as recorded here; separate overlapping geometry is not redesigned.
+
 Validated against `feature/topology-showcase`, starting at
 `6f7f14ea2b3a55023b40eb293f474fe581a05694`, with a clean working tree.
 No commit, push, migration or backend/API change.
