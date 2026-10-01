@@ -126,6 +126,11 @@ export function showcaseLayout(model) {
       (posterHeight - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height);
     Object.assign(diagnostic, { sceneWidth: bounds.width, sceneHeight: bounds.height,
       naturalContentWidth: bounds.width, naturalContentHeight: bounds.height, initialRequiredScale,
+      requiredPosterWidth: requiredWidth, requiredPosterHeight: requiredHeight,
+      maximumSupportedWidth: SHOWCASE_MAX_WIDTH, maximumSupportedHeight: SHOWCASE_MAX_HEIGHT,
+      // Diagnostic only: this does not participate in poster selection or fitting.
+      scaleAtMaximumDimensions: Math.min(1, (SHOWCASE_MAX_WIDTH - POSTER_MARGIN * 2) / bounds.width,
+        (SHOWCASE_MAX_HEIGHT - SHOWCASE_CONTENT_TOP - POSTER_MARGIN) / bounds.height),
       chosenPosterWidth: posterWidth, chosenPosterHeight: posterHeight, requiredScale: scale, finalScale: scale });
     return { posterWidth, posterHeight, scale, requiredWidth, requiredHeight };
   };

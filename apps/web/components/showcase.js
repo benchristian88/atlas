@@ -98,7 +98,32 @@ export function Showcase({ data, site }) {
     return () => controller.abort();
   }, [layout]);
   if (!site) return <p className="empty-state" role="status">Select a current site to create its Showcase.</p>;
-  if (!layout.complete) return <p className="empty-state" role="status">{layout.reason}</p>;
+  if (!layout.complete) return <>
+    <p className="empty-state" role="status">{layout.reason}</p>
+    {/* Temporary test-environment diagnostics. Remove this block after investigation. */}
+    {layout.reason.startsWith("Showcase incomplete") && layout.diagnostics &&
+      <pre aria-label="Showcase diagnostics" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+        {[
+          ["Authorised Asset count", layout.diagnostics.assetCount],
+          ["Visible Asset tile count", layout.diagnostics.visibleAssetTileCount],
+          ["Root count", layout.diagnostics.rootCount],
+          ["Component count", layout.diagnostics.componentCount],
+          ["Natural topologyBounds width", layout.diagnostics.naturalContentWidth],
+          ["Natural topologyBounds height", layout.diagnostics.naturalContentHeight],
+          ["Required logical poster width", layout.diagnostics.requiredPosterWidth],
+          ["Required logical poster height", layout.diagnostics.requiredPosterHeight],
+          ["Maximum supported width", layout.diagnostics.maximumSupportedWidth],
+          ["Maximum supported height", layout.diagnostics.maximumSupportedHeight],
+          ["Scale at maximum supported dimensions", layout.diagnostics.scaleAtMaximumDimensions],
+          ["Required/final scale", layout.diagnostics.finalScale],
+          ["Readability floor", layout.diagnostics.readabilityFloor],
+          ["routeTopologyEdges succeeded", layout.diagnostics.boundsIncludeRoutes],
+          ["Incomplete/failure reason", layout.diagnostics.failureReason || layout.reason],
+          ...(layout.diagnostics.routingError ? [["Routing error", layout.diagnostics.routingError]] : []),
+          ["Any collapse attempted", layout.diagnostics.workloadCollapseAttempted],
+        ].map(([label, value]) => `${label}: ${value ?? "Unavailable"}`).join("\n")}
+      </pre>}
+  </>;
   async function download() {
     setExporting(true); setError("");
     try { await exportShowcasePng(svg.current, site.name); }
