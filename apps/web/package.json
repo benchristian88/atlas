@@ -12,6 +12,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "5.2.8",
     "next": "16.2.10",
     "react": "19.1.1",
     "react-dom": "19.1.1"

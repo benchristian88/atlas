@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../lib/api";
@@ -38,8 +40,8 @@ export function EntityDeleteAction({ kind, item, onDeleted }) {
   }
 
   return <div className="entity-delete-action">
-    <button className="button button-danger" type="button" disabled={!eligibility?.eligible || saving}
-      aria-describedby={`delete-reason-${item.id}`} onClick={() => { setOpen(true); dialog.current.showModal(); }}>Delete {label}</button>
+    <Button variant="destructive" type="button" disabled={!eligibility?.eligible || saving}
+      aria-describedby={`delete-reason-${item.id}`} onClick={() => { setOpen(true); dialog.current.showModal(); }}>Delete {label}</Button>
     <p className="secondary-text" id={`delete-reason-${item.id}`}>
       {eligibility?.reason || (eligibility?.eligible ? "Delete mistakes. Archive history." : "Checking deletion eligibility…")}
     </p>
@@ -57,8 +59,8 @@ export function EntityDeleteAction({ kind, item, onDeleted }) {
       <p id={`delete-description-${item.id}`}><strong>{item.name}</strong> will be permanently removed from the operational model. This action is intended for records created by mistake and cannot be undone. Audit history is retained.</p>
       {error && <p className="error-banner" role="alert">{error}</p>}
       <div className="form-actions">
-        <button autoFocus className="button button-secondary" disabled={saving} type="button" onClick={() => dialog.current.close()}>Cancel</button>
-        <button className="button button-danger" disabled={saving || !eligibility?.eligible} type="button" onClick={remove}>{saving ? "Deleting…" : `Delete ${label}`}</button>
+        <Button autoFocus variant="secondary" disabled={saving} type="button" onClick={() => dialog.current.close()}>Cancel</Button>
+        <Button variant="destructive" disabled={saving || !eligibility?.eligible} type="button" onClick={remove}>{saving ? "Deleting…" : `Delete ${label}`}</Button>
       </div>
     </dialog>
   </div>;

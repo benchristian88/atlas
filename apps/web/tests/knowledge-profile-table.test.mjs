@@ -35,8 +35,8 @@ test("profile wrapping and muted styles use shared theme tokens", async () => {
   const css = await read("../app/globals.css");
   assert.match(css, /\.knowledge-profile-table th, \.knowledge-profile-table td \{[^}]*white-space: normal; overflow-wrap: anywhere;/);
   assert.match(css, /\.knowledge-profile-table \.table-cell-identity \{ gap: 6px; \}/);
-  assert.match(css, /\.knowledge-profile-table \.table-cell-identity small, \.knowledge-profile-table \.profile-rule \{ font-size: 12px; line-height: 1.5; \}/);
-  assert.match(css, /\.knowledge-profile-table \.status-badge[^\n]*background: var\(--surface-muted\); color: var\(--muted\);/);
+  assert.match(css, /\.knowledge-profile-table \.table-cell-identity small, \.knowledge-profile-table \.profile-rule \{ font-size: var\(--type-label\); line-height: 1.5; \}/);
+  assert.match(css, /\.status-badge\[data-status-tone\] \{ color: var\(--status-foreground\); background: var\(--status-background\);/);
 });
 
 

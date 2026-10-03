@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import Link from "next/link";
 import { useState } from "react";
 import { useWorkspaceContext } from "./workspace-context";
@@ -33,9 +35,9 @@ function AnalysisPreview({ focusType, focusId }) {
   return <section className="detail-card dependency-analysis-panel" aria-label="Dependency analysis" aria-busy={loading}>
     <div className="form-card-header">
       <div><p className="eyebrow">Hypothetical scenario</p><h2>Dependency analysis</h2></div>
-      <button className="button button-secondary" type="button" disabled={loading} onClick={preview}>
+      <Button variant="secondary" type="button" disabled={loading} onClick={preview}>
         {loading ? "Analysing…" : "Preview unavailable"}
-      </button>
+      </Button>
     </div>
     <p>Preview consequences for known Services if this {focusType === "asset" ? "Asset" : "Service"} were unavailable. This does not change accepted knowledge or report live health.</p>
     {error && <div className="error-banner" role="alert">{error}</div>}

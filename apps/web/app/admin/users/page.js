@@ -1,5 +1,7 @@
 "use client";
 
+import { Button, IconButton } from "../../../components/button";
+
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
@@ -173,16 +175,13 @@ export default function UsersAdminPage() {
 
   return (
     <>
-      <div className="page-heading-row">
-        <PageHeader eyebrow="Organisation" title="Users" description="Manage local accounts, lifecycle state, and role assignments. Passwords are never displayed." />
-        {canCreate && <button className="button button-primary" onClick={openCreate} type="button">Add user</button>}
-      </div>
+      <PageHeader eyebrow="Organisation" title="Users" description="Manage local accounts, lifecycle state, and role assignments. Passwords are never displayed." actions={<>{canCreate && <Button variant="primary" onClick={openCreate} type="button">Add user</Button>}</>} />
       {error && <div className="error-banner" role="alert">{error}</div>}
       {success && <div className="success-banner" role="status">{success}</div>}
 
       {form && (
         <section className="form-card">
-          <div className="form-card-header"><h2>{editingId ? "Edit user" : "Add user"}</h2><button className="icon-button" aria-label="Close form" onClick={() => setForm(null)} type="button">×</button></div>
+          <div className="form-card-header"><h2>{editingId ? "Edit user" : "Add user"}</h2><IconButton onClick={() => setForm(null)} type="button" label="Close form" icon="close" /></div>
           <form onSubmit={saveUser}>
             <div className="form-grid">
               <label className="field"><span>Email *</span><input autoComplete="off" disabled={Boolean(editingId)} onChange={(event) => setForm({ ...form, email: event.target.value })} required type="email" value={form.email} /></label>
@@ -203,14 +202,14 @@ export default function UsersAdminPage() {
                   <button className="text-button text-danger" disabled={form.assignments.length === 1} onClick={() => setForm({ ...form, assignments: form.assignments.filter((_, itemIndex) => itemIndex !== index) })} type="button">Remove</button>
                 </div>;
               })}
-              <button className="button button-secondary" onClick={() => setForm({ ...form, assignments: [...form.assignments, blankAssignment(roles)] })} type="button">Add assignment</button>
+              <Button variant="secondary" onClick={() => setForm({ ...form, assignments: [...form.assignments, blankAssignment(roles)] })} type="button">Add assignment</Button>
             </fieldset>}
-            <div className="form-actions"><button className="button button-secondary" onClick={() => setForm(null)} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : editingId ? "Save user" : "Create user"}</button></div>
+            <div className="form-actions"><Button variant="secondary" onClick={() => setForm(null)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">{saving ? "Saving…" : editingId ? "Save user" : "Create user"}</Button></div>
           </form>
         </section>
       )}
 
-      {resetUser && <section className="form-card"><div className="form-card-header"><div><h2>Reset password</h2><p className="secondary-text">Set a temporary password for {resetUser.email}. All existing sessions will be invalidated.</p></div><button className="icon-button" aria-label="Close reset form" onClick={() => setResetUser(null)} type="button">×</button></div><form onSubmit={submitReset}><label className="field"><span>Temporary password</span><input autoComplete="new-password" minLength={12} onChange={(event) => setResetPassword(event.target.value)} required type="password" value={resetPassword} /></label><div className="form-actions"><button className="button button-secondary" onClick={() => setResetUser(null)} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">Set temporary password</button></div></form></section>}
+      {resetUser && <section className="form-card"><div className="form-card-header"><div><h2>Reset password</h2><p className="secondary-text">Set a temporary password for {resetUser.email}. All existing sessions will be invalidated.</p></div><IconButton onClick={() => setResetUser(null)} type="button" label="Close reset form" icon="close" /></div><form onSubmit={submitReset}><label className="field"><span>Temporary password</span><input autoComplete="new-password" minLength={12} onChange={(event) => setResetPassword(event.target.value)} required type="password" value={resetPassword} /></label><div className="form-actions"><Button variant="secondary" onClick={() => setResetUser(null)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">Set temporary password</Button></div></form></section>}
 
       <section className="table-card" aria-label="Users list">
         <div className="table-meta"><span>{loading ? "Loading…" : `${users.length} users`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>

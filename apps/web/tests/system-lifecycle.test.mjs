@@ -44,11 +44,11 @@ test("local System navigation is semantic and has no competing overview", async 
 
 test("System Settings provides truthful sections and package metadata without deployment configuration", async () => {
   const page = await readFile(new URL("../app/admin/system-settings/page.js", import.meta.url), "utf8");
-  for (const title of ["General", "Backup &amp; Restore", "Updates", "About"]) assert.ok(page.includes(title));
+  for (const title of ["General", "About"]) assert.ok(page.includes(title));
   assert.match(page, /filter\(\(setting\) => !setting.sensitive\)/);
   assert.match(page, /packageMetadata.version/);
   assert.match(page, /Web package version/);
-  assert.match(page, /Homelab Ready hardening/);
+  assert.doesNotMatch(page, /Homelab Ready hardening|will be added|are planned/);
   assert.doesNotMatch(page, /process.env|DATABASE_URL|MASTER_KEY|replacement value|current secret/);
 });
 
@@ -56,7 +56,7 @@ test("both lifecycle actions share a native modal with safe focus and server rec
   const component = await readFile(new URL("../components/entity-delete-action.js", import.meta.url), "utf8");
   assert.match(component, /<dialog/);
   assert.match(component, /showModal\(\)/);
-  assert.match(component, /autoFocus className="button button-secondary"/);
+  assert.match(component, /autoFocus variant="secondary"/);
   assert.match(component, /aria-labelledby/);
   assert.match(component, /deletion-eligibility/);
   assert.match(component, /method: "DELETE"/);

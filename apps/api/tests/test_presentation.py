@@ -7,7 +7,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.presentation import PresentationAccent, PresentationIcon
-from app.schemas import AssetCategoryCreate, AssetCategoryUpdate, NetworkCreate, NetworkUpdate
+from app.schemas import (AssetCategoryCreate, AssetCategoryUpdate, NetworkCreate, NetworkUpdate,
+    ServiceTypeCreate, ServiceTypeUpdate, BusinessFunctionCreate, BusinessFunctionUpdate)
 
 
 def test_web_and_api_registry_contract_cannot_drift():
@@ -41,3 +42,35 @@ def test_defaults_and_partial_edits_do_not_reset_other_presentation():
     for schema in (AssetCategoryUpdate, NetworkUpdate):
         assert schema(name="Renamed").model_dump(exclude_unset=True) == {"name": "Renamed"}
         assert schema(accent_key="rose").model_dump(exclude_unset=True) == {"accent_key": "rose"}
+
+
+@pytest.mark.parametrize("schema,base", [
+    (ServiceTypeCreate, {"key": "custom", "name": "Custom"}),
+    (ServiceTypeUpdate, {}),
+    (BusinessFunctionCreate, {"customer_id": uuid.uuid4(), "name": "Purpose"}),
+    (BusinessFunctionUpdate, {}),
+])
+def test_entity_accent_is_bounded_and_partial_edits_preserve_legacy_defaults(schema, base):
+    for accent in get_args(PresentationAccent):
+        assert schema(**base, accent_key=accent).accent_key == accent
+    for invalid in ("Blue", "#112233", "arbitrary", "https://example.test"):
+        with pytest.raises(ValidationError):
+            schema(**base, accent_key=invalid)
+    assert "accent_key" not in schema(**base).model_dump(exclude_unset=True)
+
+
+def test_business_function_icons_bounded_and_service_type_historical_icons_readable():
+    from app.schemas import BusinessFunctionUpdate, ServiceTypeUpdate
+    for icon in get_args(PresentationIcon):
+        assert BusinessFunctionUpdate(icon_key=icon).icon_key == icon
+    with pytest.raises(ValidationError):
+        BusinessFunctionUpdate(icon_key="https://example.test/icon.svg")
+    # Preserve the established nullable/string API contract for existing consumers.
+    assert ServiceTypeUpdate(icon_key="historical-custom-key").icon_key == "historical-custom-key"
+
+
+def test_durable_identity_default_matches_web_and_is_bounded():
+    from app.presentation import default_entity_accent
+    assert default_entity_accent("00000000-0000-4000-8000-000000000020") == "blue"
+    for n in range(100):
+        assert default_entity_accent(uuid.UUID(int=n)) in get_args(PresentationAccent)

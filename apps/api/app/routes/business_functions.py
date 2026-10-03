@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
+from app.presentation import default_entity_accent
 from app.schemas import EntityDeletionEligibilityResponse
 from app.models import BusinessFunction, CriticalityLevel, KnowledgeGap, ServiceBusinessFunction, Service, Site
 from app.routes.crud_helpers import commit, flush, not_found
@@ -72,6 +73,8 @@ def create_business_function(payload: BusinessFunctionCreate, request: Request, 
         if criticality is None or not criticality.active: raise HTTPException(status_code=422, detail="Criticality level is not active or does not exist")
     item = BusinessFunction(**payload.model_dump(), created_by_user_id=principal.user.id, updated_by_user_id=principal.user.id)
     db.add(item); flush(db, "Business function")
+    item.icon_key = item.icon_key or "home"
+    item.accent_key = item.accent_key or default_entity_accent(item.id)
     add_audit_event(db, action="business_function.created", target_type="business_function", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Business Function created", request=request)
     commit(db, "Business function"); db.refresh(item)
     return function_response(db, item, principal)

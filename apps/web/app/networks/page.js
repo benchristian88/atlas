@@ -7,7 +7,7 @@ import { useWorkspaceContext } from "../../components/workspace-context";
 import { NETWORK_TYPES, taxonomyLabel } from "../../lib/taxonomy";
 
 import { presentationField } from "../../components/presentation-picker";
-import { PresentationIdentity } from "../../components/presentation-identity.mjs";
+import { NetworkIdentity } from "../../components/entity-identity";
 
 const dependencies = [
   { key: "customers", endpoint: "/customers" },
@@ -29,7 +29,7 @@ const fields = [
 ];
 
 const columns = [
-  { key: "name", label: "Network", render: (row) => <PresentationIdentity record={row} fallback="network" /> },
+  { key: "name", label: "Network", render: (row) => <span className="presentation-identity"><NetworkIdentity record={row} /><span>{row.name}</span></span> },
   { key: "network_type", label: "Type", render: (row) => taxonomyLabel(row.network_type) },
   { key: "vlan_id", label: "VLAN", render: (row) => row.vlan_id ?? "—" },
   { key: "cidr", label: "CIDR", render: (row) => <span className="mono">{row.cidr || "—"}</span> },

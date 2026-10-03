@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getCurrentUser } from "../lib/auth";
@@ -101,8 +103,8 @@ export function RootShell({ children }) {
           <p>The Atlas API could not complete the session check. Check API routing and availability, then try again.</p>
           <p className="session-error-detail">{authState.error}</p>
           <div className="form-actions">
-            <button className="button button-primary" onClick={() => setRetryKey((value) => value + 1)} type="button">Try again</button>
-            <button className="button button-secondary" onClick={() => router.replace("/login")} type="button">Go to sign in</button>
+            <Button variant="primary" onClick={() => setRetryKey((value) => value + 1)} type="button">Try again</Button>
+            <Button variant="secondary" onClick={() => router.replace("/login")} type="button">Go to sign in</Button>
           </div>
         </section>
       </main>

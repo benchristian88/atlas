@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "../../../components/button";
+
 import { AuditInvestigation } from "../../../components/audit-investigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "../../../components/access-denied";
@@ -62,7 +64,7 @@ export default function AuditAdminPage() {
           <label className="field"><span>From</span><input onChange={(event) => setFilters({ ...filters, date_from: event.target.value })} type="datetime-local" value={filters.date_from} /></label>
           <label className="field"><span>To</span><input onChange={(event) => setFilters({ ...filters, date_to: event.target.value })} type="datetime-local" value={filters.date_to} /></label>
         </div>
-        <div className="form-actions"><button className="button button-secondary" onClick={() => { const empty = { actor: "", action: "", entity_type: "", date_from: "", date_to: "" }; setFilters(empty); setAppliedFilters(empty); }} type="button">Clear</button><button className="button button-primary" disabled={loading} type="submit">Apply filters</button></div>
+        <div className="form-actions"><Button variant="secondary" onClick={() => { const empty = { actor: "", action: "", entity_type: "", date_from: "", date_to: "" }; setFilters(empty); setAppliedFilters(empty); }} type="button">Clear</Button><Button variant="primary" disabled={loading} type="submit">Apply filters</Button></div>
       </form>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <section className="table-card" aria-label="Audit events">

@@ -564,7 +564,7 @@ Keep C2 graph development independent of future worker orchestration.
 
 # 25. Frontend Engineering
 
-Follow the existing Atlas visual language and component conventions.
+Read and follow [the canonical UI architecture guide](docs/architecture/ui-architecture.md) before UI work. Reuse its tokens, PageHeader, Button/IconButton, EntityIdentity, status registry, collection/filter and table contracts. Preserve recognisable Asset icons and the accepted Service/Business Function catalogue interaction; share architecture without forcing identical domain rows. Keep tenant context, entity identity and operational status separate.
 
 Before creating a new component:
 

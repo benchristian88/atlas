@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useMemo, useState } from "react";
 import { DURATION_UNITS, durationToMinutes, minutesToDuration } from "../lib/duration.mjs";
 
@@ -62,6 +64,6 @@ export function ServiceForm({ service = null, serviceTypes, criticalityLevels, c
       {text("runbook_url", "Runbook URL", { type: "url" })}{text("documentation_url", "Documentation URL", { type: "url" })}
       {text("recovery_notes", "Recovery notes", { textarea: true, wide: true })}{text("backup_notes", "Backup notes", { textarea: true, wide: true })}{text("notes", "Notes", { textarea: true, wide: true })}
     </div>
-    <div className="form-actions"><button className="button button-secondary" disabled={saving} onClick={onCancel} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : service ? "Save Service" : "Create Service"}</button></div>
+    <div className="form-actions"><Button variant="secondary" disabled={saving} onClick={onCancel} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">{saving ? "Saving…" : service ? "Save Service" : "Create Service"}</Button></div>
   </form>;
 }

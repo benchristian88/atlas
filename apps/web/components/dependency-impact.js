@@ -1,10 +1,12 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useState } from "react";
 import { DEPENDENCY_REQUIREMENT_LABELS, DEPENDENCY_STRATEGY_LABELS, FAILURE_EFFECT_LABELS, singletonImpactRequest, dependencyGroupLabel, availableDependencyName } from "../lib/dependency-semantics.mjs";
 
 function EffectChoices({ label, value, disabled, onChange }) {
-  return <fieldset className="impact-choices" disabled={disabled}><legend>{label}</legend><div>{Object.entries(FAILURE_EFFECT_LABELS).map(([effect, text]) => <button key={effect} type="button" className="button button-secondary" aria-pressed={value === effect} onClick={() => onChange(effect)}>{value === effect && <span aria-hidden="true">✓ </span>}{effect === "unknown" ? "Not sure / Unknown" : text}</button>)}</div></fieldset>;
+  return <fieldset className="impact-choices" disabled={disabled}><legend>{label}</legend><div>{Object.entries(FAILURE_EFFECT_LABELS).map(([effect, text]) => <Button key={effect} type="button" variant="secondary" aria-pressed={value === effect} onClick={() => onChange(effect)}>{value === effect && <span aria-hidden="true">✓ </span>}{effect === "unknown" ? "Not sure / Unknown" : text}</Button>)}</div></fieldset>;
 }
 
 function GroupEditor({ group, service, groups, dependencies, saving, onSave }) {
@@ -19,7 +21,7 @@ function GroupEditor({ group, service, groups, dependencies, saving, onSave }) {
   }}><fieldset disabled={saving}><legend>Dependencies that provide the same capability</legend><div className="dependency-member-options">{eligible.map(d => {
     const field = d.kind === "asset" ? "asset_dependency_ids" : "service_dependency_ids";
     return <label className="checkbox-field" key={`${d.kind}:${d.id}`}><input type="checkbox" checked={form[field].includes(d.id)} onChange={event => update(field, event.target.checked ? [...form[field], d.id] : form[field].filter(id => id !== d.id))} /><span>{d.name}</span></label>;
-  })}</div><div className="form-grid"><label><span>Group name (optional)</span><input maxLength={255} value={form.name} onChange={event => update("name", event.target.value)} /></label><label><span>How do these providers work together?</span><select value={form.strategy} onChange={event => update("strategy", event.target.value)}>{Object.entries(DEPENDENCY_STRATEGY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Requirement</span><select value={form.requirement} onChange={event => update("requirement", event.target.value)}>{Object.entries(DEPENDENCY_REQUIREMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>If this requirement cannot be met</span><select value={form.failure_effect} onChange={event => update("failure_effect", event.target.value)}>{Object.entries(FAILURE_EFFECT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><button className="button button-secondary" disabled={!count} type="submit">Save dependency impact</button></fieldset></form>;
+  })}</div><div className="form-grid"><label><span>Group name (optional)</span><input maxLength={255} value={form.name} onChange={event => update("name", event.target.value)} /></label><label><span>How do these providers work together?</span><select value={form.strategy} onChange={event => update("strategy", event.target.value)}>{Object.entries(DEPENDENCY_STRATEGY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Requirement</span><select value={form.requirement} onChange={event => update("requirement", event.target.value)}>{Object.entries(DEPENDENCY_REQUIREMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>If this requirement cannot be met</span><select value={form.failure_effect} onChange={event => update("failure_effect", event.target.value)}>{Object.entries(FAILURE_EFFECT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><Button variant="secondary" disabled={!count} type="submit">Save dependency impact</Button></fieldset></form>;
 }
 
 export function DependencyImpact({ service, assets, services, groups, canManage, saving, mutate }) {

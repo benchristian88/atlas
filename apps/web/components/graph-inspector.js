@@ -1,6 +1,8 @@
 "use client";
 
-import { AssetIcon } from "./asset-icon";
+import { Button } from "./button";
+
+import { EntityIdentity } from "./entity-identity";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -25,7 +27,7 @@ export function GraphInspector({ selected, group, graph, analysis, analysisActiv
   const result = analysis?.results.find((r) => r.service.key === node?.key);
   return <aside className="ops-card graph-inspector" aria-label="Graph inspector" aria-live="polite">
     {group ? <><p className="ops-meta">Dependency behaviour</p><h2>{dependencyGroupLabel(group)}</h2><dl className="ops-definition"><dt>Requirement</dt><dd>{DEPENDENCY_REQUIREMENT_LABELS[group.dependency_requirement]}</dd><dt>Strategy</dt><dd>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</dd><dt>If unsatisfied</dt><dd>{ANALYSIS_STATE_LABELS[group.failure_effect]}</dd></dl><h3>Visible members</h3><ul>{group.edges.map((edge) => <li key={edge.key}><button type="button" className="text-button" onClick={() => onSelect(edge.target)}>{edge.target.name}</button></li>)}</ul><p className="ops-meta">Existing dependency-group semantics. This group represents recorded relationships.</p></> : !node ? <div className="ops-guided"><h2>Explore your environment</h2><p>Select an entity to inspect its recorded knowledge. Double click or choose Focus to explore its neighbourhood.</p><p>Use Tab and Enter to select nodes with the keyboard.</p></div> : <>
-      <header className="inspector-identity">{node.entity_type === "asset" ? <AssetIcon asset={node} size={32} /> : <EntityMark type={node.entity_type} />}<div><h2>{node.name}</h2><p>{node.subtitle || node.entity_type.replaceAll("_", " ")}</p></div></header>
+      <header className="inspector-identity"><EntityIdentity type={node.entity_type} record={node} size={32} /><div><h2>{node.name}</h2><p>{node.subtitle || node.entity_type.replaceAll("_", " ")}</p></div></header>
       {node.site_id && node.site_id !== siteId && <p className="site-badge">{node.site_name || "Another authorized Site"}</p>}
       {analysisActive ? <>
         {!analysis && <p role="status">Waiting for scenario explanation…</p>}
@@ -39,7 +41,7 @@ export function GraphInspector({ selected, group, graph, analysis, analysisActiv
         {detail?.truncated && <p role="status">This neighbourhood is bounded. Focus another entity to explore further.</p>}
         {!relationships.length ? <p className="ops-meta">No visible relationships recorded in this neighbourhood.</p> : <ul className="inspector-relationships">{relationships.map((edge) => <li key={edge.key}><button type="button" className="text-button" onClick={() => onSelect(edge.source)}>{edge.source.name}</button><small>{edge.label} →</small><button type="button" className="text-button" onClick={() => onSelect(edge.target)}>{edge.target.name}</button>{edge.failure_effect && <small>{dependencyDetail(edge)}</small>}</li>)}</ul>}
       </>}
-      <footer className="inspector-actions"><button type="button" className="button button-secondary" onClick={() => onFocus(node)}>Focus in graph</button><Link className="button button-secondary" href={node.href}>Open {node.entity_type.replaceAll("_", " ")}</Link>{node.entity_type !== "business_function" && !analysisActive && <button type="button" className="button button-primary" onClick={() => onPreview(node)}>Preview unavailable</button>}</footer>
+      <footer className="inspector-actions"><Button type="button" variant="secondary" onClick={() => onFocus(node)}>Focus in graph</Button><Link className="button button-secondary" href={node.href}>Open {node.entity_type.replaceAll("_", " ")}</Link>{node.entity_type !== "business_function" && !analysisActive && <Button type="button" variant="primary" onClick={() => onPreview(node)}>Preview unavailable</Button>}</footer>
     </>}
   </aside>;
 }

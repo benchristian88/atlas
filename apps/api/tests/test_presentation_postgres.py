@@ -65,3 +65,27 @@ def test_network_presentation_defaults_edits_membership_and_scope(client, db):
     assert client.patch(url, json={"accent_key": "red"}).status_code == 404
     assert record["id"] not in {n["id"] for n in client.get("/api/networks").json()}
     assert record["id"] not in {n["id"] for n in client.get("/api/topology").json()["networks"]}
+
+
+def test_business_function_presentation_defaults_edits_and_scope(client, db):
+    from app.presentation import default_entity_accent
+    sites, _, _ = seed_scope(db)
+    principal = make_principal("business_functions.view", "business_functions.manage")
+    principal.user.email = "function-presentation@example.test"
+    db.add(principal.user); db.flush()
+    app.dependency_overrides[get_principal] = lambda: principal
+    result = client.post("/api/business-functions", json={"customer_id": str(sites[0].customer_id), "site_id": str(sites[0].id), "name": "Purpose"})
+    assert result.status_code == 201, result.text
+    record = result.json()
+    assert (record["icon_key"], record["accent_key"]) == ("home", default_entity_accent(record["id"]))
+    url = f"/api/business-functions/{record['id']}"
+    changed = client.patch(url, json={"icon_key": "shield", "accent_key": "rose"})
+    assert changed.status_code == 200, changed.text
+    renamed = client.patch(url, json={"name": "Renamed purpose"}).json()
+    assert (renamed["icon_key"], renamed["accent_key"]) == ("shield", "rose")
+    assert client.patch(url, json={"icon_key": "arbitrary"}).status_code == 422
+    scoped = Principal(principal.user, (ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Other Site", scope_type="site", customer_id=sites[1].customer_id, site_id=sites[1].id, permissions=frozenset({"business_functions.view", "business_functions.manage"})),))
+    app.dependency_overrides[get_principal] = lambda: scoped
+    assert client.get(url).status_code == 404
+    assert client.patch(url, json={"accent_key": "red"}).status_code == 404
+    assert record["id"] not in {item["id"] for item in client.get("/api/business-functions").json()}

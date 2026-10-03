@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import React from "react";
+import { loadComponent } from "./helpers/components.mjs";
 import { renderToStaticMarkup } from "react-dom/server";
 const require = createRequire(import.meta.url);
 const { transformSync } = require("next/dist/compiled/babel/core");
@@ -14,12 +15,12 @@ function component(path, imports) {
     plugins: [require("next/dist/compiled/babel/plugin-transform-modules-commonjs")],
   });
   const exports = {};
-  Function("require", "exports", "React", code)((name) => imports[name], exports, React);
+  Function("require", "exports", "React", code)((name) => imports[name] || loadComponent(new URL(name, new URL(path, import.meta.url))), exports, React);
   return exports;
 }
 const catalogue = component("../components/entity-catalogue.js", {
   "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },
-  "./operations-primitives": component("../components/operations-primitives.js", { "../lib/operations-experience.mjs": {} }),
+
 });
 const render = (name, props) => renderToStaticMarkup(React.createElement(catalogue[name], props));
 const service = { id: "dns", name: "DNS", description: "Resolves names", purpose: "Legacy purpose", service_type_name: "Infrastructure Service", operational_status: "operational", lifecycle_status: "active", asset_dependency_count: 3, business_function_count: 1, owner_name: "Hidden owner", criticality_name: "Hidden criticality", rto_minutes: 60, completeness_status: "incomplete" };
@@ -52,7 +53,7 @@ test("Business Function description, service count, state and native keyboard-ac
   assert.match(render("BusinessFunctionCatalogueRow", { item: { id: "old", name: "Old", active: false, service_count: 0 } }), /Archived/);
 });
 test("Catalogue loading, error, empty and populated states remain distinct", () => {
-  const props = { label: "Services", count: 0, empty: "No matches", children: React.createElement("li", null, "Visible row") };
+  const props = { onRefresh() {}, label: "Services", count: 0, empty: "No matches", children: React.createElement("li", null, "Visible row") };
   const loading = render("EntityCatalogue", { ...props, loading: true });
   assert.match(loading, /aria-busy="true"/); assert.match(loading, /Loading Services/); assert.match(loading, /disabled/); assert.doesNotMatch(loading, /No matches|Visible row/);
   const error = render("EntityCatalogue", { ...props, error: "Failed" });
@@ -78,8 +79,8 @@ test("Pages retain scoped API search/type filters and active-only Business Funct
 test("Catalogue focus and mobile layout use theme tokens", () => {
   const css = source("../app/globals.css");
   assert.match(css, /\.catalogue-row:focus-visible/);
-  assert.match(css, /\.catalogue-health \.status-outage \{ background: var\(--danger\);/);
-  assert.match(css, /@media \(max-width: 640px\) \{\s*\.catalogue-filter-grid, \.catalogue-row \{ grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(css, /\[data-status-tone="danger"\] \{ --status-foreground: var\(--danger\);/);
+  assert.match(css, /@media \(max-width: 640px\) \{[\s\S]*?\.catalogue-filter-grid, \.catalogue-row \{ grid-template-columns: minmax\(0, 1fr\);/);
 });
 
 // Exercise real page/hook logic with controlled React, router, timers and API boundaries.

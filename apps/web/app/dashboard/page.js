@@ -66,7 +66,7 @@ function Attention({ graph, summary, hasPermission }) {
 function CriticalServices({ graph, graphError }) {
   const services = graph?.nodes.filter((n) => n.entity_type === "service" && n.criticality_rank >= 75).sort((a, b) => b.criticality_rank - a.criticality_rank || a.name.localeCompare(b.name)) || [];
   return <section className="ops-card"><header className="ops-section-header"><div><h2>Critical Services</h2><p>Recorded status and required knowledge completeness.</p></div><Link className="text-button" href="/services">View all</Link></header><div className="critical-service-grid">{services.slice(0, 3).map((node) => <Link className="critical-service-card" href={graphHref({ focus: node.key })} key={node.key}>
-    <div className="critical-service-heading"><EntityMark type="service" /><span className="ops-badge">{node.criticality_name}</span></div>
+    <div className="critical-service-heading"><EntityMark type="service" record={node} /><span className="ops-badge">{node.criticality_name}</span></div>
     <strong>{node.name}</strong>
     <div className="critical-service-status"><RecordedStatus state={node.operational_state} /><span>{(node.operational_state || "unknown").replaceAll("_", " ")}</span></div>
     <div className="critical-service-completeness"><span>Required knowledge</span><CompletenessLine node={node} /></div>

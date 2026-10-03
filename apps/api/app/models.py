@@ -390,6 +390,7 @@ class ServiceType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     icon_key: Mapped[str | None] = mapped_column(String(100))
+    accent_key: Mapped[str | None] = mapped_column(String(32))
     active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
     )
@@ -751,6 +752,8 @@ class BusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    icon_key: Mapped[str | None] = mapped_column(String(32))
+    accent_key: Mapped[str | None] = mapped_column(String(32))
     description: Mapped[str | None] = mapped_column(Text)
     owner_name: Mapped[str | None] = mapped_column(String(255))
     criticality_level_id: Mapped[uuid.UUID | None] = mapped_column(

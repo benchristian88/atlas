@@ -111,6 +111,8 @@ def service_response(db: Session, item: Service, principal: Principal) -> dict:
     result.update(
         service_type_key=service_type.key if service_type else None,
         service_type_name=service_type.name if service_type else None,
+        service_type_icon_key=service_type.icon_key if service_type else None,
+        service_type_accent_key=service_type.accent_key if service_type else None,
         criticality_key=criticality.key if criticality else None,
         criticality_name=criticality.name if criticality else None,
         criticality_rank=criticality.rank if criticality else None,

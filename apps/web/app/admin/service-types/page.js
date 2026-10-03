@@ -3,19 +3,21 @@
 import Link from "next/link";
 import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
+import { presentationField } from "../../../components/presentation-picker";
+import { PresentationIdentity } from "../../../components/presentation-identity.mjs";
 import { CrudScreen } from "../../../components/crud-screen";
 
 const fields = [
   { name: "key", label: "Key", createOnly: true, required: true, placeholder: "application_service" },
   { name: "name", label: "Name", required: true },
-  { name: "icon_key", label: "Icon key", placeholder: "Optional display hint" },
+  presentationField("application"),
   { name: "sort_order", label: "Sort order", type: "number", required: true },
   { name: "active", label: "Available for new Services", type: "checkbox" },
   { name: "requires_asset_dependency", label: "Requires an Asset dependency", type: "checkbox", help: "Turn this off for external Services that intentionally have no managed Asset." },
   { name: "description", label: "Description", type: "textarea", wide: true },
 ];
 const columns = [
-  { key: "name", label: "Service type", render: (row) => <span className="primary-cell">{row.name}</span> },
+  { key: "name", label: "Service type", render: (row) => <PresentationIdentity record={row} fallback="application" /> },
   { key: "key", label: "Key", render: (row) => <span className="mono secondary-text">{row.key}</span> },
   { key: "requires_asset_dependency", label: "Asset dependency", render: (row) => row.requires_asset_dependency ? "Required" : "Explicitly optional" },
   { key: "active", label: "State", render: (row) => row.active ? "Active" : "Inactive" },
@@ -34,9 +36,9 @@ export default function ServiceTypesAdminPage() {
     canCreate={manage} canDelete={false} canEdit={manage}
     columns={visibleColumns}
     description="Define stable operational Service categories. Referenced types can be renamed or deactivated without breaking Services."
-    emptyValues={{ key: "", name: "", icon_key: "", sort_order: "100", active: true, requires_asset_dependency: true, description: "" }}
+    emptyValues={{ key: "", name: "", icon_key: "application", accent_key: "blue", sort_order: "100", active: true, requires_asset_dependency: true, description: "" }}
     endpoint="/service-types" eyebrow="Reference Data" fields={fields}
-    preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, icon_key: form.icon_key || null, sort_order: Number(form.sort_order), active: form.active, requires_asset_dependency: form.requires_asset_dependency, description: form.description || null })}
+    preparePayload={(form, editingId) => ({ ...(!editingId ? { key: form.key } : {}), name: form.name, icon_key: form.icon_key || null, accent_key: form.accent_key || null, sort_order: Number(form.sort_order), active: form.active, requires_asset_dependency: form.requires_asset_dependency, description: form.description || null })}
     headingActions={hasGlobalPermission("knowledge_requirements.view") && hasGlobalPermission("knowledge_requirements.manage") && <Link className="button button-secondary" href="/admin/service-types/requirements/global">Manage global requirements</Link>}
     title="Service types"
   />;

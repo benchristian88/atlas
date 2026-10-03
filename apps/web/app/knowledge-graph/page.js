@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "../../components/button";
+
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -100,20 +102,20 @@ function KnowledgeGraph() {
   const scenarioName = displayed.nodesByKey[state.focus]?.name;
   function toggle(key, value) { update({ [key]: state[key].includes(value) ? state[key].filter((v) => v !== value) : [...state[key], value] }); }
   if (!canView) return <AccessDenied />;
-  return <div className="operations-page"><PageHeader title="Knowledge Graph" description="Why it matters, what delivers it, and what implements it." />
+  return <div className="operations-page"><PageHeader variant="canvas" title="Knowledge Graph" description="Why it matters, what delivers it, and what implements it." />
     {!workspace.customerId || !workspace.siteId ? <p className="ops-card">Select a Customer and Site to explore recorded knowledge.</p> : <ExpandedGraphSurface expanded={expanded} onClose={closeExpanded} returnFocus={expandButton} scrollPosition={expansionScroll}>
       <div className="graph-toolbar" aria-label="Knowledge Graph controls">
         <div className="ops-segments" aria-label="Graph mode"><button type="button" aria-pressed={!state.focus} onClick={() => update({ focus: "", analysis: false })}>Overview</button><button type="button" aria-pressed={Boolean(state.focus)} disabled={!selectedNode} onClick={() => focusNode(selectedNode)}>Focus</button></div>
         <div className="graph-find"><label className="sr-only" htmlFor="graph-find">Find in graph</label><input id="graph-find" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find in graph…" type="search" aria-controls="graph-search-results" />{search.trim() && <div id="graph-search-results" className="graph-search-results"><ul aria-label="Matches in visible graph">{localMatches.map(node => <li key={node.key}><button type="button" onClick={() => { selectNode(node); setLocateRequest({ key: node.key }); setSearch(""); }}>{node.name}<small>Locate in current graph</small></button></li>)}</ul><p className="ops-meta">Focus another entity: authorized matches in this Customer; up to 8 of each type. Refine your search for more.</p>{searching && <p role="status">Searching…</p>}{searchError && <p role="alert">{searchError}</p>}{!searching && !searchError && !results.length && !localMatches.length && <p role="status">No matches.</p>}<ul>{results.map((node) => <li key={node.key}><button type="button" onClick={() => focusNode(node)}>{node.name}<small>{node.entity_type.replaceAll("_", " ")}</small></button></li>)}</ul></div>}</div>
         {state.focus && <div className="ops-segments" aria-label="Focus depth">{(expanded ? [1, 2, 3] : [1, 2]).map((depth) => <button type="button" key={depth} aria-label={`Depth ${depth}`} aria-pressed={state.depth === depth} onClick={() => update({ depth })}>{depth}</button>)}</div>}
-        <button className="button button-secondary" type="button" aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)}>Filters</button>
-        {state.focus && !state.focus.startsWith("business_function:") && !state.analysis && <button className="button button-secondary" type="button" onClick={() => update({ analysis: true })}>Preview unavailable</button>}
-        <button className="button button-secondary" type="button" onClick={() => setFitKey((n) => n + 1)}>Fit</button>
+        <Button variant="secondary" type="button" aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)}>Filters</Button>
+        {state.focus && !state.focus.startsWith("business_function:") && !state.analysis && <Button variant="secondary" type="button" onClick={() => update({ analysis: true })}>Preview unavailable</Button>}
+        <Button variant="secondary" type="button" onClick={() => setFitKey((n) => n + 1)}>Fit</Button>
         <DetailsPanelToggle hidden={detailsHidden} onToggle={() => setDetailsHidden(value => !value)} />
         <button ref={expandButton} hidden={expanded} className="button button-secondary graph-icon-button" type="button" aria-label="Expand Knowledge Graph" title="Expand Knowledge Graph" onClick={() => { expansionScroll.current = { left: window.scrollX, top: window.scrollY }; setExpanded(true); }}><NavigationIcon name="expand" /></button>
       </div>
       {showFilters && <section className="ops-card graph-filters" aria-label="Graph filters"><fieldset><legend>Node types</legend>{LANES.map((lane) => <label key={lane.type}><input type="checkbox" checked={state.types.includes(lane.type)} onChange={() => toggle("types", lane.type)} />{lane.label}</label>)}</fieldset><fieldset><legend>Relationships</legend>{Object.entries(RELATIONSHIPS).map(([key, label]) => <label key={key}><input type="checkbox" checked={state.families.includes(key)} onChange={() => toggle("families", key)} />{label}</label>)}</fieldset></section>}
-      {state.analysis && <section className="analysis-scenario" aria-label="Hypothetical scenario"><div><strong>Scenario: {scenarioName || "selected entity"} unavailable</strong><p>{analysis?.assumption || "Previewing consequences in authorized recorded knowledge…"}</p></div><button className="button button-secondary" type="button" onClick={() => update({ analysis: false })}>Exit analysis</button></section>}
+      {state.analysis && <section className="analysis-scenario" aria-label="Hypothetical scenario"><div><strong>Scenario: {scenarioName || "selected entity"} unavailable</strong><p>{analysis?.assumption || "Previewing consequences in authorized recorded knowledge…"}</p></div><Button variant="secondary" type="button" onClick={() => update({ analysis: false })}>Exit analysis</Button></section>}
       {error && <div className="error-banner" role="alert">{error} <button type="button" className="text-button" onClick={() => setRetry((n) => n + 1)}>Try again</button></div>}
       {analysisError && <div className="error-banner" role="alert">{analysisError}</div>}
       {(graph?.truncated || analysis?.truncated) && <div className="warning-banner" role="status">{[...(graph?.warnings || []), ...(analysis?.warnings || [])].join(" ")}</div>}

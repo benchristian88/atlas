@@ -306,7 +306,7 @@ The repository audit materially changes several classifications:
    Recursive analysis, outage semantics, evidence paths, scoring and a dedicated
    route do not exist.
 5. **Integration management is only partially implemented.**
-   The Integration model and navigation scaffolding exist, but the page still uses mock data
+   The Integration model and navigation scaffolding exist, but the page shows an explicit unavailable state
    and there is no registered Integration API router.
 6. **Business Function lifecycle is only partially implemented.**
    Business Functions exist, but they do not yet have their own assertions,
@@ -349,7 +349,7 @@ transcript-derived report and the audited repository.
 |--------------|---------------------------------|----------------------------------|-----------------|
 | End-to-end Proxmox discovery | Implemented or uncertain        | **Partially implemented**        | Plugin discovery/normalization and `AtlasDiscoverySync` exist, but no API/worker path loads an Integration, resolves a secret and invokes the plugin. |
 | Redis worker orchestration | Implemented foundation / limited | **Partially implemented**        | Compose runs Redis and worker, but `worker/main.py` only logs readiness and sleeps. |
-| Integration management UI | Unknown/partially implemented   | **Partially implemented**        | Integration table and permissions exist; `/integrations` still imports mock data and no Integration router is registered. |
+| Integration management UI | Unknown/partially implemented   | **Partially implemented**        | Permissions and an explicit unavailable state exist; sample rows are removed and no Integration router is registered. |
 | Generated Documentation | Planned/unknown                 | **Partially implemented**        | Deterministic Asset Markdown and `Document` persistence exist, but no documents router or usable UI exists. |
 | Impact Analysis | Planned but not implemented     | **Planned but not implemented**  | Focused Service/Business Function graphs are structural prerequisites, not an impact engine; no outage semantics or `/impact-analysis` exists. |
 | Business Function completeness/history | Not separately classified       | **Partially implemented**        | Business Function CRUD and graph exist, but no assertions, profiles, gaps or history. |
@@ -443,6 +443,8 @@ unchanged.
 | Last-Master protection | **Implemented** | Foundation | Administration tests verify protections. |
 | Customer/site context selector | **Implemented** | Foundation | Context API, workspace context and revalidation are present. |
 | User/role/assignment administration | **Implemented** | Foundation | Guarded APIs and administration pages exist. |
+| Shared UI architecture | **Implemented** | UI consolidation | [Canonical guide](../architecture/ui-architecture.md); locally packaged Inter, shared typography/density/shape tokens, PageHeader, Button/IconButton, central status registry, entity identity, collection/filter compatibility adapters, CRUD DataTable and Asset detail shell. Domain rows and existing permission checks remain distinct. |
+| Entity presentation overrides | **Implemented** | UI identity | Additive migration `20261004_0024` supplies optional Business Function icon/accent and Service Type accent; bounded pickers, durable-ID defaults and Service Type inheritance. Historical icon strings and null presentation values remain readable. |
 | Per-user accent preference | **Implemented** | UI/account | Persisted, validated and tested. |
 | Per-user theme mode | **Implemented** | UI/account | Profile saves Light, Dark or System independently of accent colour; shared shell, Dashboard and Knowledge Graph tokens follow the resolved mode. Nullable `users.theme_mode` is added by migration `20260909_0015`. |
 | Top-right account menu | **Implemented** | UI/account | Profile/logout dropdown exists and is tested. |
@@ -639,7 +641,7 @@ unchanged.
 | Idempotent core discovery sync | **Implemented as component** | Integration foundation | Raw payload retention, upsert, last-seen and stale marking are tested. |
 | Integration persistence model | **Implemented** | Integration foundation | Integration table stores plugin and connection metadata. |
 | Integration management API | **Partially implemented/absent** | B2-lite | No Integration router is registered. |
-| Integration management page | **Partially implemented** | B2-lite | Page exists but imports mock data. |
+| Integration management page | **Partially implemented** | B2-lite | Permission-gated page shows an explicit unavailable state; no Integration API is registered. |
 | Test-connection journey | **Partially implemented/absent** | B2-lite | Standalone validator exists; no current user journey invokes it. |
 | Integration secret resolver/store | **Unknown** | Production integration | `secret_reference` exists, but no provider/resolver contract is decided. |
 | End-to-end configured Proxmox run | **Partially implemented** | B2-lite | No path joins Integration, secret resolution, plugin invocation and safe execution. |

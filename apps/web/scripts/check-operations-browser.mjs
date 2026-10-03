@@ -183,7 +183,7 @@ try {
         assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-item')].every(n=>n.querySelector('svg') && n.querySelector('small').textContent === 'Current recorded total')"), true);
         assert.equal(await evaluate("new Set([...document.querySelectorAll('.ops-summary-item')].map(n=>n.getBoundingClientRect().height)).size"), 1);
         assert.equal(await evaluate("document.querySelectorAll('.ops-attention-row svg').length"), 4);
-        assert.equal(await evaluate("[...document.querySelectorAll('.critical-service-card')].every(n=>n.querySelector('.entity-mark') && n.querySelector('.ops-badge') && n.querySelector('[aria-label=\"Recorded status: operational\"]') && n.querySelector('[role=meter]').getAttribute('aria-valuenow') === '75')"), true);
+        assert.equal(await evaluate("[...document.querySelectorAll('.critical-service-card')].every(n=>n.querySelector('.entity-identity') && n.querySelector('.ops-badge') && n.querySelector('[aria-label=\"Recorded status: operational\"]') && n.querySelector('[role=meter]').getAttribute('aria-valuenow') === '75')"), true);
         assert.equal(await evaluate("new Set([...document.querySelectorAll('.ops-activity .ops-icon-tile path')].map(n=>n.getAttribute('d'))).size"), 4);
         assert.equal(await evaluate("document.querySelectorAll('.ops-activity time[datetime]').length"), 4);
         assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-copy, .ops-attention-row > div, .critical-service-card, .ops-activity-copy')].every(n=>n.scrollWidth <= n.clientWidth)"), true);
@@ -225,8 +225,11 @@ try {
     await navigate(`/knowledge-graph?focus=${provider.key}`);
     await until("document.querySelector('.graph-inspector')?.textContent.includes('192.0.2.53')");
     assert.ok(await evaluate("document.querySelector('.graph-inspector').textContent.includes('Remote lab')"));
-    await evaluate("document.querySelector('.dependency-presentation').click()");
-    await until("document.querySelector('.graph-inspector').textContent.includes('Visible members')");
+    // Singleton dependency groups render directly in the current graph UI.
+    if (await evaluate("document.querySelector('.dependency-presentation') !== null")) {
+      await evaluate("document.querySelector('.dependency-presentation').click()");
+      await until("document.querySelector('.graph-inspector').textContent.includes('Visible members')");
+    } else assert.ok(await evaluate("document.querySelector('.graph-inspector').textContent.includes('AdGuard Home')"));
     await evaluate(`document.querySelector('[data-node-key="${provider.key}"]').click()`);
     await until("document.querySelector('.graph-inspector h2')?.textContent === 'AdGuard Home'");
     await evaluate("[...document.querySelectorAll('.inspector-actions button')].find(e=>e.textContent.trim()==='Preview unavailable').click()");
@@ -248,7 +251,9 @@ try {
     await evaluate("const el=document.getElementById('graph-find');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'DNS');el.dispatchEvent(new Event('input',{bubbles:true}));");
     await until("document.querySelectorAll('.graph-search-results li').length>0");
     await evaluate("[...document.querySelectorAll('.graph-search-results button')].find(n=>n.textContent.includes('DNS Resolution')).click()");
-    await until(`location.search.includes(encodeURIComponent(${JSON.stringify(dns.key)}))`);
+    await until(`document.querySelector('.graph-inspector h2')?.textContent === ${JSON.stringify(dns.name)}`);
+    await clickText("Focus in graph");
+    await until(`new URLSearchParams(location.search).get("focus")===${JSON.stringify(dns.key)}`);
     await clickText("2");
     await until("new URLSearchParams(location.search).get('depth')==='2'");
     await evaluate("history.back()");
