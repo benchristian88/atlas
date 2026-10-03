@@ -18,7 +18,7 @@ def test_fresh_populated_upgrade_downgrade_reupgrade(monkeypatch):
     assert not inspect(engine).get_table_names(), 'Refusing to modify nonempty database'
     monkeypatch.setenv('DATABASE_URL', url)
     config = Config(str(Path(__file__).parents[1] / 'alembic.ini'))
-    assert ScriptDirectory.from_config(config).get_heads() == ['20260921_0023']
+    assert ScriptDirectory.from_config(config).get_heads() == ['20261004_0024']
     command.upgrade(config, 'head')  # Entire fresh chain first.
     command.downgrade(config, '20260921_0022')
     path = Path(__file__).parents[1] / 'migrations/versions/20260921_0023_managed_topology_positions.py'
@@ -67,6 +67,6 @@ def test_fresh_populated_upgrade_downgrade_reupgrade(monkeypatch):
     with pytest.raises(RuntimeError, match='32-character'):
         command.downgrade(config, '20260921_0022')
     with engine.connect() as db:
-        assert db.scalar(text('SELECT version_num FROM alembic_version')) == '20260921_0023'
+        assert db.scalar(text('SELECT version_num FROM alembic_version')) == '20261004_0024'
         assert db.scalar(text("SELECT p.key FROM asset_types a JOIN topology_positions p ON p.id=a.topology_position_id WHERE a.key='legacy'")) == 'a' * 40
     engine.dispose()

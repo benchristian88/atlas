@@ -19,7 +19,7 @@ def test_empty_chain_upgrade_backfill_preservation_and_downgrade(monkeypatch):
     assert not inspect(engine).get_table_names(), 'Refusing to modify nonempty database'
     monkeypatch.setenv('DATABASE_URL', url)
     config = Config(str(Path(__file__).parents[1] / 'alembic.ini'))
-    assert ScriptDirectory.from_config(config).get_heads() == ['20260921_0023']
+    assert ScriptDirectory.from_config(config).get_heads() == ['20261004_0024']
     command.upgrade(config, '20260921_0020')
     path = Path(__file__).parents[1] / 'migrations/versions/20260921_0021_relationship_topology_layers.py'
     spec = importlib.util.spec_from_file_location('layers_migration', path)

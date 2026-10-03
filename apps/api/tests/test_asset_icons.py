@@ -139,6 +139,8 @@ def test_redirect_limit_and_relative_redirect(monkeypatch):
 
 
 def test_timeout_is_safe_and_secret_free(monkeypatch, caplog):
+    # In-process Alembic checks can disable loggers created before their setup.
+    monkeypatch.setattr(icons.logger, "disabled", False)
     fake_client(monkeypatch, [TimeoutError("secret URL")])
     icons.refresh_icon(uuid.uuid4(), "https://example.com/?secret=hidden", uuid.uuid4())
     assert "reason=timeout" in caplog.text
