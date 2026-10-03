@@ -1,0 +1,121 @@
+"use client";
+
+import { fitLandscape } from "../lib/landscape-geometry.mjs";
+import { dependencyDetail, dependencyGroupLabel, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
+import { layoutLandscape, landscapeGroupPath, routeLandscape, selectedLandscapeEdges } from "../lib/landscape-layout.mjs";
+import { AssetIcon } from "./asset-icon";
+
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
+import { EntityMark, RecordedStatus } from "./operations-primitives";
+
+// Pan only this canvas; locating a node must not scroll the page or modal toolbar.
+function locateNode(viewport, key) {
+  const node = key && viewport?.querySelector(`[data-node-key="${CSS.escape(key)}"]`);
+  if (!node) return;
+  const bounds = viewport.getBoundingClientRect(), target = node.getBoundingClientRect();
+  const vertical = target.top < bounds.top ? target.top - bounds.top : target.bottom > bounds.bottom ? target.bottom - bounds.bottom : 0;
+  viewport.scrollTo({ left: viewport.scrollLeft + target.left - bounds.left - (viewport.clientWidth - target.width) / 2, top: viewport.scrollTop + vertical, behavior: "instant" });
+}
+
+export function ServiceLandscape({ graph, compact = false, selected = "", selectedGroup = "", onSelect, onFocus, onGroup, siteId, types, families, quick, analysis, fitKey = 0, expandedView = false, detailsHidden = false, centerKey = "", locateRequest = null }) {
+  const viewport = useRef(null);
+  const arrowId = `landscape-arrow-${useId().replaceAll(":", "")}`;
+  const [expanded, setExpanded] = useState([]);
+  const [zoom, setZoom] = useState(1);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    let frame;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        setViewportWidth(element.clientWidth);
+        setViewportHeight(element.clientHeight);
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [expandedView, detailsHidden]);
+  const presentation = useMemo(() => presentLandscape(graph, { types, families, quick, limit: compact ? 5 : 8, expanded, selected, focus: centerKey, analysis: Boolean(analysis) }), [graph, types, families, quick, compact, expanded, selected, centerKey, analysis]);
+  const layout = useMemo(() => layoutLandscape(presentation, viewportWidth, expandedView, compact), [presentation, viewportWidth, expandedView, compact]);
+
+  const routes = useMemo(() => routeLandscape(presentation, layout), [presentation, layout]);
+  const selectedEdges = useMemo(() => selectedLandscapeEdges(presentation.edges, selected, selectedGroup), [presentation, selected, selectedGroup]);
+
+  // Native CSS-pixel sizing is the readable default. Height never determines
+  // card size; the existing viewport owns vertical overflow.
+  const previousMode = useRef(expandedView);
+  useLayoutEffect(() => {
+    if (compact || !viewportWidth) return;
+    const modeChanged = previousMode.current !== expandedView;
+    previousMode.current = expandedView;
+    setZoom(1);
+    viewport.current.scrollTo({ left: 0, top: modeChanged ? 0 : viewport.current.scrollTop });
+  }, [expandedView, detailsHidden, viewportWidth, compact]);
+
+  // Only a new explicit Fit request contains the entire graph in both axes.
+  const previousFit = useRef(fitKey);
+  useLayoutEffect(() => {
+    if (previousFit.current === fitKey) return;
+    previousFit.current = fitKey;
+    if (compact || !viewportWidth || !viewportHeight) return;
+    setZoom(fitLandscape(viewportWidth, viewportHeight, layout.width, layout.height));
+    viewport.current.scrollTo({ left: 0, top: 0 });
+  }, [fitKey, compact, viewportWidth, viewportHeight, layout.width, layout.height]);
+  useEffect(() => {
+    if (!centerKey) return;
+    locateNode(viewport.current, centerKey);
+  }, [centerKey, graph, viewportWidth]);
+
+  useEffect(() => {
+    if (!locateRequest) return;
+    locateNode(viewport.current, locateRequest.key);
+  }, [locateRequest]);
+
+  const pathKeys = new Set((analysis?.results || []).flatMap((r) => r.paths.flatMap((p) => p.edges.map((e) => e.key))));
+  function edgeClass(edges) {
+    if (analysis) return edges.some(edge => pathKeys.has(edge.key)) ? "consequence-path" : "context-edge";
+    if (!selected && !selectedGroup) return "";
+    return edges.some(edge => selectedEdges.has(edge.key)) ? "selected-relationship" : "background-relationship";
+  }
+  const drag = useRef(null);
+  return <div className={`service-landscape ${compact ? "landscape-compact" : expandedView ? "landscape-expanded" : ""}`}>
+    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
+    <div className="landscape-viewport" ref={viewport} style={!compact && !expandedView ? { height: `min(66vh, ${layout.height}px)` } : undefined} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
+      if (event.pointerType !== "mouse" || event.target.closest("button, a")) return;
+      drag.current = { x: event.clientX, y: event.clientY, left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }} onPointerMove={(event) => { if (drag.current) { event.currentTarget.scrollLeft = drag.current.left + drag.current.x - event.clientX; event.currentTarget.scrollTop = drag.current.top + drag.current.y - event.clientY; } }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+      <div style={{ width: layout.width * zoom, height: layout.height * zoom, marginInline: "auto", ...(!compact ? { marginBlock: 16 } : {}) }}>
+        <div className="landscape-canvas" style={{ width: layout.width, height: layout.height, transform: `scale(${zoom})` }}>
+          {presentation.lanes.map((lane, index) => <section className={`landscape-lane entity-${lane.type}`} key={lane.type} style={{ left: index * layout.stepX, width: layout.stepX - 12, height: layout.height }} aria-label={lane.label}>
+            <header><EntityMark type={lane.type} /><div><h3>{lane.label} <span>({lane.total})</span></h3><small>{lane.description}</small></div></header>
+            {!lane.total && <p className="lane-empty">No {lane.label.toLowerCase()} in this view.</p>}
+          </section>)}
+          <svg className="landscape-connectors" width={layout.width} height={layout.height} aria-hidden="true">
+            <defs><marker id={arrowId} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="currentColor" /></marker></defs>
+            {routes.map(({ edge, path }) => <path key={edge.key} data-edge-key={edge.key} d={path} markerEnd={`url(#${arrowId})`} className={`${edge.edge_family === "service_service" ? "secondary-dependency" : ""} ${edgeClass([edge])}`}><title>{edge.source.name} — {edge.label} → {edge.target.name}</title></path>)}
+            {layout.groups.map(group => <path key={group.key} data-group-connector={group.dependency_group_id} className={edgeClass(group.edges)} d={landscapeGroupPath(layout.positions.get(group.source_key), group, layout)} />)}
+          </svg>
+          {[...layout.positions.values()].map(({ node, x, y }) => {
+            const state = analysisState(node, analysis);
+            return <button className={`landscape-node entity-${node.entity_type} ${node.key === selected ? "is-selected" : ""} ${state ? `analysis-${state}` : analysis ? "analysis-context" : ""}`} key={node.key} data-node-key={node.key} style={{ left: x, top: y, width: layout.nodeWidth, minHeight: layout.nodeHeight }} type="button" aria-pressed={node.key === selected} aria-label={`${node.entity_type.replaceAll("_", " ")}: ${node.name}${state ? `. Scenario: ${state}` : ""}`} onClick={() => onSelect?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect?.(node); } }} onDoubleClick={() => onFocus?.(node)}>
+              {node.entity_type === "asset" ? <AssetIcon asset={node} size={32} /> : <EntityMark type={node.entity_type} />}<span className="landscape-node-text"><strong>{node.name}</strong><small>{node.entity_type.replaceAll("_", " ")}{!compact && node.criticality_name && <span className="ops-badge">{node.criticality_name}</span>}</small>
+                {node.site_id && node.site_id !== siteId && <small className="site-badge">{node.site_name || "Another authorized Site"}</small>}
+                {state && <small className="analysis-label">{state.toUpperCase()}</small>}
+              </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}
+            </button>;
+          })}
+          {layout.groups.map((group) => <button className="dependency-presentation" data-group-id={group.dependency_group_id} style={{ left: group.x, top: group.y, width: group.width, height: group.height }} key={group.key} type="button" onClick={() => onGroup?.(group)}><strong title={dependencyGroupLabel(group)}>{dependencyGroupLabel(group)}</strong><small>{DEPENDENCY_STRATEGY_LABELS[group.dependency_strategy]}</small></button>)}
+        </div>
+      </div>
+    </div>
+    <div className="landscape-disclosure">{presentation.lanes.map((lane) => lane.omitted > 0 ? <button className={`landscape-more entity-${lane.type}`} key={lane.type} type="button" onClick={() => setExpanded((values) => [...values, lane.type])}>+ {lane.omitted} more {lane.label.toLowerCase()}</button> : expanded.includes(lane.type) && lane.total > (compact ? 5 : 8) ? <button className={`landscape-more entity-${lane.type}`} key={lane.type} type="button" onClick={() => setExpanded((values) => values.filter((v) => v !== lane.type))}>Show fewer {lane.label.toLowerCase()}</button> : null)}</div>
+    {(presentation.omittedEdges > 0 || presentation.filteredNodes > 0) && <p className="ops-meta" role="status">{presentation.omittedEdges > 0 && `${presentation.omittedEdges} relationships connect collapsed items. Expand their lanes to see them. `}{presentation.filteredNodes > 0 && `${presentation.filteredNodes} items excluded by presentation filters.`}</p>}
+    {!compact && <details className="graph-semantic-list"><summary>Recorded relationships in this view ({presentation.edges.length})</summary><ul>{presentation.edges.map((edge) => <li key={edge.key}><button className="text-button" type="button" onClick={() => onSelect?.(edge.source)}>{edge.source.name}</button> — {edge.label} → <button className="text-button" type="button" onClick={() => onSelect?.(edge.target)}>{edge.target.name}</button>{["service_asset", "service_service"].includes(edge.edge_family) && <details><summary>Dependency impact details</summary><p>{dependencyDetail(edge)}</p><a className="text-button" href={`/services/${edge.source.entity_id}#dependency-impact`}>Review on Service page</a></details>}</li>)}</ul></details>}
+  </div>;
+}

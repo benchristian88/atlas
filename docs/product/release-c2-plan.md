@@ -1,14 +1,45 @@
 # Release C2 implementation plan
 
-Status: C2.1 implemented and merged; C2.2, C2.3, and C2.4 planned
+Status: C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented and merged; C2.5 implemented; C2.6 implemented; live/manual acceptance pending
 
-Delivered increment: **C2.1 — Shared Operational Graph**
+Latest implemented increment: **C2.6 — Usability & Lifecycle Polish**
+
+C2.4 implementation and its pending manual gate are described in the
+[operations architecture](../architecture/homelab-operations-experience.md) and
+[validation record](../testing/release-c2-homelab-operations-experience.md).
+
+Previous increment: **C2.3 — Explainable Dependency Analysis**
+
+C2.3 adds `POST /api/dependency-analysis` and a small Preview unavailable panel
+on Asset and Service details. It uses current authorized graph dependencies,
+explicit effects, conservative aggregation, and structured paths without writes
+or migrations. Subsequent live acceptance on the deployed PostgreSQL-backed
+test LXC is complete for this lean scope. See
+[the C2.3 validation and acceptance record](../testing/release-c2-explainable-dependency-analysis.md) and
+[analysis architecture](../architecture/dependency-analysis.md).
 
 ## C2.1 implementation evidence — 3 September 2026
 
 C2.1 was implemented in `a9f41df` and merged into `dev` by `1842d16` on
-3 September 2026. The validation results below were recorded on the feature
-working tree before that merge; the merge has the same tree as `a9f41df`.
+3 September 2026. The automated validation results recorded in
+[`../testing/release-c2-operational-graph.md`](../testing/release-c2-operational-graph.md)
+were collected on the feature working tree; the merge has the same tree as
+`a9f41df`.
+
+The original working-tree audit environment could not run PostgreSQL/Docker
+acceptance. That audit limitation is preserved in the test plan and Feature
+Ledger. Subsequent live pre-merge acceptance was completed in the deployed,
+PostgreSQL-backed test LXC and covered:
+
+- generic Asset, Service, and Business Function graph behavior;
+- depth `0`, `1`, and `2`;
+- incoming and outgoing traversal;
+- edge-family filtering;
+- safe node-limit truncation without dangling edges;
+- Service→Service dependency traversal in both directions;
+- preservation of semantic edge direction;
+- cross-tenant non-disclosure using the normal “Record not found” response; and
+- final migration and repository checks before merge.
 
 The delivered implementation adds:
 
@@ -38,6 +69,68 @@ because no Business Function completeness evaluator exists.
 No migration, graph table, external graph service, cache, new permission, or
 graph-rendering dependency was introduced.
 
+## C2.2 implementation evidence — 8 September 2026
+
+C2.2 is implemented on the feature working tree based on
+`bd2ab6cacf7b6f11acad188827744f6105e50310`. The additive migration, API,
+generic graph metadata, Service workflow, security tests, and PostgreSQL
+upgrade/downgrade validation are recorded in
+[`../testing/release-c2-lean-dependency-semantics.md`](../testing/release-c2-lean-dependency-semantics.md).
+
+The implementation adds no permission, graph store, rule engine, worker, cache,
+or consequence evaluator. `required_for_operation` and the existing dependency
+routes remain available; their responses gain additive semantic fields.
+
+### Subsequent live LXC acceptance
+
+After that implementation-time validation, C2.2 completed manual acceptance in
+the deployed PostgreSQL-backed test LXC. The upgrade preserved the existing
+Reverse Proxy → DNS Service and DNS Service → Adguard Home Asset
+dependencies without duplicates or fabricated groups. Required/Optional
+compatibility and persistence, explicit failure-effect persistence, behaviour
+removal with ungrouped fallback, and the mixed `Core Operation` Service→Asset
+plus Service→Service group all passed.
+
+The generic Operational Graph projected the mixed edges with one group identity,
+`all`, `required`, `unavailable`, and compatible
+`required_for_operation = true` metadata. Incoming traversal preserved the
+canonical Reverse Proxy → DNS direction and semantics. A principal in another
+tenant received the normal non-disclosing `{"detail":"Record not found"}`
+response from the Service dependency-groups route.
+
+The live topology had no genuine redundant AdGuard pair, so `any` was not
+manually exercised and no fake topology was created. Automated C2.2 coverage
+already exercises `any`. The implementation-time evidence and environment
+limitations remain unchanged in the linked test record.
+
+## C2.3 subsequent live LXC acceptance
+
+C2.3 completed manual acceptance on the deployed PostgreSQL-backed test LXC:
+
+- DNS unavailable made Reverse Proxy unavailable directly at 1 hop through
+  `Core Operation`.
+- AdGuard unavailable with ungrouped DNS semantics made DNS unknown at 1 hop
+  and Reverse Proxy unknown downstream at 2 hops.
+- After explicit `DNS Provider` semantics were configured, AdGuard unavailable
+  made DNS unavailable at 1 hop and Reverse Proxy unavailable at 2 hops.
+- PVE1 unavailable derived no Service consequence from current accepted C2.3
+  dependency semantics. The structural AdGuard `Runs on` PVE1 relationship is
+  not a failure rule; this result does not establish no real-world consequence.
+- A principal in another tenant received **Record not found** on direct AdGuard
+  Asset access; the analysis surface was unreachable and disclosed no analysis
+  information. This is a security regression pass.
+
+Explanations consumed persisted C2.2 semantics and retained actual C2.1
+relationships and canonical direction. Nginx Proxy Manager remained unaffected
+by the DNS/AdGuard scenarios, which is not a live-health claim.
+
+`degraded`, `any`, cycles, truncation, site isolation and other cases identified
+in the [C2.3 record](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance)
+remain automated-only C2.3 coverage. That document separates these live results
+from the unchanged implementation-time automated counts, commands, environment
+limitations and original manual checklist. C2.4 was still planned at that acceptance; it
+does not complete F1-lite, B2-lite or Homelab Ready.
+
 ## Purpose
 
 Release C2 converts the focused graph work delivered in C1 into a reusable,
@@ -53,7 +146,8 @@ The release is split into four increments:
 - **C2.3 — Explainable Dependency Analysis:** bounded consequence analysis,
   actual explanation paths, and small deterministic result states.
 - **C2.4 — Homelab Operations Experience:** a polished dashboard, visual graph,
-  enhanced Service Operations, exploration, and product refinement.
+  integrated Focus/Analysis exploration and product refinement; Service/BF
+  detail redesign is C2.5.
 
 C2.1 is deliberately useful without attempting full impact analysis. The
 near-term target is a Homelab Ready product, not completion of every later
@@ -520,7 +614,7 @@ C1 records whether a Service dependency is required for operation. Homelab
 consequence analysis needs a small amount of additional meaning for optional
 dependencies, basic redundancy, degradation, and unknown cases.
 
-C2.2 should add explicit semantics before full impact propagation.
+C2.2 adds explicit semantics before full impact propagation.
 
 ## Homelab scope
 
@@ -532,13 +626,17 @@ redundancy strategy: all | any
 failure effect: unavailable | degraded | unknown
 ```
 
-The exact additive schema requires a separate design review. Important
-constraints are:
+The implemented additive schema uses temporal `dependency_groups` and
+`dependency_group_memberships`. A group belongs to one Service and records the
+small vocabulary above. Memberships can reference existing Service→Asset and
+outgoing Service→Service rows, including a mixed set, without replacing those
+authoritative relationships. Important constraints are:
 
 - current rows remain valid after migration;
 - current `required_for_operation` consumers remain compatible;
 - a default migration must not reinterpret optional dependencies as critical;
-- unknown semantics remain visible as knowledge gaps;
+- unknown semantics remain explicit without automatically creating Knowledge
+  Gaps;
 - any groups or memberships preserve history; and
 - relationship direction remains independent from propagation direction.
 
@@ -559,6 +657,18 @@ capabilities without implementing them for Homelab Ready.
 - safe additive migration; and
 - clear UI wording that does not imply a live health signal.
 
+Implemented API/UI surface:
+
+- `GET|POST /api/services/{service_id}/dependency-groups`;
+- `PATCH|DELETE /api/dependency-groups/{group_id}`;
+- additive semantic fields on both dependency response types and applicable
+  generic Operational Graph edges; and
+- compact dependency-set creation and editing on Service detail.
+
+Group updates use temporal supersession. Existing ungrouped rows are not
+backfilled: their required/optional meaning continues to come from
+`required_for_operation`, and their failure effect is safely `unknown`.
+
 # C2.3 — Explainable Dependency Analysis
 
 ## Purpose
@@ -568,22 +678,20 @@ questions: which known Services may be affected when an Asset or Service is
 unavailable, whether the consequence is direct or downstream, why Atlas reached
 that conclusion, and where semantics are too incomplete to decide.
 
-## Proposed internal contract
+## Analysis contract (implemented C2.3)
 
 ```text
-AnalysisInput
-- graph projection or graph query
-- hypothetical state changes
-- analysis timestamp
-- policy/engine version
+POST /api/dependency-analysis
+- focus_type: asset | service
+- focus_id
+- state: unavailable
+- max_depth, max_results, max_paths_per_result
 
-AnalysisResult
-- affected entity states
-- direct and indirect paths
-- reason codes
-- unknowns and knowledge gaps
-- truncation/limit state
-- immutable engine and schema version
+DependencyAnalysisResponse
+- focus_key, focus, analysis_time, scenario_state, assumption
+- schema_version, engine_version
+- truncated, warnings
+- results: service, state, classification, distance, reasons, paths
 ```
 
 ## Required behaviors
@@ -596,7 +704,8 @@ AnalysisResult
 - missing semantics yield `unknown`, not a fabricated outage or probability;
 - each conclusion carries one or more explanation paths;
 - scope is enforced before and during traversal; and
-- the same engine can later accept failure scenarios and intended-state overlays.
+- the domain engine is independent of HTTP and frontend rendering; intended-state
+  overlays and additional scenarios remain deferred.
 
 ## C2.3 non-goals
 
@@ -610,39 +719,46 @@ C2.3 is not a general enterprise reasoning or confidence-scoring framework.
 
 # C2.4 — Homelab Operations Experience
 
-## Purpose
+Implemented on the C2.4 feature working tree; live/manual acceptance pending.
+The fixed Dashboard registry and three-lane navigational landscape, full
+Knowledge Graph Overview/Focus, temporary C2.3 analysis overlay, persistent
+inspector, progressive disclosure, URL state and responsive/accessibility
+foundation are described in the [architecture](../architecture/homelab-operations-experience.md).
 
-C2.4 turns the C1/C2 technical foundation into a polished, highly visual
-product. It is a major product release rather than cosmetic cleanup.
-
-## Product outcomes
-
-- a beautiful operational homepage using defensible real Atlas data to explain
-  the environment, what matters, what Atlas knows, and what needs attention;
-- a polished interactive Knowledge Graph over the existing C2.1 API, with
-  distinct entity types, semantic direction, focus/navigation, bounded depth
-  and edge filters where useful, responsive behavior, accessibility, and clear
-  empty/truncated states;
-- enhanced Service Operations showing providers, dependencies, dependants,
-  supported Business Functions, criticality, completeness, unknown semantics,
-  and C2.3 consequence information where available;
-- natural Asset → Service → Business Function → infrastructure exploration; and
-- deliberate hierarchy, spacing, loading/empty states, terminology, theme
-  compatibility, and Atlas Impact branding.
-
-The API remains authoritative for graph membership, relationship semantics,
-authorization, and dependency conclusions. The browser may lay out and filter
-authorized results but must not become an impact engine. Dashboard summaries
-must not imply live health without live evidence.
+Services remain customer-wide or site-specific. The selected Site is a viewpoint
+for the opt-in C2.4 graph reads; endpoint authorization remains authoritative.
+No schema migration or graph library was added. Existing topology and detail
+routes remain compatible. No Service or Business Function detail redesign is
+included, beyond necessary record-context compatibility adaptations.
 
 ## Relationship to Homelab Ready
 
-After C2.4, the principal product path continues through F1-lite Homelab
-Documentation, B2-lite Live Proxmox Discovery, and Homelab Ready hardening. C3
-People/Teams, C4 formal Knowledge Objects, advanced recovery, richer dependency
-semantics, full enterprise Impact Analysis, and intended-state simulation are
-not C2 acceptance requirements. See
-[`development-roadmap.md`](development-roadmap.md) for the canonical sequence.
+**C2.5 — Entity Detail UX Polish** is implemented with live/manual acceptance pending, before
+F1-lite Homelab Documentation, B2-lite Live Proxmox Discovery and release
+hardening. C2.5 standardizes Service/BF typography, cards, status, criticality,
+completeness and relationship presentation without new domain semantics.
+Interface-owned IP cleanup is a post-C2.4 data-preserving backlog item, not a
+migration in this release. See the [roadmap](development-roadmap.md) for scope
+and explicitly deferred enterprise/customization capabilities.
+
+# C2.5 — Entity Detail UX Polish
+
+Implemented on the C2.5 feature working tree based on the merged C2.4 baseline.
+Service and Business Function details use shared compact identity, metadata,
+relationship rows and native disclosure with C2.4 entity/status/completeness
+primitives and theme tokens. Service dependencies and dependents are distinct;
+existing C2.2 group requirement, strategy, effect and members remain editable.
+Active Service Preview unavailable and entity graph navigation reuse C2.4 Focus
+and C2.3 analysis. Business Function completeness is honestly not evaluated;
+its stored criticality and supporting Service metadata remain visible.
+
+Existing actions, recovery knowledge, history and assertions are preserved.
+A contained endpoint read-filter correction enforces related-entity view scopes
+and scoped Business Function counts; no API shapes or schema changed. Responsive
+and keyboard validation plus the exact live checklist are in the
+[C2.5 acceptance record](../testing/release-c2-entity-detail-ux-polish.md).
+No live acceptance, F1-lite, B2-lite, network/IP cleanup or hardening completion
+is claimed.
 
 # Risks and mitigations
 
@@ -678,3 +794,34 @@ This checklist guided the delivered implementation:
    and legacy Service Asset conversion have not entered the C2.1 change set.
 10. Run all supported tests and builds.
 11. Update the feature ledger at the delivered commit.
+
+# C2.6 — Usability & Lifecycle Polish
+
+Implementation complete; automated validation recorded in the
+[C2.6 acceptance record](../testing/release-c2-usability-lifecycle-polish.md).
+**Manual acceptance pending.** No live acceptance or release is claimed.
+
+Delete mistakes / Archive history is implemented with Service and Business
+Function tombstones. Automatic initial declarations, creation audit/Changes and
+completeness artefacts alone do not force Archive. Substantive relationships,
+later edits and knowledge/discovery participation block Delete. Archive keeps
+its existing Service state; Business Function Archive uses `active=false`.
+See [exact eligibility and reference audit](../architecture/entity-lifecycle.md).
+
+The System sidebar is Organisation, Reference Data, Audit Log and System
+Settings. Organisation groups Users, Roles & permissions, Customers and Sites.
+Reference Data groups all five existing taxonomy pages. Authorized local links
+track the URL; admin deep links remain supported and `/admin` redirects.
+Audit Log is direct. The Administration overview/cards are retired.
+
+System Settings contains General (existing safe settings only), Backup & Restore
+(planned), Updates (planned) and About (authoritative web package version).
+No secret editor, backup engine, version polling or self-update is introduced.
+
+Immediate delivery: **C2.6 → F1-lite Homelab Documentation → B2-lite Live Proxmox
+Discovery → Homelab Ready hardening → Homelab Ready release**. Hardening enriches
+System Settings with backup/restore, update/version checking, About/build
+information and safe runtime settings, while retaining onboarding, optional
+starter data, Interface-first IP cleanup, install/upgrade, migration, security,
+Docker, browser/mobile/accessibility, release and support/compatibility work.
+C3/C4/D/E remain later additive evolution.

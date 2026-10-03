@@ -91,8 +91,9 @@ The browser does not persist authentication tokens in browser storage.
 Navigation hiding improves usability but is not a security control.
 
 The sidebar uses stable Overview, Knowledge, Operations, Connections, and System
-domains, with Profile kept separate. The topology route is labelled Knowledge
-Graph and discovery-run activity is labelled Discovery. Roadmap entries remain
+domains, with Profile kept separate. Knowledge Graph (`/knowledge-graph`) and
+Infrastructure Topology (`/topology`) are separate destinations; discovery-run
+activity is labelled Discovery. Roadmap entries remain
 disabled in the declarative navigation model until a usable route exists.
 
 The browser API base defaults to `/api`; `NEXT_PUBLIC_API_URL` is an optional
@@ -258,8 +259,9 @@ in the browser.
 
 Atlas has three related graph surfaces:
 
-1. **Knowledge Graph topology lenses** over scoped Assets, interfaces, Networks,
-   and Asset relationships.
+1. **Infrastructure Topology** over scoped Assets, interfaces, Networks and Asset
+   relationships, with Overview, Platform, Network & VLAN and Connectivity views.
+   See [the current projection and category design](infrastructure-topology.md).
 2. **Focused Service/Business Function projections** adapted from the shared
    operational graph builder.
 3. **Generic operational graph projection** focused on an authorized Asset,

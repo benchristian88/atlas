@@ -47,53 +47,45 @@ export function readableForeground(background) {
   return candidates.sort((first, second) => contrastRatio(background, second) - contrastRatio(background, first))[0];
 }
 
-function accessibleMutedForeground(background, foreground) {
-  let accessible = foreground;
-  for (const backgroundWeight of [0.12, 0.18, 0.24, 0.3, 0.36]) {
-    const candidate = mixColours(foreground, background, backgroundWeight);
-    if (contrastRatio(background, candidate) < 4.5) break;
-    accessible = candidate;
+function accessibleAccent(accent, backgrounds, minimum) {
+  const target = readableForeground(backgrounds[0]);
+  for (let step = 0; step <= 100; step++) {
+    const candidate = mixColours(accent, target, step / 100);
+    if (backgrounds.every((background) => contrastRatio(candidate, background) >= minimum)) return candidate;
   }
-  return accessible;
+  return target;
 }
 
-export function deriveAccentTheme(value) {
-  const accent = normalizeAccentColour(value);
-  if (!accent) return null;
+export function deriveAccentTheme(value, mode = "light") {
+  const accent = normalizeAccentColour(value) || ATLAS_DEFAULT_ACCENT;
+  const dark = mode === "dark";
+  const backgrounds = dark ? ["#131D23", "#1B272E", "#233139", "#102A2E"] : ["#F5F7F9", "#FFFFFF", "#F8FAFB"];
   const foreground = readableForeground(accent);
-  const sidebar = mixColours(accent, "#000000", 0.48);
-  const soft = mixColours(accent, "#FFFFFF", 0.84);
+  const soft = mixColours(accent, backgrounds[1], dark ? 0.82 : 0.92);
   return {
     accent,
-    accentHover: mixColours(accent, "#000000", foreground === "#FFFFFF" ? 0.16 : 0.12),
+    accentHover: mixColours(accent, foreground === "#FFFFFF" ? "#000000" : "#FFFFFF", 0.16),
+    accentText: accessibleAccent(accent, backgrounds, 4.5),
     accentSoft: soft,
-    accentSoftForeground: readableForeground(soft),
-    accentBorder: mixColours(accent, "#FFFFFF", 0.66),
-    focusRing: contrastRatio(accent, "#FFFFFF") >= 3
-      ? accent
-      : mixColours(accent, "#000000", 0.42),
+    accentSoftForeground: accessibleAccent(accent, [soft], 4.5),
+    accentBorder: mixColours(accent, backgrounds[1], 0.55),
+    focusRing: accessibleAccent(accent, backgrounds, 3),
     foreground,
-    sidebar,
-    sidebarForeground: readableForeground(sidebar),
-    sidebarMuted: accessibleMutedForeground(sidebar, readableForeground(sidebar)),
   };
 }
 
-export function accentThemeStyle(value) {
-  const theme = deriveAccentTheme(value);
-  if (!theme) return undefined;
+export function accentThemeStyle(value, mode = "light") {
+  const theme = deriveAccentTheme(value, mode);
   return {
     "--accent": theme.accent,
     "--accent-hover": theme.accentHover,
+    "--accent-text": theme.accentText,
     "--accent-soft": theme.accentSoft,
     "--accent-soft-foreground": theme.accentSoftForeground,
     "--accent-border": theme.accentBorder,
     "--accent-foreground": theme.foreground,
     "--focus-ring": theme.focusRing,
-    "--sidebar": theme.sidebar,
-    "--sidebar-foreground": theme.sidebarForeground,
-    "--sidebar-muted": theme.sidebarMuted,
-    "--brand-mark": theme.accent,
+    "--brand-mark": theme.accentText,
     "--brand-mark-foreground": theme.foreground,
   };
 }

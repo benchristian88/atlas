@@ -1,0 +1,54 @@
+# Exploring the Knowledge Graph
+
+The Knowledge Graph shows recorded connections between Business Functions,
+Services and Assets. Select a node to read its details in the inspector.
+For hosting, Networks, VLANs and technical connectivity, use the separate
+[Infrastructure Topology](infrastructure-topology.md) surface.
+
+Use **Expand Knowledge Graph** beside **Fit** to fill the application viewport.
+The same graph, filters, selected entity and inspector remain available. On a
+wide screen the inspector sits alongside the graph; on mobile it occupies a
+scrollable panel below it. Close with the top-right X or Escape. Keyboard focus
+returns to Expand and the page returns to its previous scroll position.
+
+**Focus** shows a neighbourhood around one entity. Depth means relationship hops
+from that entity, in either direction; it does not mean outage impact.
+The normal graph offers depths **1** and **2**. Expanded Focus also offers
+**3**, which can reveal another layer of recorded infrastructure and may be
+denser. Overview has no depth control.
+
+Closing at depth 3 returns to depth 2, retaining focus and filters. Reopening
+stays at depth 2; select depth 3 again when needed. A copied depth-3 link opens
+at depth 2 in the normal view and makes depth 3 available when expanded.
+Expand and Close do not add browser history entries.
+
+Filters still determine which entity types and relationships are visible.
+Structural Asset relationships are hidden by default. Hiding relationships in
+Focus also removes nodes whose only visible connection used those relationships.
+If filtering or lowering depth removes the selected entity, the inspector falls
+back to the focused entity.
+
+**Find in graph** offers matches in the visible graph for selection and location,
+plus authorized Customer matches that can become a new Focus. Use **Fit** to
+reframe the canvas, and scroll, pan or zoom to explore. Dense lanes retain their
+existing “more” controls. A warning indicates when the server truncated a graph.
+
+**Preview unavailable** remains a hypothetical scenario with explanations in the
+inspector. Expand and Close preserve the scenario; **Exit analysis** returns to
+recorded knowledge. Analysis may show explanation context beyond the structural
+Focus depth and retains that context when relationship lines are filtered.
+Neither depth nor expansion changes recorded dependencies or predicts live
+availability. Asset artwork uses the same cached icon and fallback rules as the
+normal graph.
+
+Knowledge Graph opens with readable cards, width-based lanes and top-aligned
+content. Tall graphs scroll inside the graph area. Expanded mode uses slightly
+larger cards and the available width excluding the inspector. Leaving expanded
+mode restores the embedded card size and default framing.
+**Hide/Show details panel** adjusts the lanes and preserves selection and vertical
+scroll position. Expanding **+N more** adds vertical content without shrinking cards.
+Manual zoom and pan remain undisturbed by ordinary selection and content updates.
+**Fit** explicitly shows the entire visible graph using both width and height;
+this can make tall graphs small. Reloading or changing viewport mode restores the
+readable default instead of retaining that Fit scale. Very narrow graph areas
+allow horizontal scrolling to preserve readable text.

@@ -17,7 +17,9 @@ from pydantic import (
     model_validator,
 )
 
+from app.presentation import PresentationIcon, PresentationAccent
 from app.taxonomy import NETWORK_TYPES
+from app.topology_classes import TopologyClass
 
 
 class ORMResponse(BaseModel):
@@ -111,6 +113,7 @@ class UserResponse(ORMResponse):
     email: EmailStr
     display_name: str
     accent_colour: str | None
+    theme_mode: Literal["light", "dark", "system"] = "system"
     is_active: bool
     force_password_change: bool
     last_login_at: datetime | None
@@ -137,6 +140,7 @@ class ProfileUpdate(BaseModel):
 
     display_name: str = Field(min_length=1, max_length=255)
     accent_colour: str | None = None
+    theme_mode: Literal["light", "dark", "system"] = "system"
 
     _display_name = field_validator("display_name")(_trim_nonempty)
     _accent_colour = field_validator("accent_colour")(_normalize_accent_colour)
@@ -286,7 +290,7 @@ class ManualAssetCreate(BaseModel):
     vendor: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=255)
     hostname: str | None = Field(default=None, max_length=255)
-    ip_address: str | None = Field(default=None, max_length=45)
+    ip_address: str | None = Field(default=None, max_length=45, json_schema_extra={"deprecated": True}, description="Deprecated compatibility field. IP addresses belong to Asset Interfaces; use /asset-interfaces.")
     status: str = Field(default="active", min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=10000)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -305,7 +309,7 @@ class ManualAssetUpdate(BaseModel):
     vendor: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=255)
     hostname: str | None = Field(default=None, max_length=255)
-    ip_address: str | None = Field(default=None, max_length=45)
+    ip_address: str | None = Field(default=None, max_length=45, json_schema_extra={"deprecated": True}, description="Deprecated compatibility field. IP addresses belong to Asset Interfaces; use /asset-interfaces.")
     status: str | None = Field(default=None, min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=10000)
     metadata: dict[str, Any] | None = None
@@ -324,10 +328,12 @@ class ManualAssetResponse(ORMResponse):
     asset_type: str
     icon_url: str | None
     resolved_icon_url: str | None = None
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
     vendor: str | None
     model: str | None
     hostname: str | None
-    ip_address: str | None
+    ip_address: str | None = Field(json_schema_extra={"deprecated": True}, description="Deprecated compatibility field. IP addresses belong to Asset Interfaces; use /asset-interfaces.")
     status: str
     description: str | None
     source: str
@@ -379,6 +385,8 @@ class AssetRelationshipResponse(ORMResponse):
 
 
 class NetworkCreate(BaseModel):
+    icon_key: PresentationIcon = "network"
+    accent_key: PresentationAccent = "blue"
     customer_id: uuid.UUID
     site_id: uuid.UUID | None = None
     name: str = Field(min_length=1, max_length=255)
@@ -417,6 +425,8 @@ class NetworkUpdate(NetworkCreate):
 
 
 class NetworkResponse(ORMResponse):
+    icon_key: str = "network"
+    accent_key: str = "blue"
     id: uuid.UUID
     customer_id: uuid.UUID
     site_id: uuid.UUID | None
@@ -474,11 +484,94 @@ class AssetInterfaceResponse(ORMResponse):
     updated_at: datetime
 
 
+class AssetCategoryCreate(BaseModel):
+    icon_key: PresentationIcon = "infrastructure"
+    accent_key: PresentationAccent = "slate"
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    sort_order: int = Field(default=100, ge=0)
+    active: bool = True
+    show_in_topology: bool = True
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class AssetCategoryUpdate(BaseModel):
+    icon_key: PresentationIcon = "infrastructure"
+    accent_key: PresentationAccent = "slate"
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    sort_order: int | None = Field(default=None, ge=0)
+    active: bool | None = None
+    show_in_topology: bool | None = None
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class AssetCategoryResponse(ORMResponse):
+    icon_key: str = "infrastructure"
+    accent_key: str = "slate"
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str | None
+    sort_order: int
+    active: bool
+    show_in_topology: bool
+    asset_types_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class TopologyPositionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    active: bool = True
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class TopologyPositionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    active: bool | None = None
+
+    _name = field_validator("name")(_trim_nonempty)
+
+
+class TopologyPositionMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    direction: Literal["up", "down"]
+
+
+class TopologyPositionSummary(ORMResponse):
+    id: uuid.UUID
+    key: str
+    name: str
+    sort_order: int
+    active: bool
+
+
+class TopologyPositionResponse(TopologyPositionSummary):
+    description: str | None
+    asset_types_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
 class AssetTypeCreate(BaseModel):
+    topology_position_id: uuid.UUID | None = None
+    model_config = ConfigDict(extra="forbid")
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
-    category: str | None = Field(default=None, max_length=100)
+    category_id: uuid.UUID
     default_icon_url: str | None = Field(default=None, max_length=2048)
     active: bool = True
     sort_order: int = Field(default=100, ge=0)
@@ -488,9 +581,11 @@ class AssetTypeCreate(BaseModel):
 
 
 class AssetTypeUpdate(BaseModel):
+    topology_position_id: uuid.UUID | None = None
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
-    category: str | None = Field(default=None, max_length=100)
+    category_id: uuid.UUID | None = None
     default_icon_url: str | None = Field(default=None, max_length=2048)
     active: bool | None = None
     sort_order: int | None = Field(default=None, ge=0)
@@ -500,11 +595,15 @@ class AssetTypeUpdate(BaseModel):
 
 
 class AssetTypeResponse(ORMResponse):
+    topology_position: TopologyPositionSummary | None = None
+    topology_position_id: uuid.UUID | None = None
     id: uuid.UUID
     key: str
     name: str
     description: str | None
     category: str | None
+    category_id: uuid.UUID | None = None
+    category_key: str | None = None
     default_icon_url: str | None
     system_defined: bool
     active: bool
@@ -531,6 +630,7 @@ class RelationshipTypeApplicabilityResponse(ORMResponse):
 
 
 class RelationshipTypeCreate(BaseModel):
+    topology_class: TopologyClass = "other"
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
@@ -549,6 +649,7 @@ class RelationshipTypeCreate(BaseModel):
 
 
 class RelationshipTypeUpdate(BaseModel):
+    topology_class: TopologyClass = "other"
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
     source_label: str | None = Field(default=None, min_length=1, max_length=100)
@@ -566,6 +667,7 @@ class RelationshipTypeUpdate(BaseModel):
 
 
 class RelationshipTypeResponse(ORMResponse):
+    topology_class: TopologyClass
     id: uuid.UUID
     key: str
     name: str
@@ -1213,6 +1315,11 @@ class KnowledgeRequirementResponse(ORMResponse):
     updated_at: datetime
 
 
+class GlobalKnowledgeRequirementResponse(KnowledgeRequirementResponse):
+    # Presentation hint only; DELETE always rechecks the existing history guard.
+    can_delete: bool
+
+
 class KnowledgeRequirementValidationRequest(BaseModel):
     rule_type: str = Field(min_length=1, max_length=80)
     rule_config_json: dict[str, Any] = Field(default_factory=dict)
@@ -1477,6 +1584,9 @@ class ServiceAssetDependencyUpdate(BaseModel):
 
 
 class ServiceAssetDependencyResponse(ORMResponse):
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
+    resolved_icon_url: str | None = None
     id: uuid.UUID
     customer_id: uuid.UUID
     site_id: uuid.UUID | None
@@ -1490,6 +1600,11 @@ class ServiceAssetDependencyResponse(ORMResponse):
     source_label: str | None = None
     target_label: str | None = None
     required_for_operation: bool
+    dependency_group_id: uuid.UUID | None = None
+    dependency_group_name: str | None = None
+    dependency_strategy: Literal["all", "any"] | None = None
+    dependency_requirement: Literal["required", "optional"] = "required"
+    failure_effect: Literal["unavailable", "degraded", "unknown"] = "unknown"
     description: str | None
     source: str
     valid_from: datetime
@@ -1524,7 +1639,73 @@ class ServiceDependencyResponse(ORMResponse):
     source_label: str | None = None
     target_label: str | None = None
     required_for_operation: bool
+    dependency_group_id: uuid.UUID | None = None
+    dependency_group_name: str | None = None
+    dependency_strategy: Literal["all", "any"] | None = None
+    dependency_requirement: Literal["required", "optional"] = "required"
+    failure_effect: Literal["unavailable", "degraded", "unknown"] = "unknown"
     description: str | None
+    valid_from: datetime
+    valid_to: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DependencyGroupBase(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    strategy: Literal["all", "any"] = "all"
+    requirement: Literal["required", "optional"] = "required"
+    failure_effect: Literal["unavailable", "degraded", "unknown"] = "unknown"
+    asset_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
+    service_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
+    _name = field_validator("name")(_trim_nonempty)
+
+    @model_validator(mode="after")
+    def validate_members(self):
+        if not self.asset_dependency_ids and not self.service_dependency_ids:
+            raise ValueError("A dependency group must contain at least one dependency")
+        if len(set(self.asset_dependency_ids)) != len(self.asset_dependency_ids):
+            raise ValueError("Asset dependency membership cannot be duplicated")
+        if len(set(self.service_dependency_ids)) != len(self.service_dependency_ids):
+            raise ValueError("Service dependency membership cannot be duplicated")
+        return self
+
+
+class DependencyGroupCreate(DependencyGroupBase):
+    pass
+
+
+class DependencyGroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    strategy: Literal["all", "any"] | None = None
+    requirement: Literal["required", "optional"] | None = None
+    failure_effect: Literal["unavailable", "degraded", "unknown"] | None = None
+    asset_dependency_ids: list[uuid.UUID] | None = None
+    service_dependency_ids: list[uuid.UUID] | None = None
+    _name = field_validator("name")(_trim_nonempty)
+
+    @model_validator(mode="after")
+    def reject_explicit_nulls(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one dependency group field must be changed")
+        for field_name in self.model_fields_set:
+            if getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} must not be null")
+        return self
+
+
+class DependencyGroupResponse(ORMResponse):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    service_id: uuid.UUID
+    supersedes_group_id: uuid.UUID | None
+    name: str
+    strategy: Literal["all", "any"]
+    requirement: Literal["required", "optional"]
+    failure_effect: Literal["unavailable", "degraded", "unknown"]
+    asset_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
+    service_dependency_ids: list[uuid.UUID] = Field(default_factory=list)
     valid_from: datetime
     valid_to: datetime | None
     created_at: datetime
@@ -1632,6 +1813,9 @@ class ServiceGraphResponse(BaseModel):
 
 
 class OperationalGraphNode(BaseModel):
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
+    resolved_icon_url: str | None = None
     key: str
     entity_type: Literal["asset", "service", "business_function"]
     entity_id: uuid.UUID
@@ -1648,6 +1832,12 @@ class OperationalGraphNode(BaseModel):
     open_gap_count: int | None = None
     source: str | None = None
     updated_at: datetime | None = None
+    site_name: str | None = None
+    criticality_rank: int | None = None
+    required_total: int | None = None
+    required_satisfied: int | None = None
+    contextual_ip: str | None = None
+    contextual_vlan: int | None = None
 
 
 class OperationalGraphEdge(BaseModel):
@@ -1665,6 +1855,11 @@ class OperationalGraphEdge(BaseModel):
     relationship_type_name: str | None = None
     label: str
     required_for_operation: bool | None = None
+    dependency_group_id: uuid.UUID | None = None
+    dependency_group_name: str | None = None
+    dependency_strategy: Literal["all", "any"] | None = None
+    dependency_requirement: Literal["required", "optional"] | None = None
+    failure_effect: Literal["unavailable", "degraded", "unknown"] | None = None
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     source: str | None = None
@@ -1725,10 +1920,58 @@ class CompletenessBatchRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
 
 
+class TopologyPlatformLink(BaseModel):
+    relationship_id: uuid.UUID
+    parent_id: uuid.UUID
+    child_id: uuid.UUID
+
+
+class ConnectivityNode(BaseModel):
+    eligible_child_count: int = 0
+    returned_child_count: int = 0
+    topology_position: TopologyPositionSummary | None = None
+    parent_key: str | None = None
+    key: str
+    entity_type: Literal["asset", "network"]
+    entity_id: uuid.UUID
+    name: str
+    distance: int
+
+
+class ConnectivityEdge(BaseModel):
+    topology_class: TopologyClass | None = None
+    platform_parent_key: str | None = None
+    key: str
+    source_key: str
+    target_key: str
+    label: str
+    kind: Literal["relationship", "membership"]
+    directional: bool
+
+
+class ConnectivityResponse(BaseModel):
+    node_limit: int
+    edge_limit: int
+    focus_key: str
+    nodes: list[ConnectivityNode]
+    edges: list[ConnectivityEdge]
+    truncated: bool
+
+
 class TopologyResponse(BaseModel):
+    structural_edges: list[ConnectivityEdge] = Field(default_factory=list)
+    categories: list[AssetCategoryResponse] = Field(default_factory=list)
+    asset_types: list[AssetTypeResponse] = Field(default_factory=list)
+    relationship_types: list[RelationshipTypeResponse] = Field(default_factory=list)
+    platform_links: list[TopologyPlatformLink] = Field(default_factory=list)
     customers: list[CustomerResponse]
     sites: list[SiteResponse]
     assets: list[ManualAssetResponse]
     relationships: list[AssetRelationshipResponse]
     networks: list[NetworkResponse]
     asset_interfaces: list[AssetInterfaceResponse]
+
+
+class EntityDeletionEligibilityResponse(BaseModel):
+    eligible: bool
+    reason: str | None = None

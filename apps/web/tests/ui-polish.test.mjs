@@ -57,6 +57,7 @@ test("Asset Type counts are ordered deterministically and filters compose in the
   assert.equal(href, `/assets?asset_type_id=${typeId}&completeness=incomplete&search=docker&offset=30`);
   assert.deepEqual(parseAssetListFilters(new URL(href, "http://atlas.test").searchParams, 30), {
     assetTypeId: typeId,
+    categoryId: "",
     completeness: "incomplete",
     search: "docker",
     offset: 30,
@@ -83,11 +84,11 @@ test("Assets exposes ten direct selectors, accessible More, and scoped summary d
   assert.match(styles, /\.asset-type-filter \{[^}]*min-height: 36px;/);
 });
 
-test("System navigation opens Administration while retaining its settings subsection", async () => {
-  const navigation = await readFile(new URL("../lib/navigation-model.mjs", import.meta.url), "utf8");
-  const sections = await readFile(new URL("../components/admin-sections.js", import.meta.url), "utf8");
-  assert.match(navigation, /id: "administration"/);
-  assert.match(navigation, /href: "\/admin"/);
-  assert.match(navigation, /activeRoutes: \["\/admin"\]/);
-  assert.match(sections, /href: "\/admin\/system-settings"/);
+test("System navigation retires Administration while preserving deep links", async () => {
+  const navigation = await readFile(new URL("../lib/system-navigation.mjs", import.meta.url), "utf8");
+  const landing = await readFile(new URL("../app/admin/page.js", import.meta.url), "utf8");
+  assert.doesNotMatch(navigation, /id: "administration"/);
+  assert.match(navigation, /href: "\/admin\/system-settings"/);
+  assert.match(landing, /router\.replace\(destination\)/);
+  assert.doesNotMatch(landing, /Open section/);
 });

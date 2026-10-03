@@ -8,7 +8,7 @@ function initialState(service, context) {
   const rpo = minutesToDuration(service?.rpo_minutes);
   return {
     customer_id: service?.customer_id || context.customerId || "",
-    site_id: service?.site_id || context.siteId || "",
+    site_id: service ? service.site_id || "" : context.siteId || "",
     name: service?.name || "", slug: service?.slug || "",
     service_type_id: service?.service_type_id || "",
     criticality_level_id: service?.criticality_level_id || "",
@@ -50,7 +50,7 @@ export function ServiceForm({ service = null, serviceTypes, criticalityLevels, c
   return <form className="resource-form" onSubmit={submit}>
     <div className="form-grid">
       {!service && <label className="field"><span>Customer *</span><select required disabled={Boolean(context.customerId)} value={form.customer_id} onChange={(event) => setForm((current) => ({ ...current, customer_id: event.target.value, site_id: "" }))}><option value="">Choose customer</option>{customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-      <label className="field"><span>Site</span><select disabled={Boolean(context.siteId)} value={form.site_id} onChange={(event) => update("site_id", event.target.value)}><option value="">Customer-wide</option>{matchingSites.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="field"><span>Site</span><select value={form.site_id} onChange={(event) => update("site_id", event.target.value)}><option value="">Customer-wide</option>{matchingSites.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       {text("name", "Service name", { required: true })}{text("slug", "Slug", { help: "Leave blank to generate from the name." })}
       <label className="field"><span>Service type *</span><select required value={form.service_type_id} onChange={(event) => update("service_type_id", event.target.value)}><option value="">Choose type</option>{serviceTypes.filter((item) => item.active || item.id === service?.service_type_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="field"><span>Criticality *</span><select required value={form.criticality_level_id} onChange={(event) => update("criticality_level_id", event.target.value)}><option value="">Choose criticality</option>{criticalityLevels.filter((item) => item.active || item.id === service?.criticality_level_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

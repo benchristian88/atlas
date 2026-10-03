@@ -21,7 +21,6 @@ function initialForm(asset, assetTypes, customers, sites, context) {
     vendor: asset?.vendor || "",
     model: asset?.model || "",
     hostname: asset?.hostname || "",
-    ip_address: asset?.ip_address || "",
     management_url: managementUrl,
     tags,
     status: asset?.status || "active",
@@ -109,7 +108,6 @@ export function AssetForm({
       vendor: form.vendor || null,
       model: form.model || null,
       hostname: form.hostname || null,
-      ip_address: form.ip_address || null,
       status: form.status,
       description: form.description || null,
       metadata: {
@@ -125,9 +123,10 @@ export function AssetForm({
     <form className="resource-form" onSubmit={submit}>
       {formError && <div className="error-banner" role="alert">{formError}</div>}
       <div className="asset-form-heading">
-        <AssetIcon asset={{ icon_url: form.icon_url }} assetType={selectedType} alt="Asset icon preview" size={54} />
+        <AssetIcon asset={form.icon_url === asset?.icon_url ? asset : null} assetType={selectedType} alt="Asset icon preview" size={54} />
         <div><strong>Icon preview</strong><span>Asset override, then type default, then Atlas fallback.</span></div>
       </div>
+      <p className="secondary-text">Manage IP addresses through Interfaces on the Asset detail page after saving.</p>
       <div className="form-grid">
         <label className="field"><span>Customer *</span><select disabled={Boolean(context.customerId)} required value={form.customer_id} onChange={(event) => {
           const customerId = event.target.value;
@@ -137,11 +136,10 @@ export function AssetForm({
         <label className="field"><span>Site *</span><select disabled={Boolean(context.siteId)} required value={form.site_id} onChange={(event) => change("site_id", event.target.value)}><option value="">Select site</option>{availableSites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></label>
         <label className="field"><span>Name *</span><input required value={form.name} onChange={(event) => change("name", event.target.value)} /></label>
         <label className="field"><span>Asset type *</span><select required value={form.asset_type} onChange={(event) => change("asset_type", event.target.value)}><option value="">Select asset type</option>{availableTypes.map((type) => <option key={type.key} value={type.key}>{type.name}</option>)}</select></label>
-        <label className="field field-wide"><span>Asset icon URL</span><input placeholder="https://example.com/icon.png" type="url" value={form.icon_url} onChange={(event) => change("icon_url", event.target.value)} /><small>Optional absolute HTTPS image URL; remote SVG files are not supported.</small></label>
+        <label className="field field-wide"><span>Asset icon URL</span><input placeholder="https://example.com/icon.png" type="url" value={form.icon_url} onChange={(event) => change("icon_url", event.target.value)} /><small>Optional public HTTPS PNG, JPEG or WebP source. Atlas caches a local copy after saving; changing the URL refreshes it. SVG and private addresses are blocked.</small></label>
         <label className="field"><span>Vendor</span><input value={form.vendor} onChange={(event) => change("vendor", event.target.value)} /></label>
         <label className="field"><span>Model</span><input value={form.model} onChange={(event) => change("model", event.target.value)} /></label>
         <label className="field"><span>Hostname</span><input value={form.hostname} onChange={(event) => change("hostname", event.target.value)} /></label>
-        <label className="field"><span>Primary IP address</span><input placeholder="192.168.1.10" value={form.ip_address} onChange={(event) => change("ip_address", event.target.value)} /></label>
         <label className="field"><span>Management URL</span><input type="url" value={form.management_url} onChange={(event) => change("management_url", event.target.value)} /></label>
         <label className="field"><span>Tags</span><input placeholder="production, critical" value={form.tags} onChange={(event) => change("tags", event.target.value)} /></label>
         <label className="field"><span>Status *</span><select required value={form.status} onChange={(event) => change("status", event.target.value)}><option value="active">Active</option><option value="stale">Stale</option><option value="unknown">Unknown</option></select></label>

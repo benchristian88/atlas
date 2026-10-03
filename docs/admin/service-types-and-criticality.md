@@ -1,6 +1,6 @@
 # Service Types and Criticality administration
 
-Release C1 adds two managed reference-data areas under **Administration**.
+Release C1 added two managed reference-data areas, now under **System → Reference Data**.
 Users need `service_types.manage` or `criticality_levels.manage` to change them;
 view-only users can still read active definitions used by Services.
 

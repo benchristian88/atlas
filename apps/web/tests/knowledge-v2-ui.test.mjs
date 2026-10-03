@@ -8,7 +8,8 @@ test("changes timeline and dashboard use meaningful-change APIs", async () => {
   assert.match(changes, /apiRequest\(`\/changes\?/);
   assert.match(changes, /change_type/);
   assert.match(changes, /Security and access activity remains in Audit/);
-  assert.match(dashboard, /\/reconciliation-items\/summary/);
+  assert.match(dashboard, /\/operational-graph\/landscape/);
+  assert.doesNotMatch(dashboard, /\/reconciliation-items\/summary/);
   assert.match(dashboard, /\/changes\?limit=6/);
 });
 

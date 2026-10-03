@@ -24,6 +24,7 @@ function hookValue(hook, record, fallback) {
 export function CrudScreen({
   eyebrow,
   title,
+  singularTitle = title.replace(/s$/, ""),
   description,
   endpoint,
   listEndpoint = endpoint,
@@ -39,6 +40,8 @@ export function CrudScreen({
   deleteReason,
   contextReloadKey,
   onMutation,
+  headingActions,
+  reorderable = false,
 }) {
   const dependencySignature = JSON.stringify(
     dependencies.map((dependency) => [dependency.key, dependency.endpoint]),
@@ -152,6 +155,22 @@ export function CrudScreen({
     }
   }
 
+  async function move(record, direction) {
+    setSaving(true);
+    setError("");
+    try {
+      const items = await apiRequest(`${endpoint}/${record.id}/move`, {
+        method: "POST", body: JSON.stringify({ direction }),
+      });
+      setRecords(items);
+      if (onMutation) await onMutation();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const showCreate = capabilityAllows(canCreate);
   const showActions = canEdit !== false || canDelete !== false;
 
@@ -159,11 +178,14 @@ export function CrudScreen({
     <>
       <div className="page-heading-row">
         <PageHeader eyebrow={eyebrow} title={title} description={description} />
-        {showCreate && (
-          <button className="button button-primary" onClick={openCreate} type="button">
-            Add {title.replace(/s$/, "")}
-          </button>
-        )}
+        {(headingActions || showCreate) && <div className="row-actions crud-heading-actions">
+          {headingActions}
+          {showCreate && (
+            <button className="button button-primary" onClick={openCreate} type="button">
+              Add {singularTitle}
+            </button>
+          )}
+        </div>}
       </div>
 
       {error && <div className="error-banner" role="alert">{error}</div>}
@@ -171,7 +193,7 @@ export function CrudScreen({
       {formOpen && (
         <section className="form-card">
           <div className="form-card-header">
-            <h2>{editingId ? `Edit ${title.replace(/s$/, "")}` : `Add ${title.replace(/s$/, "")}`}</h2>
+            <h2>{editingId ? `Edit ${singularTitle}` : `Add ${singularTitle}`}</h2>
             <button className="icon-button" onClick={closeForm} type="button" aria-label="Close form">×</button>
           </div>
           <form className="resource-form" onSubmit={submit}>
@@ -190,6 +212,7 @@ export function CrudScreen({
                     ? field.disabled(form, editingId)
                     : field.disabled),
                 );
+                if (field.render) return <div className="field-wide" key={field.name}>{field.render({ form, setForm, disabled: fieldDisabled })}</div>;
                 return (
                   <label
                     className={`${field.wide ? "field field-wide" : "field"}${field.type === "checkbox" ? " checkbox-field" : ""}`}
@@ -232,7 +255,7 @@ export function CrudScreen({
                         size={field.type === "multiselect" ? field.size || 6 : undefined}
                         value={form[field.name] ?? (field.type === "multiselect" ? [] : "")}
                       >
-                        {field.type !== "multiselect" && !field.required && <option value="">None</option>}
+                        {field.type !== "multiselect" && !field.required && <option value="">{field.emptyLabel || "None"}</option>}
                         {field.type !== "multiselect" && field.placeholder && <option value="">{field.placeholder}</option>}
                         {field.type !== "multiselect" && form[field.name] && !options.some((option) => optionValue(option) === form[field.name]) && (
                           <option value={form[field.name]}>{form[field.name]} (existing custom value)</option>
@@ -290,14 +313,18 @@ export function CrudScreen({
                   </td>
                 </tr>
               )}
-              {records.map((record) => (
+              {records.map((record, index) => (
                 <tr key={record.id}>
                   {columns.map((column) => (
-                    <td key={column.key}>{column.render ? column.render(record, relatedById) : record[column.key] || "—"}</td>
+                    <td key={column.key}>{column.render ? column.render(record, relatedById, index) : record[column.key] || "—"}</td>
                   ))}
                   {showActions && (
                     <td>
                       <div className="row-actions">
+                        {reorderable && capabilityAllows(canEdit, record) && <>
+                          <button className="icon-button" type="button" disabled={saving || loading || index === 0} aria-label={`Move ${record.name} up`} onClick={() => move(record, "up")}><span aria-hidden="true">↑</span></button>
+                          <button className="icon-button" type="button" disabled={saving || loading || index === records.length - 1} aria-label={`Move ${record.name} down`} onClick={() => move(record, "down")}><span aria-hidden="true">↓</span></button>
+                        </> }
                         {capabilityAllows(canEdit, record) && (
                           <button className="text-button" onClick={() => openEdit(record)} type="button">
                             Edit

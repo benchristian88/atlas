@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     Numeric,
     String,
@@ -21,7 +22,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -57,6 +58,7 @@ class TimestampMixin:
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
+        CheckConstraint("theme_mode IN ('light', 'dark', 'system')", name="theme_mode"),
         UniqueConstraint(
             "auth_provider",
             "external_subject",
@@ -69,6 +71,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     accent_colour: Mapped[str | None] = mapped_column(String(7))
+    theme_mode: Mapped[str | None] = mapped_column(String(6))
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True
     )
@@ -187,8 +190,47 @@ class AccessAssignment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
 
 
+UNCATEGORIZED_ID = uuid.UUID("cbb23449-f856-5a92-a031-02c83946b579")
+
+
+class AssetCategory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "asset_categories"
+    __table_args__ = (
+        CheckConstraint("key <> 'uncategorized' OR active", name="uncategorized_active"),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    icon_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="infrastructure")
+    accent_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="slate")
+    # Exact names preserve distinct legacy values, including case differences.
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100", index=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", index=True)
+    show_in_topology: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
+class TopologyPosition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "topology_positions"
+    __table_args__ = (
+        UniqueConstraint("sort_order", deferrable=True, initially="DEFERRED"),
+        CheckConstraint("sort_order >= 0", name="sort_order_nonnegative"),
+        CheckConstraint("key <> 'automatic'", name="explicit_position"),
+    )
+
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", index=True)
+
+
 class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asset_types"
+    topology_position_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("topology_positions.id", ondelete="RESTRICT"), index=True,
+    )
+    topology_position: Mapped["TopologyPosition | None"] = relationship(lazy="joined")
     __table_args__ = (
         Index("uq_asset_types_name_lower", text("lower(name)"), unique=True),
     )
@@ -198,7 +240,13 @@ class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
+    # Frozen upgrade snapshot; never read or edited as managed taxonomy.
     category: Mapped[str | None] = mapped_column(String(100), index=True)
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("asset_categories.id", ondelete="RESTRICT"), nullable=False,
+        index=True, server_default=str(UNCATEGORIZED_ID),
+    )
+    category_record: Mapped["AssetCategory"] = relationship(lazy="joined")
     default_icon_url: Mapped[str | None] = mapped_column(String(2048))
     system_defined: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
@@ -213,7 +261,12 @@ class AssetType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class RelationshipType(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "relationship_types"
+    topology_class: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
     __table_args__ = (
+        CheckConstraint(
+            "topology_class IN ('platform', 'physical_network', 'data_resilience', 'logical_operational', 'other')",
+            name="ck_relationship_types_topology_class",
+        ),
         Index(
             "uq_relationship_types_name_lower",
             text("lower(name)"),
@@ -394,7 +447,7 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "customer_id",
             text("lower(name)"),
             unique=True,
-            postgresql_where=text("site_id IS NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         Index(
             "uq_services_customer_site_name",
@@ -402,14 +455,14 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "site_id",
             text("lower(name)"),
             unique=True,
-            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         Index(
             "uq_services_customer_slug_without_site",
             "customer_id",
             "slug",
             unique=True,
-            postgresql_where=text("site_id IS NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         Index(
             "uq_services_customer_site_slug",
@@ -417,11 +470,13 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "site_id",
             "slug",
             unique=True,
-            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL"),
+            postgresql_where=text("site_id IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL"),
         ),
         CheckConstraint("rto_minutes IS NULL OR rto_minutes >= 0", name="valid_rto_minutes"),
         CheckConstraint("rpo_minutes IS NULL OR rpo_minutes >= 0", name="valid_rpo_minutes"),
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -569,6 +624,113 @@ class ServiceDependency(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class DependencyGroup(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A temporal semantic set over existing Service dependency rows."""
+
+    __tablename__ = "dependency_groups"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"],
+            ["sites.customer_id", "sites.id"],
+            name="fk_dependency_groups_customer_site_sites",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "strategy IN ('all', 'any')", name="valid_strategy"
+        ),
+        CheckConstraint(
+            "requirement IN ('required', 'optional')", name="valid_requirement"
+        ),
+        CheckConstraint(
+            "failure_effect IN ('unavailable', 'degraded', 'unknown')",
+            name="valid_failure_effect",
+        ),
+        Index(
+            "uq_dependency_groups_active_name",
+            "service_id",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
+        ),
+    )
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    supersedes_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("dependency_groups.id", ondelete="RESTRICT"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(20), nullable=False)
+    requirement: Mapped[str] = mapped_column(String(20), nullable=False)
+    failure_effect: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="unknown"
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
+class DependencyGroupMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Temporal membership linking a semantic group to one dependency kind."""
+
+    __tablename__ = "dependency_group_memberships"
+    __table_args__ = (
+        CheckConstraint(
+            "(service_asset_dependency_id IS NOT NULL) <> "
+            "(service_dependency_id IS NOT NULL)",
+            name="exactly_one_dependency",
+        ),
+        Index(
+            "uq_dependency_group_memberships_active_asset_dependency",
+            "service_asset_dependency_id",
+            unique=True,
+            postgresql_where=text(
+                "valid_to IS NULL AND service_asset_dependency_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_dependency_group_memberships_active_service_dependency",
+            "service_dependency_id",
+            unique=True,
+            postgresql_where=text(
+                "valid_to IS NULL AND service_dependency_id IS NOT NULL"
+            ),
+        ),
+    )
+
+    dependency_group_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dependency_groups.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    service_asset_dependency_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_asset_dependencies.id", ondelete="RESTRICT"), index=True
+    )
+    service_dependency_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_dependencies.id", ondelete="RESTRICT"), index=True
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    ended_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
 class BusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "business_functions"
     __table_args__ = (
@@ -578,9 +740,11 @@ class BusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_business_functions_customer_site_sites",
             ondelete="RESTRICT",
         ),
-        Index("uq_business_functions_customer_name_without_site", "customer_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NULL")),
-        Index("uq_business_functions_customer_site_name", "customer_id", "site_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NOT NULL")),
+        Index("uq_business_functions_customer_name_without_site", "customer_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NULL AND deleted_at IS NULL")),
+        Index("uq_business_functions_customer_site_name", "customer_id", "site_id", text("lower(name)"), unique=True, postgresql_where=text("site_id IS NOT NULL AND deleted_at IS NULL")),
     )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -1311,6 +1475,7 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     vendor: Mapped[str | None] = mapped_column(String(100), index=True)
     model: Mapped[str | None] = mapped_column(String(255))
     hostname: Mapped[str | None] = mapped_column(String(255), index=True)
+    # Deprecated compatibility storage; current IPs belong to AssetInterface.
     ip_address: Mapped[str | None] = mapped_column(String(45), index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="active", index=True
@@ -1326,6 +1491,21 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )
+
+
+class AssetIconCache(Base):
+    """Disposable bounded image bytes; never part of accepted Asset knowledge."""
+    __tablename__ = "asset_icon_cache"
+    __table_args__ = (
+        CheckConstraint("octet_length(data) <= 524288", name="bounded_icon_data"),
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True)
+    source_hash: Mapped[str | None] = mapped_column(String(64))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    attempted_source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    retry_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempt_token: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
 
 class AssetRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -1386,6 +1566,8 @@ class Network(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     site_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    icon_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="network")
+    accent_key: Mapped[str] = mapped_column(String(32), nullable=False, server_default="blue")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     network_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     vlan_id: Mapped[int | None] = mapped_column(Integer)

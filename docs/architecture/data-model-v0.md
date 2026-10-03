@@ -21,6 +21,7 @@ erDiagram
     CUSTOMER ||--o{ ASSET : owns
     SITE ||--o{ ASSET : contains
     ASSET_TYPE ||--o{ ASSET : classifies
+    TOPOLOGY_POSITION o|--o{ ASSET_TYPE : places
     ASSET ||--o{ ASSET_RELATIONSHIP : source
     ASSET ||--o{ ASSET_RELATIONSHIP : target
     RELATIONSHIP_TYPE ||--o{ ASSET_RELATIONSHIP : classifies
@@ -62,6 +63,7 @@ erDiagram
         string external_subject
         boolean mfa_enabled
         string accent_colour "nullable #RRGGBB preference"
+        string theme_mode "nullable light/dark/system preference"
     }
     ROLE {
         uuid id PK
@@ -113,12 +115,22 @@ erDiagram
         string key UK
         string name UK
         string category
+        uuid topology_position_id FK
         string default_icon_url
         boolean system_defined
         boolean active
         integer sort_order
     }
+    TOPOLOGY_POSITION {
+        uuid id PK
+        string key UK
+        string name UK
+        string description
+        integer sort_order UK
+        boolean active
+    }
     RELATIONSHIP_TYPE {
+        string topology_class
         uuid id PK
         string key UK
         string name UK
@@ -232,7 +244,9 @@ use, and `session_version` invalidates already-issued signed sessions.
 release implements local passwords, not external identity or MFA.
 `accent_colour` is a nullable, per-user presentation preference stored as a
 canonical uppercase `#RRGGBB` value. A null value selects the Atlas default
-theme and preserves the existing appearance for upgraded accounts.
+accent. `theme_mode` independently selects `light`, `dark`, or `system`;
+null is presented as `system`, retaining OS-based mode selection for upgraded
+accounts. Both preferences use the authenticated profile update and audit flow.
 
 ### Role, Permission, and AccessAssignment
 
@@ -288,10 +302,25 @@ context rather than accepting plugin-selected tenancy.
 ### AssetType
 
 The UUID `id` is the internal primary key; the unique string `key` is the stable
-inventory reference used by assets. Display name, description, category,
-default icon URL, active state, and sort order are editable subject to policy. A
+inventory reference used by assets. Every type requires a managed AssetCategory
+through non-null `category_id`. The compatibility `category` API field resolves
+the current managed name; its legacy database column is a frozen upgrade snapshot.
+See [managed categories and topology](infrastructure-topology.md).
+Display name, description, category assignment,
+default icon URL, nullable managed `topology_position_id` (null means Automatic),
+active state, and sort order are editable subject to policy. A
 system-defined or referenced type cannot be deleted; inactive types remain
 resolvable for existing assets.
+
+### TopologyPosition
+
+Global ordered Reference Data: UUID id, unique immutable key, unique display
+name, optional description, unique nonnegative sort_order, active, created_at and
+updated_at. AssetType references it with a nullable restrictive foreign key.
+Automatic has no row. Inactive references remain valid and authoritative for
+layout; deletion requires explicit reassignment. Reorder swaps ranks atomically
+under a PostgreSQL table lock with a deferred unique constraint. Ordering affects
+presentation only. See [Topology Positions](../admin/topology-positions.md).
 
 ### RelationshipType
 
@@ -299,7 +328,10 @@ Relationship types similarly have an internal UUID and a stable unique key.
 Labels, inverse label,
 directionality, and optional allowed source/target asset-type key lists drive
 validation and display. Used/system types follow the same delete-versus-
-deactivate lifecycle.
+deactivate lifecycle. The bounded `topology_class` presentation field defaults to
+`other`; it controls Infrastructure Topology Connectivity eligibility without
+changing direction, endpoints or Knowledge Graph semantics. See
+[the registry and migration mapping](infrastructure-topology.md#managed-relationship-classes).
 
 ## Custom fields
 

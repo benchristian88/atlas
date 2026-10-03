@@ -47,10 +47,10 @@ test("the shared logo preserves the source asset and natural aspect ratio", () =
   assert.match(markup, /class="login-logo-image"/);
 });
 
-test("the authenticated shell selects a supplied lockup for the derived sidebar background", async () => {
+test("the authenticated shell selects a supplied lockup for the resolved theme mode", async () => {
   const shell = await readFile(new URL("../components/app-shell.js", import.meta.url), "utf8");
 
-  assert.match(shell, /deriveAccentTheme\(user\.accent_colour\)/);
+  assert.match(shell, /sidebarBrandVariant = resolvedThemeMode/);
   assert.match(shell, /<AtlasBrand href=\{authenticatedHome\(user\)\} variant=\{sidebarBrandVariant\} \/>/);
   assert.match(shell, /Atlas Impact<br \/>Local development/);
   assert.doesNotMatch(shell, /className="brand-mark"/);

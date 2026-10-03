@@ -1,6 +1,12 @@
 # Operational graph architecture
 
-Status: implemented for Release C2.1 and merged to `dev` in `1842d16`
+Status: C2.1 projection implemented; C2.2 lean dependency metadata implemented;
+C2.3 analysis implemented with subsequent live LXC acceptance complete for its lean scope.
+See the [C2.3 acceptance record](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance).
+
+The [C2.4 operations experience](homelab-operations-experience.md) adds a batched
+landscape read, opt-in Customer-scoped Site viewpoints, metadata and visual
+Overview/Focus/Analysis while retaining default C2.1 API behavior.
 
 This document describes the implemented C2.1 architecture and the approved
 extension boundaries for later graph and analysis releases.
@@ -9,13 +15,14 @@ extension boundaries for later graph and analysis releases.
 
 Atlas currently has several graph-shaped product surfaces:
 
-- the Knowledge Graph topology lenses over Assets and Asset relationships;
+- [Infrastructure Topology](infrastructure-topology.md) over Assets, recorded
+  relationships and interface/Network membership;
 - a focused Service graph;
 - a focused Business Function graph; and
 - summary and completeness views that depend on related operational records.
 
-The next product surfaces — the C2.4 operational homepage, visual Knowledge
-Graph, enhanced Service Operations, C2.3 dependency analysis, and later Change
+C2.3 dependency analysis and the next product surfaces — the C2.4 operational
+homepage, visual Knowledge Graph, enhanced Service Operations, and later Change
 Simulation — need consistent graph identity, direction, scope, metadata, and
 traversal behavior.
 
@@ -120,7 +127,7 @@ does not itself decide failure propagation or business impact.
 
 ### Analysis traversal
 
-A later C2.3 operation that applies lean dependency semantics and a hypothetical
+The C2.3 operation applies lean dependency semantics and a hypothetical
 unavailable input to structural graph paths, returning deterministic reason
 codes, direct/downstream explanations, and unavailable/degraded/unknown results.
 
@@ -141,6 +148,8 @@ flowchart LR
 | `Service` | Operational capability node | Current or archived record |
 | `ServiceAssetDependency` | Service-to-Asset edge | `valid_from` and optional `valid_to` |
 | `ServiceDependency` | Service-to-Service edge | `valid_from` and optional `valid_to`; non-self cycles allowed |
+| `DependencyGroup` | Temporal `all`/`any`, required/optional, and failure-effect meaning for one Service need | Superseding versions preserve prior meaning |
+| `DependencyGroupMembership` | Associates existing Service→Asset and Service→Service rows with a group | `valid_from` and optional `valid_to` |
 | `BusinessFunction` | Lightweight business capability node | Current active/inactive record |
 | `ServiceBusinessFunction` | Service-to-Business Function edge | `valid_from` and optional `valid_to` |
 | `RelationshipType` | Stable key, labels, direction, endpoint applicability | Managed reference data |
@@ -237,6 +246,8 @@ Recommended fields:
 - managed relationship type key and name;
 - source-side display label;
 - `required_for_operation` where the source model supports it;
+- dependency group ID/name, `all`/`any` strategy, required/optional meaning,
+  and unavailable/degraded/unknown effect for Service dependency edges;
 - `valid_from` and `valid_to` where supported;
 - source where available; and
 - `knowledge_state`, initially `accepted` for the operational projection.
@@ -276,10 +287,13 @@ Relationship Type, or turns an inverse display label into a different edge.
 This prevents later impact analysis from reinterpreting presentation choices as
 operational meaning.
 
-Release C2.2 adds required/optional meaning, `all`/`any` redundancy, and explicit
-unavailable/degraded/unknown failure effects. Until then,
-`required_for_operation` is useful compatibility metadata but is not enough to
-model redundancy or failure consequences.
+Release C2.2 additively exposes required/optional meaning, `all`/`any`
+redundancy, and explicit unavailable/degraded/unknown failure effects on
+`service_asset` and `service_service` edges. Ungrouped edges retain
+`required_for_operation`, derive the equivalent requirement, and return
+`failure_effect=unknown`; no unavailable result is inferred. These fields
+describe accepted semantics only. The graph still does not calculate failure
+consequences.
 
 ## Authorization and non-disclosure
 
@@ -360,7 +374,7 @@ captured generation/request time; it does not imply historical reconstruction.
 C2.1 supports a focused bounded projection:
 
 - focus entity required;
-- structural depth `0..2`;
+- structural depth `0..3`;
 - incoming, outgoing, or both directions;
 - optional edge-family filter;
 - deterministic node limit; and
@@ -382,7 +396,7 @@ The builder should:
 7. add newly discovered nodes once;
 8. queue unvisited nodes until the requested structural depth;
 9. stop deterministically at the node limit;
-10. attach bounded metadata in batches;
+10. attach bounded node and dependency-group metadata in batches;
 11. sort the final nodes and edges by stable keys; and
 12. return warnings and truncation state.
 
@@ -498,8 +512,13 @@ enterprise extensions, but they are not C2.2 or Homelab Ready requirements.
 
 ## Extension to C2.3 and Release E
 
-Release C2.3 should consume the shared graph through an internal contract rather
-than requerying every table independently.
+Release C2.3 consumes the shared builder through an internal analysis profile.
+It follows incoming Service dependencies, probes the bounded frontier, then
+completes outgoing dependency sets for reached Services. Endpoint authorization,
+current-valid filtering, group metadata and identity use the existing builder.
+The generic structural route now accepts depth `0..3` for expanded Knowledge Graph exploration; the analysis profile and its independent bounds are unchanged. See
+[dependency analysis](dependency-analysis.md) for the implemented contract,
+scenario assumptions, fixed-point evaluation and safety limits.
 
 It adds:
 
@@ -598,3 +617,72 @@ C2.1 does not prove:
 - that a proposed change is safe.
 
 Those claims require later operational evidence and analysis semantics.
+
+## Dependency impact presentation
+
+Dependency Groups remain explicit, temporal domain objects; the browser does
+not change graph identity, persistence, authorization, traversal or analysis.
+In the normal Knowledge Graph, a group with one distinct relationship in the
+acquired authorized projection renders as its original direct relationship.
+Two or more relationships retain an intermediate group with the recorded ALL or
+ANY strategy. Ungrouped Unknown relationships also remain direct.
+
+The presentation counts members before client filters and lane disclosure, and
+retains that count through normalization. Filtering a known two-member group
+down to one visible relationship therefore does not flatten it. Counts describe
+the acquired authorized projection, not a claim about undisclosed or unacquired
+members. The existing API does not expose global group cardinality; a bounded
+projection containing only one member can consequently appear direct. No hidden
+member count is requested or disclosed to resolve this limitation.
+
+Direct edges retain group ID/name, strategy, requirement, failure effect,
+relationship label, endpoints and stable identity. Select an entity for its
+relationship details, or open **Recorded relationships in this view**, then
+**Dependency impact details**, with mouse, keyboard or touch. That disclosure
+links to the source Service for classification. The canvas prioritizes topology
+without permanently stacking semantic chips on each edge. The compact dashboard
+landscape retains its existing entity-only presentation.
+
+
+### Layout and display names
+
+The three lanes retain their domain meaning. The presentation layout places
+Assets beside their connected Services, keeps members of a requirement together,
+aligns Business Functions with their supporting Services, and packs Services
+without Asset providers into available vertical space. Shared Assets appear once
+with all relationships retained. Ordering and routing are deterministic and do
+not alter semantic direction, edge identity or traversal. Entity cards are
+visually stronger than the smaller dependency-group markers. Restrained cubic curves use side-centred anchors, distributed ports
+for shared endpoints, and separate left-gutter routing for same-lane Service
+dependencies. Group trunks connect the parent Service to its requirement marker;
+member branches start on that marker, while singleton edges remain direct. Narrow viewports retain
+native scrolling instead of shrinking text.
+
+Generated group names now use domain names (for example `DNS Providers` or
+`DNS — AdGuard Home`) with numeric collision suffixes. Historical UUID-style
+names get a friendly display-only fallback derived from the source Service.
+Readable authored names are retained. Persisted names and group history are not
+rewritten merely by viewing them; original names remain available in explicit
+advanced/technical editing and analysis details.
+
+### Dashboard normalization boundary
+
+The graph API supplies `source_key` and `target_key`; its optional `source` field
+is provenance text, not a node. Dashboard data ingestion normalizes the graph
+once before distributing it to widgets. All rendered relationship endpoints
+must resolve to nodes in that authorized response. Null/malformed records and
+dangling endpoints are excluded, never reconstructed from inaccessible data.
+Knowledge Attention counts and links use that same normalized set and consider
+only Service→Asset and Service→Service dependencies. A legacy dependency without
+an explicit failure effect remains Unknown. No backend schema change is involved.
+
+
+Selection adds restrained stroke/opacity emphasis to a node's adjacent edges.
+Selecting a group member also emphasizes the complete visible shared requirement
+and its parent connector. Selecting a group emphasizes that group's branches.
+Other topology remains visible; existing analysis-path highlighting takes
+precedence. Routing and port ordering are deterministic over the authorized
+presentation, with stable edge keys breaking ties. Node positions, card styles,
+relationship directions, normalization and dependency-analysis results are not
+changed by this routing refinement. See the
+[routing validation record](../testing/knowledge-graph-edge-routing.md).

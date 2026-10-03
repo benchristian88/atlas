@@ -175,7 +175,7 @@ def test_invalid_or_unsafe_icon_urls_are_rejected() -> None:
 
 
 def test_type_names_and_required_labels_are_trimmed_and_cannot_be_blank() -> None:
-    assert AssetTypeCreate(key="server_custom", name="  Server Custom  ").name == (
+    assert AssetTypeCreate(key="server_custom", name="  Server Custom  ", category_id=uuid.uuid4()).name == (
         "Server Custom"
     )
     assert AssetTypeUpdate(name="  Renamed Server  ").name == "Renamed Server"
@@ -234,7 +234,7 @@ def test_asset_icon_resolution_override_then_type_then_generic() -> None:
         updated_at=now,
     )
     db = AdminDatabase(item=asset_type)
-    assert asset_response_data(db, asset)["resolved_icon_url"] == asset.icon_url
+    assert asset_response_data(db, asset)["resolved_icon_url"].startswith(f"/api/assets/{asset.id}/icon?v=")
     asset.icon_url = None
     assert asset_response_data(db, asset)["resolved_icon_url"] == asset_type.default_icon_url
     asset_type.default_icon_url = None
@@ -529,6 +529,7 @@ def test_reference_usage_counts_are_filtered_to_the_principal_scope() -> None:
     asset_type = AssetType(
         id=uuid.uuid4(),
         key="server",
+        topology_position_id=None,
         name="Server",
         system_defined=True,
         active=True,

@@ -67,14 +67,44 @@ retaining their public response shapes. The builder applies endpoint-by-endpoint
 authorization and current-valid filtering. The focused routes remain structural
 projections: they do not perform outage simulation or full Impact Analysis.
 
-## Lean dependency semantics and later extension
+## Lean dependency semantics
 
-C2.2 will preserve `required_for_operation` compatibility while adding only the
-homelab semantics needed for useful analysis: required/optional meaning,
-`all`/`any` redundancy, and `unavailable`/`degraded`/`unknown` failure effects.
-C2.3 will apply those semantics through bounded, deterministic, cycle-safe,
-authorization-safe analysis and explain results with actual dependency paths.
+C2.2 preserves `required_for_operation` while adding the minimum homelab
+semantics needed by later analysis. A temporal `DependencyGroup` describes one
+operational need for a subject Service:
 
-The model should remain additively extensible to `minimum`, quorum,
+- `requirement` is `required` or `optional`;
+- `strategy` is `all` or `any`; and
+- `failure_effect` is `unavailable`, `degraded`, or explicitly `unknown`.
+
+Temporal `DependencyGroupMembership` rows associate any mixture of the
+Service's current Service→Asset and outgoing Service→Service dependency records
+with that group. The underlying dependencies remain the authoritative
+relationships; groups add meaning across them and do not merge the two tables.
+
+Ungrouped dependencies remain valid. Their required/optional meaning is derived
+unchanged from `required_for_operation`, their strategy is absent because they
+are not a multi-member set, and their failure effect is `unknown`. Migration
+does not create groups or infer outage consequences for existing rows.
+
+Group changes create a superseding group version and end the previous group and
+memberships. This keeps earlier semantics truthful without event sourcing or
+rewriting dependency history. Ending a dependency also ends its current group
+membership; ending a group leaves its dependency relationships intact.
+
+The normal Service detail workflow exposes these semantics using “Required”,
+“Optional”, “All required”, “Any one is sufficient”, “Service unavailable”,
+“Service degraded”, and “Unknown”. The existing
+`service_dependencies.view`/`service_dependencies.manage` permissions and
+customer/site checks apply to group reads and mutations.
+
+C2.3 applies these stored semantics through bounded, deterministic,
+cycle-safe, authorization-safe analysis and explains results with actual
+dependency paths. See [dependency analysis](dependency-analysis.md) for `all`/`any`
+evaluation, degraded/unknown propagation, conservative aggregation, and the
+read-only scenario API. Structural Asset relationships and Business Function
+support links do not acquire failure semantics.
+
+The model remains additively extensible to `minimum`, quorum,
 `minimum_available`, weighted, conditional, and richer group rules, but those
 are later enterprise capabilities rather than Homelab Ready requirements.

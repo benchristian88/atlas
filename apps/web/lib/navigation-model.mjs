@@ -1,3 +1,5 @@
+import { SYSTEM_GROUPS } from "./system-navigation.mjs";
+
 export const NAVIGATION_GROUPS = [
   {
     id: "overview",
@@ -16,7 +18,8 @@ export const NAVIGATION_GROUPS = [
     id: "knowledge",
     label: "Knowledge",
     items: [
-      { id: "knowledge-graph", href: "/topology", label: "Knowledge Graph", permission: "assets.view" },
+      { id: "knowledge-graph", href: "/knowledge-graph", activeRoutes: ["/knowledge-graph"], label: "Knowledge Graph", anyPermission: ["assets.view", "services.view", "business_functions.view"] },
+      { id: "topology", href: "/topology", label: "Topology", permission: "assets.view" },
       { id: "assets", href: "/assets", label: "Assets", permission: "assets.view" },
       { id: "services", href: "/services", label: "Services", permission: "services.view" },
       { id: "business-functions", href: "/business-functions", label: "Business Functions", permission: "business_functions.view" },
@@ -47,47 +50,7 @@ export const NAVIGATION_GROUPS = [
     id: "system",
     label: "System",
     placement: "bottom",
-    items: [
-      {
-        id: "users-access",
-        label: "Users & Access",
-        destinations: [
-          { href: "/admin/users", globalPermission: "users.view" },
-          { href: "/admin/roles", globalPermission: "roles.view" },
-        ],
-        activeRoutes: ["/admin/users", "/admin/roles"],
-      },
-      {
-        id: "reference-data",
-        label: "Reference Data",
-        destinations: [
-          { href: "/admin/asset-types", globalPermission: "asset_types.manage" },
-          { href: "/admin/relationship-types", globalPermission: "relationship_types.manage" },
-          { href: "/admin/service-types", globalPermission: "service_types.manage" },
-          { href: "/admin/criticality-levels", globalPermission: "criticality_levels.manage" },
-          { href: "/admin/custom-fields", globalPermission: "custom_fields.manage" },
-          { href: "/admin/customers", permission: "customers.manage" },
-          { href: "/admin/sites", permission: "sites.manage" },
-        ],
-        activeRoutes: [
-          "/admin/asset-types",
-          "/admin/relationship-types",
-          "/admin/service-types",
-          "/admin/criticality-levels",
-          "/admin/custom-fields",
-          "/admin/customers",
-          "/admin/sites",
-        ],
-      },
-      {
-        id: "administration",
-        label: "Administration",
-        destinations: [
-          { href: "/admin", globalPermission: "system_settings.manage" },
-        ],
-        activeRoutes: ["/admin"],
-      },
-    ],
+    items: SYSTEM_GROUPS,
   },
 ];
 

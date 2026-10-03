@@ -1,11 +1,19 @@
 # Atlas product feature ledger — repository-reconciled edition
 
+**C2.6 working-tree audit:** 10 September 2026; implementation complete, manual acceptance pending
+
 **Repository audit date:** 30 August 2026
 **C2.1 merged-state audit date:** 3 September 2026
+**C2.1 subsequent live acceptance date:** 3 September 2026
+**C2.2 working-tree audit date:** 8 September 2026
+**C2.2 subsequent live acceptance:** complete in the deployed test LXC
+**C2.3 subsequent live acceptance:** complete in the deployed PostgreSQL-backed test LXC for its lean scope
 **Review comparison dates:** 23–24 July 2026
 **Planning alignment update:** 3 September 2026
 **Repository source of truth:** `dev` at `1842d161de87bcf826a15ae117703876fc30c192`
 **C2.1 delivery:** `a9f41df` merged into `dev` by `1842d16`
+**C2.2 delivery state:** implemented on the feature working tree based on
+`bd2ab6cacf7b6f11acad188827744f6105e50310`; live LXC acceptance complete
 **Primary evidence:** audited repository models, migrations, routes, pages, tests, and build configuration
 **Comparison baseline:** the earlier transcript-derived **Atlas Product Feature Status Review**
 
@@ -19,6 +27,142 @@
 > schema, reachable backend path, usable frontend path where applicable, and supporting tests.
 
 
+## C2.5 working-tree audit — 9 September 2026
+
+**Implemented; live/manual acceptance pending.** Branch
+`feature/c2-5-entity-detail-ux-polish`, base HEAD
+`4b984aea6deff7515515fe2152ba0531b8d387c9` (C2.4 merged into dev).
+The C2.4 audit below is its historical implementation-time snapshot.
+
+Reachable Service and Business Function detail pages now reuse C2.4 primitives
+for compact headers, surfaces, entity marks, status, criticality and completeness.
+Shared relationship rows provide bounded initial display and View all. Service
+providers, supporting Functions, dependencies and dependents are distinct;
+existing C2.2 group semantics and ungrouped Unknown effects are explicit.
+Active records link to Knowledge Graph Focus; Service Preview unavailable opens
+existing C2.3 analysis. Existing edit, recovery, gap, history and assertion flows
+remain reachable. Business Functions have no synthetic completeness or state.
+
+Contained backend read filters correct related-entity name/member/count exposure
+using existing authorization, without API shape or schema changes. Evidence:
+`entity-detail.js`, both detail routes, frontend/browser tests, API access tests
+and the [C2.5 validation/manual checklist](../testing/release-c2-entity-detail-ux-polish.md).
+F1-lite, B2-lite, hardening, Asset/Network redesign, network/IP cleanup, richer
+semantics and enterprise graph capabilities remain deferred.
+
+## C2.4 working-tree audit — 9 September 2026
+
+**Implemented; live/manual acceptance pending.** Feature branch
+`feature/c2-4-homelab-operations-experience`, based on
+`69c9a9a8ee3ca9d8b49d281cb9adf031c806e431` (the C2.3 merge on `dev`).
+The earlier named audit commits below remain historical baselines; C2.4 is
+uncommitted implementation, not a merged or live-accepted release.
+
+Reachable evidence: the Dashboard's five-widget registry and four metrics,
+`/knowledge-graph` Overview/Focus/Analysis, shared lane presentation and inspector,
+`GET /api/operational-graph/landscape`, opt-in authorized Site-viewpoint reads,
+C2.4 tests, and the [validation record](../testing/release-c2-homelab-operations-experience.md).
+The [architecture](../architecture/homelab-operations-experience.md) documents
+progressive disclosure, accessibility, themes, scope and existing completeness
+reuse. No new graph library, engine, persistence or migration was introduced.
+
+Services retain customer-wide or site-specific scope. Customer-wide Services can
+show authorized cross-site providers; existing site-specific link rules remain.
+C2.5 Entity Detail UX Polish is planned before F1-lite. Interface-owned IP cleanup
+remains a post-C2.4 data-preserving backlog item. Full impact semantics and live
+availability claims remain outside this release.
+
+
+---
+
+# C2.3 current completion record
+
+C2.3 is **Implemented with live acceptance complete for its lean scope** on
+`feature/c2-3-explainable-dependency-analysis`. The implementation-time automated
+evidence remains unchanged in the
+[C2.3 validation record](../testing/release-c2-explainable-dependency-analysis.md#commands-and-execution-evidence):
+**72 focused API tests** (43 C2.3, 13 C2.2, 16 C2.1), **231 full API tests**
+including the real PostgreSQL integration test, **81 web tests**, a passing
+33-page build, **5 SDK tests**, **22 Proxmox tests**, compilation, one Alembic
+head at `20260908_0014`, a fresh PostgreSQL 17 migration, and `git diff --check`.
+These are historical implementation results, not checks rerun for this
+documentation finalization. The original environment limitations and statements
+about manual work still pending at implementation time are preserved there.
+
+[Subsequent live LXC acceptance](../testing/release-c2-explainable-dependency-analysis.md#subsequent-live-lxc-acceptance)
+confirmed Asset/Service unavailable inputs, direct and downstream consequences,
+`unavailable` and `unknown`, conservative and multi-hop propagation, consumption
+of persisted C2.2 `Core Operation` and `DNS Provider` semantics, actual canonical
+explanation relationships, structural Asset non-propagation, and cross-tenant
+non-disclosure. The PVE1 scenario derived no Service consequence from current
+accepted C2.3 dependency semantics; this does not establish that a real PVE1
+failure has no consequence.
+
+Implemented scope includes `all`/`any` evaluation,
+`unavailable`/`degraded`/`unknown`/`unaffected` result semantics, structured
+explanation paths, bounded deterministic traversal, cycle-safe analysis, and
+authorization/non-disclosure. `degraded`, `any`, cycles, truncation, site
+isolation and the other cases identified in the acceptance record remain
+automated-only C2.3 evidence. Live `unaffected` observations concerned Nginx Proxy
+Manager as a member unaffected by the scenario, not proof of live health.
+
+Current release status is **C2.1/C2.2/C2.3 complete; C2.4 implemented on the
+feature working tree with manual acceptance pending**. Business Function impact semantics,
+automatic Asset→Asset failure propagation, minimum/quorum, weighted/conditional
+rules, confidence scoring, probability, full Impact Analysis, recovery analysis,
+change simulation and scenario persistence remain deferred beyond C2.3.
+F1-lite, B2-lite and Homelab Ready remain undelivered.
+
+The dated C2.2, C2.1 and earlier audit sections below retain their historical
+evidence and release-scope statements; they do not override this current C2.3
+completion record.
+
+---
+
+# C2.2 working-tree implementation audit — 8 September 2026
+
+The feature working tree implements lean dependency semantics end to end. Two
+additive temporal tables represent dependency groups and their memberships over
+existing Service→Asset and Service→Service rows. Existing dependencies are not
+rewritten or backfilled. Ungrouped rows retain `required_for_operation`, map it
+to required/optional, and expose an explicit unknown failure effect.
+
+Reachable evidence includes dependency-group CRUD in the existing Service API,
+plain-language controls on Service detail, additive generic Operational Graph
+edge metadata, server-side ownership/scope validation, temporal group
+supersession, and focused API/web tests. A disposable PostgreSQL 17 database was
+upgraded from the C2.1 head with representative required and optional rows;
+both values survived unchanged, no groups were fabricated, persistence and
+graph projection passed, and downgrade/re-upgrade preserved the relationships.
+
+Working-tree validation recorded **187 API tests**, **76 web tests**, a passing
+33-page production build, **5 plugin SDK tests**, **22 Proxmox tests**, Python
+compile checks, offline Alembic SQL generation, and one migration head at
+`20260908_0014`. Detailed commands and the PostgreSQL fixture procedure are in
+[`../testing/release-c2-lean-dependency-semantics.md`](../testing/release-c2-lean-dependency-semantics.md).
+
+Subsequent manual acceptance in the deployed PostgreSQL-backed test LXC
+confirmed upgrade safety without duplicate relationships or fabricated groups;
+Required/Optional compatibility; persisted failure effects; non-destructive
+group removal and explicit Unknown fallback; and the mixed `Core Operation`
+Service→Asset plus Service→Service group. The generic Operational Graph
+projected both members with the same group identity and lean semantics while
+preserving canonical direction and incoming traversal. Cross-tenant access
+returned the normal non-disclosing not-found response.
+
+The live topology had no genuine redundant AdGuard pair, so `any` was not
+manually exercised and no fake topology was created. Automated C2.2 coverage
+already exercises `any`. This subsequent acceptance does not replace the exact
+implementation-time automated evidence above.
+
+C2.2 is classified **Implemented on the feature working tree with live
+acceptance complete**. Implemented scope is required/optional, `all`/`any`,
+unavailable/degraded/unknown, temporal dependency groups, mixed Service→Asset
+and Service→Service membership, and Operational Graph semantic projection.
+`minimum`, N-of-M, quorum, weighted and conditional rules, confidence scoring,
+failure propagation, blast radius, C2.3 analysis, and the C2.4 visual redesign
+remain deferred or planned and unimplemented.
+
 ---
 
 # C2.1 merged implementation audit — 3 September 2026
@@ -29,7 +173,7 @@ API-owned operational graph builder, the generic `/api/operational-graph`
 contract, compatibility adapters for both C1 graph routes, shared web graph
 normalization/presentation, and focused authorization/traversal tests.
 
-Repository evidence at this audit point:
+Automated and working-tree evidence available at the original audit point:
 
 - API tests: **174 passed**;
 - focused operational graph API tests: **16 passed**;
@@ -43,8 +187,16 @@ Repository evidence at this audit point:
 The local environment had no running PostgreSQL server and no Docker executable,
 so `alembic current` and Docker/PostgreSQL acceptance were not completed. The
 existing test suite uses repository-standard fake sessions and route dependency
-overrides; production PostgreSQL acceptance remains an outstanding manual
-release check.
+overrides. This limitation remains part of the historical audit evidence.
+
+Subsequent live pre-merge acceptance was completed in the deployed test LXC
+against its real PostgreSQL-backed Atlas environment. Manual validation covered
+generic Asset, Service, and Business Function graph behavior; depth `0`, `1`,
+and `2`; incoming and outgoing traversal; edge-family filtering; safe node-limit
+truncation without dangling edges; Service→Service traversal in both directions;
+semantic edge direction preservation; cross-tenant non-disclosure returning the
+normal “Record not found” response; and final migration/repository checks before
+merge.
 
 C2.1 is classified **Implemented**. This does not change the planned or partial
 status of C2.2, C2.3, C2.4, full Impact Analysis, Change Simulation, Backup and
@@ -159,9 +311,11 @@ The repository audit materially changes several classifications:
 6. **Business Function lifecycle is only partially implemented.**
    Business Functions exist, but they do not yet have their own assertions,
    completeness profiles, gap summaries or change history.
-7. **The Interface-first IP transition is incomplete.**
-   Interfaces and topology use structured IP data, but Asset forms/lists still expose
-   the legacy direct `Asset.ip_address`.
+7. **The Interface-first IP UI transition is implemented.**
+   Asset create/edit and detail no longer expose a top-level IP. Interfaces own IP
+   addresses; topology and authorised list search use them. The deprecated API
+   field and reconciliation compatibility writers remain; see the
+   [compatibility audit](../testing/interface-first-ip-transition.md).
 
 ## Current release position
 
@@ -172,7 +326,7 @@ The repository audit materially changes several classifications:
 | Release B — Discovery and Reconciliation | **Implemented for simulation and reconciliation; live plugin operation is partial** |
 | B.5 — Knowledge Completeness | **Implemented for Assets and Services** |
 | Release C1 — Homelab Service MVP | **Implemented**            |
-| Release C2 — shared graph and dependency analysis foundations | **C2.1 implemented; C2.2/C2.3/C2.4 planned**  |
+| Release C2 — shared graph and dependency analysis foundations | **C2.1/C2.2/C2.3 complete; C2.4/C2.5 implemented; manual acceptance pending**  |
 | F1-lite — Homelab Documentation | **Planned but not implemented; renderer/storage foundation exists** |
 | B2-lite — Live Proxmox Discovery | **Partially implemented foundation; end-to-end journey absent** |
 | Homelab Ready Release | **Planned but not implemented** |
@@ -199,7 +353,7 @@ transcript-derived report and the audited repository.
 | Generated Documentation | Planned/unknown                 | **Partially implemented**        | Deterministic Asset Markdown and `Document` persistence exist, but no documents router or usable UI exists. |
 | Impact Analysis | Planned but not implemented     | **Planned but not implemented**  | Focused Service/Business Function graphs are structural prerequisites, not an impact engine; no outage semantics or `/impact-analysis` exists. |
 | Business Function completeness/history | Not separately classified       | **Partially implemented**        | Business Function CRUD and graph exist, but no assertions, profiles, gaps or history. |
-| Interface-first IP UX | Implemented                     | **Partially implemented**        | Interfaces are first-class, but Asset forms and list still use direct `ip_address`. |
+| Interface-first IP UX | Implemented | **Implemented** | Create/edit omit the legacy field; detail uses Interfaces, topology and list IP search use Interfaces, and the list has no IP column. |
 | Discovery cancellation | Assumed part of lifecycle       | **Planned but not implemented**  | `cancelled` is a valid status and B2 now commits to cancellation, but no cancel endpoint, UI, action, or test exists. |
 | Full Reconciliation action set | Broadly treated as implemented  | **Core decisions implemented; some advanced actions not evidenced** | Accept/reject/defer/lifecycle paths are tested; reclassify, bulk operations and broad merge journeys are not present. |
 | Full Documentation product | Planned but not implemented     | **Partially implemented**        | The renderer and storage are already real, but the product surface is absent. |
@@ -237,6 +391,12 @@ They do **not** establish:
 * production queue behavior;
 * secret-store resolution;
 * community installer behavior.
+
+The first item above is deliberately scoped to what was available **at the
+30 August audit point**. C2.1 subsequently completed live manual acceptance in
+the deployed PostgreSQL-backed test LXC before merge, as recorded in the C2.1
+merged implementation audit and release test plan. The remaining exclusions are
+unchanged.
 
 
 ---
@@ -284,6 +444,7 @@ They do **not** establish:
 | Customer/site context selector | **Implemented** | Foundation | Context API, workspace context and revalidation are present. |
 | User/role/assignment administration | **Implemented** | Foundation | Guarded APIs and administration pages exist. |
 | Per-user accent preference | **Implemented** | UI/account | Persisted, validated and tested. |
+| Per-user theme mode | **Implemented** | UI/account | Profile saves Light, Dark or System independently of accent colour; shared shell, Dashboard and Knowledge Graph tokens follow the resolved mode. Nullable `users.theme_mode` is added by migration `20260909_0015`. |
 | Top-right account menu | **Implemented** | UI/account | Profile/logout dropdown exists and is tested. |
 | Initials/image fallback avatar | **Implemented** | UI/account | `user-avatar.js` provides safe fallback behavior. |
 | Avatar/photo upload | **Deferred** | Future account work | No avatar field, media storage or upload endpoint exists. |
@@ -307,34 +468,40 @@ They do **not** establish:
 | Customer CRUD | **Implemented** | Foundation | Models, routes and pages use real APIs. |
 | Site CRUD | **Implemented** | Foundation | Models, routes and pages use real APIs. |
 | Manual Asset CRUD | **Implemented** | Foundation | Scoped APIs and create/detail/edit UI exist. |
-| Managed Asset Types | **Implemented** | Foundation | Stable-key database records and administration UI exist. |
+| Managed Asset Categories | **Implemented** | Infrastructure Topology | Required category FK, protected Uncategorized, deterministic legacy migration, lifecycle API/UI, dynamic Assets/topology filters; see [architecture](../architecture/infrastructure-topology.md). |
+| Managed Topology Positions | **Implemented** | Infrastructure Topology | Global Reference Data CRUD, immutable keys, protected used deletion, active assignment rules, usage counts and atomic move up/down; configured ordering constrains connected Connectivity branches without runtime type/vendor matching. |
+| Managed Asset Types | **Implemented** | Foundation | Stable-key database records and administration UI include a nullable managed Topology Position FK; custom Types default to Automatic, with direct role-to-FK migration, inactive-assignment preservation and dynamic layout acceptance. |
 | Asset Type safe lifecycle | **Implemented** | Foundation | Inactive and referenced deletion behavior is tested. |
-| Managed Relationship Types | **Implemented** | Foundation | Database-managed labels/direction/type constraints exist. |
+| Managed Relationship Types | **Implemented** | Foundation | Database-managed labels/direction/type constraints and bounded Topology class exist; custom types default to Other, with globally authorized Add/Edit and list presentation. |
 | Relationship endpoint applicability | **Implemented** | C1      | Supports Asset→Asset, Service→Asset, Service→Service and Service→Business Function. |
 | Typed Custom Fields | **Implemented** | Foundation | Definition, applicability, options and values are implemented. |
 | Ten-field active limit per type | **Implemented** | Foundation | Enforced and tested. |
 | Customer-specific taxonomies | **Deferred** | Enterprise/MSP | Asset/Relationship Types and Custom Field definitions remain global. |
-| Asset/type icons | **Implemented** | Foundation/UI | Safe HTTPS non-SVG icon handling and fallback exist. |
-| Uploaded icon/media library | **Deferred** | Future media system | No blob/media route or storage. |
-| Server-side icon proxy | **Deferred** | Future media system | No remote fetch/proxy. |
+| Asset/type icons | **Implemented** | Foundation/UI | Shared cached Asset → Type → generic rendering across list, detail, graphs and dashboard; bounded authenticated PostgreSQL cache with lazy retrieval and URL-based invalidation. |
+| Uploaded icon/media library | **Deferred** | Future media system | No upload route or general media library; the Asset icon cache is narrowly scoped. |
+| Server-side Asset icon cache | **Implemented** | UI/platform | Public HTTPS raster retrieval with DNS/peer/redirect checks, bounded decoding, persistent cache and Asset-scoped serving. See [design](../architecture/asset-icon-cache.md). |
 | Atlas Impact branding in shell/login | **Implemented** | UI      | Shared supplied lockups are theme-aware in the shell and used on login. |
 | Runtime/customer-specific branding | **Deferred** | Future enterprise branding | Current branding is build-time. |
 | Networks/VLAN CRUD | **Implemented** | Foundation | Customer/site/type/VLAN/CIDR/gateway/purpose/zone/notes are persisted. |
+| Category and Network presentation identity | **Implemented** | Infrastructure Topology | Bounded icon/accent API fields and migration, shared admin pickers, category-based Asset accents retaining AssetIcon, Network identity and dashed membership accents; light/dark fixture acceptance and PostgreSQL preservation tests. |
 | Asset Interfaces | **Implemented** | Foundation | Interface, network, IP, MAC, primary and notes are persisted and managed. |
-| Direct Asset IP field | **Partially superseded** | Foundation migration | Remains in forms/lists for compatibility even though interfaces are first-class. |
-| Interface-first IP UX | **Partially implemented** | Future polish | Topology/detail use interfaces; create/edit/list still prioritise direct `ip_address`. |
+| Direct Asset IP field | **Deferred** | Compatibility removal | Deprecated database/API field and reconciliation writers retained; excluded from ordinary Asset UI, topology display and list search. |
+| Interface-first IP UX | **Implemented** | Foundation hardening | Asset forms do not read/write the legacy field; detail shows Interface IPs; topology and authorised IP search use Interfaces only. |
 | Safe CIDR membership suggestions | **Unknown** | Network UX | No implementation or explicit decision. |
 | Asset Relationships | **Implemented** | Foundation | Scoped CRUD, type validation and same-context rules exist. |
 | New cross-site/customer relationships | **Deferred/prohibited** | Security boundary | Explicitly rejected and tested. |
 | Legacy cross-context relationships | **Implemented as compatibility** | Migration support | Readable only when both endpoints are authorised. |
-| Knowledge Graph topology API | **Implemented** | Foundation | Returns authorised Assets, relationships, networks and interfaces. |
-| Physical lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Platform lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Network/VLAN lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Dependency lens | **Implemented** | Foundation/UI | Supports one-hop focus. |
-| All Relationships lens | **Implemented** | Foundation/UI | Current topology lens. |
-| Old generic hierarchy tabs | **Abandoned** | UI supersession | Replaced by the current lenses. |
-| Second-hop Knowledge Graph topology focus | **Planned but not implemented** | C2.4/future topology | The generic operational graph supports depth `0..2`, but the current topology lens remains direct-neighbour focused. |
+| Infrastructure Topology API | **Implemented** | Infrastructure Topology | Existing `/api/topology` collections retained with managed category/type metadata and platform links; endpoint visibility strengthened. Additive complete `structural_edges` support Showcase without Connectivity traversal limits. |
+| Infrastructure Overview | **Implemented** | Infrastructure Topology | Authorized counts, twelve-icon category previews with +N, canonical Asset links and category-filtered View all. |
+| Platform view | **Implemented** | Infrastructure Topology | Wrapping category grid with preserved empty tracks and content-driven equal heights per row, recorded parent/child links, four-child two-column preview, +N more and progressive drill-down; persistent collapsible right-hand Asset inspector with Open Asset, non-zero child/interface facts with singular/plural wording, deterministic interface-derived IPs; cycles and standalone Assets retained. |
+| Network & VLAN view | **Implemented** | Infrastructure Topology | Vertical master/detail and explicit interface membership, including multihoming; persistent collapsible Asset inspector and sortable Name/Interface/IP/MAC/status columns with numeric IPv4/IPv6 ordering. |
+| Showcase v1 | **Implemented** | Infrastructure Topology | Whole-current-site, light-only poster of existing authorized knowledge; shared pure Connectivity geometry for managed Position ranks, branch ownership, same-position hierarchy, contour packing and orthogonal routing. Measured local icon/name-only tiles with complete one- or two-line names before final-line ellipsis, host-local categories (singletons direct; 2–4 one column; 5+ two), Atlas branding and Site title. Logical Network/VLAN nodes and membership edges excluded by typed Networks-off eligibility; network-device Assets retained. Realistic named 44-Asset fixture fits 1920×1080; wider 44/50-Asset reference shapes use existing adaptive width with every workload visible and no +N. Measured adaptive width (1920–3024) and height (1080–1358) at the existing readability floor before last-resort previews for sites over 100 Assets; unreadable geometry disables export. Showcase-only clear-port/exterior routing fallback preserves cards and canonical relationships, with distinct routing/size failure diagnostics; Showcase presentation endpoints resolve to visible tiles/groups and retraced fallback spurs are removed while retaining relationship IDs; Connectivity defaults remain unchanged. Uniform presentation upscaling up to 1.30× with alignment beneath the header, preserving poster selection and shrink/collapse rules. Same-scene PNG export at exactly 2× dimensions. Platform unchanged; Connectivity controls/disclosure/cards preserved with a shared same-position network-chain correction. See [architecture](../architecture/showcase.md), [guide](../admin/showcase.md) and [adaptive-width acceptance](../testing/showcase-adaptive-width.md) and [routing acceptance](../testing/showcase-routing.md) and [visual-correctness acceptance](../testing/showcase-visual-correctness.md). |
+| Connectivity view | **Implemented** | Infrastructure Topology | Compact wrapping Search/Focus/hops/Networks toolbar; ten-result authorized name/hostname/interface-IP focus finder with pointer and keyboard selection. Bounded relationship classes filter before traversal: Platform + Physical/network (including interface membership) default on; Data/resilience, Logical/operational and Other are optional. Combined category/class changed-count/reset and view-entry defaults; custom types default to Other, Routes stays Other. Path-aware bounded 1/2-hop embedded and 1/2/3-hop expanded traversal suppresses shared-host/Network sibling fan-out; Asset/Network single-click inspection and double-click/inspector refocus preserving hops/filters with Fit, explicit host/Network focus, deterministic managed-position layout with relationship clustering, Automatic context placement, eight-child focused-parent preview, branch-local +N badges and connected +N more presentation controls, branch-local vertical compaction, stable parent-anchor + Position-ID membership with dynamic local containers, four-column sibling grids and contained remainder controls, presentation-only hosting-group connectors, subtree footprint grouping, card/position-label/container obstacle-checked orthogonal routes, external distribution rails and individual overlay routing through endpoint grid gaps, top-biased Fit, inspector-only relationship labels, contained shared icons; server-owned 100-node/500-edge bounds and safety notices distinct from presentation collapse ([disclosure acceptance](../testing/infrastructure-topology-disclosure.md), [branch-local layout acceptance](../testing/infrastructure-topology-local-positions.md), [external rail acceptance](../testing/infrastructure-topology-external-rails.md), [stable groups/grid acceptance](../testing/infrastructure-topology-stable-groups.md)). No runtime vendor/Asset Type name rules. |
+| Expanded Infrastructure Topology | **Implemented; live manual acceptance pending** | Infrastructure Topology | Connectivity-only application-viewport dialog preserves filters, selection and graph state; switching to another topology view closes it; Platform, Network/VLAN and Connectivity can hide/show their shared Asset inspector without refetching or losing selection; isolated browser fixtures validate desktop/light/dark behavior. |
+| Old Physical/Platform/Network/Dependency/All Relationships lenses | **Abandoned / superseded** | UI supersession | Replaced by the four operational Infrastructure Topology views while retaining `/topology`; Showcase later adds a separate export view. |
+| Old generic hierarchy tabs | **Abandoned / superseded** | UI supersession | Replaced by subsequent lenses and now Infrastructure Topology. |
+| Expanded Knowledge Graph | **Implemented; live manual acceptance pending** | UI | Application viewport dialog retains the same graph, inspector, filters, selection and analysis. Expanded Focus offers depth 1/2/3; close returns to at most 2 and reopening stays at 2. Expanded entry, inspector hide/show and viewport resize auto-Fit; manual zoom/pan persists between structural changes. Dashboard remains compact. See [guide](../admin/knowledge-graph.md). |
+| Second-hop Knowledge Graph focus | **Implemented** | C2.4 | `/knowledge-graph` Focus supports depth 1/2 through the generic operational graph. Infrastructure Topology separately supports bounded technical Connectivity with a third hop available in expanded mode. |
 | Live Dashboard summaries | **Implemented** | Foundation/C1 | Inventory, relationship, Service, Business Function and completeness totals are live. |
 
 
@@ -415,6 +582,7 @@ They do **not** establish:
 
 | Feature | Status | Release | Concrete evidence |
 |---------|--------|---------|-------------------|
+| Service and Business Function catalogues | **Implemented** | UI refinement | Shared responsive linked rows show identity, descriptions and relationship counts; Services show recorded operational health and type. Compact shared search/filter controls use a 300 ms automatic search debounce and immediate discrete filters over existing scoped APIs. Services preserve URL filters, compact quick filters and an archived-only view; Business Functions default to active with Include archived available. Both retain results during filtering and ignore superseded responses. |
 | First-class Service records | **Implemented** | C1      | Migration, routes and full list/create/detail/edit UI exist. |
 | Service archive/restore | **Implemented** | C1      | API supports both. |
 | Service Types | **Implemented** | C1      | Managed reference records and admin UI exist. |
@@ -443,7 +611,7 @@ They do **not** establish:
 | Business Function assertions/history | **Partially implemented/absent** | Future C extension | No first-class assertions, completeness or change-history page. |
 | Focused Service graph | **Implemented and C2.1-hardened** | C1/C2.1 | `/api/services/{id}/graph` uses the shared builder and preserves the C1 response contract with independent endpoint authorization. |
 | Focused Business Function graph | **Implemented and shared** | C1/C2.1 | `/api/business-functions/{id}/graph` uses the same builder and preserves its C1 response contract. |
-| Generic operational graph API | **Implemented** | C2.1 | `/api/operational-graph` supports authorized Asset, Service, and Business Function focus, depth `0..2`, semantic direction, edge-family filtering, deterministic limits, and safe truncation. |
+| Generic operational graph API | **Implemented** | C2.1 | `/api/operational-graph` supports authorized Asset, Service, and Business Function focus, depth `0..3`, semantic direction, edge-family filtering, deterministic limits, and safe truncation. |
 | Namespaced graph identity | **Implemented** | C2.1 | Node and edge keys include entity type/family, preventing cross-table UUID collisions. |
 | Shared web graph foundation | **Implemented** | C2.1 | Shared normalization and accessible rendering consume API labels, hrefs, semantic endpoints, and truncation state. |
 | Recursive global Service graph | **Deferred** | C2/E    | Explicitly outside C1. |
@@ -523,11 +691,12 @@ They do **not** establish:
 | Service “Depends on” / “Required by” | **Implemented** | C1      | Typed Service dependencies exist. |
 | Business Function connected Assets | **Implemented** | C1 | Business Function detail and graph expose Assets connected through supporting Services; this is not impact analysis. |
 | Focused Service projection | **Implemented** | C1 | Structural graph endpoint exists. |
-| Recursive analysis traversal | **Planned but not implemented** | C2.3/E | No recursive impact engine. C2.1 bounded structural projection is not impact propagation. |
-| Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..2`, deduplication, cycles, and explicit limits without impact propagation. |
-| Lean dependency semantics (`all`/`any`, failure effect) | **Planned but not implemented** | C2.2 | Current `required_for_operation` is a compatibility foundation; no redundancy strategy or explicit failure-effect model exists. |
-| Explainable dependency consequence analysis | **Planned but not implemented** | C2.3 | No bounded consequence engine returns direct/downstream paths and `unavailable`/`degraded`/`unknown` results. |
-| Homelab Operations Experience | **Planned but not implemented** | C2.4 | Existing summaries and graph components are foundations, not the planned polished dashboard, visual graph, and enhanced Service Operations release. |
+| Recursive analysis traversal | **Implemented** | C2.3 | Bounded two-stage consequence closure over the authorized C2 graph; cycles terminate and retain explanation edges. Full enterprise impact remains deferred. |
+| Bounded structural depth/cycle traversal | **Implemented** | C2.1 | The shared projection supports deterministic structural depth `0..3`, deduplication, cycles, and explicit limits without impact propagation. |
+| Lean dependency semantics (`all`/`any`, failure effect) | **Implemented; live acceptance complete on feature working tree** | C2.2 | Temporal groups/memberships persist required/optional, all/any, and unavailable/degraded/unknown meaning; APIs, Service UI, and generic graph expose it while retaining `required_for_operation`. Live acceptance covered mixed membership, graph projection, fallback, direction, and non-disclosure; `any` remains automated-only because the live topology had no genuine redundant pair. |
+| Explainable dependency consequence analysis | **Implemented; live acceptance complete for lean scope** | C2.3 | Asset/Service `unavailable` input via `POST /api/dependency-analysis` and preview panels; direct/downstream consequences; `all`/`any` evaluation; `unavailable`/`degraded`/`unknown`/`unaffected` result semantics; structured canonical-edge explanation paths; bounded deterministic, cycle-safe analysis; authorization/non-disclosure. Live acceptance covers unavailable/unknown propagation and the structural/security boundaries; `degraded`, `any`, cycles, truncation and site isolation remain automated-only C2.3 coverage. See [C2.3 evidence](../testing/release-c2-explainable-dependency-analysis.md). |
+| Homelab Operations Experience | **Implemented; manual acceptance pending** | C2.4 | Fixed Dashboard registry, three-lane Knowledge Graph, Focus/Analysis inspector, URL state, explicit disclosure, authorized Site viewpoint, accessibility and responsive themes. See the C2.4 audit above. |
+| Entity Detail UX Polish | **Implemented; live/manual acceptance pending** | C2.5 | Shared compact Service/BF detail, relationship and dependency-semantics presentation, Focus/Analysis navigation; see C2.5 evidence above. |
 | Outage simulation | **Deferred** | E       | Explicitly excluded from C1. |
 | Dedicated `/impact-analysis` route | **Planned but not implemented** | E       | Navigation entry is unavailable. |
 | Evidence-qualified impact path | **Planned but not implemented** | E       | No path/evidence engine. |
@@ -578,16 +747,12 @@ These items are committed future work in current repository documentation.
 
 ## C2 — remaining Homelab Ready foundations
 
-* C2.2 required/optional dependencies, `all`/`any` redundancy, and
-  `unavailable`/`degraded`/`unknown` failure effects;
-* C2.3 bounded explainable consequence analysis with direct/downstream paths and
-  `unavailable`/`degraded`/`unknown`/defensible `unaffected` results; and
-* C2.4 polished operational homepage, visual Knowledge Graph, enhanced Service
-  Operations, environment exploration, responsiveness, accessibility, and
-  product polish.
+* C2.5 implementation is complete; its live/manual acceptance gate remains open.
+  F1-lite, B2-lite and Homelab Ready hardening remain undelivered.
 
-The dedicated Impact Analysis route, outage simulation, blast radius, recovery
-ordering, and business severity remain Release E, not C2.1.
+The dedicated full Impact Analysis product, blast radius, recovery ordering,
+and business severity remain Release E. C2.3 adds only the contained hypothetical
+unavailable scenario over explicit lean Service dependency semantics.
 
 ## F1-lite — Homelab Documentation
 
@@ -693,7 +858,7 @@ The following are explicitly postponed or excluded from the current MVP/C1:
 * customer-specific reference taxonomies;
 * cross-customer/cross-site relationships;
 * uploaded icon/media library;
-* icon proxying;
+* general media proxying beyond the bounded Asset icon cache;
 * runtime/customer-specific branding;
 * avatar upload;
 * plugins beyond Proxmox;
@@ -719,7 +884,7 @@ The following are explicitly postponed or excluded from the current MVP/C1:
 | Browser `localStorage` session tokens | Superseded by HttpOnly cookie sessions. |
 | Split-origin default production design | Superseded by same-origin `/api`; split-origin remains dev compatibility. |
 | Missing Knowledge as a Reconciliation queue | Superseded by dedicated Knowledge Gaps. |
-| Generic Hierarchy/Relationships topology tabs | Superseded by Physical, Platform, Network/VLAN, Dependency and All Relationships lenses. |
+| Generic Hierarchy/Relationships topology tabs | Superseded first by the five legacy lenses, then by Infrastructure Topology’s four projections. |
 | Standalone Profile sidebar navigation | Superseded by top-right account menu. |
 | Visible placeholder roadmap navigation | Superseded by hiding unavailable routes. |
 | Role-name-only/browser-only authorisation | Superseded by backend permission keys and scoped assignments. |
@@ -805,16 +970,19 @@ The generation component already works. The next increment is relatively contain
 
 This converts hidden technical capability into visible user value.
 
-## Foundation hardening: complete Interface-first IP UX
+## Delivered foundation hardening: Interface-first IP UX
 
-Remove or de-emphasise direct `Asset.ip_address` from:
+IP addresses belong to Asset Interfaces. The shared Asset create/edit form omits
+legacy IP state and payloads; Asset detail presents addresses in Interfaces only.
+Platform and Connectivity retain deterministic interface summaries without a
+legacy fallback. The Assets table has no IP column; authorised Interface IPs are
+searchable. New knowledge requirements use interface-IP rules; existing legacy
+field rules remain identifiable as deprecated for compatibility.
 
-* Asset create/edit form;
-* Asset list display;
-* filtering and sorting.
-
-Use primary interface information consistently, retaining the legacy field only as a
-migration/read-compatibility mechanism.
+The database column, API acceptance/serialization, manual assertion provenance,
+and reconciliation compatibility writers remain deliberately intact. Schema
+metadata marks the field deprecated. No data migration or discovery rewrite was
+introduced. See the [audit and validation](../testing/interface-first-ip-transition.md).
 
 ## Delivered product foundation: C2.1 Shared Operational Graph
 
@@ -829,16 +997,14 @@ C2.1 now provides:
 7. compatibility adapters for both focused C1 routes; and
 8. no impact, outage, recovery, scoring, or change-safety conclusions.
 
-## Homelab Ready stream: C2.2 through C2.4
+## Homelab Ready stream: C2.6 manual acceptance pending
 
-Build the smallest useful semantic and product layer over C2.1:
-
-1. C2.2 required/optional, `all`/`any`, and
-   `unavailable`/`degraded`/`unknown` dependency meaning;
-2. C2.3 bounded, cycle-safe, authorized consequence analysis explained by
-   actual paths; and
-3. C2.4 polished dashboard, visual graph, enhanced Service Operations,
-   environment exploration, and deliberate UX refinement.
+C2.3 bounded, cycle-safe, authorized consequence analysis explained by actual
+paths is implemented with live acceptance complete for its lean scope. C2.4
+Dashboard and Knowledge Graph implementation has manual acceptance pending.
+C2.5 Entity Detail UX Polish and C2.6 Usability & Lifecycle Polish are implemented;
+live/manual acceptance remains pending. The immediate path is C2.6 → F1-lite →
+B2-lite → Homelab Ready hardening → Homelab Ready release.
 
 ## Later enterprise release: C3 structured ownership
 
@@ -879,9 +1045,10 @@ Once live discovery and ownership are stable, add:
 | **B.5 Knowledge Completeness** | Asset/Service requirements, gaps, defer/exception/assignment/resolve | **Implemented** |
 | **C1 Homelab Service MVP** | Services, Service Types, Criticality, Business Functions, dependencies, ownership labels, RTO/RPO and focused graphs | **Implemented** |
 | **C2.1 Shared Operational Graph** | Reusable API-owned structural graph projection and compatibility adapters | **Implemented** |
-| **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Planned** |
-| **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Planned** |
-| **C2.4 Homelab Operations Experience** | Polished dashboard, visual graph, enhanced Service Operations and exploration | **Planned** |
+| **C2.2 Lean Dependency Semantics** | Required/optional, `all`/`any`, and unavailable/degraded/unknown failure effects | **Implemented; live acceptance complete on feature working tree** |
+| **C2.3 Explainable Dependency Analysis** | Bounded path-based direct/downstream consequence analysis with small deterministic states | **Implemented; live acceptance complete for lean scope** |
+| **C2.4 Homelab Operations Experience** | Dashboard, visual graph, Focus/Analysis inspector and exploration | **Implemented; manual acceptance pending** |
+| **C2.5 Entity Detail UX Polish** | Service/BF typography, cards, completeness/status and relationships | **Implemented; live/manual acceptance pending** |
 | **F1-lite Homelab Documentation** | Documents API/list/detail, Markdown rendering, Asset links and honest content status | **Planned; renderer/storage foundation exists** |
 | **Homelab Ready Release** | Onboarding, deployment/upgrade, backup/restore, security, accessibility, device validation and release artefacts | **Planned** |
 | **C3 MSP Ownership** | People, Teams, memberships and role assignments | **Planned after Homelab Ready**   |
@@ -906,24 +1073,26 @@ with compatibility adapters for the existing focused routes.
 
 ## Increment 2 — C2.2 Lean Dependency Semantics
 
-Add only required/optional meaning, `all`/`any` redundancy, and
+Delivered required/optional meaning, `all`/`any` redundancy, and
 `unavailable`/`degraded`/`unknown` failure effects while preserving
 `required_for_operation` compatibility.
 
 ## Increment 3 — C2.3 Explainable Dependency Analysis
 
-Add bounded path-based Asset/Service consequence analysis with direct/downstream
-classification and small deterministic states. Unknown semantics produce
+Implemented bounded path-based Asset/Service consequence analysis with
+direct/downstream classification and small deterministic states; subsequent
+live LXC acceptance is complete for its lean scope. Unknown semantics produce
 `unknown`, not an invented probability or score.
 
 ## Increment 4 — C2.4 Homelab Operations Experience
 
-Deliver the polished operational homepage, interactive visual Knowledge Graph,
-enhanced Service Operations, intuitive environment exploration, and deliberate
-responsive/accessibility/branding refinement.
+Implemented the operational homepage, interactive Knowledge Graph, integrated
+C2.3 analysis, persistent inspector and responsive/accessibility foundation.
+Live/manual acceptance remains pending. Service/BF detail redesign belongs to C2.5.
 
 ## Product completion increments
 
+- Complete C2.5 live/manual acceptance; its implementation adds no new domain semantics.
 - Deliver F1-lite Documents using the existing renderer/storage foundation.
 - Deliver B2-lite configure/test/Run Now/result/reconcile Proxmox discovery.
 - Complete Interface-first IP, onboarding, deployment/upgrade, backup/restore,
@@ -936,8 +1105,8 @@ responsive/accessibility/branding refinement.
 Retain richer dependency semantics, C3, C4, D, broader B2 automation, full E,
 intended-state F work, and ITSM/MSP capabilities after Homelab Ready.
 
-The roadmap must continue to distinguish implemented C2.1 structure from
-planned C2.2 semantics, C2.3 analysis, C2.4 product experience, and later full
+The roadmap must continue to distinguish implemented C2.1 structure and C2.2
+semantics and C2.3 analysis from C2.4 product experience (manual gate pending) and later full
 Impact Analysis.
 
 ---
@@ -951,6 +1120,8 @@ Atlas is further advanced than a simple inventory MVP:
 * completeness is real;
 * Services and Business Functions are real;
 * graph projections are real;
+* lean dependency semantics are real and live-accepted on the C2.2 feature
+  working tree;
 * the Proxmox adapter and core sync are real;
 * deterministic Markdown generation is real.
 
@@ -959,11 +1130,100 @@ workflow remains a substantial incomplete journey. B2-lite places the smallest
 secure Proxmox journey before Homelab Ready without requiring the full worker
 control plane.
 
-The delivered **C2.1 — Shared Operational Graph** lets Atlas prove its knowledge
-and relationship model with manually curated accepted data. The next priority is
-to make that foundation useful and visible through lean semantics, explainable
-analysis, C2.4 product experience, F1-lite, B2-lite, and release hardening.
+The delivered **C2.1 — Shared Operational Graph** and live-accepted **C2.2 —
+Lean Dependency Semantics** let Atlas prove its knowledge, relationship, and
+lean dependency model with manually curated accepted data. C2.3 explainable
+analysis is implemented with live acceptance complete for its lean scope. Next
+are the outstanding manual acceptance gates, F1-lite,
+B2-lite, and release hardening.
 
 C2.1 now has a reusable graph builder, a generic focused graph API,
 compatibility adapters for the existing graph routes, authorization and
 non-disclosure tests, shared web primitives, and updated implementation evidence.
+
+## C2.6 — Usability & Lifecycle Polish (10 September 2026)
+
+| Capability | Repository status | Evidence |
+| --- | --- | --- |
+| Delete mistakes / Archive history | **Implemented**; manual acceptance pending | `entity_lifecycle.py`, migration `20260910_0016`, Service/BF eligibility + DELETE APIs, shared entity deletion dialog and PostgreSQL integration tests. Tombstones preserve creation evidence and history; operational references and substantive edits block deletion. |
+| Business Function Archive/Restore | **Implemented** | Named API/UI actions reuse existing `active` lifecycle; distinct nullable `deleted_at` represents deletion. |
+| System information architecture | **Implemented** | `system-navigation.mjs`, admin layout and redirect. Organisation + Reference Data use authorized local URL links; Audit Log and System Settings are direct. Old deep links remain valid. |
+| System Settings sections | **Implemented** | General shows existing non-sensitive settings; About labels the real web package version. No deployment secrets are exposed. |
+| Backup & Restore / Updates | **Planned but not implemented** | Truthful System Settings placeholders only; delivery remains Homelab Ready hardening. |
+
+[Exact rules/reference audit](../architecture/entity-lifecycle.md) and
+[validation/manual acceptance checklist](../testing/release-c2-usability-lifecycle-polish.md).
+No live acceptance, deployment, F1-lite, B2-lite or hardening completion is claimed.
+
+### Post-C2.6 Knowledge Profile usability tidy-up
+
+Asset Type profile queries now constrain `entity_type=asset`, fixing accidental
+inclusion of Service requirements whose `asset_type_id` is null. Service profile
+selection and completeness evaluation semantics are unchanged. Both administration
+pages share a compact table with separate global/type-specific sections, stacked
+names and descriptions, wrapped technical rules and secondary lifecycle actions.
+Migration `20260910_0017` repairs only exact known built-in Service description
+text; custom copy and historical references are preserved. This is a usability
+fix, not a new feature release. Regression coverage lives in
+`test_knowledge_profiles.py`, `knowledge-profile-table.test.mjs`, and the opt-in
+`check-knowledge-profiles-browser.mjs` browser check.
+
+### Global requirement administration tidy-up
+
+Global Asset and Global Service requirements have dedicated secondary management
+pages under `/admin/asset-types/requirements/global` and
+`/admin/service-types/requirements/global`. They reuse the existing structured
+editors, rule semantics and lifecycle APIs. Asset types and Service types expose
+a secondary management action; their existing Reference Data tabs are unchanged.
+Inherited global rows on type profiles are now reference-only, with manager-only
+links to the global pages. The global list API requires global view/manage
+permissions and returns only the requested entity class with no type scope.
+History and built-in status determine Delete availability, rechecked by the
+existing backend guard. Empty Asset policy lists remain valid. No database
+schema, seed requirements or migrations changed. This is an administration
+usability improvement, not a new feature release.
+
+### Topology and audit investigation polish
+
+Implemented: Platform and Network/VLAN reuse the Connectivity Asset inspector;
+all support persistent hide/show and Open Asset. Overview previews up to 12
+Assets per category. Platform previews four direct children with local expansion
+and relationship-driven multi-level drill-down. Network membership columns sort
+locally, including numeric IPv4/IPv6 ordering. Expanded Connectivity supports
+three hops within unchanged 100-node/500-edge limits and returns to two on close.
+Expanded Knowledge Graph Fits on viewport changes and supports inspector collapse.
+Audit Log supports multiple bounded inline investigation panels with recorded
+before/after values, additions/removals and redacted metadata. Events that only
+record changed field names cannot reconstruct historical before/after values.
+
+Evidence: topology route/service, topology and Knowledge Graph pages, shared
+DetailsPanelToggle, AuditInvestigation, topology-audit-polish unit tests and
+`check-topology-audit-polish-browser.mjs`. No persisted schema changes.
+
+### Dependency impact UX refinement
+
+Implemented: plain-language singleton classification and editing on Service
+details; ALL/ANY multi-provider controls; advanced group name/membership editing;
+singleton visual collapse in the Knowledge Graph with inspectable semantics;
+plain-language preview explanations with original technical evidence retained;
+and dashboard disclosure linking affected relationships to their Service editor.
+No new failure effects, quorum support, migrations, API contracts or analysis
+outcomes are introduced. Group cardinality is presentation-local to acquired
+authorized knowledge; see [graph presentation rules](../architecture/operational-graph.md#dependency-impact-presentation)
+and [validation record](../testing/dependency-impact-ux.md).
+
+
+Dependency-impact UX follow-up: the dashboard now normalizes raw graph API data
+before rendering dependency attention. Endpoint-resolution regressions, empty and
+legacy responses, and unauthenticated navigation have browser coverage. Graph
+presentation clusters providers by Service, strengthens entity/group hierarchy,
+and replaces generated identifier-style group labels with friendly domain labels
+without rewriting historical group names. See the
+[follow-up validation record](../testing/dependency-presentation-followup.md).
+
+
+Knowledge Graph routing polish: smooth cubic connectors, separate shared-node
+ports, group fan-out and selected-relationship emphasis are implemented on the
+existing layout. Singleton collapse, multi-member grouping, semantic direction,
+analysis behavior and card styling remain unchanged. See
+[routing validation](../testing/knowledge-graph-edge-routing.md).

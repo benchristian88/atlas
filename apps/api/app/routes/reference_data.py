@@ -17,8 +17,10 @@ from app.authorization import (
 from app.database import get_db
 from app.models import (
     Asset,
+    AssetCategory,
     AssetRelationship,
     AssetType,
+    TopologyPosition,
     CustomFieldAssetType,
     RelationshipType,
     RelationshipTypeApplicability,
@@ -87,8 +89,12 @@ def _asset_type_response(
             "key": item.key,
             "name": item.name,
             "description": item.description,
-            "category": item.category,
+            "category": item.category_record.name if item.category_record else "Uncategorized",
+            "category_id": item.category_id,
+            "category_key": item.category_record.key if item.category_record else "uncategorized",
             "default_icon_url": item.default_icon_url,
+            "topology_position_id": item.topology_position_id,
+            "topology_position": item.topology_position,
             "system_defined": item.system_defined,
             "active": item.active,
             "sort_order": item.sort_order,
@@ -162,6 +168,7 @@ def _relationship_type_response(
             "target_label": item.target_label,
             "inverse_label": item.inverse_label,
             "directional": item.directional,
+            "topology_class": item.topology_class,
             "system_defined": item.system_defined,
             "active": item.active,
             "sort_order": item.sort_order,
@@ -197,6 +204,8 @@ def create_asset_type(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "asset_types.manage")
+    _validate_category(db, payload.category_id)
+    _validate_position(db, payload.topology_position_id)
     item = AssetType(**payload.model_dump(), system_defined=False)
     db.add(item)
     flush(db, "Asset type")
@@ -232,6 +241,10 @@ def update_asset_type(
     if item is None:
         raise HTTPException(status_code=404, detail="Asset type not found")
     changes = payload.model_dump(exclude_unset=True)
+    if "category_id" in changes:
+        _validate_category(db, changes["category_id"], current_id=item.category_id)
+    if "topology_position_id" in changes:
+        _validate_position(db, changes["topology_position_id"], current_id=item.topology_position_id)
     referenced_requirements = requirements_referencing(db, item.id) if changes.get("active") is False else []
     for key, value in changes.items():
         setattr(item, key, value)
@@ -514,3 +527,20 @@ def delete_relationship_type(
     db.delete(item)
     commit(db, "Relationship type")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _validate_category(db: Session, category_id, current_id=None):
+    category = db.get(AssetCategory, category_id) if category_id else None
+    if category is None or (not category.active and category_id != current_id):
+        raise HTTPException(status_code=422, detail="Select an active Asset Category")
+    return category
+
+
+def _validate_position(db, position_id, current_id=None):
+    if position_id is None:
+        return
+    position = db.scalar(select(TopologyPosition).where(TopologyPosition.id == position_id).with_for_update(read=True))
+    if position is None:
+        raise HTTPException(422, "Unknown topology position")
+    if not position.active and position_id != current_id:
+        raise HTTPException(422, "Choose an active topology position")

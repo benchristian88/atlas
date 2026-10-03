@@ -156,9 +156,9 @@ access. On login and navigation it applies these rules:
 - Reject a selected customer/site that is not in the fresh accessible set.
 - Clear a site when its customer changes, then show only sites under that
   customer.
-- Automatically select the sole customer and sole site available to a user.
-- Allow an all-customers view only for assignments that actually cover multiple
-  contexts.
+- Restore one valid Customer/Site preference, otherwise choose the first
+  accessible Customer/Site in deterministic API order.
+- Do not expose All Customers or All Sites in the workspace selectors.
 - Require a concrete authorized customer and site for creation.
 
 The selected `Customer / Site` is displayed in the protected header. Asset,
@@ -167,6 +167,13 @@ Asset creation defaults to it, but the API independently validates submitted
 ownership. The web client sends the preference as `X-Atlas-Customer-ID` and
 `X-Atlas-Site-ID`; the central context dependency rejects a mismatched site,
 stale ID, or scope the current assignments do not cover.
+
+C2.4 treats the selected Site as a viewpoint for opt-in graph/analysis reads.
+It retains the selected Customer and per-entity/per-edge permissions, and can
+include directly relevant authorized cross-site providers of customer-wide
+Services. This does not widen any assignment. Customer-wide form mutations
+explicitly send record scope so the viewpoint does not change record ownership.
+See [the operations architecture](homelab-operations-experience.md).
 
 Every asset belongs to one customer and one site. New relationships are allowed
 only when the source and target are both authorized and have the same customer
@@ -226,17 +233,13 @@ inactive.
 
 ## Icon safety
 
-`AssetType.default_icon_url` and `Asset.icon_url` are optional. Resolution is:
-
-```text
-asset override -> asset-type default -> generic application icon
-```
-
-Only syntactically valid HTTPS URLs are accepted, and remote SVG URLs are
-rejected. Atlas does not perform a privileged server-side fetch, which avoids
-turning icon configuration into an SSRF primitive. The browser loads the URL
-and replaces a missing, blocked, or broken image with the generic fallback.
-Inline HTML and `data:`/`javascript:` sources are not accepted.
+Asset icon URLs are external sources for the [secure local icon cache](asset-icon-cache.md).
+An authenticated, Asset-scoped endpoint serves validated raster images from
+PostgreSQL. Resolution is cached Asset image, then Asset Type default, then the
+generic icon. Public HTTPS/DNS/peer/redirect validation, download and decoding
+limits protect the server fetch boundary. URL changes refresh lazily; successful
+unchanged sources are never periodically refreshed. Asset Type defaults retain
+the existing browser HTTPS behavior. Remote SVG is not supported.
 
 ## Audit events
 

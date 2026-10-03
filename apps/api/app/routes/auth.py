@@ -145,9 +145,12 @@ def update_profile(
     user = principal.user
     previous_name = user.display_name
     previous_accent = user.accent_colour
+    previous_theme = user.theme_mode or "system"
     user.display_name = payload.display_name.strip()
     if "accent_colour" in payload.model_fields_set:
         user.accent_colour = payload.accent_colour
+    if "theme_mode" in payload.model_fields_set:
+        user.theme_mode = payload.theme_mode
     add_audit_event(
         db,
         action="profile.updated",
@@ -158,6 +161,7 @@ def update_profile(
         metadata={
             "display_name": {"from": previous_name, "to": user.display_name},
             "accent_colour": {"from": previous_accent, "to": user.accent_colour},
+            "theme_mode": {"from": previous_theme, "to": user.theme_mode or "system"},
         },
         request=request,
     )

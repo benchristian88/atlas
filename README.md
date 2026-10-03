@@ -214,14 +214,17 @@ than one link per technical page:
 
 - **Overview:** Dashboard and the meaningful Changes timeline.
 - **Knowledge:** Assets, Networks, first-class Services, lightweight Business
-  Functions, and Knowledge Graph. Knowledge Graph is the user-facing name for
-  the existing `/topology` capability; topology remains a technical lens within
-  that graph.
+  Functions, Knowledge Graph (`/knowledge-graph`) and Infrastructure Topology
+  (`/topology`). The latter provides hosting, Network membership and technical
+  Connectivity views over the same accepted knowledge.
 - **Operations:** Discovery run activity and simulation, plus Reconciliation
   for reviewing sourced changes before they enter the operational model.
 - **Connections:** Integrations.
-- **System:** permission-filtered Users & Access, Reference Data, and an
-  Administration landing page linking to available administration sections.
+- **System:** permission-filtered Organisation (Users, Roles & permissions,
+  Customers, Sites), Reference Data, direct Audit Log and System Settings.
+  Existing admin deep links remain valid; `/admin` redirects to the first
+  authorized section. System Settings contains General, planned Backup & Restore,
+  planned Updates and About.
 - **Profile:** kept separate because it contains user-specific identity,
   password, access-summary, and appearance preferences.
 
@@ -235,12 +238,23 @@ KNOWLEDGE      Knowledge Graph; Assets; Services; Business Functions;
 OPERATIONS     Discovery; Reconciliation; Impact Analysis (roadmap);
                Backup & Recovery (roadmap); Documentation (roadmap)
 CONNECTIONS    Integrations
-SYSTEM         Users & Access; Reference Data; Administration
+SYSTEM         Organisation; Reference Data; Audit Log; System Settings
 PROFILE        Profile
 ```
 
 Future usable features should be enabled within these domains rather than
 added as arbitrary top-level links.
+
+## Service and Business Function lifecycle
+
+**Delete mistakes. Archive history.** C2.6 adds Delete for unused mistakes even
+when automatic creation declarations, gaps and audit records exist. Deletion
+retains a tombstone and history while excluding the entity from operational
+views; substantive relationships, later edits and knowledge participation block
+Delete. Archive preserves genuinely used records. See
+[the exact lifecycle rules](docs/architecture/entity-lifecycle.md) and
+[C2.6 manual acceptance checklist](docs/testing/release-c2-usability-lifecycle-polish.md).
+Manual acceptance remains pending.
 
 ## Customer and site context
 
@@ -286,11 +300,14 @@ one asset type is limited to 10, including global fields. Keys remain stable
 after use, typed values are validated by the API, and deactivation preserves
 existing values.
 
-Asset types can define an HTTPS icon URL and an asset can override it. Atlas
-resolves `asset override -> type default -> generic fallback`. Remote SVG URLs
-and non-HTTPS URLs are rejected. The API validates and stores the URL but does
-not fetch it; the user's browser fetches the image and falls back safely if it
-fails.
+Asset types can define an HTTPS default icon and an Asset can override it with
+a public HTTPS PNG, JPEG or WebP source. Atlas securely downloads and caches an
+Asset-specific local copy on first display, then reuses it until its source URL
+changes. Resolution is `cached Asset image -> type default -> generic fallback`.
+Clearing the URL restores the fallback. Private addresses, remote SVG, oversized
+images and unsafe redirects are blocked; retrieval failures do not prevent Asset
+saves. Type defaults retain their existing browser HTTPS behavior. See the
+[icon guide](docs/admin/asset-icons.md) and [cache design](docs/architecture/asset-icon-cache.md).
 
 For example, an operator can configure externally hosted Proxmox, Home
 Assistant, or UniFi artwork for a type or specific asset. Atlas does not bundle
@@ -357,10 +374,12 @@ See the [Service model](docs/architecture/service-model.md),
 
 ## Current product sequence
 
-**Release C2.1 — Shared Operational Graph is implemented and merged.** Atlas's
-near-term product target is a polished, secure, publicly usable **Homelab Ready
-Release**. The planned route is C2.2 Lean Dependency Semantics, C2.3 Explainable
-Dependency Analysis, C2.4 Homelab Operations Experience, F1-lite Homelab
+**C2.1 — Shared Operational Graph is implemented and merged. C2.2 — Lean
+Dependency Semantics and C2.3 — Explainable Dependency Analysis are implemented
+with live LXC acceptance complete for their respective scopes.** Atlas's near-term
+product target is a polished, secure, publicly usable **Homelab Ready Release**.
+C2.4 Homelab Operations Experience is implemented on its feature working tree
+with manual acceptance pending. C2.5 Entity Detail UX Polish follows, then F1-lite Homelab
 Documentation, B2-lite Live Proxmox Discovery, and contained release hardening.
 
 Manual and curated operational knowledge remains first-class. People/Teams,
@@ -453,7 +472,7 @@ After signing in, verify the persistent manual-data workflow:
 3. Open **Assets**, select the customer and site, enter an asset name, type, and hostname, then create it. Add IP addresses from the asset detail interface section.
 4. Create a second asset, open the first asset by selecting its name, and add a relationship to the second asset.
 5. Refresh the asset detail page and confirm the asset fields and relationship remain.
-6. Open **Knowledge Graph** (`/topology`) and confirm the customer → site → assets tree and relationship label appear.
+6. Open **Infrastructure Topology** (`/topology`), choose **Connectivity**, and confirm the recorded relationship appears for the focused Asset.
 7. Return to **Dashboard** and confirm the live customer, site, asset, and relationship counts.
 
 The API container runs `alembic upgrade head` at startup. Existing deployments
@@ -468,16 +487,18 @@ below; do not drop/recreate the database.
 4. Create asset **nginx-proxy-manager** with type `docker_container` or `application`.
 5. Open an asset detail page and create `docker01` → `runs_on` → `pve1`.
 6. Create `nginx-proxy-manager` → `runs_on` → `docker01`.
-7. Open **Knowledge Graph**, switch between **Platform** and **All relationships**, and verify node details and edge labels.
-8. Filter the topology by Home Lab, Home, and an asset type; clear each filter and confirm the graph remains stable.
+7. Open **Infrastructure Topology**, switch between **Platform** and **Connectivity**, and verify recorded details and edge labels.
+8. Select Home Lab / Home in workspace context and filter by managed Asset Category; confirm the graph remains stable.
 9. Refresh the browser and confirm all assets and relationships remain present without repeated idle API requests.
 
 ### Model a homelab network
 
 Networks and VLANs represent subnets and broadcast/routing domains. Assets can
 have one or more interfaces, and interface records are the source of truth for
-IP and network membership. The legacy asset-level IP field remains API-compatible
-but is not used by the web workflow.
+IP and network membership. Asset create/edit forms have no top-level IP field; add addresses through
+**Interfaces and networks** on Asset detail. The legacy asset-level `ip_address`
+field is deprecated compatibility only: existing API clients may still read or
+write it, but Asset UI, topology display and list search do not use it.
 
 1. Create customer **Home Lab** and site **Home**.
 2. Open **Networks** and create **Apps VLAN** as a `vlan`, VLAN ID `5`, CIDR `192.168.5.0/24`, and gateway `192.168.5.1`.
@@ -485,32 +506,26 @@ but is not used by the web workflow.
 4. Create asset **docker01**, then open its asset detail page.
 5. Add interface **eth0** with IP `192.168.5.8`, select **Apps VLAN**, and mark it primary.
 6. Refresh the asset detail page and confirm the interface and network remain present.
-7. Open **Knowledge Graph**, select **Network / VLAN**, and confirm docker01 appears under `VLAN 5 — Apps VLAN — 192.168.5.0/24`.
-8. Confirm an asset without an interface appears under **Unassigned network** rather than being assigned from its primary IP silently.
+7. Open **Infrastructure Topology**, select **Network & VLAN**, choose Apps VLAN and confirm docker01 appears with eth0 and its IP.
+8. Confirm an Asset without explicit Network membership is absent from the Network member list and remains visible in Platform.
 9. Edit Apps VLAN, refresh the page, then delete a disposable network and confirm the list updates only after those user actions.
 
-### Topology lenses
+### Infrastructure Topology
 
-Atlas separates overlapping infrastructure questions into focused topology lenses:
+[Infrastructure Topology](docs/admin/infrastructure-topology.md) separates four questions:
 
-- **Physical** shows firewalls, routers, switches, access points, storage, and physical hosts connected by `connects_to`, `uplinks_to`, or `connected_via`. Hosted workloads are summarized as counts instead of being drawn.
-- **Platform** shows clusters, hypervisor hosts, VMs, LXCs, Docker hosts, containers, and applications using hosting and containment relationships.
-- **Network / VLAN** groups every asset interface under its explicit Network/VLAN. Assets without interface membership remain unassigned.
-- **Dependency** shows operational links such as `depends_on`, `proxies`, `authenticates`, `exposes`, `backs_up_to`, and `uses_storage`.
-- **All relationships** is the advanced/debug lens. Use customer, site, asset type, relationship type, or focus-asset filters when it becomes busy.
+- **Overview:** authorized inventory and dynamic category/Network summaries.
+- **Platform:** a wrapping grid driven by recorded hosting/containment relationships,
+  with compact child previews and Show all for larger parents.
+- **Network & VLAN:** vertical Network master/detail using explicit interface membership.
+- **Connectivity:** a centred, bounded one- or two-hop focus with an inspector.
 
-To exercise the lenses with a representative homelab:
+[Managed Asset Categories](docs/admin/asset-categories.md) drive grouping and
+filter defaults, including custom categories. Relationships drive topology.
+Uncategorized is a protected fallback, hidden by default but available in Filters.
+Expansion fills the Atlas viewport and preserves view state. No telemetry,
+subnet-derived links or gateway devices are invented.
 
-1. Create **UDM Pro**, **USW-16-POE**, **NAS**, **PBS**, **pve1**, and **pve2** assets.
-2. Record `UDM Pro` → `uplinks_to` → `USW-16-POE`, then connect NAS, PBS, pve1, and pve2 to the switch with `connects_to`.
-3. Create a **Proxmox Cluster** and record pve1 and pve2 as `member_of` the cluster.
-4. Add VMs and LXCs with `runs_on` relationships to their Proxmox hosts.
-5. Add a Docker host and containers/applications, then record their `runs_on` relationships.
-6. Add an application → `depends_on` → database relationship.
-7. Confirm **Physical** hides the VMs and containers but shows workload counts on the hosts.
-8. Confirm **Platform** shows cluster → hosts → VMs/LXCs → containers/applications.
-9. Confirm **Network / VLAN** uses interface membership and **Dependency** shows the application/database edge.
-10. Select pve1 as the focus asset and confirm only pve1 and its directly connected neighbors remain. Clear focus and verify the full filtered lens returns without another API fetch.
 
 ### Model a homelab Service
 

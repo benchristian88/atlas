@@ -9,6 +9,7 @@ import {
   publicSessionState,
 } from "../lib/session-state.mjs";
 import { AppShell } from "./app-shell";
+import { useResolvedThemeMode } from "./theme-mode";
 import {
   authenticatedHome,
   AuthContext,
@@ -30,6 +31,11 @@ export function RootShell({ children }) {
   const publicRoute = isPublicRoute(pathname);
   const [authState, setAuthState] = useState(checkingSessionState);
   const [retryKey, setRetryKey] = useState(0);
+  const resolvedThemeMode = useResolvedThemeMode(authState.user?.theme_mode);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedThemeMode;
+  }, [resolvedThemeMode]);
 
   useEffect(() => {
     if (publicRoute) {
@@ -59,6 +65,7 @@ export function RootShell({ children }) {
   }, []);
 
   const authValue = useMemo(() => ({
+    resolvedThemeMode,
     user: authState.user,
     updateUser,
     permissions: authState.user?.permissions || [],
@@ -71,7 +78,7 @@ export function RootShell({ children }) {
     hasPermissionForObject: (permission, customerId, siteId) => (
       userHasPermissionForObject(authState.user, permission, customerId, siteId)
     ),
-  }), [authState.user, updateUser]);
+  }), [authState.user, updateUser, resolvedThemeMode]);
 
   const passwordChangeRequired = Boolean(
     authState.status === "authenticated"

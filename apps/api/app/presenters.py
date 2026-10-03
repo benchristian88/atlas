@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.authorization import Principal, role_names
 from app.models import Asset, AssetType, KnowledgeCompletenessSummary
 from app.services.custom_fields import custom_field_values
+from app.services.asset_icons import icon_fields
 
 
 def user_response_data(principal: Principal, *, administrative: bool = False) -> dict:
@@ -17,6 +18,7 @@ def user_response_data(principal: Principal, *, administrative: bool = False) ->
         "email": user.email,
         "display_name": user.display_name,
         "accent_colour": user.accent_colour,
+        "theme_mode": user.theme_mode or "system",
         "is_active": user.is_active,
         "force_password_change": user.force_password_change,
         "last_login_at": user.last_login_at,
@@ -65,9 +67,7 @@ def asset_response_data(db: Session, asset: Asset) -> dict:
         "name": asset.name,
         "asset_type": asset.asset_type,
         "icon_url": asset.icon_url,
-        "resolved_icon_url": asset.icon_url or (
-            asset_type.default_icon_url if asset_type is not None else None
-        ),
+        **icon_fields(asset, asset_type),
         "vendor": asset.vendor,
         "model": asset.model,
         "hostname": asset.hostname,
@@ -83,3 +83,31 @@ def asset_response_data(db: Session, asset: Asset) -> dict:
         "created_at": asset.created_at,
         "updated_at": asset.updated_at,
     }
+
+
+def topology_asset_responses(db: Session, assets, types):
+    """Batch the existing Asset response contract for an authorized projection."""
+    from app.models import AssetCustomFieldValue, CustomFieldDefinition, CustomFieldOption
+    from app.schemas import ManualAssetResponse
+    ids = [a.id for a in assets]
+    if not ids:
+        return []
+    completeness = {r.entity_id: r for r in db.scalars(select(KnowledgeCompletenessSummary).where(
+        KnowledgeCompletenessSummary.entity_type == "asset", KnowledgeCompletenessSummary.entity_id.in_(ids))) }
+    fields = {}
+    for stored, definition, option in db.execute(select(AssetCustomFieldValue, CustomFieldDefinition, CustomFieldOption)
+        .join(CustomFieldDefinition, CustomFieldDefinition.id == AssetCustomFieldValue.field_definition_id)
+        .outerjoin(CustomFieldOption, CustomFieldOption.id == AssetCustomFieldValue.value_option_id)
+        .where(AssetCustomFieldValue.asset_id.in_(ids))):
+        value = next((v for v in (stored.value_text, stored.value_number, stored.value_date, stored.value_bool) if v is not None), option.value if option else None)
+        fields.setdefault(stored.asset_id, {})[definition.key] = value
+    result = []
+    for asset in assets:
+        values = ManualAssetResponse.model_validate(asset).model_dump()
+        values.update(icon_fields(asset, types.get(asset.asset_type)))
+        values["custom_fields"] = fields.get(asset.id, {})
+        summary = completeness.get(asset.id)
+        if summary:
+            values.update(completeness_status=summary.completeness_status, open_knowledge_gap_count=summary.open_gap_count, critical_knowledge_gap_count=summary.critical_gap_count)
+        result.append(values)
+    return result

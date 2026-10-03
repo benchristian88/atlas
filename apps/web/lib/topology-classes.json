@@ -1,0 +1,27 @@
+[
+  {
+    "key": "platform",
+    "label": "Platform / containment",
+    "enabled_by_default": true
+  },
+  {
+    "key": "physical_network",
+    "label": "Physical / network",
+    "enabled_by_default": true
+  },
+  {
+    "key": "data_resilience",
+    "label": "Data / resilience",
+    "enabled_by_default": false
+  },
+  {
+    "key": "logical_operational",
+    "label": "Logical / operational",
+    "enabled_by_default": false
+  },
+  {
+    "key": "other",
+    "label": "Other",
+    "enabled_by_default": false
+  }
+]

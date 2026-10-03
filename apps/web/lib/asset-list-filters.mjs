@@ -17,8 +17,10 @@ export function parseAssetListFilters(searchParams, pageSize = 30) {
     ? Math.floor(rawOffset / pageSize) * pageSize
     : 0;
   const typeId = searchParams.get("asset_type_id") || "";
+  const categoryId = searchParams.get("category_id") || "";
   const completeness = searchParams.get("completeness") || "";
   return {
+    categoryId: UUID_PATTERN.test(categoryId) ? categoryId : "",
     assetTypeId: UUID_PATTERN.test(typeId) ? typeId : "",
     completeness: ASSET_COMPLETENESS_FILTERS.includes(completeness) ? completeness : "",
     search: (searchParams.get("search") || "").trim().slice(0, 255),
@@ -28,6 +30,7 @@ export function parseAssetListFilters(searchParams, pageSize = 30) {
 
 export function assetListFiltersHref(filters) {
   const params = new URLSearchParams();
+  if (filters.categoryId) params.set("category_id", filters.categoryId);
   if (filters.assetTypeId) params.set("asset_type_id", filters.assetTypeId);
   if (filters.completeness) params.set("completeness", filters.completeness);
   if (filters.search) params.set("search", filters.search.trim());

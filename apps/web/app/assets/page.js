@@ -28,6 +28,7 @@ export default function AssetsPage() {
   const filterKey = assetListFiltersHref(filters);
   const [assets, setAssets] = useState([]);
   const [summary, setSummary] = useState({ total: 0, by_asset_type: [] });
+  const [categories, setCategories] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
   const [customFields, setCustomFields] = useState([]);
   const [searchDraft, setSearchDraft] = useState(filters.search);
@@ -52,15 +53,17 @@ export default function AssetsPage() {
     setLoading(true);
     setError("");
     try {
-      const [assetSummary, typeRecords, fieldRecords] = await Promise.all([
+      const [assetSummary, typeRecords, fieldRecords, categoryRecords] = await Promise.all([
         apiRequest("/assets/summary"),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields?active_only=true") : Promise.resolve([]),
+        hasPermission("asset_types.view") ? apiRequest("/asset-categories") : Promise.resolve([]),
       ]);
       if (requestId.current !== currentRequest) return;
       const validType = assetSummary.by_asset_type.find((item) => item.asset_type_id === filters.assetTypeId);
       const parameters = new URLSearchParams({ limit: String(PAGE_SIZE + 1), offset: String(filters.offset) });
       if (validType) parameters.set("asset_type_id", validType.asset_type_id);
+      if (filters.categoryId) parameters.set("category_id", filters.categoryId);
       if (filters.search) parameters.set("search", filters.search);
       if (filters.completeness === "has_critical_gaps") parameters.set("has_critical_gaps", "true");
       else if (filters.completeness === "has_open_knowledge_gaps") parameters.set("has_open_knowledge_gaps", "true");
@@ -70,6 +73,7 @@ export default function AssetsPage() {
       if (requestId.current !== currentRequest) return;
       setSummary(assetSummary);
       setAssetTypes(typeRecords);
+      setCategories(categoryRecords);
       setCustomFields(fieldRecords);
       setAssets(assetRecords.slice(0, PAGE_SIZE));
       setHasMore(assetRecords.length > PAGE_SIZE);
@@ -83,7 +87,7 @@ export default function AssetsPage() {
     } finally {
       if (requestId.current === currentRequest) setLoading(false);
     }
-  }, [canView, filterKey, filters.assetTypeId, filters.completeness, filters.offset, filters.search, hasPermission, workspace.reloadKey]);
+  }, [canView, filterKey, filters.assetTypeId, filters.categoryId, filters.completeness, filters.offset, filters.search, hasPermission, workspace.reloadKey]);
 
   useEffect(() => {
     load();
@@ -101,7 +105,7 @@ export default function AssetsPage() {
   const creatableCustomerIds = new Set(creatableSites.map((site) => site.customer_id));
   const creatableCustomers = workspace.customers.filter((customer) => creatableCustomerIds.has(customer.id));
   const ready = loadedKey === filterKey;
-  const activeFilterCount = [selectedType, filters.completeness, filters.search].filter(Boolean).length;
+  const activeFilterCount = [selectedType, filters.categoryId, filters.completeness, filters.search].filter(Boolean).length;
 
   if (!canView) return <AccessDenied />;
 
@@ -149,14 +153,14 @@ export default function AssetsPage() {
 
     <section className="asset-filter-panel" aria-label="Asset filters">
       <div className="asset-type-filters" aria-label="Filter by asset type"><button aria-pressed={!selectedType} className={`asset-type-filter selector-control-text${!selectedType ? " active" : ""}`} onClick={() => updateFilters({ assetTypeId: "" })} type="button"><span>All assets</span><strong>{summary.total}</strong></button>{directTypeCounts.map((item) => <button aria-pressed={selectedType?.asset_type_id === item.asset_type_id} className={`asset-type-filter selector-control-text${selectedType?.asset_type_id === item.asset_type_id ? " active" : ""}`} key={item.asset_type_id} onClick={() => updateFilters({ assetTypeId: item.asset_type_id })} type="button"><span>{item.asset_type_name}</span><strong>{item.count}</strong></button>)}{additionalTypeCounts.length > 0 && <label className={`asset-type-more${selectedAdditionalType ? " active" : ""}`}><span className="sr-only">More asset types</span><select aria-label="More asset types" className="selector-control-text" onChange={(event) => updateFilters({ assetTypeId: event.target.value })} value={selectedAdditionalType?.asset_type_id || ""}><option value="">More…</option>{additionalTypeCounts.map((item) => <option key={item.asset_type_id} value={item.asset_type_id}>{item.asset_type_name} ({item.count})</option>)}</select></label>}</div>
-      <form className="asset-list-toolbar" onSubmit={(event) => { event.preventDefault(); updateFilters({ search: searchDraft.trim() }); }}><label className="field"><span>Search assets</span><input onChange={(event) => setSearchDraft(event.target.value)} placeholder="Name, hostname, IP, vendor or model" value={searchDraft} /></label>{hasPermission("knowledge_gaps.view") && <label className="field"><span>Completeness</span><select onChange={(event) => updateFilters({ completeness: event.target.value })} value={filters.completeness}><option value="">All completeness states</option><option value="has_critical_gaps">Has critical gaps</option><option value="has_open_knowledge_gaps">Has open gaps</option><option value="critical_gaps">Critical gaps status</option><option value="incomplete">Incomplete</option><option value="operationally_complete">Operationally complete</option><option value="complete">Complete</option><option value="exception_accepted">Exception accepted</option><option value="not_evaluated">Not evaluated</option></select></label>}<button className="button button-secondary" type="submit">Apply search</button><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/assets")} type="button">Clear filters</button></form>
+      <form className="asset-list-toolbar" onSubmit={(event) => { event.preventDefault(); updateFilters({ search: searchDraft.trim() }); }}><label className="field"><span>Search assets</span><input onChange={(event) => setSearchDraft(event.target.value)} placeholder="Name, hostname, IP, vendor or model" value={searchDraft} /></label><label className="field"><span>Asset Category</span><select aria-label="Asset Category" value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></label>{hasPermission("knowledge_gaps.view") && <label className="field"><span>Completeness</span><select onChange={(event) => updateFilters({ completeness: event.target.value })} value={filters.completeness}><option value="">All completeness states</option><option value="has_critical_gaps">Has critical gaps</option><option value="has_open_knowledge_gaps">Has open gaps</option><option value="critical_gaps">Critical gaps status</option><option value="incomplete">Incomplete</option><option value="operationally_complete">Operationally complete</option><option value="complete">Complete</option><option value="exception_accepted">Exception accepted</option><option value="not_evaluated">Not evaluated</option></select></label>}<button className="button button-secondary" type="submit">Apply search</button><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/assets")} type="button">Clear filters</button></form>
     </section>
 
     <section className="table-card" aria-label="Assets list">
       <div className="table-meta"><span>{!ready || loading ? "Loading…" : `${assets.length} shown${selectedType ? ` · ${selectedType.asset_type_name}` : ""}`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>
-      <div className="table-scroll"><table><thead><tr><th>Asset</th><th>Type</th><th>Customer</th><th>Site</th><th>Hostname / IP</th><th>Status</th>{hasPermission("knowledge_gaps.view") && <th>Completeness</th>}{showActions && <th>Actions</th>}</tr></thead><tbody>
+      <div className="table-scroll"><table><thead><tr><th>Asset</th><th>Type</th><th>Customer</th><th>Site</th><th>Hostname</th><th>Status</th>{hasPermission("knowledge_gaps.view") && <th>Completeness</th>}{showActions && <th>Actions</th>}</tr></thead><tbody>
         {ready && !loading && assets.length === 0 && <tr><td className="empty-state" colSpan={columnCount}>No assets match the current filters.</td></tr>}
-        {ready && assets.map((asset) => { const type = assetTypesByKey[asset.asset_type]; const customer = workspace.customers.find((item) => item.id === asset.customer_id); const site = workspace.sites.find((item) => item.id === asset.site_id); const canEditAsset = canEdit && hasPermissionForObject("assets.edit", asset.customer_id, asset.site_id); const canDeleteAsset = canDelete && hasPermissionForObject("assets.delete", asset.customer_id, asset.site_id); return <tr key={asset.id}><td><Link className="asset-table-identity" href={`/assets/${asset.id}`}><AssetIcon asset={{ ...asset, icon_url: asset.icon_url || asset.resolved_icon_url }} assetType={type} size={38} /><span><strong>{asset.name}</strong><small>{asset.vendor || asset.model ? [asset.vendor, asset.model].filter(Boolean).join(" ") : "View documentation"}</small></span></Link></td><td>{type?.name || asset.asset_type}</td><td>{customer?.name || "Unknown"}</td><td>{site?.name || "Unknown"}</td><td><span className="mono">{asset.ip_address || asset.hostname || "—"}</span></td><td><StatusBadge status={asset.status} /></td>{hasPermission("knowledge_gaps.view") && <td><StatusBadge status={asset.completeness_status.replaceAll("_", " ")} />{asset.open_knowledge_gap_count > 0 && <small className="secondary-text">{asset.open_knowledge_gap_count} open</small>}</td>}{showActions && <td><div className="row-actions">{canEditAsset && <Link className="text-button" href={`/assets/${asset.id}/edit`}>Edit</Link>}{canDeleteAsset && <button className="text-button text-danger" onClick={() => removeAsset(asset)} type="button">Delete</button>}</div></td>}</tr>; })}
+        {ready && assets.map((asset) => { const type = assetTypesByKey[asset.asset_type]; const customer = workspace.customers.find((item) => item.id === asset.customer_id); const site = workspace.sites.find((item) => item.id === asset.site_id); const canEditAsset = canEdit && hasPermissionForObject("assets.edit", asset.customer_id, asset.site_id); const canDeleteAsset = canDelete && hasPermissionForObject("assets.delete", asset.customer_id, asset.site_id); return <tr key={asset.id}><td><Link className="asset-table-identity" href={`/assets/${asset.id}`}><AssetIcon asset={asset} assetType={type} size={38} /><span><strong>{asset.name}</strong><small>{asset.vendor || asset.model ? [asset.vendor, asset.model].filter(Boolean).join(" ") : "View documentation"}</small></span></Link></td><td>{type?.name || asset.asset_type}</td><td>{customer?.name || "Unknown"}</td><td>{site?.name || "Unknown"}</td><td><span className="mono">{asset.hostname || "—"}</span></td><td><StatusBadge status={asset.status} /></td>{hasPermission("knowledge_gaps.view") && <td><StatusBadge status={asset.completeness_status.replaceAll("_", " ")} />{asset.open_knowledge_gap_count > 0 && <small className="secondary-text">{asset.open_knowledge_gap_count} open</small>}</td>}{showActions && <td><div className="row-actions">{canEditAsset && <Link className="text-button" href={`/assets/${asset.id}/edit`}>Edit</Link>}{canDeleteAsset && <button className="text-button text-danger" onClick={() => removeAsset(asset)} type="button">Delete</button>}</div></td>}</tr>; })}
       </tbody></table></div>
     </section>
     {ready && !loading && (filters.offset > 0 || hasMore) && <div className="pagination"><button className="button button-secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</button><span>Page {Math.floor(filters.offset / PAGE_SIZE) + 1}</span><button className="button button-secondary" disabled={!hasMore} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</button></div>}

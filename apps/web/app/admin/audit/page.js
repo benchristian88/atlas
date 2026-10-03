@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { AuditInvestigation } from "../../../components/audit-investigation";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
 import { PageHeader } from "../../../components/page-header";
@@ -15,6 +16,7 @@ export default function AuditAdminPage() {
   const { hasPermission } = useAuth();
   const { customerId, siteId } = useWorkspaceContext();
   const [events, setEvents] = useState([]);
+  const [expanded, setExpanded] = useState({});
   const [filters, setFilters] = useState({ actor: "", action: "", entity_type: "", date_from: "", date_to: "" });
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export default function AuditAdminPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Administration" title="Audit log" description="Review security-sensitive and administrative changes within your authorised scope." />
+      <PageHeader eyebrow="System" title="Audit log" description="Review security-sensitive and administrative changes within your authorised scope." />
       <form className="filter-card" onSubmit={submit}>
         <div className="form-grid audit-filter-grid">
           <label className="field"><span>Actor</span><input onChange={(event) => setFilters({ ...filters, actor: event.target.value })} placeholder="Email or display name" value={filters.actor} /></label>
@@ -67,7 +69,7 @@ export default function AuditAdminPage() {
         <div className="table-meta"><span>{loading ? "Loading…" : `${events.length} events`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>
         <div className="table-scroll"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Result</th><th>Summary</th><th>Details</th></tr></thead><tbody>
           {!loading && events.length === 0 && <tr><td className="empty-state" colSpan="7">No audit events match these filters.</td></tr>}
-          {events.map((event) => <tr key={event.id}><td className="secondary-text">{timestamp(event.created_at)}</td><td>{event.actor_snapshot || "System"}</td><td><span className="mono">{event.event_type}</span></td><td>{event.target_type || "—"}</td><td>{event.success ? "Success" : "Failed"}</td><td>{event.change_summary || "—"}</td><td>{Object.keys(event.metadata || {}).length ? <details><summary>View</summary><pre className="audit-metadata">{JSON.stringify(event.metadata, null, 2)}</pre></details> : "—"}</td></tr>)}
+          {events.map((event) => <Fragment key={event.id}><tr><td className="secondary-text">{timestamp(event.created_at)}</td><td>{event.actor_snapshot || "System"}</td><td><span className="mono">{event.event_type}</span></td><td>{event.target_type || "—"}</td><td>{event.success ? "Success" : "Failed"}</td><td>{event.change_summary || "—"}</td><td><button type="button" className="audit-disclosure" aria-label={expanded[event.id] ? "Collapse audit record" : "Expand audit record"} aria-expanded={Boolean(expanded[event.id])} aria-controls={`audit-${event.id}`} onClick={() => setExpanded(current => ({ ...current, [event.id]: !current[event.id] }))}>{expanded[event.id] ? "−" : "+"}</button></td></tr>{expanded[event.id] && <tr><td colSpan="7"><AuditInvestigation event={event} timestamp={timestamp} /></td></tr>}</Fragment>)}
         </tbody></table></div>
       </section>
     </>

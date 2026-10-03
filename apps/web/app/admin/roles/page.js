@@ -47,7 +47,7 @@ export default function RolesAdminPage() {
       description="Inspect built-in roles or create permission bundles for future access assignments."
       emptyValues={{ name: "", sort_order: "100", active: true, permission_keys: [], description: "" }}
       endpoint="/roles"
-      eyebrow="Administration"
+      eyebrow="Organisation"
       fields={fields}
       preparePayload={(form) => ({
         name: form.name,

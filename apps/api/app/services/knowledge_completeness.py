@@ -519,7 +519,7 @@ def evaluate_service(
     actor_user_id: uuid.UUID | None = None,
 ) -> KnowledgeCompletenessSummary:
     service = service_or_id if isinstance(service_or_id, Service) else db.get(Service, service_or_id)
-    if service is None:
+    if service is None or service.deleted_at is not None:
         raise ValueError("Service not found")
     now = datetime.now(timezone.utc)
     requirements = list(db.scalars(select(KnowledgeRequirementDefinition).where(

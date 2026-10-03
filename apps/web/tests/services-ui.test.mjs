@@ -44,9 +44,17 @@ test("Dashboard spacing and knowledge-list descriptions use the requested stacke
   ]);
 
   assert.match(dashboard, /className="summary-grid dashboard-summary-grid"/);
-  assert.match(services, /className="table-cell-identity"/);
-  assert.match(businessFunctions, /className="table-cell-identity"/);
-  assert.match(businessFunctions, /<small className="secondary-text">\{item\.description/);
+  assert.match(services, /<ServiceCatalogueRow/);
+  assert.match(businessFunctions, /<BusinessFunctionCatalogueRow/);
   assert.match(styles, /\.dashboard-summary-grid \{ margin-bottom: 20px; \}/);
   assert.match(styles, /\.table-cell-identity \{ display: grid; gap: 4px; min-width: 0; \}/);
+});
+
+
+test("Service Types omits the obsolete naming callout and retains managed CRUD", async () => {
+  const page = await readFile(new URL("../app/admin/service-types/page.js", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /Naming note|warning-banner|Runtime Service|Existing Assets are not migrated automatically/);
+  assert.match(page, /endpoint="\/service-types"/);
+  assert.match(page, /canCreate=\{manage\} canDelete=\{false\} canEdit=\{manage\}/);
+  assert.match(page, /hasPermission\("service_types.view"\)/);
 });

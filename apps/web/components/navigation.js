@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "./auth-context";
 import { useWorkspaceContext } from "./workspace-context";
+import { NavigationIcon } from "./navigation-icon.mjs";
 import {
   navigationItemIsActive,
   visibleNavigationGroups,
@@ -52,7 +53,8 @@ function NavigationLink({ item, pathname }) {
       className={`nav-link${active ? " active" : ""}`}
       href={item.href}
     >
-      {item.label}
+      <NavigationIcon name={item.id} />
+      <span>{item.label}</span>
     </Link>
   );
 }

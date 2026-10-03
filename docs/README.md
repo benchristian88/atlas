@@ -41,7 +41,7 @@ update the audited ledger.
 | Release B — Discovery and Reconciliation | Simulation and reconciliation implemented; live plugin operation and worker orchestration remain partial |
 | Release B.5 — Knowledge Completeness | Implemented for Assets and Services; broader entity coverage remains future work |
 | Release C1 — Homelab Service MVP | Implemented |
-| Release C2 — shared graph and Homelab Ready product foundations | C2.1 implemented; C2.2 lean semantics, C2.3 explainable analysis and C2.4 operations experience planned |
+| Release C2 — shared graph and Homelab Ready product foundations | C2.1 complete; C2.2 complete; C2.3 complete; C2.4 implemented; manual acceptance pending |
 | F1-lite — Homelab Documentation | Planned; generated Markdown renderer and Document storage exist |
 | B2-lite — Live Proxmox Discovery | Partially implemented foundation; configure/test/Run Now/reconcile journey planned |
 | Homelab Ready Release | Planned near-term product target |
@@ -52,10 +52,18 @@ update the audited ledger.
 | Release F — Documentation and intended state | Generated-document foundation partial; user-facing product and intended-state workflow not implemented |
 | Production and community packaging | Not established |
 
-**Release C2.1 — Shared Operational Graph** is implemented and merged to `dev`.
-The near-term target is a polished, secure, self-hosted **Homelab Ready
-Release** through C2.2, C2.3, C2.4, F1-lite, B2-lite, and release hardening.
+**Release C2.1 — Shared Operational Graph** is complete and merged to `dev`.
+**C2.2 — Lean Dependency Semantics** and **C2.3 — Explainable Dependency
+Analysis** are implemented with live LXC acceptance complete for their respective
+scopes. C2.4 is implemented with manual acceptance pending; C2.5 Entity Detail
+UX Polish, F1-lite, B2-lite, and release hardening remain on
+the path to a polished, secure, self-hosted **Homelab Ready Release**. See the
+[C2.3 acceptance record](testing/release-c2-explainable-dependency-analysis.md).
 See [`product/development-roadmap.md`](product/development-roadmap.md).
+
+The [C2.4 architecture](architecture/homelab-operations-experience.md) and
+[validation record](testing/release-c2-homelab-operations-experience.md) describe
+the Dashboard, Knowledge Graph and pending manual acceptance.
 
 ## Product documents
 
@@ -73,7 +81,20 @@ See [`product/development-roadmap.md`](product/development-roadmap.md).
 - [`history/implementation-prompts`](history/implementation-prompts) — archived
   C2.1 Codex prompts; not current specifications.
 
+## User and administrator guides
+
+- [Topology Positions](admin/topology-positions.md): managed vertical order, Automatic, lifecycle and reordering.
+- [Relationship Types](admin/relationship-types.md): managed labels, endpoints and Connectivity topology classes.
+- [Infrastructure Topology](admin/infrastructure-topology.md): four infrastructure views, filtering, focus and expansion.
+- [Asset Types](admin/asset-types.md): managed inventory taxonomy and topology presentation roles.
+- [Asset Categories](admin/asset-categories.md): managed taxonomy, presentation, lifecycle and default topology visibility.
+- [Networks](admin/networks.md): Network records, bounded icons/accents and topology presentation.
+
+- [Exploring the Knowledge Graph](admin/knowledge-graph.md): expanded view, Focus depth, filters and inspector.
+
 ## Architecture documents
+
+- [Infrastructure Topology and managed categories](architecture/infrastructure-topology.md): contracts, migration, scoping and projection semantics.
 
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) — current
   baseline through C1.
@@ -102,6 +123,8 @@ See [`product/development-roadmap.md`](product/development-roadmap.md).
 - [`testing/release-c2-operational-graph.md`](testing/release-c2-operational-graph.md)
   — C2.1 contract, authorization, temporal, compatibility, performance, and UI
   validation.
+- [`testing/release-c2-lean-dependency-semantics.md`](testing/release-c2-lean-dependency-semantics.md)
+  — C2.2 automated validation and subsequent live LXC acceptance.
 - Existing release-specific and security test plans remain applicable and must
   continue to pass.
 

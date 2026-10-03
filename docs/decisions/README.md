@@ -17,6 +17,10 @@ remain understandable after the original implementation discussion is gone.
   PostgreSQL accepted operational knowledge as the source of truth and introduce
   an API-owned derived operational graph for Release C2.1 and later analysis.
 
+- [`0002-mistaken-entity-tombstones.md`](0002-mistaken-entity-tombstones.md) —
+  distinguish mistaken-record removal from Archive while retaining evidence and
+  excluding tombstones from operational reads.
+
 ## ADR maintenance
 
 Create or supersede an ADR when a change affects any of the following:

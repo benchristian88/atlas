@@ -11,13 +11,19 @@ from typing import Callable, Literal
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.authorization import ActiveContext, Principal
+from app.authorization import ActiveContext, Principal, scope_condition
+from app.services.asset_icons import icon_fields
 from app.models import (
     Asset,
     AssetRelationship,
     AssetType,
+    AssetInterface,
+    Network,
+    Site,
     BusinessFunction,
     CriticalityLevel,
+    DependencyGroup,
+    DependencyGroupMembership,
     KnowledgeCompletenessSummary,
     KnowledgeGap,
     RelationshipType,
@@ -86,10 +92,22 @@ class GraphProjectionRequest:
     # Compatibility routes can retain their C1 expansion shape while using the
     # same authorization, temporal, identity, and metadata implementation.
     edge_families_by_depth: tuple[frozenset[str], ...] | None = None
+    # Internal analysis profile: probe the depth boundary, then complete the
+    # outgoing dependency sets of reached Services using the same loaders.
+    complete_service_dependencies: bool = False
+    edge_limit: int | None = None
 
 
 class GraphFocusNotFound(LookupError):
     """The focus is missing, inactive, archived, or unavailable to the caller."""
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyGraphProjection:
+    graph: OperationalGraphResponse
+    # Internal only: no hidden endpoint identifiers, labels or counts reach
+    # the analysis contract. A partially visible ANY set cannot prove failure.
+    incomplete_group_keys: frozenset[str]
 
 
 class OperationalGraphBuilder:
@@ -107,7 +125,76 @@ class OperationalGraphBuilder:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def build(self, request: GraphProjectionRequest) -> OperationalGraphResponse:
+        if not 0 <= request.max_depth <= 3:
+            raise ValueError("Structural graph depth must be between 0 and 3.")
+        return self._build(request).graph
+
+    def build_dependency_projection(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
+        return self._build(request)
+
+    def landscape(self, context: ActiveContext, *, node_limit: int = 500) -> OperationalGraphResponse:
+        """One batched Site-viewpoint read, using the focused projection loaders.
+
+        Seed local/customer-wide knowledge; expand only Service relationships
+        once. A remote provider never seeds expansion of its entire Site.
+        """
+        if context.customer_id is None or context.site_id is None:
+            raise GraphFocusNotFound
+        objects, types = {}, {}
+        truncated = False
+        for entity_type, model in MODEL_BY_ENTITY_TYPE.items():
+            query = select(model).where(
+                model.customer_id == context.customer_id,
+                or_(model.site_id == context.site_id, model.site_id.is_(None)),
+                scope_condition(self.principal, NODE_PERMISSIONS[entity_type], model.customer_id, model.site_id),
+            )
+            if entity_type == "service":
+                query = query.where(Service.archived_at.is_(None))
+            if entity_type == "business_function":
+                query = query.where(BusinessFunction.active.is_(True))
+            for item in self.db.scalars(query.order_by(model.id).limit(node_limit + 1)):
+                if not self._node_is_viewable(entity_type, item, context):
+                    continue
+                if len(objects) >= node_limit:
+                    truncated = True
+                    continue
+                key = graph_node_key(entity_type, item.id)
+                objects[key], types[key] = item, entity_type
+        now = self.clock()
+        frontier = [(types[key], item.id) for key, item in objects.items() if types[key] != "asset"]
+        candidates = self._load_edge_candidates(frontier, EDGE_FAMILIES - {"asset_relationship"}, "both", now)
+        groups = self._load_dependency_groups(candidates, now)
+        members = set(objects)
+        self._batch_load_objects({ref for _, row in candidates for ref in self._edge_endpoints(row)}, objects, types)
+        relationships = list(self.db.scalars(select(RelationshipType)))
+        by_id, by_key = {r.id: r for r in relationships}, {r.key: r for r in relationships}
+        edges = []
+        customer_context = ActiveContext(context.customer_id, None)
+        for family, row in candidates:
+            source_ref, target_ref = self._edge_endpoints(row)
+            source_key, target_key = graph_node_key(*source_ref), graph_node_key(*target_ref)
+            source, target = objects.get(source_key), objects.get(target_key)
+            if (source is None or target is None
+                or not self._node_is_viewable(source_ref[0], source, customer_context)
+                or not self._node_is_viewable(target_ref[0], target, customer_context)
+                or not self._edge_is_viewable(family, row, source, target)):
+                continue
+            new_keys = {source_key, target_key} - members
+            if len(members) + len(new_keys) > node_limit or len(edges) >= 2000:
+                truncated = True
+                continue
+            members.update(new_keys)
+            edges.append(self._edge_schema(family, row, by_id, by_key, groups.get((family, row.id))))
+        return OperationalGraphResponse(
+            focus_key="", generated_at=now, requested_depth=1,
+            truncated=truncated, warnings=[NODE_LIMIT_WARNING] if truncated else [],
+            nodes=sorted(self._node_schemas({k: objects[k] for k in members}, {k: types[k] for k in members}), key=lambda n: n.key),
+            edges=sorted(edges, key=lambda e: e.key),
+        )
+
+    def _build(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
         generated_at = self.clock()
+        incomplete_group_keys: set[str] = set()
         focus = self.db.get(MODEL_BY_ENTITY_TYPE[request.focus_type], request.focus_id)
         if focus is None or not self._node_is_viewable(
             request.focus_type,
@@ -132,22 +219,32 @@ class OperationalGraphBuilder:
         expanded: set[str] = set()
         truncated = False
 
-        for depth in range(request.max_depth):
+        for depth in range(request.max_depth + (2 if request.complete_service_dependencies else 0)):
+            completing = request.complete_service_dependencies and depth == request.max_depth + 1
+            probing = request.complete_service_dependencies and depth == request.max_depth
+            if completing:
+                frontier = [
+                    (object_types[key], objects[key].id)
+                    for key in sorted(member_keys) if object_types[key] == "service"
+                ]
             frontier = sorted(
                 (
                     (entity_type, entity_id)
                     for entity_type, entity_id in frontier
-                    if graph_node_key(entity_type, entity_id) not in expanded
+                    if completing or graph_node_key(entity_type, entity_id) not in expanded
                 ),
                 key=lambda item: graph_node_key(item[0], item[1]),
             )
             if not frontier:
+                if request.complete_service_dependencies:
+                    continue
                 break
             expanded.update(graph_node_key(*item) for item in frontier)
             families = self._families_for_depth(request, depth)
             candidates = self._load_edge_candidates(
-                frontier, families, request.direction, generated_at
+                frontier, families, "outgoing" if completing else request.direction, generated_at
             )
+            dependency_groups = self._load_dependency_groups(candidates, generated_at)
             endpoint_refs = {
                 endpoint
                 for _, row in candidates
@@ -186,6 +283,9 @@ class OperationalGraphBuilder:
                     )
                     or not self._edge_is_viewable(family, row, source, target)
                 ):
+                    group = dependency_groups.get((family, row.id))
+                    if group is not None:
+                        incomplete_group_keys.add(f"dependency_group:{group.id}")
                     continue
 
                 # Objects loaded for authorization are not graph members until
@@ -196,6 +296,12 @@ class OperationalGraphBuilder:
                     for ref in (source_ref, target_ref)
                     if graph_node_key(*ref) not in member_keys
                 ]
+                if probing and new_refs:
+                    truncated = True
+                    continue
+                if request.edge_limit is not None and len(edges) >= request.edge_limit:
+                    truncated = True
+                    continue
                 if len(member_keys) + len(set(new_refs)) > request.node_limit:
                     truncated = True
                     # Continue through this frontier so legitimate edges whose
@@ -212,6 +318,7 @@ class OperationalGraphBuilder:
                     row,
                     relationship_types_by_id,
                     relationship_types_by_key,
+                    dependency_groups.get((family, row.id)),
                 )
 
             if truncated:
@@ -226,7 +333,7 @@ class OperationalGraphBuilder:
             for edge in edges.values()
             if edge.source_key in member_keys and edge.target_key in member_keys
         ]
-        return OperationalGraphResponse(
+        graph = OperationalGraphResponse(
             focus_key=focus_key,
             generated_at=generated_at,
             requested_depth=request.max_depth,
@@ -235,6 +342,7 @@ class OperationalGraphBuilder:
             nodes=sorted(nodes, key=lambda node: node.key),
             edges=sorted(result_edges, key=lambda edge: edge.key),
         )
+        return DependencyGraphProjection(graph, frozenset(incomplete_group_keys))
 
     @staticmethod
     def _families_for_depth(
@@ -256,6 +364,8 @@ class OperationalGraphBuilder:
         *,
         allow_inactive: bool = False,
     ) -> bool:
+        if entity_type in {"service", "business_function"} and item.deleted_at is not None:
+            return False
         if (
             not allow_inactive
             and entity_type == "service"
@@ -490,6 +600,7 @@ class OperationalGraphBuilder:
         row,
         relationship_types_by_id: dict[uuid.UUID, RelationshipType],
         relationship_types_by_key: dict[str, RelationshipType],
+        dependency_group: DependencyGroup | None,
     ) -> OperationalGraphEdge:
         source_ref, target_ref = self._edge_endpoints(row)
         if family == "asset_relationship":
@@ -505,6 +616,8 @@ class OperationalGraphBuilder:
                 if family == "service_business_function"
                 else "Depends on"
             )
+        is_dependency = family in {"service_asset", "service_service"}
+        required_for_operation = getattr(row, "required_for_operation", None)
         return OperationalGraphEdge(
             key=graph_edge_key(family, row.id),
             edge_family=family,
@@ -514,11 +627,96 @@ class OperationalGraphBuilder:
             relationship_type_key=relationship_key,
             relationship_type_name=relationship.name if relationship else None,
             label=relationship.source_label if relationship else fallback_label,
-            required_for_operation=getattr(row, "required_for_operation", None),
+            required_for_operation=required_for_operation,
+            dependency_group_id=dependency_group.id if dependency_group else None,
+            dependency_group_name=dependency_group.name if dependency_group else None,
+            dependency_strategy=dependency_group.strategy if dependency_group else None,
+            dependency_requirement=(
+                dependency_group.requirement
+                if dependency_group
+                else ("required" if required_for_operation else "optional")
+                if is_dependency
+                else None
+            ),
+            failure_effect=(
+                dependency_group.failure_effect
+                if dependency_group
+                else "unknown" if is_dependency else None
+            ),
             valid_from=getattr(row, "valid_from", None),
             valid_to=getattr(row, "valid_to", None),
             source=getattr(row, "source", None),
         )
+
+    def _load_dependency_groups(
+        self,
+        candidates: list[tuple[EdgeFamily, object]],
+        generated_at: datetime,
+    ) -> dict[tuple[EdgeFamily, uuid.UUID], DependencyGroup]:
+        asset_ids = [row.id for family, row in candidates if family == "service_asset"]
+        service_ids = [row.id for family, row in candidates if family == "service_service"]
+        predicates = []
+        if asset_ids:
+            predicates.append(DependencyGroupMembership.service_asset_dependency_id.in_(asset_ids))
+        if service_ids:
+            predicates.append(DependencyGroupMembership.service_dependency_id.in_(service_ids))
+        if not predicates:
+            return {}
+        memberships = [
+            row
+            for row in self.db.scalars(select(DependencyGroupMembership).where(
+                or_(*predicates),
+                DependencyGroupMembership.valid_from <= generated_at,
+                or_(
+                    DependencyGroupMembership.valid_to.is_(None),
+                    DependencyGroupMembership.valid_to > generated_at,
+                ),
+            ))
+            if row.valid_from <= generated_at
+            and (row.valid_to is None or row.valid_to > generated_at)
+        ]
+        group_ids = {row.dependency_group_id for row in memberships}
+        if not group_ids:
+            return {}
+        groups = {
+            row.id: row
+            for row in self.db.scalars(select(DependencyGroup).where(
+                DependencyGroup.id.in_(group_ids),
+                DependencyGroup.valid_from <= generated_at,
+                or_(DependencyGroup.valid_to.is_(None), DependencyGroup.valid_to > generated_at),
+            ))
+            if row.valid_from <= generated_at
+            and (row.valid_to is None or row.valid_to > generated_at)
+        }
+        rows_by_key = {(family, row.id): row for family, row in candidates}
+        result: dict[tuple[EdgeFamily, uuid.UUID], DependencyGroup] = {}
+        for membership in memberships:
+            if membership.service_asset_dependency_id is not None:
+                key: tuple[EdgeFamily, uuid.UUID] = (
+                    "service_asset",
+                    membership.service_asset_dependency_id,
+                )
+            else:
+                key = ("service_service", membership.service_dependency_id)
+            group = groups.get(membership.dependency_group_id)
+            dependency = rows_by_key.get(key)
+            if group is None or dependency is None:
+                continue
+            subject_id = (
+                dependency.service_id
+                if key[0] == "service_asset"
+                else dependency.source_service_id
+            )
+            if (
+                group.service_id == subject_id
+                and group.customer_id == dependency.customer_id
+                and group.site_id == dependency.site_id
+                and self.principal.can(
+                    "service_dependencies.view", group.customer_id, group.site_id
+                )
+            ):
+                result[key] = group
+        return result
 
     def _node_schemas(
         self,
@@ -610,6 +808,7 @@ class OperationalGraphBuilder:
                         site_id=item.site_id,
                         name=item.name,
                         subtitle=asset_type.name if asset_type else item.asset_type,
+                        **icon_fields(item, asset_type),
                         href=f"/assets/{item.id}",
                         lifecycle_state=item.status,
                         completeness_status=(
@@ -670,6 +869,36 @@ class OperationalGraphBuilder:
                         updated_at=item.updated_at,
                     )
                 )
+        site_ids = {item.site_id for item in objects.values() if item.site_id}
+        sites = {s.id: s for s in self.db.scalars(select(Site).where(Site.id.in_(site_ids)))} if site_ids else {}
+        asset_ids = supported_ids.get("asset", set())
+        interfaces = sorted(
+            self.db.scalars(select(AssetInterface).where(AssetInterface.asset_id.in_(asset_ids))),
+            key=lambda row: (not row.is_primary, row.name, str(row.id)),
+        ) if asset_ids else []
+        primary_interfaces = {}
+        for interface in interfaces:
+            if interface.asset_id in asset_ids and interface.ip_address:
+                primary_interfaces.setdefault(interface.asset_id, interface)
+        network_ids = {i.network_id for i in primary_interfaces.values() if i.network_id}
+        networks = {n.id: n for n in self.db.scalars(select(Network).where(Network.id.in_(network_ids)))} if network_ids else {}
+        for node in nodes:
+            item = objects[node.key]
+            site = sites.get(item.site_id)
+            if site and site.customer_id == item.customer_id:
+                node.site_name = site.name
+            criticality = criticalities.get(getattr(item, "criticality_level_id", None))
+            node.criticality_rank = criticality.rank if criticality else None
+            summary = summaries.get((node.entity_type, node.entity_id))
+            if summary and summary.completeness_status != "not_evaluated":
+                node.required_total = summary.required_total
+                node.required_satisfied = summary.required_satisfied
+            interface = primary_interfaces.get(node.entity_id) if node.entity_type == "asset" else None
+            if interface:
+                node.contextual_ip = interface.ip_address
+                network = networks.get(interface.network_id)
+                if network and network.customer_id == item.customer_id and self.principal.can("networks.view", network.customer_id, network.site_id):
+                    node.contextual_vlan = network.vlan_id
         return nodes
 
 
