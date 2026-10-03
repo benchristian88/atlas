@@ -45,7 +45,15 @@ dummy hash verification to reduce account-enumeration timing differences.
 
 The browser session is an expiring signed value stored only in the
 `atlas_session` cookie. The cookie is `HttpOnly`, `SameSite=Lax`, scoped to `/`,
-and `Secure` when `AUTH_COOKIE_SECURE=true`. Browser requests use credentials;
+and `Secure` when `AUTH_COOKIE_SECURE=true`. Docker defaults to `auto`, which
+sets Secure according to the trusted ASGI request scheme: direct HTTP omits it,
+HTTPS through an allowlisted external proxy includes it. Explicit `true`/`false`
+remain supported; native/systemd keeps `true`. The gateway replaces public
+forwarding headers and accepts protocol headers only from `ATLAS_TRUSTED_PROXIES`.
+API Uvicorn trusts its unpublished Compose network; publishing it directly with
+that trust setting is unsupported. Application cookie code never reads raw
+forwarded headers. Host, Origin, HttpOnly, SameSite and token checks are retained.
+Browser requests use credentials;
 the web application does not copy a bearer token into `localStorage`, React
 state, logs, or URLs.
 
@@ -64,40 +72,54 @@ permission-protected application routes continue to return `403`. A profile
 update can change `display_name`; it cannot change email, roles, scopes, active
 state, or session version through mass assignment.
 
-## Bootstrap administrator
+## Secure first-run setup
 
-`scripts.seed_admin` is an idempotent first-user bootstrap, not a recurring
-credential seed:
+The singleton `installation_state` row is the durable first-run boundary. A
+migration marks any database containing users INITIALISED; an empty database
+starts UNINITIALISED. Removing or disabling users never reopens initialized
+state. A defensive user-existence check also closes setup if a legacy account
+appears before the marker is written.
 
-1. If any user exists, exit successfully without changing users, passwords,
-   roles, or assignments.
-2. If the users table is empty and all bootstrap values are absent, exit
-   successfully without creating an account.
-3. If only some values are present, or a value fails email/password/name
-   validation, fail with a safe configuration error.
-4. If the table is empty and all values are valid, create one active user with a
-   password hash and `force_password_change=true`.
-5. Ensure the protected Master Administrator role exists and assign it globally
-   to the new user.
-6. If no customer exists, create the starter `Home / Homelab` context; never add
-   it to an installation that already has customer data.
+The local `python -m scripts.setup_code reset` command creates a human-enterable
+100-bit random code (five groups of four characters, from a 32-character
+alphabet without I/O/0/1). Only its Argon2 verifier is stored. Reset refuses on
+initialized installations and has no force override or HTTP equivalent.
+Installation and reset print the raw code once to the local terminal; startup
+and HTTP responses do not print it.
 
-The variables are `ATLAS_BOOTSTRAP_ADMIN_EMAIL`,
-`ATLAS_BOOTSTRAP_ADMIN_PASSWORD`, and `ATLAS_BOOTSTRAP_ADMIN_NAME`. Operators
-remove them after the first password change. They never overwrite a password
-and cannot be used to recover an existing account.
+`/setup` verifies the code through `POST /api/setup/verify` and clears the input
+immediately. The API issues a separate ten-minute `atlas_setup` HttpOnly,
+SameSite=Lax cookie scoped to `/api/setup`, using the deployment Secure policy.
+Its signed audience is `atlas-setup`, so it cannot authenticate normal API
+requests. A generation claim invalidates all authorizations on reset. Five
+failed verifications lock verification globally for fifteen minutes; counters
+and lockout are serialized in PostgreSQL across API processes. A local reset
+also clears the lockout. Unapproved browser Origins are rejected by the same
+request-forgery middleware used for normal authentication.
 
-For upgrade compatibility, the deprecated `ATLAS_ADMIN_EMAIL`,
-`ATLAS_ADMIN_PASSWORD`, and `ATLAS_ADMIN_DISPLAY_NAME` group is consulted only
-when the users table is empty and the preferred group is absent. It emits a
-warning and enters the exact same one-time flow. Existing users cause an early
-no-op before either group is interpreted, so a stale environment password is
-never a live credential or reset path.
+`POST /api/setup/administrator` requires this authorization and normal
+email/name/password validation (12–1024 characters and matching confirmation).
+The singleton row lock serializes verification, reset and initialization. User,
+global Master Administrator assignment, the existing Home/Homelab starter
+context when context-free, initialization marker, verifier deletion, and safe
+audit event commit atomically. No normal user session is issued: the browser
+opens sign in. Initialized installations reject setup mutations independently
+of the UI. Restore Backup is a disabled reserved choice; H1 has no restore API.
 
-System permissions, built-in roles, and managed system types are seeded
-idempotently and separately from this one-time user bootstrap. Startup may add a
-missing protected definition introduced by a release, but does not overwrite
-operator-editable records.
+`ATLAS_BOOTSTRAP_ADMIN_*` and `ATLAS_ADMIN_*` credential seeding is retired.
+The compatibility `scripts.seed_admin` command now only delegates to protected
+system-definition seeding. It cannot create or reset a user. Tests can seed
+ordinary database fixtures without running production installers.
+
+## Session lifetime
+
+`auth.session_minutes` is an ordinary non-sensitive System Setting, seeded at
+480 minutes, validated as an integer from 1 to 10080. Global
+`system_settings.manage` permission is required to read/change it. Login and
+password-change session issuance read it from PostgreSQL; absent rows use 480.
+Changes affect newly issued tokens and cookie lifetimes, not already-issued
+expiry claims. `AUTH_SESSION_MINUTES` is ignored and removed from supported
+environment templates. Signing secrets stay outside PostgreSQL.
 
 ## Permissions and role assignments
 

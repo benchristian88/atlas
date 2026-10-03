@@ -20,24 +20,17 @@ Prepare at least these isolated records:
 Use synthetic passwords and data. Never run destructive lifecycle cases against
 the only production Master Administrator.
 
-## Bootstrap and forced password change
+## First-run setup and forced password change
 
-- [ ] Start with an empty database and all three valid
-  `ATLAS_BOOTSTRAP_ADMIN_*` values; exactly one active global Master
-  Administrator is created.
-- [ ] Restart with the same values; no user, assignment, or role is duplicated
-  and no password changes.
-- [ ] Start an already-initialised database with different bootstrap values; no
-  account or password changes.
-- [ ] Start an empty database with no bootstrap values; startup succeeds but no
-  account is created.
-- [ ] Partial or invalid bootstrap configuration fails safely without printing
-  the password.
-- [ ] The bootstrap account can log in but protected navigation is restricted to
-  password change.
-- [ ] Wrong current password and mismatched confirmation produce useful errors.
-- [ ] A successful replacement clears forced-change state and invalidates the
-  pre-change session.
+- [ ] Fresh startup creates no user. A local setup-code reset prints one code.
+- [ ] `/setup` verifies that code and shows active new-Atlas / disabled restore choices.
+- [ ] Create the first global Master Administrator with a confirmed strong password.
+- [ ] Sign-in succeeds and `/setup` cannot initialize Atlas again.
+- [ ] Local setup-code reset refuses once initialized.
+- [ ] Existing users/passwords survive migration and never expose setup takeover.
+- [ ] Normal administrator-created temporary-password users still require a change.
+- [ ] Wrong current password/mismatched confirmation fail; a successful change
+  invalidates previous sessions.
 
 ## Login, cookie, and protected routes
 

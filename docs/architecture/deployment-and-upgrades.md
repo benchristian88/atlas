@@ -1,66 +1,63 @@
 # Deployment, upgrade, and rollback
 
-Atlas's reference deployment is Docker Compose with separate web, API, worker,
-PostgreSQL, and Redis services. PostgreSQL is the system of record. Redis data
+Atlas's reference deployment is Docker Compose with a lightweight nginx ingress
+gateway and separate web, API, worker, PostgreSQL, and Redis services. PostgreSQL is the system of record. Redis data
 is operational and may be recreated; the PostgreSQL volume must be backed up.
 
-## Configuration boundary
+## Configuration and installation boundary
 
-Copy `.env.example` to `.env` and keep `.env` outside version control. The API
-receives database, Redis, cookie/session, CORS, and optional bootstrap settings.
-The web container receives only browser-public `NEXT_PUBLIC_API_URL` and the
-development-origin allow-list. Compose deliberately does not inject the whole
-`.env` into the Next.js container.
+Public beta production installation is supported through **Docker Compose** or
+**native/systemd** only. Direct execution remains a developer workflow. Manual
+production installation is unsupported. See [H1 installation](../deployment/h1-installation.md)
+for generated secrets, configuration classification, first-run setup, reset
+commands and native prerequisites.
 
-Required operational settings are:
+Production configuration is generated with exclusive creation and restrictive
+permissions; installers never overwrite an existing file. Database credentials,
+Redis connectivity, `AUTH_SECRET_KEY`, cookie/CORS policy and installation/build
+identity are deployment configuration. Session lifetime is managed in Atlas
+System Settings. `.env.example` is development-only. Neither bootstrap admin
+credential group is read anymore.
 
-- `AUTH_SECRET_KEY`: at least 32 unpredictable characters. Rotation logs out
-  every user.
-- `AUTH_SESSION_MINUTES`: signed-session lifetime from 1 to 10,080 minutes; the
-  development default is 480.
-- `AUTH_COOKIE_SECURE`: `false` only for local HTTP; `true` behind production
-  HTTPS.
-- `CORS_ORIGINS`: optional exact comma-separated web origins for intentional
-  split-origin development. Leave blank for normal same-origin operation and
-  never use a wildcard with authenticated requests.
-- `NEXT_PUBLIC_API_URL`: optional browser API-base override. It defaults to
-  `/api`; use an absolute URL ending in `/api` only for split-origin development.
-- Database credentials and `DATABASE_URL`: replace the development values for
-  any non-local deployment.
-
-`ATLAS_BOOTSTRAP_ADMIN_EMAIL`, `ATLAS_BOOTSTRAP_ADMIN_PASSWORD`, and
-`ATLAS_BOOTSTRAP_ADMIN_NAME` are optional and one-time. Set all three only while
-creating the first user, change that temporary password, remove the values, and
-restart the API. They do not reset or update an existing account.
-
-The old `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
-`ATLAS_ADMIN_DISPLAY_NAME` group is a deprecated migration fallback. It is read
-only when the users table is empty and the preferred group is absent, emits a
-warning, and performs the same one-time bootstrap. Do not add it to new
-deployments; remove it immediately after a legacy bootstrap.
-The reference Compose file intentionally forwards only the preferred new group;
-rename legacy keys in `.env`. The fallback is for direct execution or an older
-external orchestrator that still supplies the legacy environment.
+The canonical application version/channel lives in `apps/api/app/release.json`.
+Builds carry `ATLAS_BUILD_ID` when available and need no runtime Git. The
+protected `/api/system-settings/build-info` endpoint and About display version,
+channel, build ID and installation method (`docker_compose`, `systemd`, or
+`development`). Frontend package versions are tooling metadata, not a separate
+application identity. Update checking is deferred.
 
 ## Fresh Compose installation
 
-```bash
-cp .env.example .env
-# Edit .env: replace secrets and set all bootstrap values.
-docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --build
-docker compose --env-file .env -f infra/docker/docker-compose.yml logs -f api
-```
-
-API startup runs `alembic upgrade head`, idempotent system-definition seeding,
-and `python -m scripts.seed_admin` before starting Uvicorn. A fresh installation
-with valid bootstrap values therefore has one forced-password-change Master
-Administrator and, when the database had no customer, a starter
-`Home / Homelab` context. Once login and password change succeed, remove the
-bootstrap values and recreate the API container:
+Acquire the source and select a supported release as shown in the installation
+guide, then from a fresh checkout:
 
 ```bash
-docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --force-recreate api
+python3 infra/install/compose.py
 ```
+
+The helper generates protected `.env`, builds/starts the healthy stack, and
+prints the actual single-origin HTTP access URL and a one-time setup code to
+the SSH terminal. Open `/setup` through that URL (or an optional trusted HTTPS
+proxy), enter the code, choose a new Atlas and create the
+first Master Administrator. Then sign in. Startup uses bounded database
+readiness retries, `alembic upgrade head`, and protected definition seeding;
+it never generates/logs a raw setup code or creates environment users.
+All six services use `unless-stopped`. Only gateway port 80 is published at
+`ATLAS_BIND_ADDRESS:ATLAS_PORT` (installer-detected default-route IPv4, port
+3000; safe loopback fallback). API/web/database/cache remain internal. The
+gateway preserves `/api`, Host including port, and sanitized forwarding headers.
+Its empty-by-default `ATLAS_TRUSTED_PROXIES` allowlist accepts original HTTPS
+only from explicitly trusted proxy peers. Docker API Uvicorn trusts internal
+Compose peers (`FORWARDED_ALLOW_IPS=*`); this requires the API to remain
+unpublished on the private Compose network. The development override restores
+split ports and narrows API proxy trust to loopback. Application cookie auto
+mode reads the ASGI request scheme, never raw forwarded headers. External TLS
+proxies use one gateway upstream; single-origin operation leaves CORS blank.
+
+Native/systemd retains its loopback web/API ports, host-proxy requirement,
+Uvicorn's loopback trust default and `AUTH_COOKIE_SECURE=true`. The Docker
+gateway and LAN detection do not apply to it. H1.1 changes deployment ingress
+only; PostgreSQL authority, domain semantics, RBAC and discovery stay intact.
 
 To stop containers while retaining data:
 
@@ -79,10 +76,11 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 2. Make a PostgreSQL backup and verify that it is non-empty and restorable.
 3. Copy `.env` to a separately protected backup. Do not place secrets in the
    repository or a ticket.
-4. Replace obsolete `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
-   `ATLAS_ADMIN_DISPLAY_NAME` entries. Existing database users remain. On an
-   empty users table only, the seed accepts that full legacy group with a
-   deprecation warning; it is not a permanent credential or reset mechanism.
+4. Remove retired `ATLAS_ADMIN_*`, `ATLAS_BOOTSTRAP_ADMIN_*` and
+   `AUTH_SESSION_MINUTES` entries. Existing users/passwords remain. The new
+   session setting starts at 480; set any desired previous custom value through
+   System Settings after upgrading. Retain existing database/signing secrets:
+   the fresh-install generator intentionally refuses an existing environment.
 5. Check for legacy login identifiers that differ only by case or surrounding
    whitespace. Resolve any rows returned by the query below deliberately before
    upgrading; the migration refuses to merge accounts automatically:
@@ -94,14 +92,10 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
    HAVING count(*) > 1;
    ```
 
-6. Set the new `ATLAS_BOOTSTRAP_ADMIN_*` values only if the deployment truly has
-   no database user. Setting them cannot repair or reset an existing account.
-7. Pull/build the matching web, API, and worker version, then start the stack.
-   The API applies migrations before accepting traffic.
-8. Check API migration/startup logs, `/api/health`, login, forced-password-change
-   state, context selection, a scope-limited account, and topology/inventory
-   counts.
-9. Remove any bootstrap values after first use and recreate the API container.
+6. Build/start matching services. Startup migrates before serving traffic.
+7. Check migration logs, `/api/health`, normal login, a scoped account, context
+   selection, topology/inventory counts, and System Settings.
+8. Confirm `/setup` cannot initialize an installation with existing users.
 
 For a short maintenance-window upgrade:
 
@@ -210,13 +204,16 @@ tests a safe path.
 
 ## Production limitations and checklist
 
-- Terminate TLS at a maintained reverse proxy and set secure cookies.
-- Restrict database/Redis ports to trusted networks; the Compose port mappings
-  are development conveniences.
+- For HTTPS, terminate TLS at a maintained reverse proxy and configure the
+  gateway's narrow trusted-proxy list; Docker cookie auto mode then marks cookies
+  Secure. Direct LAN HTTP uses non-Secure cookies. Explicit `true` forces HTTPS.
+- PostgreSQL/Redis ports are internal to production Compose. Use the separate
+  development override only when local access is needed.
 - Put secrets in the deployment platform's secret store where possible rather
   than long-lived plaintext environment files.
-- Set a narrow CORS origin list and security headers/content-security policy at
-  the edge. Cached Asset icons use Atlas itself; allow remote hosts only for
+- Leave CORS blank for normal same-origin operation; use a narrow exact origin
+  list only for deliberate split origins. Set security headers/content-security
+  policy at the edge. Cached Asset icons use Atlas itself; allow remote hosts only for
   the existing Asset Type default images. See [Asset icon caching](asset-icon-cache.md)
   for the additive migration and PostgreSQL persistence.
 - Send logs and audit events to protected external retention if tamper evidence

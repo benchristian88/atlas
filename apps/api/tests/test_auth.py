@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.auth import (
     COOKIE_NAME,
@@ -81,7 +82,6 @@ class AuthDatabase:
 def auth_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AUTH_SECRET_KEY", "test-secret-key-with-at-least-32-characters")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
-    monkeypatch.setenv("AUTH_SESSION_MINUTES", "30")
     yield
     app.dependency_overrides.clear()
 
@@ -115,6 +115,38 @@ def client_for(db: AuthDatabase) -> TestClient:
 
     app.dependency_overrides[get_db] = override_get_db
     return TestClient(app)
+
+
+@pytest.mark.parametrize("policy,forwarded_scheme,peer,expected", [
+    ("auto", "http", "172.20.0.2", False),
+    ("auto", "https", "172.20.0.2", True),
+    ("auto", "https", "192.0.2.10", False),
+    ("true", "http", "172.20.0.2", True),
+    ("false", "https", "172.20.0.2", False),
+])
+def test_cookie_policy_uses_trusted_asgi_scheme(user, monkeypatch, policy, forwarded_scheme, peer, expected):
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", policy)
+    monkeypatch.setenv("CORS_ORIGINS", "")
+    db = AuthDatabase(user)
+    app.dependency_overrides[get_db] = lambda: db
+    proxy_app = ProxyHeadersMiddleware(app, trusted_hosts=["172.20.0.2"])
+    with TestClient(proxy_app, base_url="http://atlas.test:4300", client=(peer, 1234)) as client:
+        response = client.post("/api/auth/login", json={"email": user.email, "password": "correct horse battery staple"},
+            headers={"Origin": f"{forwarded_scheme}://atlas.test:4300", "X-Forwarded-Proto": forwarded_scheme})
+        assert response.status_code == 200
+        cookie = response.headers["set-cookie"]
+        assert ("Secure" in cookie) is expected
+        assert "HttpOnly" in cookie and "SameSite=lax" in cookie and "Path=/" in cookie
+        assert "access-control-allow-origin" not in response.headers
+
+
+def test_cookie_auto_does_not_read_raw_forwarded_headers(user, monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "auto")
+    with client_for(AuthDatabase(user)) as client:
+        response = client.post("/api/auth/login", json={"email": user.email, "password": "correct horse battery staple"},
+                               headers={"X-Forwarded-Proto": "https"})
+        assert response.status_code == 200
+        assert "Secure" not in response.headers["set-cookie"]
 
 
 def test_passwords_are_argon2_hashed() -> None:

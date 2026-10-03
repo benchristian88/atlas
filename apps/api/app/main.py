@@ -5,6 +5,8 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 
 from app.routes import (
     asset_interfaces,
@@ -34,6 +36,7 @@ from app.routes import (
     system_settings,
     topology,
     users,
+    setup,
 )
 
 
@@ -78,6 +81,17 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def safe_setup_validation(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/api/setup/"):
+        # FastAPI normally echoes invalid input, even with Pydantic's
+        # hide_input_in_errors. Setup credentials must never be echoed.
+        errors = [{key: value for key, value in error.items() if key not in {"input", "ctx"}}
+                  for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": errors}, headers={"Cache-Control": "no-store"})
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.middleware("http")
 async def request_security(request: Request, call_next):
     request_id = request.headers.get("x-request-id", "")
@@ -97,11 +111,14 @@ async def request_security(request: Request, call_next):
         )
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    if request.url.path.startswith("/api/setup/"):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(setup.router)
 api_router.include_router(context.router)
 api_router.include_router(users.router)
 api_router.include_router(roles.router)

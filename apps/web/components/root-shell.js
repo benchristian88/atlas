@@ -5,6 +5,7 @@ import { Button } from "./button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getCurrentUser } from "../lib/auth";
+import { getSetupStatus } from "../lib/setup";
 import {
   checkSession,
   checkingSessionState,
@@ -24,7 +25,7 @@ import {
 import { WorkspaceContextProvider } from "./workspace-context";
 
 function isPublicRoute(pathname) {
-  return pathname === "/login";
+  return pathname === "/login" || pathname === "/setup";
 }
 
 export function RootShell({ children }) {
@@ -48,9 +49,18 @@ export function RootShell({ children }) {
     let active = true;
     setAuthState(checkingSessionState);
     async function protectRoute() {
-      const nextState = await checkSession(getCurrentUser, () => active);
+      const nextState = await checkSession(async () => {
+        const setup = await getSetupStatus();
+        if (setup.state === "UNINITIALISED") {
+          const error = new Error("Atlas requires first-run setup");
+          error.status = 428;
+          throw error;
+        }
+        return getCurrentUser();
+      }, () => active);
       if (!nextState) return;
       setAuthState(nextState);
+      if (nextState.status === "setup") router.replace("/setup");
       if (nextState.status === "unauthenticated") {
         router.replace("/login");
       }
@@ -110,6 +120,7 @@ export function RootShell({ children }) {
       </main>
     );
   }
+  if (authState.status === "setup") return <main className="route-loading" aria-live="polite">Opening Atlas setup…</main>;
   if (authState.status === "unauthenticated") {
     return (
       <main className="route-loading" aria-live="polite">

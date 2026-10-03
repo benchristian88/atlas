@@ -15,6 +15,8 @@ COPY migrations ./migrations
 
 EXPOSE 8000
 
-# The bootstrap check is intentionally part of every startup. It is a safe
-# no-op when users already exist or no one-time bootstrap values are supplied.
-CMD ["sh", "-c", "alembic upgrade head && python -m scripts.seed_admin && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+ARG ATLAS_BUILD_ID=unknown
+ENV ATLAS_BUILD_ID=${ATLAS_BUILD_ID}
+RUN useradd --system --uid 10001 atlas
+USER atlas
+CMD ["python", "-m", "scripts.start"]

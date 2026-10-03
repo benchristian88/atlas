@@ -1,0 +1,17 @@
+# Development only: optional split-port web/API and local database/cache access.
+# Gateway remains available on 3000; direct Next.js uses 3001 to avoid a clash.
+services:
+  api:
+    environment:
+      FORWARDED_ALLOW_IPS: "127.0.0.1"
+    ports:
+      - "127.0.0.1:8000:8000"
+  web:
+    ports:
+      - "127.0.0.1:3001:3000"
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"

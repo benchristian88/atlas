@@ -32,15 +32,15 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 def _set_session_cookie(
-    response: Response, user_id, session_version: int
+    response: Response, user_id, session_version: int, db: Session, request: Request
 ) -> None:
-    duration = session_duration()
+    duration = session_duration(db)
     response.set_cookie(
         key=COOKIE_NAME,
-        value=create_session_token(user_id, session_version),
+        value=create_session_token(user_id, session_version, duration=duration),
         max_age=int(duration.total_seconds()),
         httponly=True,
-        secure=cookie_secure(),
+        secure=cookie_secure(request),
         samesite="lax",
         path="/",
     )
@@ -86,7 +86,7 @@ def login(
     authenticated_version = user.session_version
     db.commit()
     db.refresh(user)
-    _set_session_cookie(response, user.id, authenticated_version)
+    _set_session_cookie(response, user.id, authenticated_version, db, request)
     principal = _load_principal(user, db)
     return LoginResponse(user=UserResponse.model_validate(user_response_data(principal)))
 
@@ -124,7 +124,7 @@ def logout(
     response.delete_cookie(
         key=COOKIE_NAME,
         httponly=True,
-        secure=cookie_secure(),
+        secure=cookie_secure(request),
         samesite="lax",
         path="/",
     )
@@ -220,5 +220,5 @@ def change_password(
     authenticated_version = user.session_version
     db.commit()
     db.refresh(user)
-    _set_session_cookie(response, user.id, authenticated_version)
+    _set_session_cookie(response, user.id, authenticated_version, db, request)
     return UserResponse.model_validate(user_response_data(_load_principal(user, db)))

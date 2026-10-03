@@ -22,6 +22,7 @@ _SENSITIVE_FRAGMENTS = (
     "authorization",
     "hash",
     "credential",
+    "setup_code",
 )
 
 

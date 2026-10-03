@@ -41,6 +41,7 @@ export async function checkSession(getCurrentUser, isActive = () => true) {
     return { status: "authenticated", user, error: null };
   } catch (error) {
     if (!isActive()) return null;
+    if (error?.status === 428) return { status: "setup", user: null, error: null };
     if (error?.status === 401) {
       return { status: "unauthenticated", user: null, error: null };
     }

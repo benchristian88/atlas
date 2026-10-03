@@ -1,0 +1,85 @@
+// Live H1 acceptance. Input is ephemeral JSON on stdin: {code, password}.
+// This script never mocks authentication or writes input credentials to disk.
+import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
+let input = "";
+for await (const chunk of process.stdin) input += chunk;
+const { code, password } = JSON.parse(input);
+input = "";
+const origin = process.env.ATLAS_BROWSER_BASE_URL || "http://127.0.0.1:3147";
+const output = process.env.ATLAS_BROWSER_OUTPUT || "/tmp/atlas-h1-browser";
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
+const errors = [];
+try {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto(`${origin}/dashboard`);
+  await page.waitForURL("**/setup");
+  await page.getByLabel("Setup code", { exact: true }).waitFor();
+  for (const width of [1440, 800, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: `${output}/setup-code-${width}.png`, fullPage: true });
+  }
+  await page.getByLabel("Setup code", { exact: true }).fill(code);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Set up a new Atlas", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Restore backup — coming later" }).isDisabled(), true);
+  assert.equal(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]).includes("atlas_setup")), false);
+  const setupCookie = (await context.cookies()).find(cookie => cookie.name === "atlas_setup");
+  assert.equal(setupCookie.httpOnly, true);
+  assert.equal(setupCookie.path, "/api/setup");
+  await page.screenshot({ path: `${output}/setup-choices.png`, fullPage: true });
+  await page.getByRole("button", { name: "Set up a new Atlas", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("H1 Acceptance Administrator");
+  await page.getByLabel("Email", { exact: true }).fill("h1@example.com");
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm password", { exact: true }).fill(password);
+  await page.screenshot({ path: `${output}/setup-administrator.png`, fullPage: true });
+  await page.getByRole("button", { name: "Create administrator", exact: true }).click();
+  await page.waitForURL("**/login");
+  await page.getByLabel("Email", { exact: true }).fill("h1@example.com");
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.waitForURL("**/dashboard");
+  await page.goto(`${origin}/admin/system-settings`);
+  const row = page.getByRole("row").filter({ hasText: "Session lifetime" });
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+  const lifetime = page.getByLabel("Session lifetime (minutes)", { exact: true });
+  await lifetime.fill("0");
+  assert.equal(await lifetime.evaluate(input => input.validity.rangeUnderflow), true);
+  await lifetime.fill("10081");
+  assert.equal(await lifetime.evaluate(input => input.validity.rangeOverflow), true);
+  await lifetime.fill("90");
+  await page.getByRole("button", { name: "Save setting", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "updated" }).waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll("tr")].some(row => row.textContent.includes("Session lifetime") && row.querySelector("td:nth-child(2)")?.textContent.trim() === "90"));
+  assert.match(await row.innerText(), /90/);
+  await page.screenshot({ path: `${output}/system-settings.png`, fullPage: true });
+  const state = await context.request.get(`${origin}/api/setup/status`);
+  assert.equal((await state.json()).state, "INITIALISED");
+  const replay = await context.request.post(`${origin}/api/setup/verify`, { data: { code } });
+  assert.equal(replay.status(), 409);
+  await page.goto(`${origin}/setup`);
+  await page.waitForURL("**/dashboard");
+  assert.equal(await page.getByLabel("Setup code", { exact: true }).count(), 0);
+  await context.close();
+  // An initialized instance stays closed for a separate unauthenticated browser.
+  const loggedOut = await browser.newContext();
+  const loginPage = await loggedOut.newPage();
+  await loginPage.goto(`${origin}/setup`);
+  await loginPage.waitForURL("**/login");
+  assert.equal(await loginPage.getByLabel("Setup code", { exact: true }).count(), 0);
+  await loginPage.getByLabel("Email", { exact: true }).fill("h1@example.com");
+  await loginPage.getByLabel("Password", { exact: true }).fill(password);
+  await loginPage.getByRole("button", { name: "Sign in", exact: true }).click();
+  await loginPage.waitForURL("**/dashboard");
+  await loggedOut.close();
+  assert.deepEqual(errors, []);
+  await writeFile(`${output}/report.json`, JSON.stringify({ result: "passed", widths: [1440, 800, 390], liveAuthentication: true, errors }, null, 2));
+  console.log("PASS: live first-run, administrator login, setup closure, session setting, and populated-instance login.");
+} finally { await browser.close(); }

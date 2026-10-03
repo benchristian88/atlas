@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AtlasLogo } from "../../components/atlas-brand.mjs";
 import { authenticatedHome } from "../../components/auth-context";
 import { getCurrentUser, login } from "../../lib/auth";
+import { getSetupStatus } from "../../lib/setup";
 import { checkSession } from "../../lib/session-state.mjs";
 
 export default function LoginPage() {
@@ -19,6 +20,12 @@ export default function LoginPage() {
     let active = true;
     async function validateExistingSession() {
       try {
+        const setup = await getSetupStatus();
+        if (!active) return;
+        if (setup.state === "UNINITIALISED") {
+          router.replace("/setup");
+          return;
+        }
         const session = await checkSession(getCurrentUser, () => active);
         if (!session) return;
         if (session.status === "authenticated") {
@@ -26,6 +33,8 @@ export default function LoginPage() {
         } else if (session.status === "error") {
           setError(`Atlas could not check your existing session. ${session.error}`);
         }
+      } catch (requestError) {
+        if (active) setError(requestError.message || "Atlas could not check initialization.");
       } finally {
         if (active) setCheckingSession(false);
       }

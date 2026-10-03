@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
+from app.services.system_settings import DEFAULT_SESSION_MINUTES, session_minutes
 
 ALGORITHM = "HS256"
 COOKIE_NAME = "atlas_session"
@@ -63,22 +64,24 @@ def _secret_key() -> str:
     return secret
 
 
-def session_duration() -> timedelta:
-    raw_minutes = os.getenv("AUTH_SESSION_MINUTES", "480")
-    try:
-        minutes = int(raw_minutes)
-    except ValueError as exc:
-        raise RuntimeError("AUTH_SESSION_MINUTES must be an integer") from exc
-    if not 1 <= minutes <= 10080:
-        raise RuntimeError("AUTH_SESSION_MINUTES must be between 1 and 10080")
+def session_duration(db: Session | None = None) -> timedelta:
+    minutes = session_minutes(db) if db is not None else DEFAULT_SESSION_MINUTES
     return timedelta(minutes=minutes)
 
 
-def cookie_secure() -> bool:
-    return os.getenv("AUTH_COOKIE_SECURE", "true").lower() in {"1", "true", "yes"}
+def cookie_secure(request: Request) -> bool:
+    policy = os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower()
+    if policy == "auto":
+        # The ASGI server applies proxy trust; never read raw forwarded headers.
+        return request.url.scheme == "https"
+    if policy in {"1", "true", "yes"}:
+        return True
+    if policy in {"0", "false", "no"}:
+        return False
+    raise RuntimeError("AUTH_COOKIE_SECURE must be auto, true, or false")
 
 
-def create_session_token(user: User | uuid.UUID, session_version: int = 0) -> str:
+def create_session_token(user: User | uuid.UUID, session_version: int = 0, *, duration: timedelta | None = None) -> str:
     now = datetime.now(timezone.utc)
     user_id = user.id if isinstance(user, User) else user
     version = int(getattr(user, "session_version", session_version) or 0)
@@ -86,7 +89,7 @@ def create_session_token(user: User | uuid.UUID, session_version: int = 0) -> st
         "sub": str(user_id),
         "ver": version,
         "iat": now,
-        "exp": now + session_duration(),
+        "exp": now + (duration or session_duration()),
         "iss": TOKEN_ISSUER,
         "aud": TOKEN_AUDIENCE,
         "jti": str(uuid.uuid4()),

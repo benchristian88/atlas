@@ -434,7 +434,7 @@ unchanged.
 | HttpOnly cookie sessions | **Implemented** | Foundation | `atlas_session` uses HttpOnly/SameSite and the browser sends credentials. |
 | Bearer-token API compatibility | **Implemented** | Foundation compatibility | API accepts bearer credentials as well as session cookies. |
 | Browser localStorage bearer sessions | **Abandoned** | Superseded design | Replaced by HttpOnly cookie sessions; legacy token code only removes old values. |
-| One-time administrator bootstrap | **Implemented** | Foundation | `seed_admin.py` creates only the first forced-change Master Administrator and is idempotent. |
+| One-time administrator bootstrap | **Implemented** | Foundation | H1 `/setup` creates the first global Master Administrator with a local one-time code and atomic database initialization; environment credential seeding is retired. |
 | Forced password change | **Implemented** | Foundation | Backend restrictions and Profile flow exist. |
 | Admin temporary-password reset | **Implemented** | Foundation | Admin user page supports write-only reset. |
 | Protected application shell | **Implemented** | Foundation | Session states prevent protected content flashing and handle failures cleanly. |
@@ -1150,7 +1150,7 @@ non-disclosure tests, shared web primitives, and updated implementation evidence
 | Delete mistakes / Archive history | **Implemented**; manual acceptance pending | `entity_lifecycle.py`, migration `20260910_0016`, Service/BF eligibility + DELETE APIs, shared entity deletion dialog and PostgreSQL integration tests. Tombstones preserve creation evidence and history; operational references and substantive edits block deletion. |
 | Business Function Archive/Restore | **Implemented** | Named API/UI actions reuse existing `active` lifecycle; distinct nullable `deleted_at` represents deletion. |
 | System information architecture | **Implemented** | `system-navigation.mjs`, admin layout and redirect. Organisation + Reference Data use authorized local URL links; Audit Log and System Settings are direct. Old deep links remain valid. |
-| System Settings sections | **Implemented** | General shows existing non-sensitive settings; About labels the real web package version. No deployment secrets are exposed. |
+| System Settings sections | **Implemented** | General shows existing non-sensitive settings; General includes database-backed session lifetime; About displays canonical application/build/install metadata. No deployment secrets are exposed. |
 | Backup & Restore / Updates | **Planned but not implemented** | Truthful System Settings placeholders only; delivery remains Homelab Ready hardening. |
 
 [Exact rules/reference audit](../architecture/entity-lifecycle.md) and
@@ -1229,3 +1229,14 @@ ports, group fan-out and selected-relationship emphasis are implemented on the
 existing layout. Singleton collapse, multi-member grouping, semantic direction,
 analysis behavior and card styling remain unchanged. See
 [routing validation](../testing/knowledge-graph-edge-routing.md).
+
+## H1 release foundation and secure first-run setup
+
+| Capability | Status | Evidence and limits |
+| --- | --- | --- |
+| Canonical version/build/install identity | **Implemented** | `apps/api/app/release.json`, artifact build ID, global-permission build-info API and System Settings About. No update checking. |
+| Secure first-run initialization | **Implemented** | Singleton PostgreSQL state, legacy user backfill, local Argon2 setup verifier/reset, scoped expiring HttpOnly setup authorization, atomic Master creation, disabled Restore entry. |
+| Session lifetime System Setting | **Implemented** | Integer 1–10080, default 480, global settings authorization, login/password-change issuance reads database. Environment value retired. |
+| Production installation foundation | **Implemented** | Compose/native helpers generate independent secrets without overwrite; six Compose restart policies (including nginx gateway) and enabled unprivileged systemd units. H1 Docker build/setup/login/dashboard and actual LXC reboot were accepted on Linux; H1.1 gateway/direct HTTP/external HTTPS needs repeat Linux acceptance; real systemd remains unverified. |
+| Docker single-ingress and cookie auto mode | **Implemented** | H1.1 nginx gateway only publishes detected/configured IPv4:port; internal `/api` routing, explicit external proxy trust, scheme-based cookies and focused regression tests. Real Linux/LAN/NPM/reboot revalidation is pending; systemd ingress unchanged. |
+| Atlas backup restore | **Planned but not implemented** | H1 reserves a disabled setup choice; no restore endpoint or engine. |
