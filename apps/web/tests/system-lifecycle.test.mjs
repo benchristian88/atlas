@@ -42,12 +42,14 @@ test("local System navigation is semantic and has no competing overview", async 
   assert.doesNotMatch(layout, /Overview|Administration sections/);
 });
 
-test("System Settings provides truthful sections and package metadata without deployment configuration", async () => {
+test("System Settings provides truthful sections and canonical application metadata without deployment configuration", async () => {
   const page = await readFile(new URL("../app/admin/system-settings/page.js", import.meta.url), "utf8");
   for (const title of ["General", "About"]) assert.ok(page.includes(title));
   assert.match(page, /filter\(\(setting\) => !setting.sensitive\)/);
-  assert.match(page, /packageMetadata.version/);
-  assert.match(page, /Web package version/);
+  assert.match(page, /buildInfo.version/);
+  assert.match(page, /system-settings\/build-info/);
+  assert.match(page, /Session lifetime/);
+  assert.match(page, /Release channel/);
   assert.doesNotMatch(page, /Homelab Ready hardening|will be added|are planned/);
   assert.doesNotMatch(page, /process.env|DATABASE_URL|MASTER_KEY|replacement value|current secret/);
 });

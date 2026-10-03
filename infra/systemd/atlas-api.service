@@ -1,0 +1,28 @@
+[Unit]
+Description=Atlas Impact API
+Requires=postgresql.service redis-server.service
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=atlas
+Group=atlas
+WorkingDirectory=/opt/atlas/apps/api
+EnvironmentFile=/etc/atlas/atlas.env
+Environment=PATH=/opt/atlas/venv/bin:/usr/bin:/bin
+Environment=ATLAS_API_HOST=127.0.0.1
+ExecStart=/opt/atlas/venv/bin/python -m scripts.start
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

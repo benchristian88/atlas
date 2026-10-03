@@ -2,22 +2,24 @@ name: atlas
 
 services:
   api:
+    restart: unless-stopped
     build:
       context: ../../apps/api
+      args:
+        ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:-unknown}
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://atlas:atlas_dev@postgres:5432/atlas}
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-atlas}
+      POSTGRES_USER: ${POSTGRES_USER:-atlas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the production bootstrap helper or set a development credential}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY must be set}
-      AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-480}
-      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      ATLAS_INSTALL_METHOD: ${ATLAS_INSTALL_METHOD:-docker_compose}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
-      # Optional and bootstrap-only. An empty set is a valid configuration once
-      # an account exists; empty-table bootstrap rejects a partial/invalid set.
-      ATLAS_BOOTSTRAP_ADMIN_EMAIL: ${ATLAS_BOOTSTRAP_ADMIN_EMAIL:-}
-      ATLAS_BOOTSTRAP_ADMIN_PASSWORD: ${ATLAS_BOOTSTRAP_ADMIN_PASSWORD:-}
-      ATLAS_BOOTSTRAP_ADMIN_NAME: ${ATLAS_BOOTSTRAP_ADMIN_NAME:-}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,8 +34,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 180s
 
   web:
+    restart: unless-stopped
     build:
       context: ../../apps/web
       dockerfile: Dockerfile
@@ -42,16 +46,21 @@ services:
         # pass database, auth, or bootstrap secrets as web build arguments.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       api:
         condition: service_healthy
 
   worker:
+    restart: unless-stopped
     build:
       context: ../../apps/worker
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://atlas:atlas_dev@postgres:5432/atlas}
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-atlas}
+      POSTGRES_USER: ${POSTGRES_USER:-atlas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the production bootstrap helper or set a development credential}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     depends_on:
       postgres:
@@ -60,13 +69,12 @@ services:
         condition: service_healthy
 
   postgres:
+    restart: unless-stopped
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-atlas}
       POSTGRES_USER: ${POSTGRES_USER:-atlas}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_dev}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -78,9 +86,8 @@ services:
       retries: 10
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:

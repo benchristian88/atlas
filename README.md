@@ -55,18 +55,10 @@ See [single-origin deployment](docs/deployment/single-origin.md),
    openssl rand -hex 32
    ```
 
-   On the first start of an empty database, set all three one-time bootstrap
-   values:
-
-   ```dotenv
-   ATLAS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
-   ATLAS_BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-long-random-password
-   ATLAS_BOOTSTRAP_ADMIN_NAME=Atlas Administrator
-   ```
-
-   They are optional after an account exists and are never the application's
-   permanent login configuration. To use the exposed development ports without
-   a reverse proxy, explicitly select split-origin development:
+   `.env.example` is development-only. Production uses the generated configuration
+   in [H1 installation](docs/deployment/h1-installation.md), through Docker
+   Compose or native/systemd. Manual production installation is unsupported.
+   For exposed development ports without a reverse proxy, select split origin:
 
    ```dotenv
    NEXT_PUBLIC_API_URL=http://localhost:8000/api
@@ -84,7 +76,7 @@ See [single-origin deployment](docs/deployment/single-origin.md),
    ```
 
    API startup applies pending Alembic migrations, seeds protected system
-   definitions idempotently, and then runs the optional bootstrap check.
+   definitions idempotently. It does not create users from environment credentials.
 
 3. Open the services:
 
@@ -95,49 +87,27 @@ See [single-origin deployment](docs/deployment/single-origin.md),
 The API health endpoint returns `{"status":"ok"}`. The worker logs
 `Atlas worker is ready` once it starts.
 
-4. Sign in with the temporary bootstrap credentials, change the password when
-   prompted, remove the three `ATLAS_BOOTSTRAP_ADMIN_*` entries from `.env`,
-   and restart the API. Leaving a bootstrap password in deployment
-   configuration needlessly exposes it to anyone who can inspect the
-   environment, even though Atlas will not reuse it.
+4. Generate a one-time code in the local terminal:
 
-## Bootstrap the first administrator
+   ```bash
+   docker compose --env-file .env -f infra/docker/docker-compose.yml exec api \
+     python -m scripts.setup_code reset
+   ```
 
-Atlas does not expose public registration. The startup command creates one
-Master Administrator only when the entire `users` table is empty and all three
-valid bootstrap values are present. The password is hashed, the account is
-assigned the global Master Administrator role, and the account must change its
-password at first login.
+   Open `/setup`, enter the code, select **Set up a new Atlas**, and create your
+   Master Administrator. Sign in with that account. Existing populated databases
+   remain initialized and cannot use/reset setup. There is no environment-based
+   admin credential or public registration.
 
-On a truly context-free fresh installation, the same bootstrap creates the
-starter `Home / Homelab` customer and site. It never adds that sample context
-when a customer already exists.
+## Initialize the first administrator
 
-If any user already exists, bootstrap is a no-op: it never creates a second
-user, overwrites an account, or resets a password. Supplying only some bootstrap
-values, an invalid email, or a password that fails the server policy while the
-users table is empty is a configuration error. With no bootstrap values, the API
-may start without creating a user; this is useful for an already-initialised
-deployment.
-
-To run the same safe check manually:
-
-```bash
-docker compose --env-file .env -f infra/docker/docker-compose.yml exec api \
-  python -m scripts.seed_admin
-```
-
-Bootstrap messages never contain the password. Bootstrap is not an account
-recovery or password-reset mechanism.
-
-For a transition from an older empty installation, the seed command recognizes
-deprecated `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
-`ATLAS_ADMIN_DISPLAY_NAME` only when no user exists and the preferred bootstrap
-group is absent. It emits a deprecation warning and treats them as the same
-one-time bootstrap input, never as live credentials. Replace/remove them
-immediately. If a database user exists, even those legacy values are ignored.
-The reference Compose file forwards only the new names, so rename legacy keys
-in `.env` before a Compose upgrade rather than relying on the fallback.
+Setup codes authorize only first-run operations and are shown once to the local
+terminal. PostgreSQL stores only an Argon2 verifier. A ten-minute HttpOnly setup
+cookie authorizes atomic first-admin creation; initialization invalidates the
+code and every setup authorization. The existing Home/Homelab context is created
+only when no customer exists. Restore Backup is present but disabled for H1.
+See [installation and setup](docs/deployment/h1-installation.md) for both
+supported production methods and local reset commands.
 
 ## Authentication and profile
 
@@ -439,13 +409,10 @@ flows are documented in
 ## Manual authentication test
 
 1. Start from a fresh database and bring the stack up with `--build`.
-2. Confirm the API logs report that the bootstrap admin was created. Restart
-   once and confirm another account is not created.
-3. Open `/login` and sign in with `ATLAS_BOOTSTRAP_ADMIN_EMAIL` and
-   `ATLAS_BOOTSTRAP_ADMIN_PASSWORD`.
-4. Confirm login routes to the required password-change profile. Change the
-   password, then confirm `/dashboard` is accessible and the header displays the
-   configured email and display name.
+2. Run `python -m scripts.setup_code reset` inside the API container.
+3. Open `/setup`, verify the code, choose a new Atlas and create an administrator.
+4. Confirm sign-in works, `/dashboard` displays the account identity, and `/setup`
+   can no longer initialize Atlas. Restarting must not create another account.
 5. Refresh `/dashboard`; the authenticated session should remain active.
 6. Select **Log out** and confirm the browser returns to `/login`.
 7. Open `/dashboard` directly while logged out and confirm it redirects to
@@ -565,12 +532,11 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 ## Upgrade an existing installation
 
 Before upgrading, record the deployed revision and make a verified PostgreSQL
-backup. Replace obsolete `ATLAS_ADMIN_EMAIL`, `ATLAS_ADMIN_PASSWORD`, and
-`ATLAS_ADMIN_DISPLAY_NAME` settings with the new names only if the users table is
-genuinely empty. Existing database users and password hashes remain. The seed
-recognizes the legacy group solely as a deprecated first-user fallback on an
-empty table; it is never permanent authentication and cannot reset an existing
-password. Remove either bootstrap group after first use.
+backup. Remove retired environment administrator credentials and
+`AUTH_SESSION_MINUTES`; existing users/passwords are preserved and close setup.
+Session lifetime defaults to 480 minutes in System Settings; restore a custom
+previous value there if desired. Preserve existing database/signing secrets.
+See [H1 installation](docs/deployment/h1-installation.md) for the release migration.
 
 The foundation migration:
 
@@ -600,8 +566,7 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml run --rm api \
 
 Rebuild/start the matched services, allow the API to run `alembic upgrade head`,
 then verify health, login/password-change state, customer/site selectors,
-scope-limited users, inventory counts, and topology. Remove bootstrap values
-after first use.
+scope-limited users, inventory counts, topology, and first-run closure.
 
 Rollback should restore the pre-upgrade database backup and matching prior
 application revision. Do not run old code against the upgraded schema or assume
@@ -620,15 +585,18 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
-python -m scripts.seed_admin
+python -m scripts.seed_system
+python -m scripts.setup_code reset
 uvicorn app.main:app --reload
 ```
 
 Export the API variables from the root `.env` before running those commands. If
 PostgreSQL is in Compose but the API is on the host, use `localhost` rather than
-the Compose-only `postgres` hostname in `DATABASE_URL`. The seed command is a
-safe no-op when bootstrap values are absent or a user already exists. The API
-container performs migration and bootstrap automatically.
+the Compose-only `postgres` hostname in `DATABASE_URL`. Add the development
+Compose override for host database/cache access. System seeding never creates
+users. Reset is only for an empty uninitialized
+instance; existing instances refuse it. The API container performs migration and
+system seeding automatically. Direct execution is a development workflow.
 
 To create a migration after changing the SQLAlchemy models, run:
 

@@ -1783,6 +1783,24 @@ class AuditEvent(UUIDPrimaryKeyMixin, Base):
         return self.summary
 
 
+class InstallationState(Base):
+    """Singleton first-run security boundary, serialized with a row lock."""
+
+    __tablename__ = "installation_state"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+        CheckConstraint("setup_generation >= 0 AND failed_attempts >= 0", name="nonnegative"),
+        CheckConstraint("initialized_at IS NULL OR setup_code_hash IS NULL", name="no_initialized_verifier"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    initialized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    setup_code_hash: Mapped[str | None] = mapped_column(String(255))
+    setup_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class SystemSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "system_settings"
 

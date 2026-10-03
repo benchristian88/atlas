@@ -81,7 +81,6 @@ class AuthDatabase:
 def auth_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AUTH_SECRET_KEY", "test-secret-key-with-at-least-32-characters")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
-    monkeypatch.setenv("AUTH_SESSION_MINUTES", "30")
     yield
     app.dependency_overrides.clear()
 

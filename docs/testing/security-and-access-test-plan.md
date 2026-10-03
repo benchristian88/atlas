@@ -1,3 +1,7 @@
+H1 first-run, settings and deployment acceptance is detailed in
+[H1 validation](h1-release-foundation.md). The cases below remain the foundation
+RBAC/access matrix; environment admin seeding is retired.
+
 # Authentication and access foundation test plan
 
 This matrix defines the required automated and migration-level verification for
@@ -42,15 +46,13 @@ PostgreSQL; an in-memory/model-only test is not a substitute.
 
 | Case | Required assertion |
 | --- | --- |
-| Empty-table bootstrap | Creates one active forced-change user, secure password hash, global Master Administrator assignment, and no plaintext secret. |
-| Existing user | Bootstrap returns a no-op regardless of supplied email/password and never creates/resets another account. |
-| Missing/partial values | All absent is a safe no-op; partial values are a safe configuration error. |
-| Deprecated variable fallback | A complete legacy group works with a warning only on an empty users table when the preferred group is absent; any existing user makes it a no-op. |
+| First-run setup | A local code authorizes one atomic global Master Administrator creation; initialized state permanently closes setup. |
+| Retired credential variables | Both environment administrator groups are ignored; existing users/password hashes are unchanged. |
 | Password validation | Email is normalized; passwords shorter than 12 or longer than the supported maximum are rejected. |
 | Valid login | Updates last login/failure state, audits success, and sets the expected HttpOnly/SameSite cookie. |
 | Invalid login | Generic `401`, no cookie, failure count/lock behavior, safe audit event, and unknown-email timing hash path. |
 | Disabled/locked account | Cannot log in or continue using an old signed session. |
-| Forced change | Normal protected APIs return `403` while profile/password/logout and the slim, scope-filtered `/api/context` bootstrap response remain reachable. |
+| Forced change | Normal protected APIs return `403` while profile/password/logout and slim scoped `/api/context` remain reachable. |
 | Profile update | Only display name changes; role/scope/mass-assignment fields are ignored or rejected. |
 | Password change | Requires current password and matching strong replacement, hashes it, clears forced state, increments session version, and audits safely. |
 | Logout | Clears cookie, increments session version, and rejects the captured old cookie. |
@@ -166,11 +168,11 @@ blank legacy type values, legacy users, and a cross-context relationship:
    Master assignment.
 4. Confirm the cross-context edge remains marked/recognizable and subject to the
    both-endpoints read rule.
-5. Run `alembic upgrade head` and system/bootstrap seeds again; counts and
+5. Run `alembic upgrade head` and system-definition seeding again; counts and
    customizations remain unchanged.
-6. Start Compose with no bootstrap values against the upgraded database and
-   confirm startup succeeds.
-7. Render `docker compose config` and verify bootstrap/database/auth secrets are
+6. Start Compose against the upgraded database and confirm startup succeeds
+   and initialized setup mutation/reset refuse.
+7. Render `docker compose config` and verify database/auth secrets are
    not present in the web service environment.
 8. Exercise the backup-restore rollback procedure in an isolated environment.
 

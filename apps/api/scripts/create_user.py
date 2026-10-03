@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.auth import hash_password
 from app.database import SessionLocal
 from app.models import User
+from app.services.installation import installation_state, is_initialized
 
 
 def main() -> None:
@@ -23,6 +24,8 @@ def main() -> None:
         raise SystemExit("Password must contain at least 12 characters")
 
     with SessionLocal.begin() as db:
+        if not is_initialized(db, installation_state(db, lock=True)):
+            raise SystemExit("Create the first administrator through /setup")
         if db.scalar(select(User.id).where(User.email == email)) is not None:
             raise SystemExit("A user with that email already exists")
         db.add(

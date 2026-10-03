@@ -1,17 +1,14 @@
-import os
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, event, or_, select
 from sqlalchemy.orm import Session, sessionmaker, with_loader_criteria
 
 from app.models import BusinessFunction, KnowledgeAssertion, KnowledgeCompletenessSummary, KnowledgeGap, Service
+from app.config import database_url
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://atlas:atlas_dev@localhost:5432/atlas",
-)
+DATABASE_URL = database_url()
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, hide_parameters=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

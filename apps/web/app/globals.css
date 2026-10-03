@@ -145,6 +145,9 @@ h3 { font-size: var(--type-h3); font-weight: var(--weight-semibold); line-height
 .login-card h1 { font-size: var(--type-h1); letter-spacing: -0.035em; margin: 0; }
 .login-card .page-description { margin-bottom: 24px; }
 .login-form { display: grid; gap: 17px; }
+.setup-choices { display: grid; gap: var(--space-6, 24px); }
+.setup-choices section { border-top: 1px solid var(--border); padding-top: 16px; }
+.setup-choices h2 { margin-bottom: 8px; }
 .login-submit { margin-top: 4px; width: 100%; }
 .profile-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); max-width: 560px; padding: 24px; }
 .profile-card h2 { font-size: var(--type-h2); margin: 0 0 5px; }

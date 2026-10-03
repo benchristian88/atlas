@@ -9,8 +9,16 @@ from app.authorization import Principal, require_global, require_permission
 from app.database import get_db
 from app.models import SystemSetting
 from app.schemas import SystemSettingResponse, SystemSettingUpdate
+from app.services.system_settings import SESSION_LIFETIME_KEY, validate_session_minutes
+from app.release import build_metadata
 
 router = APIRouter(prefix="/system-settings", tags=["system settings"])
+
+
+@router.get("/build-info")
+def installation_info(principal: Principal = Depends(require_permission("system_settings.manage"))):
+    require_global(principal, "system_settings.manage")
+    return build_metadata()
 
 
 def _response(setting: SystemSetting) -> SystemSettingResponse:
@@ -47,6 +55,11 @@ def update_system_setting(
     setting = db.scalar(select(SystemSetting).where(SystemSetting.key == key))
     if setting is None:
         raise HTTPException(status_code=404, detail="System setting not found")
+    if key == SESSION_LIFETIME_KEY:
+        try:
+            validate_session_minutes(payload.value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     setting.value_ = payload.value
     setting.updated_by_user_id = principal.user.id
     add_audit_event(
@@ -62,4 +75,3 @@ def update_system_setting(
     db.commit()
     db.refresh(setting)
     return _response(setting)
-

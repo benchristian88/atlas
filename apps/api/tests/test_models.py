@@ -52,6 +52,7 @@ EXPECTED_TABLES = {
     "documents",
     "audit_events",
     "system_settings",
+    "installation_state",
 }
 
 
