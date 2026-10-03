@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { NavigationIcon } from "./navigation-icon.mjs";
 import { useEffect, useRef, useState } from "react";
 import { primaryRoleLabel } from "../lib/user-presentation.mjs";
 import { UserAvatar } from "./user-avatar";
@@ -67,7 +68,7 @@ export function AccountMenu({ user, onLogout, signingOut = false }) {
     <button aria-controls="atlas-user-menu" aria-expanded={open} aria-haspopup="menu" aria-label={`Open user menu for ${displayName}`} className="account-menu-trigger" disabled={signingOut} onClick={() => setOpen((current) => !current)} onKeyDown={handleTriggerKeyDown} ref={triggerRef} type="button">
       <UserAvatar displayName={displayName} imageUrl={imageUrl} />
       <span className="account-trigger-copy"><strong>{displayName}</strong><span>{role}</span></span>
-      <span aria-hidden="true" className={`account-menu-chevron${open ? " open" : ""}`}>⌄</span>
+      <span aria-hidden="true" className={`account-menu-chevron${open ? " open" : ""}`}><NavigationIcon name="chevron-down" /></span>
     </button>
     {open && <div aria-label="User account" className="account-dropdown" id="atlas-user-menu" onKeyDown={handleMenuKeyDown} ref={menuRef} role="menu">
       <Link className="account-dropdown-item" href="/profile" onClick={() => setOpen(false)} role="menuitem">My profile</Link>

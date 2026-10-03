@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { PRESENTATION_ICONS, PRESENTATION_ACCENTS, presentationIcon, presentationAccent } from "../lib/presentation.mjs";
+import { NavigationIcon } from "./navigation-icon.mjs";
 import { PresentationIcon } from "./presentation-identity.mjs";
 
 const accentOptions = PRESENTATION_ACCENTS.map(key => ({ key, label: key[0].toUpperCase() + key.slice(1) }));
@@ -68,13 +69,13 @@ function PresentationChoice({ label, options, value, onChange, renderIcon, disab
       onKeyDown={event => {
         if (["ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); openMenu(); }
       }}>
-      {renderIcon(value)}<span id={`${id}-value`}>{selected.label}</span><span className="presentation-choice-chevron" aria-hidden="true">⌄</span>
+      {renderIcon(value)}<span id={`${id}-value`}>{selected.label}</span><NavigationIcon name="chevron-down" />
     </button>
     {open && <div className="account-dropdown presentation-choice-menu" style={placement} id={`${id}-menu`} ref={menuRef} role="menu" aria-label={`Choose ${label.toLowerCase()}`} onKeyDown={handleKeyDown}>
       {options.map(option => <button type="button" role="menuitemradio" aria-checked={option.key === value} tabIndex={-1}
         className="account-dropdown-item presentation-choice-option" key={option.key}
         onClick={() => { onChange(option.key); closeMenu(); }}>
-        {renderIcon(option.key)}<span>{option.label}</span><span className="presentation-choice-check" aria-hidden="true">{option.key === value ? "✓" : ""}</span>
+        {renderIcon(option.key)}<span>{option.label}</span><span className="presentation-choice-check" aria-hidden="true">{option.key === value && <NavigationIcon name="check" />}</span>
       </button>)}
     </div>}
   </div>;
@@ -94,7 +95,7 @@ export function PresentationPicker({ form, onChange, fallback = "infrastructure"
         renderIcon={key => <span className="presentation-swatch" data-presentation-accent={key} aria-hidden="true" />} />
     </div>
     <div className="presentation-identity" aria-label="Presentation preview"><PresentationIcon record={{ icon_key: iconKey, accent_key: accentKey }} /><span>{form.name || "Preview"}</span></div>
-    <p className="ops-meta">Used for topology presentation only.</p>
+    <p className="ops-meta">Used for entity recognition; independent of operational status.</p>
   </fieldset>;
 }
 

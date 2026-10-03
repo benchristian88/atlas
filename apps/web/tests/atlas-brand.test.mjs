@@ -52,7 +52,7 @@ test("the authenticated shell selects a supplied lockup for the resolved theme m
 
   assert.match(shell, /sidebarBrandVariant = resolvedThemeMode/);
   assert.match(shell, /<AtlasBrand href=\{authenticatedHome\(user\)\} variant=\{sidebarBrandVariant\} \/>/);
-  assert.match(shell, /Atlas Impact<br \/>Local development/);
+  assert.doesNotMatch(shell, /Local development/);
   assert.doesNotMatch(shell, /className="brand-mark"/);
 });
 

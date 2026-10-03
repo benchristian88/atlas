@@ -16,14 +16,14 @@ test("cached Asset > Asset Type > generic; external Asset source is never render
 test("all four surfaces and the inspector share AssetIcon, preserving non-Asset marks", async () => {
   for (const path of ["app/assets/page.js", "app/assets/[id]/page.js", "components/service-landscape.js", "components/graph-inspector.js", "app/topology/page.js"]) {
     const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
-    assert.match(source, /<AssetIcon asset=\{/);
+    assert.match(source, /<AssetIcon asset=\{|<AssetCatalogueRow|<EntityDetailHeader type="asset"|<EntityIdentity/);
     assert.doesNotMatch(source, /icon_url: asset\.icon_url/);
   }
   for (const path of ["app/dashboard/page.js", "app/knowledge-graph/page.js"]) {
     assert.match(await readFile(new URL(`../${path}`, import.meta.url), "utf8"), /<ServiceLandscape/);
   }
   const graph = await readFile(new URL("../components/service-landscape.js", import.meta.url), "utf8");
-  assert.match(graph, /node.entity_type === "asset" \? <AssetIcon.*: <EntityMark type=\{node.entity_type\}/);
+  assert.match(graph, /<EntityIdentity type=\{node.entity_type\} record=\{node\}/);
 });
 
 test("loading and failure retain fixed themed box and hide unready image", async () => {

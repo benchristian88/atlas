@@ -595,6 +595,8 @@ class AssetTypeUpdate(BaseModel):
 
 
 class AssetTypeResponse(ORMResponse):
+    icon_key: str | None = None
+    accent_key: str | None = None
     topology_position: TopologyPositionSummary | None = None
     topology_position_id: uuid.UUID | None = None
     id: uuid.UUID
@@ -1388,6 +1390,7 @@ class ServiceTypeCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=10000)
     icon_key: str | None = Field(default=None, max_length=100)
+    accent_key: PresentationAccent | None = None
     active: bool = True
     sort_order: int = Field(default=100, ge=0)
     requires_asset_dependency: bool = True
@@ -1400,6 +1403,7 @@ class ServiceTypeUpdate(BaseModel):
     icon_key: str | None = Field(default=None, max_length=100)
     sort_order: int | None = Field(default=None, ge=0)
     requires_asset_dependency: bool | None = None
+    accent_key: PresentationAccent | None = None
     active: bool | None = None
     _name = field_validator("name")(_trim_nonempty)
 
@@ -1410,6 +1414,7 @@ class ServiceTypeResponse(ORMResponse):
     name: str
     description: str | None
     icon_key: str | None
+    accent_key: str | None = None
     active: bool
     system_defined: bool
     sort_order: int
@@ -1521,6 +1526,8 @@ class ServiceResponse(ORMResponse):
     purpose: str | None
     service_type_id: uuid.UUID
     service_type_key: str | None = None
+    service_type_icon_key: str | None = None
+    service_type_accent_key: str | None = None
     service_type_name: str | None = None
     criticality_level_id: uuid.UUID
     criticality_key: str | None = None
@@ -1719,6 +1726,8 @@ class BusinessFunctionCreate(BaseModel):
     description: str | None = Field(default=None, max_length=20000)
     owner_name: str | None = Field(default=None, max_length=255)
     criticality_level_id: uuid.UUID | None = None
+    icon_key: PresentationIcon | None = None
+    accent_key: PresentationAccent | None = None
     active: bool = True
     _name = field_validator("name")(_trim_nonempty)
 
@@ -1729,6 +1738,8 @@ class BusinessFunctionUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=20000)
     owner_name: str | None = Field(default=None, max_length=255)
     criticality_level_id: uuid.UUID | None = None
+    icon_key: PresentationIcon | None = None
+    accent_key: PresentationAccent | None = None
     active: bool | None = None
     _name = field_validator("name")(_trim_nonempty)
 
@@ -1742,6 +1753,8 @@ class BusinessFunctionResponse(ORMResponse):
     owner_name: str | None
     criticality_level_id: uuid.UUID | None
     criticality_name: str | None = None
+    icon_key: str | None = None
+    accent_key: str | None = None
     active: bool
     service_count: int = 0
     open_gap_count: int = 0
@@ -1813,6 +1826,11 @@ class ServiceGraphResponse(BaseModel):
 
 
 class OperationalGraphNode(BaseModel):
+    icon_key: str | None = None
+    accent_key: str | None = None
+    service_type_id: uuid.UUID | None = None
+    service_type_icon_key: str | None = None
+    service_type_accent_key: str | None = None
     cached_icon_url: str | None = None
     default_icon_url: str | None = None
     resolved_icon_url: str | None = None

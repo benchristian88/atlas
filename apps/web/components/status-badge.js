@@ -1,4 +1,6 @@
+import { StatusIndicator } from "./status-indicator";
+
+// Compatibility adapter for workflow/severity consumers.
 export function StatusBadge({ status }) {
-  const normalized = status.toLowerCase().replaceAll(" ", "-");
-  return <span className={`status-badge status-${normalized}`}>{status}</span>;
+  return <StatusIndicator state={status} variant="badge" />;
 }

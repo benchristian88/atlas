@@ -70,14 +70,14 @@
   --identity-emphasis: light-dark(#A6426A, #C5849E);
 }
 
-.presentation-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: 7px; background: var(--identity-tile); color: var(--identity-foreground); }
+.presentation-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: var(--radius-control); background: var(--identity-tile); color: var(--identity-foreground); }
 .presentation-icon .nav-icon { width: 19px; height: 19px; flex-basis: 19px; }
 .presentation-identity { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
 .presentation-picker { display: grid; gap: 12px; border: 0; margin: 0; padding: 0; min-width: 0; }
-.presentation-picker legend { font-size: 13px; font-weight: 650; padding: 0; margin-bottom: 12px; }
+.presentation-picker legend { font-size: var(--type-compact); font-weight: var(--weight-semibold); padding: 0; margin-bottom: 12px; }
 .presentation-picker p { margin: 0; }
 .presentation-choice { position: relative; min-width: 0; }
-.presentation-choice-trigger { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 42px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.presentation-choice-trigger { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 42px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--type-compact); text-align: left; cursor: pointer; }
 .presentation-choice-trigger:hover, .presentation-choice-trigger[aria-expanded="true"] { background: var(--surface-muted); }
 .presentation-choice-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .presentation-choice-trigger:disabled { color: var(--muted); background: var(--surface-muted); cursor: default; }
@@ -87,15 +87,15 @@
 .presentation-choice .presentation-choice-option { display: flex; align-items: center; gap: 8px; padding: 8px; font-weight: 400; }
 .presentation-choice .presentation-choice-option[aria-checked="true"] { background: var(--surface-muted); box-shadow: inset 0 0 0 1px var(--border); }
 .presentation-choice .presentation-choice-option:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
-.presentation-choice-check { margin-left: auto; min-width: 12px; font-weight: 650; }
+.presentation-choice-check { margin-left: auto; min-width: 12px; font-weight: var(--weight-semibold); }
 .presentation-choice .presentation-icon { width: 24px; height: 24px; flex-basis: 24px; }
 .presentation-choice .nav-icon { width: 16px; height: 16px; flex-basis: 16px; }
 .presentation-swatch { display: inline-block; width: 14px; height: 14px; flex: 0 0 14px; margin: 5px; border-radius: 50%; background: var(--identity-foreground); }
 
 /* Specific selectors keep identity separate from global branding and status. */
-.infrastructure-topology .topology-summary-row { border-color: var(--identity-border); padding: 12px; margin-top: 6px; border-radius: 7px; background: var(--identity-tint); }
+.infrastructure-topology .topology-summary-row { border-color: var(--identity-border); padding: 12px; margin-top: 6px; border-radius: var(--radius-control); background: var(--identity-tint); }
 .infrastructure-topology .topology-platform-section > h2,
-.infrastructure-topology .topology-network-heading { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 7px; border-bottom: 1px solid var(--border); background: var(--identity-tint); }
+.infrastructure-topology .topology-network-heading { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--radius-control); border-bottom: 1px solid var(--border); background: var(--identity-tint); }
 .infrastructure-topology .topology-platform-card { border-top: 2px solid var(--border); }
 .infrastructure-topology .topology-child { background: var(--identity-tint); }
 .infrastructure-topology .topology-network-row { border-bottom-color: var(--identity-border); border-radius: 6px; background: var(--identity-tint); margin-bottom: 5px; }

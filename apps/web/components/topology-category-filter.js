@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { PresentationIdentity } from "./presentation-identity.mjs";
 
@@ -56,10 +58,10 @@ export function TopologyCategoryFilter({ categories, enabled, changedCount, open
         onOpenChange(false); trigger.current?.focus({ preventScroll: true });
       }
     }}>
-    <button ref={trigger} type="button" className="button button-secondary" disabled={!categories.length}
+    <Button ref={trigger} type="button" variant="secondary" disabled={!categories.length}
       aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => onOpenChange(!open)}>
       Filters{changedCount > 0 && ` · ${changedCount}`}
-    </button>
+    </Button>
     {open && <div ref={panel} id={id} className="account-dropdown topology-filter-popover" style={placement}>
       <fieldset><legend>Asset categories</legend><div className="topology-filter-options">
         {categories.map(category => <label key={category.id} htmlFor={`${id}-${category.id}`}>

@@ -34,6 +34,10 @@ When implementing a task:
 5. Run relevant checks.
 6. Summarize what changed.
 
+# Frontend work
+
+Read and follow [the canonical UI architecture guide](../architecture/ui-architecture.md). Reuse tokens and shared primitives before adding page-specific patterns. Preserve Asset imagery and accepted catalogue interactions; keep status, presentation identity and tenant context separate. The dated UI review is historical rationale, not another specification. Verify changed shared contracts and representative responsive/theme states.
+
 # Development rules
 - Do not store secrets in logs.
 - Do not display saved secrets back to users.

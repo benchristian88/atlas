@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "../../components/button";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -102,9 +104,9 @@ function KnowledgeGapCard({ canDefer, canEdit, canExcept, deciding, item, onActi
       <div className="knowledge-gap-action-row">
         {hasAssetLink ? <Link className="button button-secondary" href={`/${item.entity_type === "service" ? "services" : "assets"}/${item.entity_id}`}>Open {entityLabel.toLowerCase()}</Link> : <span className="secondary-text">{entityLabel} link unavailable</span>}
         {hasAssetLink && canEdit && <Link className="button button-primary" href={`/${item.entity_type === "service" ? "services" : "assets"}/${item.entity_id}/edit`}>Provide information</Link>}
-        {canDefer && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onAction(item, "defer")} type="button">Defer</button>}
-        {canExcept && item.status !== "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onAction(item, "exception")} type="button">Record exception</button>}
-        {canExcept && item.status === "exception" && <button className="button button-secondary" disabled={deciding === item.id} onClick={() => onReopen(item)} type="button">Reopen</button>}
+        {canDefer && item.status !== "exception" && <Button variant="secondary" disabled={deciding === item.id} onClick={() => onAction(item, "defer")} type="button">Defer</Button>}
+        {canExcept && item.status !== "exception" && <Button variant="secondary" disabled={deciding === item.id} onClick={() => onAction(item, "exception")} type="button">Record exception</Button>}
+        {canExcept && item.status === "exception" && <Button variant="secondary" disabled={deciding === item.id} onClick={() => onReopen(item)} type="button">Reopen</Button>}
       </div>
     </footer>
   </article>;
@@ -273,6 +275,6 @@ export default function KnowledgeGapsPage() {
       {visibleItems.length === 0 ? <div className="empty-state detail-card"><p>No knowledge gaps match the current filters.</p>{activeFilterCount > 0 && <button className="text-button" onClick={() => router.push("/knowledge-gaps")} type="button">Reset filters</button>}</div> : visibleItems.map((item) => <KnowledgeGapCard canDefer={hasPermission("knowledge_gaps.defer")} canEdit={hasPermission(item.entity_type === "service" ? "services.edit" : "assets.edit")} canExcept={hasPermission("knowledge_gaps.exception")} deciding={deciding} item={item} key={item.id} onAction={gapAction} onReopen={reopen} />)}
       </section>
     </>}
-    {ready && !loading && items.length > PAGE_SIZE && <div className="pagination"><button className="button button-secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, items.length)} of {items.length}</span><button className="button button-secondary" disabled={filters.offset + PAGE_SIZE >= items.length} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</button></div>}
+    {ready && !loading && items.length > PAGE_SIZE && <div className="pagination"><Button variant="secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</Button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, items.length)} of {items.length}</span><Button variant="secondary" disabled={filters.offset + PAGE_SIZE >= items.length} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</Button></div>}
   </>;
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useMemo, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { StatusBadge } from "./status-badge";
@@ -155,7 +157,7 @@ export function AssertionsPanel({
         {dialog.type === "delete" && <p>Deleting removes this unused assertion and its unaccepted reconciliation items permanently. Evidence and operational asset data remain unchanged.</p>}
         {dialog.type === "retract" && <><p>Retraction preserves evidence and history. It does not reverse or alter the current asset or other operational data.</p><label className="field"><span>Retraction reason *</span><textarea autoFocus required value={reason} onChange={(event) => setReason(event.target.value)} /></label>{requiresGapConfirmation && <label className="field checkbox-field provenance-confirm"><input required type="checkbox" checked={gapAcknowledged} onChange={(event) => setGapAcknowledged(event.target.checked)} /><span>I understand this may leave current operational knowledge without active provenance.</span></label>}</>}
         {error && <div className="error-banner" role="alert">{error}</div>}
-        <div className="form-actions"><button className="button button-secondary" disabled={saving} onClick={closeDialog} type="button">{dialog.type === "details" ? "Close" : "Cancel"}</button>{dialog.type !== "details" && <button className="button button-danger" disabled={saving || (dialog.type === "retract" && (!reason.trim() || (requiresGapConfirmation && !gapAcknowledged)))} onClick={performAction} type="button">{saving ? "Saving…" : dialog.type === "delete" ? "Delete permanently" : "Retract assertion"}</button>}</div>
+        <div className="form-actions"><Button variant="secondary" disabled={saving} onClick={closeDialog} type="button">{dialog.type === "details" ? "Close" : "Cancel"}</Button>{dialog.type !== "details" && <Button variant="destructive" disabled={saving || (dialog.type === "retract" && (!reason.trim() || (requiresGapConfirmation && !gapAcknowledged)))} onClick={performAction} type="button">{saving ? "Saving…" : dialog.type === "delete" ? "Delete permanently" : "Retract assertion"}</Button>}</div>
       </section>
     </div>}
   </section>;

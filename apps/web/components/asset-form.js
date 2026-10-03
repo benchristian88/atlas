@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useEffect, useMemo, useState } from "react";
 import { AssetIcon } from "./asset-icon";
 
@@ -149,7 +151,7 @@ export function AssetForm({
       {fields.length > 0 && <fieldset className="custom-fields-section"><legend>Custom enrichment</legend><div className="form-grid">{fields.map((definition) => <CustomFieldInput definition={definition} key={definition.id} onChange={(value) => setCustomValues((current) => ({ ...current, [definition.key]: value }))} value={customValues[definition.key] ?? ""} />)}</div></fieldset>}
 
       <label className="field"><span>Additional metadata (JSON)</span><textarea className="mono" rows="5" value={form.metadata_json} onChange={(event) => change("metadata_json", event.target.value)} /><small>Optional structured facts not covered by standard or custom fields.</small></label>
-      <div className="form-actions"><button className="button button-secondary" onClick={onCancel} type="button">Cancel</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : submitLabel}</button></div>
+      <div className="form-actions"><Button variant="secondary" onClick={onCancel} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">{saving ? "Saving…" : submitLabel}</Button></div>
     </form>
   );
 }

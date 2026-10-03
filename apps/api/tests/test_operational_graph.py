@@ -18,6 +18,7 @@ from app.database import get_db
 from app.main import app
 from app.models import (
     Asset,
+    AssetCategory,
     AssetRelationship,
     AssetType,
     BusinessFunction,
@@ -397,6 +398,9 @@ def test_temporal_boundaries_are_inclusive_from_and_exclusive_to(
 def test_all_edge_families_metadata_and_completeness_are_projected_in_batches():
     customer_id, site_id = uuid.uuid4(), uuid.uuid4()
     service_type, criticality, asset_type, depends_on, runs_on, supports = reference_records()
+    asset_type.category_record = AssetCategory(id=uuid.uuid4(), key="custom", name="Custom", icon_key="cloud", accent_key="rose")
+    service_type.icon_key = "database"
+    service_type.accent_key = "purple"
     first = service("Photos", customer_id, service_type, criticality, site_id=site_id)
     second = service("DNS", customer_id, service_type, criticality, site_id=site_id)
     host = asset("LXC", customer_id, site_id)
@@ -451,6 +455,9 @@ def test_all_edge_families_metadata_and_completeness_are_projected_in_batches():
         "service_business_function",
     }
     service_node = next(node for node in graph.nodes if node.entity_id == first.id)
+    assert (service_node.service_type_icon_key, service_node.service_type_accent_key) == ("database", "purple")
+    asset_node = next(node for node in graph.nodes if node.entity_id == host.id)
+    assert (asset_node.icon_key, asset_node.accent_key) == ("cloud", "rose")
     assert service_node.completeness_status == "incomplete"
     assert service_node.open_gap_count == 1
     assert service_node.criticality_key == "high"

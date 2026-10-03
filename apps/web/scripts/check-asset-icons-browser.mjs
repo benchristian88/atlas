@@ -66,7 +66,7 @@ try {
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
     for (mode of ["cached", "failed", "corrupt", "cleared", "generic", "typefailed"]) {
-      for (const [path, selector, size] of [["/assets", ".asset-table-identity .asset-icon", 38], [`/assets/${id(10)}`, ".asset-detail-heading .asset-icon", 58], ["/knowledge-graph", ".landscape-node .asset-icon", 32], ["/dashboard", ".landscape-node .asset-icon", 32]]) {
+      for (const [path, selector, size] of [["/assets", ".catalogue-identity .asset-icon", 38], [`/assets/${id(10)}`, ".entity-detail-header .asset-icon", 48], ["/knowledge-graph", ".landscape-node .asset-icon", 32], ["/dashboard", ".landscape-node .asset-icon", 32]]) {
         await page.goto(`${base}${path}`);
         const icon = page.locator(selector).first();
         try { await icon.waitFor(); } catch (error) { console.error(errors, await page.locator("body").innerText()); throw error; }
@@ -74,9 +74,9 @@ try {
           const box = document.querySelector(selector);
           const imgs = [...box.querySelectorAll("img")];
           const visible = imgs.filter((img) => getComputedStyle(img).opacity !== "0");
-          return visible.every((img) => img.complete && img.naturalWidth > 0) && (["generic", "typefailed"].includes(mode) ? imgs.length === 1 : visible.some((img) => mode === "cached" ? img.src.includes("/icon?") : img.src.includes("type.example.test")));
+          return visible.every((img) => img.complete && img.naturalWidth > 0) && (["generic", "typefailed"].includes(mode) ? imgs.length === 0 && box.querySelector(".presentation-icon svg") : visible.some((img) => mode === "cached" ? img.src.includes("/icon?") : img.src.includes("type.example.test")));
         }, { selector, mode }); } catch (error) { console.error(await icon.evaluate(el => [...el.querySelectorAll("img")].map(img => ({ src: img.src, complete: img.complete, width: img.naturalWidth, opacity: getComputedStyle(img).opacity }))), external); throw error; }
-        assert.equal(await icon.evaluate(el => [...el.querySelectorAll("img")].filter(img => getComputedStyle(img).opacity !== "0").length), 1, "Transparent icons must not reveal the generic placeholder underneath");
+        assert.equal(await icon.evaluate(el => [...el.querySelectorAll("img")].filter(img => getComputedStyle(img).opacity !== "0").length), ["generic", "typefailed"].includes(mode) ? 0 : 1, "Transparent icons must not reveal the generic placeholder underneath");
         const bounds = await icon.boundingBox();
         assert.equal(bounds.width, size); assert.equal(bounds.height, size);
         if (path === "/knowledge-graph" || path === "/dashboard") {

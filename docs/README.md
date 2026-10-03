@@ -94,6 +94,9 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 
 ## Architecture documents
 
+- [UI architecture and design system](architecture/ui-architecture.md) — canonical tokens, shared components, identity, status, responsive and contributor standards.
+- [September 2026 UI system review](history/product-reviews/atlas-ui-system-review-2026-09.md) — historical audit and rationale, not the current specification.
+
 - [Infrastructure Topology and managed categories](architecture/infrastructure-topology.md): contracts, migration, scoping and projection semantics.
 
 - [`architecture/architecture-v0.md`](architecture/architecture-v0.md) — current
@@ -119,6 +122,8 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
   truth while introducing a derived, API-owned operational graph projection.
 
 ## Release testing
+
+- [UI system acceptance](testing/ui-system.md) — responsive/theme matrix and shared component, icon, detail and topology checks.
 
 - [`testing/release-c2-operational-graph.md`](testing/release-c2-operational-graph.md)
   — C2.1 contract, authorization, temporal, compatibility, performance, and UI

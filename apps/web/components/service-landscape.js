@@ -1,9 +1,11 @@
 "use client";
 
+import { IconButton } from "./button";
+
 import { fitLandscape } from "../lib/landscape-geometry.mjs";
 import { dependencyDetail, dependencyGroupLabel, DEPENDENCY_STRATEGY_LABELS } from "../lib/dependency-semantics.mjs";
 import { layoutLandscape, landscapeGroupPath, routeLandscape, selectedLandscapeEdges } from "../lib/landscape-layout.mjs";
-import { AssetIcon } from "./asset-icon";
+import { EntityIdentity } from "./entity-identity";
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { analysisState, presentLandscape } from "../lib/operations-experience.mjs";
@@ -84,7 +86,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", select
   }
   const drag = useRef(null);
   return <div className={`service-landscape ${compact ? "landscape-compact" : expandedView ? "landscape-expanded" : ""}`}>
-    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.1, z - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, z + .1))}>+</button></div>}
+    {!compact && <div className="landscape-zoom" aria-label="Graph zoom"><IconButton label="Zoom out" icon="minus" onClick={() => setZoom((z) => Math.max(.1, z - .1))} /><span>{Math.round(zoom * 100)}%</span><IconButton label="Zoom in" icon="plus" onClick={() => setZoom((z) => Math.min(1.5, z + .1))} /></div>}
     <div className="landscape-viewport" ref={viewport} style={!compact && !expandedView ? { height: `min(66vh, ${layout.height}px)` } : undefined} tabIndex={0} aria-label="Service landscape. Scroll to explore." onPointerDown={(event) => {
       if (event.pointerType !== "mouse" || event.target.closest("button, a")) return;
       drag.current = { x: event.clientX, y: event.clientY, left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop };
@@ -104,7 +106,7 @@ export function ServiceLandscape({ graph, compact = false, selected = "", select
           {[...layout.positions.values()].map(({ node, x, y }) => {
             const state = analysisState(node, analysis);
             return <button className={`landscape-node entity-${node.entity_type} ${node.key === selected ? "is-selected" : ""} ${state ? `analysis-${state}` : analysis ? "analysis-context" : ""}`} key={node.key} data-node-key={node.key} style={{ left: x, top: y, width: layout.nodeWidth, minHeight: layout.nodeHeight }} type="button" aria-pressed={node.key === selected} aria-label={`${node.entity_type.replaceAll("_", " ")}: ${node.name}${state ? `. Scenario: ${state}` : ""}`} onClick={() => onSelect?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect?.(node); } }} onDoubleClick={() => onFocus?.(node)}>
-              {node.entity_type === "asset" ? <AssetIcon asset={node} size={32} /> : <EntityMark type={node.entity_type} />}<span className="landscape-node-text"><strong>{node.name}</strong><small>{node.entity_type.replaceAll("_", " ")}{!compact && node.criticality_name && <span className="ops-badge">{node.criticality_name}</span>}</small>
+              <EntityIdentity type={node.entity_type} record={node} size={32} /><span className="landscape-node-text"><strong>{node.name}</strong><small>{node.entity_type.replaceAll("_", " ")}{!compact && node.criticality_name && <span className="ops-badge">{node.criticality_name}</span>}</small>
                 {node.site_id && node.site_id !== siteId && <small className="site-badge">{node.site_name || "Another authorized Site"}</small>}
                 {state && <small className="analysis-label">{state.toUpperCase()}</small>}
               </span>{node.entity_type !== "business_function" && <RecordedStatus state={node.operational_state || node.lifecycle_state} />}

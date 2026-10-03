@@ -39,7 +39,7 @@ export function AppShell({ children }) {
         <AtlasBrand href={authenticatedHome(user)} variant={sidebarBrandVariant} />
         <Navigation />
         <div className="sidebar-footer">
-          Atlas Impact<br />Local development
+          Atlas Impact
         </div>
       </aside>
       <div className="content">

@@ -18,7 +18,7 @@ def test_upgrade_preserves_knowledge_and_defaults_only_recognized_builtins(monke
     assert not inspect(engine).get_table_names(),'Refusing to modify nonempty database'
     monkeypatch.setenv('DATABASE_URL',url)
     config=Config(str(Path(__file__).parents[1]/'alembic.ini'))
-    assert ScriptDirectory.from_config(config).get_heads()==['20260921_0023']
+    assert ScriptDirectory.from_config(config).get_heads()==['20261004_0024']
     command.upgrade(config,'20260921_0021')
     path=Path(__file__).parents[1]/'migrations/versions/20260921_0022_asset_type_topology_roles.py'
     spec=importlib.util.spec_from_file_location('roles_migration',path)

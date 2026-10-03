@@ -62,10 +62,11 @@ async function checkIdentityContrast(page, selector = ".infrastructure-topology 
 
 async function checkConnectivityContrast(page) {
   const networkCount = await page.locator('[data-node-key^="network:"]').count();
-  const selector = ".topology-connectivity-world .presentation-icon";
+  const selector = ".topology-connectivity-world [data-node-key^=\"network:\"] .presentation-icon";
   assert.equal(await page.locator(selector).count(), networkCount);
-  // Asset-only graphs use AssetIcon; the temporary filter icons are now closed.
+  // Network tiles are counted separately; Asset fallbacks now also use bounded identity tiles.
   if (networkCount) await checkIdentityContrast(page, selector);
+  if (await page.locator(".topology-connectivity-world .presentation-icon").count()) await checkIdentityContrast(page, ".topology-connectivity-world .presentation-icon");
 }
 
 const accentLabel = key => key[0].toUpperCase() + key.slice(1);
@@ -86,7 +87,7 @@ async function checkPreview(page, icon, accent, name) {
 async function checkCompactPicker(page, theme, width, surface) {
   assert.equal(await page.locator('.presentation-picker input[type="radio"]').count(), 0);
   assert.equal(await page.getByRole("menu").count(), 0);
-  assert.equal(await page.getByText("Used for topology presentation only.", { exact: true }).count(), 1);
+  assert.equal(await page.getByText("Used for entity recognition; independent of operational status.", { exact: true }).count(), 1);
   const triggers = page.locator(".presentation-choice-trigger");
   const boxes = await triggers.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON()));
   assert.equal(boxes[0].top, boxes[1].top, "Selectors share the existing desktop form grid");
@@ -1350,8 +1351,8 @@ try {
         await page.reload();
         await row.getByRole("button", {name:"Edit", exact:true}).click();
         await checkPreview(page, "application", "rose", name);
-        assert.equal(await pickerTrigger(page, "Icon").innerText(), "Application\n⌄");
-        assert.equal(await pickerTrigger(page, "Accent").innerText(), "Rose\n⌄");
+        assert.equal(await pickerTrigger(page, "Icon").innerText(), "Application");
+        assert.equal(await pickerTrigger(page, "Accent").innerText(), "Rose");
       }
       await choosePresentation(page, "Icon", icon);
       await choosePresentation(page, "Accent", accent);
@@ -1387,7 +1388,7 @@ try {
     const workloadSummary = page.locator(".topology-summary-row").filter({ has: page.getByRole("link", {name:"View all Workload Assets", exact:true}) });
     assert.match(await workloadSummary.innerText(), /25 Assets/);
     assert.equal(await workloadSummary.getAttribute("data-presentation-accent"), "green");
-    assert.equal(await workloadSummary.locator("[data-presentation-icon]").getAttribute("data-presentation-icon"), "cube");
+    assert.equal(await workloadSummary.locator("[data-presentation-icon]").first().getAttribute("data-presentation-icon"), "cube");
     assert.deepEqual(await page.locator(".topology-metrics [data-presentation-accent]").evaluateAll(els=>els.map(el=>el.dataset.presentationAccent)), ["blue","cyan","teal","purple"]);
     await checkIdentityContrast(page);
     await page.screenshot({path:`${output}/overview-${theme}-${width}.png`,fullPage:true});
@@ -1623,11 +1624,13 @@ try {
     assert.equal(await page.locator('select[name="category_id"] option:checked').innerText(),"Workload");
     assert.equal(await page.locator('select[name="topology_position_id"]').inputValue(), position("workload").id);
     await page.goto(`${base}/assets`);
+    await page.locator(".catalogue-more-filters > summary").click();
     await page.getByLabel("Asset Category",{exact:true}).selectOption(id(4));
     await page.waitForURL(/category_id=/);
     assert.equal(await page.getByLabel("Asset Category",{exact:true}).inputValue(),id(4));
-    assert.doesNotMatch(await page.locator("table").innerText(), /192.0.2.254|Hostname \/ IP/);
-    assert.equal(await page.getByRole("columnheader", {name:"Hostname",exact:true}).count(),1);
+    assert.doesNotMatch(await page.locator(".entity-catalogue").innerText(), /192.0.2.254|Hostname \/ IP/);
+    assert.equal(await page.locator(".entity-catalogue table").count(),0);
+    assert.ok(await page.locator(".catalogue-row").count()>0);
     assert.deepEqual(errors,[]);
     // Exercise category and type form submissions; API invariants are separately
     // covered against PostgreSQL rather than being entrusted to this fixture.
@@ -1698,7 +1701,7 @@ try {
     const homeSummary = page.locator(".topology-summary-row").filter({hasText:"Home Automation"});
     await homeSummary.waitFor();
     assert.equal(await homeSummary.getAttribute("data-presentation-accent"),"teal");
-    assert.equal(await homeSummary.locator('[data-presentation-icon="home"]').count(),1);
+    assert.equal(await homeSummary.locator('.presentation-identity [data-presentation-icon="home"]').count(),1);
     assert.equal(await homeSummary.locator(".asset-icon").count(),1);
     await page.getByRole("button",{name:"Platform",exact:true}).click();
     assert.equal(await page.locator(`[data-platform-id="${id(851)}"]`).getAttribute("data-presentation-accent"),"teal");

@@ -17,13 +17,13 @@ test("detail navigation round-trips Focus and unavailable analysis without chang
 
 test("shared detail contract uses existing operational primitives and accessible native disclosure", async () => {
   const source = await read("components/entity-detail.js");
-  assert.match(source, /import \{ CompletenessLine, EntityMark, RecordedStatus \}/);
+  assert.match(source, /import \{ CompletenessLine, RecordedStatus \}/);
   assert.match(source, /aria-label="Breadcrumb"/);
   assert.match(source, /aria-current="page"/);
   assert.match(source, /<details[^>]+><summary>View all/);
   assert.match(source, /rows.slice\(limit\)/);
   assert.match(source, /aria-label=\{`Open \$\{name\}`\}/);
-  assert.match(source, /type === "service" && <span className="entity-recorded-state"/);
+  assert.match(source, /type !== "business_function" && <span className="entity-recorded-state"/);
 });
 
 test("Service detail keeps provenance, recovery, completeness actions and typed mutation routes", async () => {

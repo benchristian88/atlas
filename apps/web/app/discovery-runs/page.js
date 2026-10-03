@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "../../components/button";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "../../components/access-denied";
@@ -89,10 +91,7 @@ export default function DiscoveryRunsPage() {
 
   if (!canView) return <AccessDenied />;
   return <>
-    <div className="page-heading-row">
-      <PageHeader eyebrow="Operations" title="Discovery" description="Review sourced discovery runs and preserve accepted provenance." />
-      {hasPermission("discovery.simulate") && <Link className="button button-primary" href="/discovery/simulate">Simulate discovery</Link>}
-    </div>
+    <PageHeader eyebrow="Operations" title="Discovery" description="Review sourced discovery runs and preserve accepted provenance." actions={<>{hasPermission("discovery.simulate") && <Link className="button button-primary" href="/discovery/simulate">Simulate discovery</Link>}</>} />
     <div className="filter-bar">
       <label className="field checkbox-field"><input checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} type="checkbox" /><span>Include archived</span></label>
     </div>
@@ -107,7 +106,7 @@ export default function DiscoveryRunsPage() {
         <h2 id="run-dialog-title">{dialog.type === "delete" ? "Delete discovery run?" : dialog.type === "restore" ? "Restore discovery run?" : "Archive discovery run"}</h2>
         {dialog.type === "delete" ? <p>Deletion removes unused test evidence, assertions, and reconciliation items permanently. This cannot be undone and never reverses operational Atlas data.</p> : dialog.type === "restore" ? <p>The run will return to the default discovery list. Its evidence and assertions are already preserved.</p> : <><p>Archiving hides this run from the default list while preserving all evidence, assertions, reconciliation history, and operational data.</p><label className="field"><span>Archive reason *</span><textarea autoFocus required value={reason} onChange={(event) => setReason(event.target.value)} /></label></>}
         {conflict && <div className="warning-banner" role="alert"><strong>{conflict.detail}</strong>{Array.isArray(conflict.blocking_reasons) && <ul>{conflict.blocking_reasons.map((item) => <li key={item}>{item}</li>)}</ul>}<p>Archive the run to preserve accepted knowledge and provenance.</p></div>}
-        <div className="form-actions"><button className="button button-secondary" disabled={saving} onClick={closeDialog} type="button">Cancel</button>{conflict && canArchive && <button className="button button-secondary" onClick={() => { setDialog({ type: "archive", run: dialog.run }); setConflict(null); }} type="button">Archive instead</button>}<button className={`button ${dialog.type === "delete" ? "button-danger" : "button-primary"}`} disabled={saving || (dialog.type === "archive" && !reason.trim()) || Boolean(conflict)} onClick={performAction} type="button">{saving ? "Saving…" : dialog.type === "delete" ? "Delete permanently" : dialog.type === "restore" ? "Restore" : "Archive"}</button></div>
+        <div className="form-actions"><Button variant="secondary" disabled={saving} onClick={closeDialog} type="button">Cancel</Button>{conflict && canArchive && <Button variant="secondary" onClick={() => { setDialog({ type: "archive", run: dialog.run }); setConflict(null); }} type="button">Archive instead</Button>}<button className={`button ${dialog.type === "delete" ? "button-danger" : "button-primary"}`} disabled={saving || (dialog.type === "archive" && !reason.trim()) || Boolean(conflict)} onClick={performAction} type="button">{saving ? "Saving…" : dialog.type === "delete" ? "Delete permanently" : dialog.type === "restore" ? "Restore" : "Archive"}</button></div>
       </section>
     </div>}
   </>;

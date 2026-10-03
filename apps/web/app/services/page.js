@@ -79,10 +79,7 @@ export default function ServicesPage() {
   const activeCount = Object.entries(filters).filter(([key, value]) => key !== "search" && Boolean(value)).length;
 
   return <>
-    <div className="page-heading-row">
-      <PageHeader eyebrow="Knowledge" title="Services" description="Browse operational capabilities and the infrastructure and business functions they connect." />
-      {canCreate && <Link className="button button-primary" href="/services/new">Add Service</Link>}
-    </div>
+    <PageHeader eyebrow="Knowledge" title="Services" description="Browse operational capabilities and the infrastructure and business functions they connect." actions={<>{canCreate && <Link className="button button-primary" href="/services/new">Add Service</Link>}</>} />
     {error && <div className="error-banner" role="alert">{error}</div>}
     <CatalogueFilters label="Search services" search={search} activeCount={activeCount} onClear={clear} primary={
       <label className="field"><span className="sr-only">Service type</span><select value={filters.serviceTypeId} onChange={(event) => update({ serviceTypeId: event.target.value })}><option value="">All types</option>{types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -105,7 +102,7 @@ export default function ServicesPage() {
         </div>
     </CatalogueFilters>
     <EntityCatalogue label="Services" count={services.length} loading={loading} error={error} onRefresh={load} empty={<>No Services match the current filters. {canCreate && <Link href="/services/new">Create the first Service.</Link>}</>}>
-      {services.map((service) => <ServiceCatalogueRow key={service.id} service={service} />)}
+      {services.map((service) => <ServiceCatalogueRow key={service.id} service={service} serviceType={types.find(type => type.id === service.service_type_id)} />)}
     </EntityCatalogue>
   </>;
 }

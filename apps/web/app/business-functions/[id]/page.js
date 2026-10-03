@@ -1,9 +1,13 @@
 "use client";
 
+import { Button } from "../../../components/button";
+
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EntityDeleteAction } from "../../../components/entity-delete-action";
 import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
+import { PresentationPicker } from "../../../components/presentation-picker";
+import { resolveEntityIdentity } from "../../../lib/entity-identity.mjs";
 import { EntityDetailHeader, EntitySection, EntityRelationshipRow, EntityRelationshipList, EntityEditDisclosure } from "../../../components/entity-detail";
 import { recordContextOptions } from "../../../lib/record-context.mjs";
 import { OperationalGraphView } from "../../../components/operational-graph-view";
@@ -47,7 +51,7 @@ export default function BusinessFunctionDetailPage({ params }) {
       setCriticalityLevels(levels);
       setServiceMetadata(metadata?.nodes || []);
       if (metadata?.truncated) setMetadataError("Supporting Service metadata is bounded. Open a Service or focus it in Knowledge Graph for more detail.");
-      setForm({ name: record.name, description: record.description || "", owner_name: record.owner_name || "", criticality_level_id: record.criticality_level_id || "", active: record.active });
+      setForm({ ...resolveEntityIdentity("business_function", record), name: record.name, description: record.description || "", owner_name: record.owner_name || "", criticality_level_id: record.criticality_level_id || "", active: record.active });
     } catch (requestError) {
       if (version !== loadVersion.current) return;
       setError(requestError.message);
@@ -80,7 +84,7 @@ export default function BusinessFunctionDetailPage({ params }) {
   }
 
   return <div className="operations-page entity-detail-page">
-    <EntityDetailHeader type="business_function" id={id} name={item.name} description={item.description || "Business purpose has not been documented."} subtitle="Business Function · Why it matters" criticality={item.criticality_name} canGraph={item.active} actions={canManage && <button className="button button-secondary" onClick={() => setEditing(!editing)} type="button" aria-expanded={editing}>{editing ? "Cancel" : "Edit"}</button>} />
+    <EntityDetailHeader record={item} type="business_function" id={id} name={item.name} description={item.description || "Business purpose has not been documented."} subtitle="Business Function · Why it matters" criticality={item.criticality_name} canGraph={item.active} actions={canManage && <Button variant="secondary" onClick={() => setEditing(!editing)} type="button" aria-expanded={editing}>{editing ? "Cancel" : "Edit"}</Button>} />
     {error && <div className="error-banner" role="alert">{error}</div>}
     {editing && <section className="form-card">
       <form className="resource-form" onSubmit={save}>
@@ -89,16 +93,17 @@ export default function BusinessFunctionDetailPage({ params }) {
           <label className="field"><span>Owner</span><input value={form.owner_name} onChange={(event) => setForm({ ...form, owner_name: event.target.value })} /></label>
           <label className="field"><span>Criticality</span><select value={form.criticality_level_id} onChange={(event) => setForm({ ...form, criticality_level_id: event.target.value })}><option value="">Not set</option>{criticalityLevels.filter((level) => level.active || level.id === item.criticality_level_id).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select></label>
           <label className="field field-wide"><span>Description</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+          <PresentationPicker form={form} onChange={setForm} fallback="home" />
         </div>
-        <div className="form-actions"><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save"}</button></div>
+        <div className="form-actions"><Button variant="primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save"}</Button></div>
       </form>
     </section>}
     {canManage && <EntitySection title="Record lifecycle" description="Delete mistakes. Archive history.">
-      <button className="button button-secondary" type="button" disabled={saving} onClick={async () => {
+      <Button variant="secondary" type="button" disabled={saving} onClick={async () => {
         setSaving(true); setError("");
         try { await apiRequest(`/business-functions/${id}/${item.active ? "archive" : "restore"}`, { method: "POST" }); await load(); }
         catch (failure) { setError(failure.message); } finally { setSaving(false); }
-      }}>{item.active ? "Archive" : "Restore archived Business Function"}</button>
+      }}>{item.active ? "Archive" : "Restore archived Business Function"}</Button>
       <EntityDeleteAction kind="business_function" item={item} />
     </EntitySection>}
     <EntitySection title="Overview" description="The business outcome supported by Services.">

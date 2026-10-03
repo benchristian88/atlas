@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "../../components/button";
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../components/auth-context";
@@ -247,9 +249,9 @@ export default function ProfilePage() {
               </label>
             </div>
             <div className="form-actions">
-              <button className="button button-primary" disabled={profileStatus.saving} type="submit">
+              <Button variant="primary" disabled={profileStatus.saving} type="submit">
                 {profileStatus.saving ? "Saving…" : "Save profile"}
-              </button>
+              </Button>
             </div>
           </form>
         </section>
@@ -331,13 +333,13 @@ export default function ProfilePage() {
                 <strong>Atlas interface accent</strong>
                 <span>Navigation, links, focus rings, and primary actions use this colour family.</span>
               </div>
-              <button className="button button-primary" type="button">Primary action</button>
+              <Button variant="primary" type="button">Primary action</Button>
             </div>
             <div className="form-actions">
-              <button className="button button-secondary" disabled={appearanceStatus.saving} onClick={resetAppearance} type="button">Reset to Atlas default</button>
-              <button className="button button-primary" disabled={appearanceStatus.saving} type="submit">
+              <Button variant="secondary" disabled={appearanceStatus.saving} onClick={resetAppearance} type="button">Reset to Atlas default</Button>
+              <Button variant="primary" disabled={appearanceStatus.saving} type="submit">
                 {appearanceStatus.saving ? "Saving…" : "Save appearance"}
-              </button>
+              </Button>
             </div>
           </form>
         </section>
@@ -394,9 +396,9 @@ export default function ProfilePage() {
               </label>
             </div>
             <div className="form-actions">
-              <button className="button button-primary" disabled={passwordStatus.saving} type="submit">
+              <Button variant="primary" disabled={passwordStatus.saving} type="submit">
                 {passwordStatus.saving ? "Changing…" : "Change password"}
-              </button>
+              </Button>
             </div>
           </form>
         </section>

@@ -1,5 +1,7 @@
 "use client";
 
+import { Button, IconButton } from "./button";
+
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "./access-denied";
 import { useAuth } from "./auth-context";
@@ -150,14 +152,11 @@ export function ServiceKnowledgeProfile({ typeId: id, globalScope = false }) {
   const dependencyRule = form.rule_type.endsWith("_exists");
   const fieldRule = form.rule_type === "service_field_present" || form.rule_type === "one_of";
   return <>
-    <div className="page-heading-row">
-      <PageHeader eyebrow="Reference Data · Service types" title={globalScope ? "Global Service requirements" : `${serviceType?.name || "Service type"} knowledge profile`} description={globalScope ? "Baseline knowledge expected for every Service." : "Define the operational knowledge Atlas expects for this Service type. Global Service requirements apply to every Service Type; type-specific requirements apply only to this type."} />
-      {canManage && <button className="button button-primary" onClick={() => begin()} type="button">Add requirement</button>}
-    </div>
+    <PageHeader eyebrow="Reference Data · Service types" title={globalScope ? "Global Service requirements" : `${serviceType?.name || "Service type"} knowledge profile`} description={globalScope ? "Baseline knowledge expected for every Service." : "Define the operational knowledge Atlas expects for this Service type. Global Service requirements apply to every Service Type; type-specific requirements apply only to this type."} actions={<>{canManage && <Button variant="primary" onClick={() => begin()} type="button">Add requirement</Button>}</>} />
     {error && <div className="error-banner" role="alert">{error}</div>}
     {notice && <div className="success-banner" role="status">{notice}</div>}
     {showForm && <section className="form-card">
-      <div className="form-card-header"><h2>{editing ? "Edit" : "Add"} Service requirement</h2><button aria-label="Close form" className="icon-button" onClick={() => setShowForm(false)} type="button">×</button></div>
+      <div className="form-card-header"><h2>{editing ? "Edit" : "Add"} Service requirement</h2><IconButton onClick={() => setShowForm(false)} type="button" label="Close form" icon="close" /></div>
       <form onSubmit={save}><div className="form-grid">
         <label className="field"><span>Key *</span><input disabled={Boolean(editing)} onChange={(event) => update("key", event.target.value)} pattern="[a-z][a-z0-9_]+" required value={form.key} /></label>
         <label className="field"><span>Name *</span><input onChange={(event) => update("name", event.target.value)} required value={form.name} /></label>
@@ -176,7 +175,7 @@ export function ServiceKnowledgeProfile({ typeId: id, globalScope = false }) {
       </div>
       {validation && <div className={validation.valid ? "success-banner" : "error-banner"} role="status"><strong>{validation.interpretation}</strong>{validation.errors?.map((message) => <span key={message}>{message}</span>)}</div>}
       <p className="warning-banner">Changing this requirement may create or resolve gaps on {globalScope ? "all Services" : `${editing ? editing.affected_asset_count : serviceType?.in_use_count || 0} affected Services`}.</p>
-      <div className="form-actions"><button className="button button-secondary" onClick={() => setShowForm(false)} type="button">Cancel</button><button className="button button-secondary" onClick={validate} type="button">Validate configuration</button><button className="button button-primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save requirement"}</button></div>
+      <div className="form-actions"><Button variant="secondary" onClick={() => setShowForm(false)} type="button">Cancel</Button><Button variant="secondary" onClick={validate} type="button">Validate configuration</Button><Button variant="primary" disabled={saving} type="submit">{saving ? "Saving…" : "Save requirement"}</Button></div>
       </form>
     </section>}
     <KnowledgeProfileTable requirements={requirements} entityLabel="Service" typeId={id} loading={loading} canManage={canManage} globalScope={globalScope} onRefresh={load} onEdit={begin} onToggle={toggle} onRemove={remove} />

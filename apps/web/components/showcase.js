@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "./button";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NavigationIcon } from "./navigation-icon.mjs";
 import { presentationAttributes, presentationIcon } from "../lib/presentation.mjs";
@@ -141,7 +143,7 @@ export function Showcase({ data, site }) {
     finally { setExporting(false); }
   }
   return <section aria-label="Showcase" className="showcase">
-    <div className="showcase-actions"><p>A shareable view of {site.name}.</p><button type="button" className="button button-primary" disabled={!resources || exporting} onClick={download}>{exporting ? "Exporting…" : "Export PNG"}</button></div>
+    <div className="showcase-actions"><p>A shareable view of {site.name}.</p><Button type="button" variant="primary" disabled={!resources || exporting} onClick={download}>{exporting ? "Exporting…" : "Export PNG"}</Button></div>
     {error && <p className="error-banner" role="alert">{error}</p>}
     {!resources && <p role="status">Preparing Showcase images…</p>}
     <div className="showcase-frame" style={{ aspectRatio: `${layout.sceneWidth} / ${layout.sceneHeight}` }}><Scene layout={layout} site={site} resources={resources} svgRef={svg} /></div>

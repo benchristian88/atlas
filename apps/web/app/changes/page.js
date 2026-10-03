@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "../../components/button";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -136,7 +138,7 @@ export default function ChangesPage() {
   return <>
     <PageHeader eyebrow="Knowledge" title="Changes" description="Meaningful knowledge changes across Atlas. Security and access activity remains in Audit." />
     <FilterToolbar gridClassName="changes-filter-grid" onSubmit={(event) => { event.preventDefault(); updateFilters({ search: searchDraft.trim() }); }} actions={<>
-      <label className="checkbox-field"><input checked={filters.attentionOnly} onChange={(event) => updateFilters({ attentionOnly: event.target.checked })} type="checkbox" /><span>Needs attention</span></label><span className="secondary-text">{activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : "Default view"}</span><button className="button button-secondary" type="submit">Apply search</button><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/changes")} type="button">Reset filters</button>
+      <label className="checkbox-field"><input checked={filters.attentionOnly} onChange={(event) => updateFilters({ attentionOnly: event.target.checked })} type="checkbox" /><span>Needs attention</span></label><span className="secondary-text">{activeFilterCount ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : "Default view"}</span><Button variant="secondary" type="submit">Apply search</Button><button className="text-button" disabled={activeFilterCount === 0} onClick={() => router.push("/changes")} type="button">Reset filters</button>
     </>}>
         <label className="field changes-period-filter"><span>Date period</span><select onChange={(event) => updateFilters({ period: event.target.value })} value={filters.period}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="">All time</option></select></label>
         <label className="field"><span>Change type</span><select onChange={(event) => updateFilters({ changeType: event.target.value })} value={filters.changeType}><option value="">All changes</option>{CHANGE_TYPES.map((item) => <option key={item} value={item}>{taxonomyLabel(item)}</option>)}</select></label>
@@ -158,6 +160,6 @@ export default function ChangesPage() {
         </TimelineEvent>)}</div></section>)}
       </section>}
     </>}
-    {ready && !loading && result.total > PAGE_SIZE && <div className="pagination"><button className="button button-secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, result.total)} of {result.total}</span><button className="button button-secondary" disabled={filters.offset + PAGE_SIZE >= result.total} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</button></div>}
+    {ready && !loading && result.total > PAGE_SIZE && <div className="pagination"><Button variant="secondary" disabled={filters.offset === 0} onClick={() => updateFilters({ offset: Math.max(0, filters.offset - PAGE_SIZE) })} type="button">Previous</Button><span>{filters.offset + 1}–{Math.min(filters.offset + PAGE_SIZE, result.total)} of {result.total}</span><Button variant="secondary" disabled={filters.offset + PAGE_SIZE >= result.total} onClick={() => updateFilters({ offset: filters.offset + PAGE_SIZE })} type="button">Next</Button></div>}
   </>;
 }

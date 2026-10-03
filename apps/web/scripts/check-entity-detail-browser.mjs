@@ -89,7 +89,7 @@ try {
       for (const path of [servicePath, functionPath]) {
         await navigate(path);
         assert.equal(await evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
-        assert.equal(await evaluate("getComputedStyle(document.querySelector('.page-header h1')).fontSize"), "27px");
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('.page-header h1')).fontSize"), "28px");
         assert.equal(await evaluate("getComputedStyle(document.querySelector('.ops-card')).backgroundColor"), mode === "light" ? "rgb(255, 255, 255)" : "rgb(27, 39, 46)");
         assert.equal(await evaluate("document.querySelector('.entity-detail-header [aria-label=\"Criticality: High\"]') !== null"), true);
         const href = await evaluate("[...document.querySelectorAll('.entity-detail-actions a')].find(n=>n.textContent==='View in Knowledge Graph').getAttribute('href')");
@@ -101,9 +101,9 @@ try {
         if (path === servicePath) {
           assert.equal(await evaluate("document.querySelector('.entity-detail-header [role=meter]').getAttribute('aria-valuenow')"), "75");
           assert.ok(await evaluate("document.querySelector('.entity-detail-header').textContent.includes('Recorded: operational')"));
-          for (const title of ["Supports · Business Functions", "Provided by · Assets", "Depends on · Services", "Dependents", "Dependency behaviour"]) assert.ok(await evaluate(`[...document.querySelectorAll('h2')].some(n=>n.textContent===${JSON.stringify(title)})`));
-          assert.ok(await evaluate("document.body.textContent.includes('Ungrouped dependency · Operational consequence unknown')"));
-          assert.ok(await evaluate("document.querySelector('.dependency-group-row').textContent.includes('Any one is sufficient') && document.querySelector('.dependency-group-row').textContent.includes('Service unavailable')"));
+          for (const title of ["Supports · Business Functions", "Provided by · Assets", "Depends on · Services", "Dependents", "Dependency impact"]) assert.ok(await evaluate(`[...document.querySelectorAll('h2')].some(n=>n.textContent===${JSON.stringify(title)})`), `${title}: ${await evaluate("JSON.stringify([...document.querySelectorAll('h2')].map(n=>n.textContent))")}`);
+          assert.ok(await evaluate("document.querySelector('#dependency-impact') !== null"));
+          assert.ok(await evaluate("document.querySelector('#dependency-impact').textContent.includes('Any one is sufficient')"));
           assert.equal(await evaluate("document.querySelector('.entity-detail-actions a').search.includes('analysis=unavailable')"), true);
           assert.ok(await evaluate("document.body.textContent.includes('Document recovery')"));
         } else {
@@ -142,9 +142,11 @@ try {
   assert.ok(calls.some((c) => c.method === "PATCH" && c.path === `/business-functions/${functionId}` && JSON.parse(c.body).name === "Updated purpose"));
   checks.push("Business Function edit/save payload retained");
   await navigate(servicePath);
-  await evaluate("[...document.querySelectorAll('summary')].find(n=>n.textContent==='Edit DNS providers behaviour').click()");
-  await evaluate("{const select=document.querySelector('[aria-label=\"DNS providers behaviour\"]');select.value='all';select.dispatchEvent(new Event('change',{bubbles:true}));}");
-  await until("document.querySelector('.dependency-group-row')?.textContent.includes('All required')");
+  await evaluate("[...document.querySelectorAll('summary')].find(n=>n.textContent==='Advanced configuration').parentElement.open=true");
+  await evaluate("[...document.querySelectorAll('summary')].find(n=>n.textContent.startsWith('DNS providers ·')).parentElement.open=true");
+  await evaluate("{const select=document.querySelector('#dependency-impact details details .dependency-group-form select');select.value='all';select.dispatchEvent(new Event('change',{bubbles:true}));}");
+  await evaluate("document.querySelector('#dependency-impact details details .dependency-group-form').requestSubmit()");
+  await until("document.querySelector('#dependency-impact')?.textContent.includes('All required')");
   assert.ok(calls.some((c) => c.method === "PATCH" && c.path === `/dependency-groups/${group.id}` && JSON.parse(c.body).strategy === "all"));
   checks.push("Dependency group strategy edit/save payload retained");
   await navigate(servicePath);

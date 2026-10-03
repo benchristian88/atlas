@@ -121,7 +121,7 @@ test("reachable UI provides keyboard nodes, inspector semantics, scenario labels
   assert.match(inspector, /Not evaluated for Business Functions/);
   assert.match(inspector, /reason.summary/);
   assert.match(inspector, /result.distance/);
-  assert.match(primitives, /Recorded status:/);
+  assert.match(primitives, /<StatusIndicator state=\{state\} dotOnly/);
   assert.match(primitives, /role="meter"/);
   assert.match(dashboard, /Build your service landscape/);
   assert.match(dashboard, /role="alert"/);

@@ -76,11 +76,11 @@ test("Assets exposes ten direct selectors, accessible More, and scoped summary d
   assert.match(page, /aria-pressed/);
   assert.match(page, /aria-label="More asset types"/);
   assert.match(page, /No assets match the current filters\./);
-  assert.match(page, /Clear filters/);
+  assert.match(page, /<CatalogueFilters[^>]*onClear=/);
   assert.match(page, /asset-type-filter selector-control-text/);
   assert.match(page, /<select aria-label="More asset types" className="selector-control-text"/);
   assert.match(topology, /button selector-control-text/);
-  assert.match(styles, /\.selector-control-text \{[^}]*font-size: 13px;[^}]*font-weight: 650;[^}]*line-height: normal;/);
+  assert.match(styles, /\.selector-control-text \{[^}]*font-size: var\(--type-compact\);[^}]*font-weight: var\(--weight-semibold\);[^}]*line-height: normal;/);
   assert.match(styles, /\.asset-type-filter \{[^}]*min-height: 36px;/);
 });
 

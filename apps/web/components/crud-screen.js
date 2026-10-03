@@ -1,7 +1,11 @@
 "use client";
 
+import { IconButton, Button } from "./button";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../lib/api";
+import { DataTable } from "./data-table";
+import { NavigationIcon } from "./navigation-icon.mjs";
 import { PageHeader } from "./page-header";
 
 const EMPTY_DEPENDENCIES = [];
@@ -176,17 +180,14 @@ export function CrudScreen({
 
   return (
     <>
-      <div className="page-heading-row">
-        <PageHeader eyebrow={eyebrow} title={title} description={description} />
-        {(headingActions || showCreate) && <div className="row-actions crud-heading-actions">
+      <PageHeader eyebrow={eyebrow} title={title} description={description} actions={<>{(headingActions || showCreate) && <div className="row-actions crud-heading-actions">
           {headingActions}
           {showCreate && (
-            <button className="button button-primary" onClick={openCreate} type="button">
+            <Button variant="primary" onClick={openCreate} type="button">
               Add {singularTitle}
-            </button>
+            </Button>
           )}
-        </div>}
-      </div>
+        </div>}</>} />
 
       {error && <div className="error-banner" role="alert">{error}</div>}
 
@@ -194,7 +195,7 @@ export function CrudScreen({
         <section className="form-card">
           <div className="form-card-header">
             <h2>{editingId ? `Edit ${singularTitle}` : `Add ${singularTitle}`}</h2>
-            <button className="icon-button" onClick={closeForm} type="button" aria-label="Close form">×</button>
+            <IconButton onClick={closeForm} type="button" label="Close form" icon="close" />
           </div>
           <form className="resource-form" onSubmit={submit}>
             <div className="form-grid">
@@ -283,47 +284,20 @@ export function CrudScreen({
               })}
             </div>
             <div className="form-actions">
-              <button className="button button-secondary" onClick={closeForm} type="button">Cancel</button>
-              <button className="button button-primary" disabled={saving} type="submit">
+              <Button variant="secondary" onClick={closeForm} type="button">Cancel</Button>
+              <Button variant="primary" disabled={saving} type="submit">
                 {saving ? "Saving…" : editingId ? "Save changes" : "Create"}
-              </button>
+              </Button>
             </div>
           </form>
         </section>
       )}
 
-      <section className="table-card" aria-label={`${title} list`}>
-        <div className="table-meta">
-          <span>{loading ? "Loading…" : `${records.length} records`}</span>
-          <button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {columns.map((column) => <th key={column.key}>{column.label}</th>)}
-                {showActions && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {!loading && records.length === 0 && (
-                <tr>
-                  <td className="empty-state" colSpan={columns.length + (showActions ? 1 : 0)}>
-                    No {title.toLowerCase()} yet.
-                  </td>
-                </tr>
-              )}
-              {records.map((record, index) => (
-                <tr key={record.id}>
-                  {columns.map((column) => (
-                    <td key={column.key}>{column.render ? column.render(record, relatedById, index) : record[column.key] || "—"}</td>
-                  ))}
-                  {showActions && (
-                    <td>
+      <DataTable label={`${title} list`} columns={columns} rows={records} related={relatedById} loading={loading} error={error} onRefresh={load} empty={`No ${title.toLowerCase()} yet.`} actions={showActions ? (record, _related, index) => (
                       <div className="row-actions">
                         {reorderable && capabilityAllows(canEdit, record) && <>
-                          <button className="icon-button" type="button" disabled={saving || loading || index === 0} aria-label={`Move ${record.name} up`} onClick={() => move(record, "up")}><span aria-hidden="true">↑</span></button>
-                          <button className="icon-button" type="button" disabled={saving || loading || index === records.length - 1} aria-label={`Move ${record.name} down`} onClick={() => move(record, "down")}><span aria-hidden="true">↓</span></button>
+                          <button className="icon-button" type="button" disabled={saving || loading || index === 0} aria-label={`Move ${record.name} up`} onClick={() => move(record, "up")}><NavigationIcon name="arrow-up" /></button>
+                          <button className="icon-button" type="button" disabled={saving || loading || index === records.length - 1} aria-label={`Move ${record.name} down`} onClick={() => move(record, "down")}><NavigationIcon name="arrow-down" /></button>
                         </> }
                         {capabilityAllows(canEdit, record) && (
                           <button className="text-button" onClick={() => openEdit(record)} type="button">
@@ -345,14 +319,7 @@ export function CrudScreen({
                           </button>
                         ) : null}
                       </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      ) : undefined} />
     </>
   );
 }

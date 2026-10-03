@@ -2,6 +2,12 @@ import { createElement } from "react";
 
 // Small inline line icons, following the existing EntityMark SVG convention.
 const paths = {
+  "arrow-up": "M12 20V4 M5 11l7-7 7 7",
+  "arrow-down": "M12 4v16 M5 13l7 7 7-7",
+  "chevron-down": "M6 9l6 6 6-6",
+  check: "M5 12l4 4L19 6",
+  plus: "M12 5v14 M5 12h14",
+  minus: "M5 12h14",
   cube: "M12 2 3 7v10l9 5 9-5V7L12 2z M3 7l9 5 9-5 M12 12v10 M7.5 4.5l9 5",
   database: "M3 6a9 4 0 1 0 18 0 9 4 0 1 0-18 0 M3 6v12a9 4 0 0 0 18 0V6 M3 12a9 4 0 0 0 18 0",
   archive: "M3 3h18v5H3z M5 8v13h14V8 M9 12h6",
