@@ -6,6 +6,10 @@ relational source of truth and does not replace the operational graph or its
 Service/Business Function semantics. No positions, grouping, membership edges or
 layout coordinates are persisted.
 
+[Showcase v1](showcase.md) is a separate whole-site presentation/export projection.
+It reuses these authorized collections and an additive `structural_edges` field;
+the existing Platform links and Connectivity behavior remain unchanged.
+
 ## Managed categories
 
 Migration `20260921_0019` follows `20260912_0018` and adds `asset_categories` with

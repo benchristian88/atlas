@@ -4,9 +4,12 @@ Open **Knowledge → Topology**. The page is named **Infrastructure Topology**. 
 which recorded Networks it belongs to, and its recorded connections. The
 Knowledge Graph remains the place for Service and Business Function context.
 Both views use Atlas knowledge; topology adds no separate truth store.
+The fifth tab, [Showcase](showcase.md), exports a light poster (16:9 preferred, with bounded adaptive height) of the
+whole current Site as a 3840×2160 PNG. It has its own presentation grouping and
+does not change Platform or Connectivity.
 
 Choose a Customer and Site using the normal workspace context. Counts and details
-include only records you may view. **Refresh** reloads the current records while
+include only records you may view. In the operational tabs, **Refresh** reloads the current records while
 preserving valid search, filters, focus, selection and graph viewport. No
 live monitoring or freshness estimate is implied.
 
@@ -105,7 +108,7 @@ so a disabled relationship cannot introduce a node, create a second-hop path or
 consume a node-limit slot.
 
 **Filters** opens a compact temporary selector beside the button. Asset categories
-appear in every view, including administrator-created and inactive categories with their configured
+appear in the four operational views, including administrator-created and inactive categories with their configured
 icons and accents. Choices apply immediately; click outside or press Escape to
 close it. Tab moves through the checkboxes and back into the page. Initial choices
 follow **Show in Infrastructure Topology by default** in managed Asset Categories.

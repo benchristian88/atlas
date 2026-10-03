@@ -110,6 +110,9 @@ def test_authorized_topology_counts_endpoints_context_and_network_non_disclosure
     TopologyResponse.model_validate(topology)
     assert {a["id"] for a in topology["assets"]} == {a.id for a in assets[:2]}
     assert len(topology["relationships"]) == 1 and len(topology["platform_links"]) == 1
+    assert len(topology["structural_edges"]) == 3
+    assert sum(e["kind"] == "membership" for e in topology["structural_edges"]) == 2
+    assert all(str(assets[2].id) not in str(e) and str(networks[1].id) not in str(e) for e in topology["structural_edges"])
     assert len(topology["asset_interfaces"]) == 3
     assert next(i for i in topology["asset_interfaces"] if i["name"] == "legacy")["network_id"] is None
     assert networks[1].id not in {n["id"] for n in topology["networks"]}
@@ -122,6 +125,7 @@ def test_authorized_topology_counts_endpoints_context_and_network_non_disclosure
     asset_only = Principal(base.user, (ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Asset only", scope_type="global", customer_id=None, site_id=None, permissions=frozenset({"assets.view"})),))
     projection = get_topology(ActiveContext(None, None), asset_only, db)
     assert projection["networks"] == projection["asset_interfaces"] == projection["relationships"] == []
+    assert projection["structural_edges"] == []
 
 
 def test_assets_category_filter_uses_managed_ids(client, db):
@@ -293,3 +297,7 @@ def test_connectivity_api_capacity_and_child_counts_respect_scope(client, db, ch
     assert client.get(url + "&limit=101").status_code == 422
     assert client.get(url + "&limit=25").json()["node_limit"] == 25
     assert client.get(f"/api/topology/connectivity?focus_asset_id={assets[2].id}").status_code == 404
+    whole_site = client.get("/api/topology").json()
+    assert len(whole_site["assets"]) == child_count + 1
+    assert len([e for e in whole_site["structural_edges"] if e["kind"] == "relationship"]) == child_count
+    assert all(str(a.id) not in str(whole_site["structural_edges"]) for a in assets[2:])

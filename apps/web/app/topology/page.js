@@ -8,6 +8,7 @@ import { useAuth } from "../../components/auth-context";
 import { ConnectivityAssetSearch } from "../../components/connectivity-asset-search";
 import { ExpandedGraphSurface } from "../../components/expanded-graph-surface";
 import { DetailsPanelToggle } from "../../components/details-panel-toggle";
+import { Showcase } from "../../components/showcase";
 import { sortNetworkMembers } from "../../lib/network-sort.mjs";
 import { NavigationIcon } from "../../components/navigation-icon.mjs";
 import { assetListFiltersHref } from "../../lib/asset-list-filters.mjs";
@@ -20,7 +21,7 @@ import { TOPOLOGY_CLASSES, topologyClassSelection, topologyCategorySelection, to
 import { PresentationIdentity, PresentationIcon } from "../../components/presentation-identity.mjs";
 import { presentationAttributes } from "../../lib/presentation.mjs";
 
-const tabs = { overview: "Overview", platform: "Platform", networks: "Network & VLAN", connectivity: "Connectivity" };
+const tabs = { overview: "Overview", platform: "Platform", networks: "Network & VLAN", connectivity: "Connectivity", showcase: "Showcase" };
 
 export default function TopologyPage() {
   const workspace = useWorkspaceContext();
@@ -122,7 +123,7 @@ function TopologyWorkbench() {
     <ExpandedGraphSurface title="Infrastructure Topology" expanded={supportsFullscreen && expanded} onClose={() => { setExpanded(false); setHops(n => Math.min(n, 2)); }} returnFocus={expandButton} scrollPosition={scrollPosition}>
       <div className="topology-toolbar" ref={toolbar}>
         <div className="lens-selector" aria-label="Topology views">{Object.entries(tabs).map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} className={`button selector-control-text ${tab === key ? "button-primary" : "button-secondary"}`} onClick={() => { if (key !== tab) enterView(key); }}>{label}</button>)}</div>
-        <div className="row-actions"><TopologyCategoryFilter
+        {tab !== "showcase" && <div className="row-actions"><TopologyCategoryFilter
           categories={data?.categories || []} enabled={enabled}
           changedCount={changedCount + (tab === "connectivity" ? classSelection.changedCount : 0)}
           classes={tab === "connectivity" ? TOPOLOGY_CLASSES : []} enabledClasses={classSelection.enabled}
@@ -130,11 +131,12 @@ function TopologyWorkbench() {
           open={filtersOpen} onOpenChange={setFiltersOpen}
           onChange={(id, checked) => setChoices(current => ({ ...current, [id]: checked }))}
           onReset={() => { setChoices({}); setClassChoices({}); }}
-        /><button type="button" className="text-button" onClick={() => setReload(n => n + 1)}>Refresh</button>{tab !== "overview" && <DetailsPanelToggle hidden={detailsHidden} onToggle={() => setDetailsHidden(hidden => !hidden)} />}{supportsFullscreen && !expanded && <button ref={expandButton} type="button" className="button button-secondary graph-icon-button" title="Expand Infrastructure Topology" aria-label="Expand Infrastructure Topology" onClick={() => { scrollPosition.current = { left: window.scrollX, top: window.scrollY }; setExpanded(true); }}><NavigationIcon name="expand" /></button>}</div>
+        /><button type="button" className="text-button" onClick={() => setReload(n => n + 1)}>Refresh</button>{tab !== "overview" && <DetailsPanelToggle hidden={detailsHidden} onToggle={() => setDetailsHidden(hidden => !hidden)} />}{supportsFullscreen && !expanded && <button ref={expandButton} type="button" className="button button-secondary graph-icon-button" title="Expand Infrastructure Topology" aria-label="Expand Infrastructure Topology" onClick={() => { scrollPosition.current = { left: window.scrollX, top: window.scrollY }; setExpanded(true); }}><NavigationIcon name="expand" /></button>}</div>}
       </div>
       {error && <p className="error-banner" role="alert">{error}</p>}
       {!data && !error && <p role="status">Loading infrastructure…</p>}
-      {data && <>
+      {data && tab === "showcase" && !error && <Showcase data={data} site={workspace.activeSite} />}
+      {data && tab !== "showcase" && <>
         {tab !== "overview" && tab !== "connectivity" && <label className="field topology-search"><span>{tab === "networks" ? "Search Networks and connected Assets" : "Search Assets"}</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === "networks" ? "Network, VLAN or Asset name" : "Asset name, hostname or IP"} /></label>}
         <TopologyPanel active={tab === "platform" || tab === "networks"} hidden={detailsHidden} inspector={<Inspector asset={selected} view={view} sites={data.sites} select={select} onFocus={a => enterView("connectivity", { focusId: a.id })} />}>{tab === "overview" ? <Overview view={view} onNetwork={openNetwork} /> :
           tab === "networks" ? <Networks view={view} network={network} search={search} onNetwork={setNetworkId} select={select} sites={data.sites} /> :
