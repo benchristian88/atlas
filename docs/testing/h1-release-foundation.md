@@ -1,5 +1,12 @@
 # H1 release foundation: validation and completion report
 
+> This is the original H1 completion evidence. Subsequent real Debian Docker
+> acceptance confirmed build, generated secrets, healthy services, setup/reset,
+> administrator creation, login/dashboard and actual LXC reboot recovery.
+> H1.1 replaces the five-service/two-loopback-port Docker ingress described below;
+> see [H1.1 correction and Linux revalidation](h1-docker-ingress.md). Native/systemd
+> acceptance remains separate.
+
 Validation date: 2026-10-04. Branch: `feature/release-foundation`.
 Starting commit: `52365fb69a741381a58ee216f867a2bf546f9381`.
 No commit, push, merge, rebase or history rewrite was performed.

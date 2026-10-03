@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
@@ -69,8 +69,16 @@ def session_duration(db: Session | None = None) -> timedelta:
     return timedelta(minutes=minutes)
 
 
-def cookie_secure() -> bool:
-    return os.getenv("AUTH_COOKIE_SECURE", "true").lower() in {"1", "true", "yes"}
+def cookie_secure(request: Request) -> bool:
+    policy = os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower()
+    if policy == "auto":
+        # The ASGI server applies proxy trust; never read raw forwarded headers.
+        return request.url.scheme == "https"
+    if policy in {"1", "true", "yes"}:
+        return True
+    if policy in {"0", "false", "no"}:
+        return False
+    raise RuntimeError("AUTH_COOKIE_SECURE must be auto, true, or false")
 
 
 def create_session_token(user: User | uuid.UUID, session_version: int = 0, *, duration: timedelta | None = None) -> str:

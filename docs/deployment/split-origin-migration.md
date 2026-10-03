@@ -10,12 +10,15 @@ Running one new component with one old component is unsupported.
 2. Back up `.env`, reverse-proxy configuration, and the deployed Git revision or
    image tags.
 3. Keep the previous containers/images or revision available for rollback.
-4. Add `/api/` routing to the existing frontend hostname. Forward it unchanged
-   to the Compose `api` service on port 8000; keep all other paths routed to
-   `web` on port 3000.
+4. For Docker, forward the existing frontend hostname to the single Atlas
+   gateway bind address/port. Remove any separate `/api` custom location: the
+   gateway handles it internally. Native/systemd still needs its host proxy
+   to route `/api` unchanged to loopback 8000 and other paths to loopback 3000.
 5. Set `NEXT_PUBLIC_API_URL=/api` or remove the value to use the built-in
    fallback. Leave `CORS_ORIGINS` blank for the target same-origin deployment.
-6. Set `AUTH_COOKIE_SECURE=true` when the public entry point uses HTTPS.
+6. For Docker, set `AUTH_COOKIE_SECURE=auto` and allowlist the external proxy
+   source IP with `ATLAS_TRUSTED_PROXIES` for HTTPS. Explicit `true` remains an
+   HTTPS-only override; native/systemd retains its `true` default.
 
 ## Coordinated deployment
 

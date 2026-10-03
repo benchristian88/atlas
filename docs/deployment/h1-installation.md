@@ -2,17 +2,29 @@
 
 Production installation methods are **Docker Compose** and **native/systemd**.
 Direct execution is for developers; manual production installation is unsupported.
-Use a same-origin HTTPS reverse proxy as described in [single-origin deployment](single-origin.md).
+Docker provides direct single-origin LAN access and supports an optional HTTPS
+reverse proxy as described in [single-origin deployment](single-origin.md).
+Native/systemd still requires an operator-configured host reverse proxy.
 The installer works in an SSH/LXC terminal and does not open a browser.
 
 ## Docker Compose
 
-Prerequisites: Python 3, Docker Engine enabled at boot, and Compose v2 supporting
-`up --wait`. From a fresh checkout, with no existing `.env`:
+Prerequisites: Git, Python 3, Linux `iproute2`, Docker Engine enabled at boot,
+and Compose v2 supporting `up --wait`. Until formal release packaging exists,
+acquire the source and select the supported release tag or commit (substitute
+repository and version values):
 
 ```bash
+git clone <repository-url> atlas
+cd atlas
+git switch --detach <supported-release-tag-or-commit>
 python3 infra/install/compose.py
 ```
+
+For a supported release branch, use `git switch <supported-release-branch>`
+instead. Use the version supplied with the release, not a development feature
+branch. Future release packaging will replace source checkout where appropriate.
+The fresh installer requires no existing `.env`; it refuses existing files.
 
 The helper creates root-of-checkout `.env` with mode `0600`, independently
 generates a 256-bit PostgreSQL password and 384-bit session-signing key, builds
@@ -27,11 +39,42 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml exec api \
   python -m scripts.setup_code reset
 ```
 
-PostgreSQL/Redis are internal services; web/API ports bind host loopback.
-A proxy container may reach `web:3000` and `api:8000` on the Compose network;
-a host proxy uses loopback. Preserve `/api`. Configure host Docker automatic
-startup; inside an LXC this remains the operator's container/host responsibility.
-All five services use `unless-stopped`, including PostgreSQL and Redis.
+Only the nginx gateway publishes a host port. It routes `/api` and `/api/*`
+unchanged to `api:8000`, and all other paths to `web:3000`. API, web, PostgreSQL,
+Redis and worker have no host ports. The installer inspects Linux IPv4 default
+routes, chooses the unique interface with the lowest route metric, obtains the
+kernel-selected source address without sending packets or using DNS, and checks
+that it is a suitable global-scope IPv4 address assigned to that interface.
+IPv6 routes do not affect this choice. Ambiguous routes, loopback/link-local or
+unusable sources, missing `ip`, and inspection failure fall back to `127.0.0.1`
+with a local-only message. Detection never falls back to `0.0.0.0`.
+
+Generated `ATLAS_BIND_ADDRESS` is the detected LAN IPv4 address and `ATLAS_PORT`
+is `3000`. Explicit IPv4 and port overrides are validated and persisted:
+
+```bash
+ATLAS_BIND_ADDRESS=192.168.3.195 ATLAS_PORT=4300 python3 infra/install/compose.py
+```
+
+The IP above is illustrative. After all services pass health checks, the helper
+prints the actual `http://<bind-address>:<port>` followed by the one-time setup
+code. Loopback URLs are identified as local-only. An explicit `0.0.0.0` is allowed
+but requires using the host's actual LAN address in the browser. Database/auth
+secrets are never displayed. Open the printed URL from another LAN device for
+setup, login and normal authenticated navigation; the browser uses `/api` on
+that same port, without CORS or port 8000.
+
+For an external HTTPS proxy, configure **one upstream** pointing at this gateway
+and set `ATLAS_TRUSTED_PROXIES` in `.env` to its actual source IP (or a narrow
+CIDR), comma-separated without spaces if multiple. Recreate the gateway after
+changing this list. No NPM custom `/api` location or external hostname setting is
+needed. The gateway ignores forwarded protocol/client headers from other peers.
+A trusted proxy must replace incoming `X-Forwarded-Proto` and client forwarding
+headers with its own verified values. See [reverse-proxy examples](reverse-proxy-examples.md).
+
+Configure host Docker automatic startup; inside an LXC this remains the
+operator's container/host responsibility. All six services use `unless-stopped`,
+including gateway, PostgreSQL and Redis.
 Health dependencies govern initial startup; the API independently retries
 database readiness with a bounded increasing delay and migrates before serving.
 Restart policies handle subsequent failures and reboot. Intentionally stopped
@@ -111,7 +154,8 @@ fake restore endpoint.
 | Category | Configuration |
 | --- | --- |
 | Required generated production secrets | `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY` |
-| Deployment/browser policy | `AUTH_COOKIE_SECURE` (production true), optional exact `CORS_ORIGINS` |
+| Deployment/browser policy | Docker `AUTH_COOKIE_SECURE=auto` (HTTP non-Secure, trusted HTTPS Secure); explicit `true`/`false` overrides; native default `true`; optional exact `CORS_ORIGINS` for deliberate split origins only |
+| Docker ingress | `ATLAS_BIND_ADDRESS` (IPv4), `ATLAS_PORT` (1–65535, default 3000), `ATLAS_TRUSTED_PROXIES` (empty by default; explicit external proxy IP/CIDR list) |
 | Artifact/install identity | `ATLAS_INSTALL_METHOD`, `ATLAS_BUILD_ID`; canonical version/channel in `apps/api/app/release.json` |
 | Standard internal defaults | DB/user `atlas`; Compose DB host `postgres`, Redis `redis://redis:6379/0`, browser API `/api` |
 | Advanced bootstrap overrides | `DATABASE_URL`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `REDIS_URL`, `NEXT_PUBLIC_API_URL` as appropriate; custom URLs remain external |
@@ -125,9 +169,11 @@ its worker is currently a placeholder and does not require runtime Redis access.
 The web service receives browser-public configuration only. Signing secrets stay
 outside PostgreSQL and are not a future TOTP/data-encryption key.
 
-For developer host access to Compose PostgreSQL/Redis add
+For developer split ports and host access to Compose PostgreSQL/Redis add
 `-f infra/docker/docker-compose.dev.yml` after the base file. Developers may
-run ordinary tests with deterministic database fixtures without any installer.
+reach direct API on loopback port 8000 and direct web on loopback port 3001
+(the gateway keeps 3000), or run ordinary tests without any installer. For split
+ports, set the absolute API base and exact web CORS origin as documented.
 Never copy the development environment into a production deployment.
 
 ## Upgrade compatibility
@@ -147,3 +193,18 @@ About exposes version/channel/build/install identity without deployment secrets.
 No Git is required at runtime; Compose embeds the build ID in its image and
 native configuration carries it from installation. Update checking, TOTP,
 backup/restore engines and the final security review remain later passes.
+
+## H1.1 update of an existing Docker installation
+
+Retain the existing `.env`, signing/database secrets and named volumes. The
+fresh installer deliberately refuses an existing environment; do not regenerate
+credentials to update an initialized installation. Add the actual LAN IPv4
+`ATLAS_BIND_ADDRESS`, `ATLAS_PORT=3000`, `AUTH_COOKIE_SECURE=auto`, and optionally
+`ATLAS_TRUSTED_PROXIES=<external-proxy-source-IP>` to the protected file. Keep
+`CORS_ORIGINS` blank for same-origin use. Then run the documented Compose
+`up -d --build --wait` command. Existing explicit `true`/`false` policies remain
+supported; `true` requires HTTPS for browser setup/login. Update an external
+proxy to use only the gateway upstream and remove its old separate API location.
+No H1.1 database migration is required. Existing users and initialized setup
+closure remain intact. Native/systemd receives no Docker gateway or ingress
+redesign. Repeat the [H1.1 Linux acceptance](../testing/h1-docker-ingress.md).

@@ -1,67 +1,98 @@
 # Reverse-proxy examples
 
-These examples implement one routing rule: preserve `/api/*` and send it to
-FastAPI; send every other path to Next.js. They are examples, not Atlas runtime
-dependencies. TLS can be terminated by any operator-selected infrastructure.
+Docker Compose includes Atlas's nginx gateway. External proxies need **one
+upstream**: `http://<ATLAS_BIND_ADDRESS>:<ATLAS_PORT>`. The gateway preserves
+`/api/*` to FastAPI and routes everything else to Next.js. No separate public
+API port, custom `/api` location, public URL setting or CORS entry is required.
+These proxy products are optional operator choices, not Atlas dependencies.
 
-## Nginx
+Set `ATLAS_TRUSTED_PROXIES` in the protected Atlas `.env` to the external proxy's
+actual socket source IP (or a narrow CIDR), comma-separated without spaces.
+Recreate the gateway after changing it:
 
-When Nginx shares the Compose network, the confirmed service names are `api`
-and `web`:
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml up -d gateway
+```
+
+The list starts empty. Direct clients cannot assert HTTPS or arbitrary client
+IPs. The trusted external proxy must replace incoming protocol and client
+forwarding headers with verified values. Keep `AUTH_COOKIE_SECURE=auto` and
+`CORS_ORIGINS=` for normal HTTP/HTTPS same-origin access. An explicit `true`
+policy requires HTTPS. See [scheme and proxy trust](single-origin.md#scheme-and-proxy-trust).
+
+## Nginx (external Docker upstream)
+
+Inside the operator's TLS server block (replace the illustrative LAN address):
 
 ```nginx
-location /api/ {
-    proxy_pass http://api:8000;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-
 location / {
-    proxy_pass http://web:3000;
-    proxy_set_header Host $host;
+    proxy_pass http://192.168.3.195:3000;
+    proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
 
-The API `proxy_pass` intentionally has no trailing slash after port 8000, so
-Nginx preserves `/api/...`. `proxy_pass http://api:8000/;` has different URI
-replacement behavior and can strip the matched prefix.
+The upstream has no URI suffix; all paths and query strings arrive unchanged.
+TLS certificate/listener configuration remains operator-managed.
 
 ## Nginx Proxy Manager
 
-Nginx Proxy Manager is optional. Configure one proxy host for the
-operator-selected Atlas hostname pointing to the web service on port 3000, then
-add a custom `/api/` location pointing to the API service on port 8000. Preserve
-the `/api/` path unchanged. A second public API hostname is not required.
+Configure one Proxy Host for the chosen hostname, forwarding scheme **http**,
+Forward Hostname/IP equal to the Atlas bind address, Forward Port equal to
+`ATLAS_PORT` (normally 3000). Configure TLS in NPM as usual. Leave Custom
+Locations empty: **no `/api` custom location**. Add NPM's actual source IP to
+Atlas's `ATLAS_TRUSTED_PROXIES`. Confirm NPM replaces `X-Forwarded-Proto` with its
+verified browser scheme and sends the original Host. Verify Secure cookies
+through HTTPS. Do not add the domain to CORS.
 
 ## Caddy
 
 ```caddyfile
-<ATLAS_HOST> {
-    handle /api/* {
-        reverse_proxy api:8000
-    }
-    handle {
-        reverse_proxy web:3000
-    }
+atlas.example.com {
+    reverse_proxy 192.168.3.195:3000
 }
 ```
 
-Use `handle`, not `handle_path`; `handle_path` strips the matched prefix.
+The hostname and address are examples. Caddy terminates TLS and forwards all
+paths to the gateway. Add Caddy's source IP to Atlas's trust list.
 
 ## Traefik
 
-Create a higher-priority router with `PathPrefix(`/api`)` targeting the API
-service on port 8000, plus a lower-priority catch-all router targeting the web
-service on port 3000. Do not attach a `StripPrefix` middleware to the API router.
+Use one hostname router and one HTTP service targeting the Atlas gateway bind
+address and port. No higher-priority API router or StripPrefix middleware is
+needed. Configure TLS normally and allowlist Traefik's source IP in Atlas.
 
 ## Optional tunnels and edge services
 
-Cloudflare and similar services are optional. When used, point the tunnel at the
-single reverse-proxy entry point; that proxy continues to route `/api/*` and
-`/*`. Atlas contains no provider-specific libraries, headers, environment
-variables, or hostname assumptions.
+Point a tunnel at the gateway or the chosen external reverse proxy, with all
+paths intact. If HTTPS terminates before an HTTP hop, explicitly trust only the
+peer supplying a verified original scheme. No provider-specific runtime,
+headers or hostname assumptions are added to Atlas.
+
+## Native/systemd (unchanged two-upstream host proxy)
+
+Native/systemd has no Docker gateway. Its operator-managed TLS host proxy
+continues to route loopback API and web ports separately:
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+No trailing URI slash on the API `proxy_pass`: `/api` must remain intact.
+Native configuration retains `AUTH_COOKIE_SECURE=true`, loopback trust and
+loopback service binds. H1.1 does not redesign native ingress.

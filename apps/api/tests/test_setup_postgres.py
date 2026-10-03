@@ -11,6 +11,7 @@ import jwt
 import pytest
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.auth import COOKIE_NAME, _secret_key, decode_session_token, hash_password
 from app.database import get_db
@@ -242,16 +243,20 @@ def test_csrf_rejects_cross_origin_setup(db, client):
     assert client.post("/api/setup/verify", headers={"Origin": "https://attacker.example"}, json={"code": code}).status_code == 403
 
 
-def test_local_reset_command_prints_once_and_refuses_initialized(db, client, monkeypatch, capsys):
+@pytest.mark.parametrize("access_url,local_only", [("http://192.168.50.10:4300", False), ("http://127.0.0.1:3000", True)])
+def test_local_reset_command_prints_once_and_refuses_initialized(db, client, monkeypatch, capsys, access_url, local_only):
     from sqlalchemy.orm import sessionmaker
     from scripts import setup_code
     import re
     import sys
     db.commit()
     monkeypatch.setattr(setup_code, "SessionLocal", sessionmaker(bind=db.get_bind(), join_transaction_mode="create_savepoint"))
-    monkeypatch.setattr(sys, "argv", ["setup-code", "reset"])
+    monkeypatch.setattr(sys, "argv", ["setup-code", "reset", "--access-url", access_url])
     setup_code.main()
     output = capsys.readouterr().out
+    assert access_url in output
+    assert ("local-only" in output) is local_only
+    assert os.environ["AUTH_SECRET_KEY"] not in output
     matches = re.findall(r"[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}", output)
     assert len(matches) == 1
     db.expire_all()
@@ -260,6 +265,49 @@ def test_local_reset_command_prints_once_and_refuses_initialized(db, client, mon
     with pytest.raises(SystemExit, match="cannot be reset on an initialised instance"):
         setup_code.main()
     assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("scheme,policy,secure", [("http", "auto", False), ("https", "auto", True),
+                                                 ("https", "true", True), ("http", "false", False)])
+def test_single_origin_setup_login_authenticated_calls_and_cookie_lifecycle(db, monkeypatch, scheme, policy, secure):
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", policy)
+    monkeypatch.setenv("CORS_ORIGINS", "")
+    app.dependency_overrides[get_db] = lambda: db
+    # Matches the private Compose upstream: Uvicorn interprets gateway-sanitized
+    # headers. The separate real nginx test exercises the public trust boundary.
+    upstream = ProxyHeadersMiddleware(app, trusted_hosts="*")
+    origin = f"{scheme}://atlas.test:4300"
+    with TestClient(upstream, base_url=origin, client=("172.20.0.2", 1234),
+                    headers={"Origin": origin, "X-Forwarded-Proto": scheme}) as browser:
+        code = reset_setup_code(db)
+        db.commit()
+        verify = browser.post("/api/setup/verify", json={"code": code})
+        assert verify.status_code == 204
+        assert ("Secure" in verify.headers["set-cookie"]) is secure
+        assert "HttpOnly" in verify.headers["set-cookie"] and "SameSite=lax" in verify.headers["set-cookie"]
+        assert browser.get("/api/setup/status").json()["authorized"] is True
+        payload = admin_payload()
+        created = browser.post("/api/setup/administrator", json=payload)
+        assert created.status_code == 204
+        assert ("Secure" in created.headers["set-cookie"]) is secure
+        login = browser.post("/api/auth/login", json={"email": payload["email"], "password": payload["password"]})
+        assert login.status_code == 200
+        assert ("Secure" in login.headers["set-cookie"]) is secure
+        assert "access-control-allow-origin" not in login.headers
+        assert browser.get("/api/auth/me").status_code == 200
+        assert browser.get("/api/context").status_code == 200
+        replacement = secrets.token_urlsafe(24)
+        changed = browser.post("/api/auth/change-password", json={"current_password": payload["password"],
+            "new_password": replacement, "new_password_confirmation": replacement})
+        assert changed.status_code == 200
+        assert ("Secure" in changed.headers["set-cookie"]) is secure
+        assert browser.get("/api/auth/me").status_code == 200
+        assert browser.post("/api/auth/login", json={"email": payload["email"], "password": replacement},
+                            headers={"Origin": "https://attacker.example"}).status_code == 403
+        logout = browser.post("/api/auth/logout")
+        assert logout.status_code == 204
+        assert ("Secure" in logout.headers["set-cookie"]) is secure
+        assert browser.get("/api/auth/me").status_code == 401
 
 
 def test_secure_cookie_and_expired_authorization_at_api(db, client, monkeypatch):

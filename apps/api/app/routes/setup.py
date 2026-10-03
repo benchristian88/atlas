@@ -50,12 +50,12 @@ def setup_status(response: Response, token: Annotated[str | None, Cookie(alias=S
 
 
 @router.post("/verify", status_code=204)
-def verify_code(payload: SetupCodeRequest, response: Response, db: Session = Depends(get_db)):
+def verify_code(payload: SetupCodeRequest, response: Response, request: Request, db: Session = Depends(get_db)):
     token = verify_setup_code(db, payload.code)
     db.commit()
     response.headers["Cache-Control"] = "no-store"
     response.set_cookie(SETUP_COOKIE, token, max_age=int(SETUP_DURATION.total_seconds()),
-                        httponly=True, secure=cookie_secure(), samesite="lax", path=SETUP_COOKIE_PATH)
+                        httponly=True, secure=cookie_secure(request), samesite="lax", path=SETUP_COOKIE_PATH)
 
 
 @router.post("/administrator", status_code=204)
@@ -68,4 +68,4 @@ def create_administrator(payload: FirstAdministratorRequest, response: Response,
     db.commit()
     response.headers["Cache-Control"] = "no-store"
     response.delete_cookie(SETUP_COOKIE, path=SETUP_COOKIE_PATH, httponly=True,
-                           secure=cookie_secure(), samesite="lax")
+                           secure=cookie_secure(request), samesite="lax")

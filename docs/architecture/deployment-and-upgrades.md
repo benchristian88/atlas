@@ -1,7 +1,7 @@
 # Deployment, upgrade, and rollback
 
-Atlas's reference deployment is Docker Compose with separate web, API, worker,
-PostgreSQL, and Redis services. PostgreSQL is the system of record. Redis data
+Atlas's reference deployment is Docker Compose with a lightweight nginx ingress
+gateway and separate web, API, worker, PostgreSQL, and Redis services. PostgreSQL is the system of record. Redis data
 is operational and may be recreated; the PostgreSQL volume must be backed up.
 
 ## Configuration and installation boundary
@@ -28,18 +28,36 @@ application identity. Update checking is deferred.
 
 ## Fresh Compose installation
 
+Acquire the source and select a supported release as shown in the installation
+guide, then from a fresh checkout:
+
 ```bash
 python3 infra/install/compose.py
 ```
 
 The helper generates protected `.env`, builds/starts the healthy stack, and
-prints a one-time setup code to the SSH terminal. Configure the same-origin TLS
-reverse proxy, open `/setup`, enter the code, choose a new Atlas and create the
+prints the actual single-origin HTTP access URL and a one-time setup code to
+the SSH terminal. Open `/setup` through that URL (or an optional trusted HTTPS
+proxy), enter the code, choose a new Atlas and create the
 first Master Administrator. Then sign in. Startup uses bounded database
 readiness retries, `alembic upgrade head`, and protected definition seeding;
 it never generates/logs a raw setup code or creates environment users.
-All five services use `unless-stopped`. Database/cache ports are internal;
-web/API host ports bind loopback for a host reverse proxy.
+All six services use `unless-stopped`. Only gateway port 80 is published at
+`ATLAS_BIND_ADDRESS:ATLAS_PORT` (installer-detected default-route IPv4, port
+3000; safe loopback fallback). API/web/database/cache remain internal. The
+gateway preserves `/api`, Host including port, and sanitized forwarding headers.
+Its empty-by-default `ATLAS_TRUSTED_PROXIES` allowlist accepts original HTTPS
+only from explicitly trusted proxy peers. Docker API Uvicorn trusts internal
+Compose peers (`FORWARDED_ALLOW_IPS=*`); this requires the API to remain
+unpublished on the private Compose network. The development override restores
+split ports and narrows API proxy trust to loopback. Application cookie auto
+mode reads the ASGI request scheme, never raw forwarded headers. External TLS
+proxies use one gateway upstream; single-origin operation leaves CORS blank.
+
+Native/systemd retains its loopback web/API ports, host-proxy requirement,
+Uvicorn's loopback trust default and `AUTH_COOKIE_SECURE=true`. The Docker
+gateway and LAN detection do not apply to it. H1.1 changes deployment ingress
+only; PostgreSQL authority, domain semantics, RBAC and discovery stay intact.
 
 To stop containers while retaining data:
 
@@ -186,13 +204,16 @@ tests a safe path.
 
 ## Production limitations and checklist
 
-- Terminate TLS at a maintained reverse proxy and set secure cookies.
+- For HTTPS, terminate TLS at a maintained reverse proxy and configure the
+  gateway's narrow trusted-proxy list; Docker cookie auto mode then marks cookies
+  Secure. Direct LAN HTTP uses non-Secure cookies. Explicit `true` forces HTTPS.
 - PostgreSQL/Redis ports are internal to production Compose. Use the separate
   development override only when local access is needed.
 - Put secrets in the deployment platform's secret store where possible rather
   than long-lived plaintext environment files.
-- Set a narrow CORS origin list and security headers/content-security policy at
-  the edge. Cached Asset icons use Atlas itself; allow remote hosts only for
+- Leave CORS blank for normal same-origin operation; use a narrow exact origin
+  list only for deliberate split origins. Set security headers/content-security
+  policy at the edge. Cached Asset icons use Atlas itself; allow remote hosts only for
   the existing Asset Type default images. See [Asset icon caching](asset-icon-cache.md)
   for the additive migration and PostgreSQL persistence.
 - Send logs and audit events to protected external retention if tamper evidence

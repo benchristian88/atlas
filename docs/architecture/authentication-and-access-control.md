@@ -45,7 +45,15 @@ dummy hash verification to reduce account-enumeration timing differences.
 
 The browser session is an expiring signed value stored only in the
 `atlas_session` cookie. The cookie is `HttpOnly`, `SameSite=Lax`, scoped to `/`,
-and `Secure` when `AUTH_COOKIE_SECURE=true`. Browser requests use credentials;
+and `Secure` when `AUTH_COOKIE_SECURE=true`. Docker defaults to `auto`, which
+sets Secure according to the trusted ASGI request scheme: direct HTTP omits it,
+HTTPS through an allowlisted external proxy includes it. Explicit `true`/`false`
+remain supported; native/systemd keeps `true`. The gateway replaces public
+forwarding headers and accepts protocol headers only from `ATLAS_TRUSTED_PROXIES`.
+API Uvicorn trusts its unpublished Compose network; publishing it directly with
+that trust setting is unsupported. Application cookie code never reads raw
+forwarded headers. Host, Origin, HttpOnly, SameSite and token checks are retained.
+Browser requests use credentials;
 the web application does not copy a bearer token into `localStorage`, React
 state, logs, or URLs.
 

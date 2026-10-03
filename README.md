@@ -30,8 +30,10 @@ service outside Docker.
 ## Browser and API routing
 
 Atlas defaults to a single browser origin. The web UI uses the relative API
-base `/api`; an operator-selected reverse proxy forwards `/api/*` unchanged to
-FastAPI and all other paths to Next.js. No public hostname is compiled into
+base `/api`; the Docker nginx gateway forwards `/api/*` unchanged to
+FastAPI and all other paths to Next.js through one published port. An optional
+external HTTPS proxy needs only that gateway upstream. Native/systemd uses an
+operator-configured host proxy. No public hostname is compiled into
 Atlas, and normal production browser traffic does not depend on CORS.
 The reference web image runs the Next.js standalone production server, not the
 development/HMR server.
@@ -58,11 +60,12 @@ See [single-origin deployment](docs/deployment/single-origin.md),
    `.env.example` is development-only. Production uses the generated configuration
    in [H1 installation](docs/deployment/h1-installation.md), through Docker
    Compose or native/systemd. Manual production installation is unsupported.
-   For exposed development ports without a reverse proxy, select split origin:
+   For optional split-port development, add `-f infra/docker/docker-compose.dev.yml`
+   after the base file (API 8000, direct web 3001), and select split origin:
 
    ```dotenv
    NEXT_PUBLIC_API_URL=http://localhost:8000/api
-   CORS_ORIGINS=http://localhost:3000
+   CORS_ORIGINS=http://localhost:3001
    ```
 
    Keep the default `NEXT_PUBLIC_API_URL=/api` for a same-origin reverse-proxy
@@ -82,7 +85,11 @@ See [single-origin deployment](docs/deployment/single-origin.md),
 
    - Web: <http://localhost:3000>
    - Login: <http://localhost:3000/login>
-   - Direct API health check: <http://localhost:8000/api/health>
+   - API health through the gateway: <http://localhost:3000/api/health>
+
+With the optional development override and split-origin configuration, open
+direct web at <http://localhost:3001> and API at
+<http://localhost:8000/api/health>. The default links above use the gateway.
 
 The API health endpoint returns `{"status":"ok"}`. The worker logs
 `Atlas worker is ready` once it starts.
@@ -133,7 +140,10 @@ authentication. Passwords, hashes,
 cookies, and session tokens are excluded from API responses and audit details.
 
 For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
-Production deployments must terminate HTTPS and set it to `true`. Leave
+Docker installations use `AUTH_COOKIE_SECURE=auto`: direct HTTP works and
+HTTPS through an explicitly trusted proxy issues Secure cookies. Native/systemd
+keeps its HTTPS/`true` default. See the installation guide for proxy trust and
+advanced `true`/`false` overrides. Leave
 `CORS_ORIGINS` blank for normal same-origin operation; for intentional
 split-origin development, restrict it to the exact web origins. Treat
 `AUTH_SECRET_KEY` as a production secret; rotating it invalidates all sessions.

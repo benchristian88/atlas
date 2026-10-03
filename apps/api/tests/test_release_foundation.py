@@ -29,7 +29,7 @@ def test_configuration_secrets_permissions_and_no_overwrite(tmp_path):
     assert len(settings["POSTGRES_PASSWORD"]) == 64
     assert len(settings["AUTH_SECRET_KEY"]) == 96
     assert settings["POSTGRES_PASSWORD"] not in settings["AUTH_SECRET_KEY"]
-    assert settings["AUTH_COOKIE_SECURE"] == "true"
+    assert settings["AUTH_COOKIE_SECURE"] == "auto"
     assert settings["ATLAS_INSTALL_METHOD"] == "docker_compose"
     assert "DATABASE_URL" not in settings
     assert "AUTH_SESSION_MINUTES" not in content
@@ -41,6 +41,8 @@ def test_configuration_secrets_permissions_and_no_overwrite(tmp_path):
     other = tmp_path / "native.env"
     module.generate_configuration(other, "systemd")
     assert "ATLAS_INSTALL_METHOD=systemd" in other.read_text()
+    assert "AUTH_COOKIE_SECURE=true" in other.read_text()
+    assert "ATLAS_BIND_ADDRESS" not in other.read_text()
     assert settings["AUTH_SECRET_KEY"] not in other.read_text()
 
 
@@ -105,7 +107,7 @@ def test_deployment_restart_and_security_contracts():
     import yaml  # Included by the existing uvicorn[standard] dependency.
     compose = yaml.safe_load((ROOT / "infra/docker/docker-compose.yml").read_text())
     services = compose["services"]
-    assert set(services) == {"api", "web", "worker", "postgres", "redis"}
+    assert set(services) == {"gateway", "api", "web", "worker", "postgres", "redis"}
     assert all(service["restart"] == "unless-stopped" for service in services.values())
     assert "ports" not in services["postgres"]
     assert "ports" not in services["redis"]
