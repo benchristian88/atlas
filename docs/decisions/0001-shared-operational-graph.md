@@ -245,7 +245,7 @@ The decision is validated when C2.1 demonstrates that:
 - no second graph persistence store has been introduced.
 
 See
-[`../testing/release-c2-operational-graph.md`](../testing/release-c2-operational-graph.md).
+[`../testing/release-c2-operational-graph.md`](../history/validation/release-c2-operational-graph.md).
 
 ## Review triggers
 

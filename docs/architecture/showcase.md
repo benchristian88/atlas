@@ -146,7 +146,7 @@ keys/names and managed positions, endpoint group membership, fixed ports/rails,
 candidate count, blocking rectangles and preferred-path rejections. Successful
 fallbacks record their mode/direction and count. Development/test logging and the
 temporary incomplete-state diagnostic panel expose these details; production UI
-hides the panel. See [routing acceptance](../testing/showcase-routing.md).
+hides the panel. See [historical validation](../history/validation/showcase-routing.md).
 
 Poster fitting prefers 1920×1080 at the existing 0.86 readability floor.
 After routing, `topologyBounds` measures the actual node, category and connector
@@ -166,7 +166,7 @@ scenes retain their previous shrink scale and readability rules. The scene is
 centred horizontally and aligned at the 100px content top beneath the header,
 leaving spare space below shallow graphs. Node fonts and icon sizes stay
 unchanged; the local name policy above determines text budgets. Preview and PNG
-use the same scene transform. See [presentation acceptance](../testing/showcase-upscale.md).
+use the same scene transform. See [historical validation](../history/validation/showcase-upscale.md).
 
 Only sites exceeding 100 Assets may attempt four-member workload previews,
 after complete compact geometry exhausts the entire width/height envelope.
@@ -181,8 +181,8 @@ reason. Successful bounds include routes. If routing itself fails, diagnostics
 explicitly mark node/group-only bounds. Development/test logging includes both
 successful and incomplete layouts; production UI has no diagnostic clutter.
 
-See [adaptive-width acceptance](../testing/showcase-adaptive-width.md) and
-[shared-geometry acceptance](../testing/showcase-shared-geometry.md). Earlier
+See [historical validation](../history/validation/showcase-adaptive-width.md) and
+[historical validation](../history/validation/showcase-shared-geometry.md). Earlier
 independent packers and global bands are preserved in historical test records.
 
 ## Rendering and export
@@ -224,9 +224,9 @@ scales. PNG density stays exactly 2× independently of device pixel ratio, with
 the same logical viewBox, text coordinates, line breaks, rectangles and routes.
 Acceptance compares computed typography and logical text bounds at the actual
 preview size with the serialized export in an isolated document, as well as PNG
-pixels at equal poster size. See [typography parity](../testing/showcase-typography-parity.md).
+pixels at equal poster size. See [historical validation](../history/validation/showcase-typography-parity.md).
 
 See [operator guidance](../admin/showcase.md),
-[visual-correctness acceptance](../testing/showcase-visual-correctness.md),
-[shared-geometry validation](../testing/showcase-shared-geometry.md) and the
-[original implementation record](../testing/showcase.md).
+[historical validation](../history/validation/showcase-visual-correctness.md),
+[historical validation](../history/validation/showcase-shared-geometry.md) and the
+[historical validation](../history/validation/showcase.md).

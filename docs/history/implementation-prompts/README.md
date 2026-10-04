@@ -7,11 +7,11 @@ They must not be treated as current product requirements, architecture,
 implementation status, or instructions for a new coding session. Current
 authority is:
 
-- [`../../product/development-roadmap.md`](../../product/development-roadmap.md)
+- [`../../product/development-roadmap.md`](../product-plans/development-roadmap.md)
   for forward planning;
-- [`../../product/release-c2-plan.md`](../../product/release-c2-plan.md) for the
+- [`../../product/release-c2-plan.md`](../product-plans/release-c2-plan.md) for the
   current C2 release boundary and C2.1 implementation history;
-- [`../../product/feature-ledger.md`](../../product/feature-ledger.md) for
+- [`../../product/feature-ledger.md`](../product-reviews/feature-ledger-2026-10-04.md) for
   implementation evidence;
 - [`../../architecture/operational-graph.md`](../../architecture/operational-graph.md)
   for graph architecture; and

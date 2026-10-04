@@ -10,6 +10,7 @@ import { PageHeader } from "../../../components/page-header";
 import { BackupRestore } from "../../../components/backup-restore";
 import { Updates } from "../../../components/updates";
 import { canManageBackups } from "../../../lib/backup.mjs";
+import { INSTALLATION_LABELS } from "../../../lib/updates.mjs";
 
 import { apiRequest } from "../../../lib/api";
 
@@ -92,8 +93,15 @@ export default function SystemSettingsAdminPage() {
           <dt>Version</dt><dd>{buildInfo.version}</dd>
           <dt>Release channel</dt><dd>{buildInfo.release_channel}</dd>
           <dt>Build</dt><dd className="mono">{buildInfo.build_id || "Unavailable"}</dd>
-          <dt>Installation method</dt><dd>{buildInfo.install_method}</dd>
+          <dt>Installation method</dt><dd>{INSTALLATION_LABELS[buildInfo.install_method] || buildInfo.install_method}</dd>
         </dl>}
+        <dl className="detail-list">
+          <dt>Licence</dt><dd>AGPL-3.0-only</dd>
+          <dt>Source</dt><dd><a href="https://github.com/benchristian88/atlas" target="_blank" rel="noopener noreferrer">Source repository</a></dd>
+          <dt>Documentation</dt><dd><a href="https://github.com/benchristian88/atlas/blob/dev/docs/README.md" target="_blank" rel="noopener noreferrer">Operator and developer guides</a></dd>
+          <dt>Security</dt><dd><a href="https://github.com/benchristian88/atlas/blob/dev/SECURITY.md" target="_blank" rel="noopener noreferrer">Security reporting policy</a></dd>
+          <dt>Project</dt><dd><a href="https://github.com/benchristian88/atlas/blob/dev/COMMERCIAL-LICENSING.md" target="_blank" rel="noopener noreferrer">Commercial licensing information</a></dd>
+        </dl>
       </section>
     </>
   );

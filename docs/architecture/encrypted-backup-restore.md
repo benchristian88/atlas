@@ -1,9 +1,9 @@
-# H3 encrypted Atlas backup and restore
+# Encrypted Atlas backup and restore
 
-H3 implements portable **application data/state** backup, not VM snapshots,
+Atlas implements portable **application data/state** backup, not VM snapshots,
 container images, application binaries or operational Backup & Recovery domain
-modelling. PostgreSQL remains the system of record. H1/H1.1 and H2 are accepted;
-H3 acceptance evidence is tracked in [the H3 report](../testing/h3-encrypted-backup-restore.md).
+modelling. PostgreSQL remains the system of record. Both supported deployment
+methods use the same portable archive and target-local configuration boundary.
 
 ## Authoritative state inventory
 
@@ -17,13 +17,13 @@ hashes, assignments, settings, audit history and installation state.
 | --- | --- |
 | PostgreSQL / Compose `postgres_data` | All authoritative Atlas records; included in full custom-format dump. |
 | Asset icons | Bounded image bytes/cache metadata in `asset_icon_cache`; included even though the cache is disposable. No filesystem image store. |
-| Generated documents / uploads | `documents.content_markdown` is PostgreSQL state. No implemented persistent upload filesystem or external authoritative file store was found. H3 upload staging is transient. |
+| Generated documents / uploads | `documents.content_markdown` is PostgreSQL state. No implemented persistent upload filesystem or external authoritative file store was found. Restore upload staging is transient. |
 | MFA | `user_mfa.secret_ciphertext` and `pending_ciphertext` use the independent application key, with their nonce/version fields. Both are authenticated and rewrapped. Recovery verifiers are one-way hashes, not encrypted fields. |
 | Other application crypto | Repository search found no other fields using the application data key. Plugin configuration references deployment-owned credentials; vendor secrets are not silently promoted to accepted knowledge. |
 | Redis / Compose `redis_data` | No current application cache/job/session authority or executed queue was found. Not backed up; the target's dedicated logical Redis DB is flushed after restore/rollback. |
 | Worker | Idle readiness/sleep loop, no mutation or job execution framework. It checks the maintenance marker; no queue was invented. |
 | Native files / web assets | `/etc/atlas/atlas.env` is target-local deployment configuration; `/opt/atlas` binaries, bundled static assets and Next caches are rebuildable. Not portable backup components. |
-| H3 state directory / Compose `atlas_state` | Protected staging, job metadata and maintenance/recovery coordination only. Not canonical operational knowledge and not imported from the source. |
+| Backup/restore state directory / Compose `atlas_state` | Protected staging, job metadata and maintenance/recovery coordination only. Not canonical operational knowledge and not imported from the source. |
 
 The archive deliberately excludes database passwords/URLs, Redis URLs,
 `AUTH_SECRET_KEY`, bind address/port, hostnames/CORS, `.env` contents, TLS/proxy
@@ -68,7 +68,7 @@ PostgreSQL framing/TOC and the dump's actual Alembic revision are checked before
 maintenance or live database writes. Wrong passphrases/corrupt/unsupported
 archives make no live database changes during archive preflight, including
 preflight failure audit rows. Initialized-install authorization occurs earlier
-and retains H2 password/factor attempt and replay bookkeeping; that is distinct
+and retains password/factor attempt and replay bookkeeping; that is distinct
 from replacing application state from an archive.
 
 ## Native database behavior and compatibility
@@ -78,14 +78,14 @@ repeatable-read snapshot; manifest revision and dump share that snapshot. An
 Atlas role owning its database suffices; a schema-only owner also needs CREATE
 privilege on the configured database to recreate that schema. Both are checked
 before replacement. No roles or grants are backed
-up, no Docker socket is mounted and no H3 superuser grant is introduced.
+up, no Docker socket is mounted and no backup-specific superuser grant is introduced.
 
-H3 supports PostgreSQL 16/17 with client tools matching the target server major;
+Backup/restore supports PostgreSQL 16/17 with client tools matching the target server major;
 the reference Docker runtime carries client 17. PostgreSQL 17 was actually
 tested. The source major must not exceed the target. Custom archive versions
 1.15/1.16 with compression NONE are allowed; compressed/unknown dumps are
-rejected before `pg_restore`. Source schemas must be known ancestors from H1
-`20261004_0025` through the current single head; older pre-H1 and unknown/newer
+rejected before `pg_restore`. Source schemas must be known ancestors from
+`20261004_0025` through the current single head; older foundation and unknown/newer
 schemas are rejected. Post-restore migrations use Alembic ancestry, not version
 string guesses, and do not downgrade the running application.
 
@@ -100,7 +100,7 @@ As with native PostgreSQL recovery, restore archives must come from a trusted
 Atlas installation. Passphrase authentication proves archive integrity, not
 source operator identity. Dumps carry SQL defined by their source database;
 PostgreSQL's [restore documentation](https://www.postgresql.org/docs/17/app-pgrestore.html)
-describes that trust boundary. H3 does not provide a sandbox for foreign SQL or
+describes that trust boundary. Atlas does not provide a sandbox for foreign SQL or
 a cryptographic source-signing infrastructure. Use the normal unprivileged,
 database-owning Atlas role on native installations.
 
@@ -115,11 +115,11 @@ Commands have a 30-minute bound and generated files have a 2 GiB bound.
 Backend permission/global scope checks plus the existing protected global Master
 Administrator role are required for export/import. A custom global settings
 administrator or customer/site administrator cannot export an environment.
-Creation requires H2 current-password reauthentication. Existing restore requires
+Creation requires current-password reauthentication. Existing restore requires
 current password, a current TOTP/recovery factor when enabled, and `RESTORE`
-acknowledgement. H2 row locks, attempt limits, factor consumption and replay
+acknowledgement. MFA row locks, attempt limits, factor consumption and replay
 protection are reused. Origin defenses and generic credential-validation errors
-apply. Setup restore requires the valid H1 one-time setup cookie/generation.
+apply. Setup restore requires the valid one-time setup cookie/generation.
 
 The current worker has no safe job framework. One bounded API-process executor
 per installation runs generation/preflight/restore; no passphrase is serialized
@@ -152,7 +152,7 @@ and serialize restore/local operations. The durable maintenance marker is
 written before a bounded 60-second drain wait. Normal reads/writes, login and
 setup mutations then return no-store 503 with a maintenance message; health and
 scoped restore progress remain available. The idle worker performs no writes.
-Future worker handlers must hold this same normal-operation guard. H3 supports
+Future worker handlers must hold this same normal-operation guard. Backup/restore supports
 one API process/runtime per installation; replicas with independent state paths
 are unsupported. Maintenance files are not stored in the replaced database.
 
@@ -163,7 +163,7 @@ temporary, local-only recovery artifact, never an HTTP download or passphrase-
 free portable backup. All ordinary plaintext work is removed on success/failure.
 
 Migrations and existing non-destructive system-definition reconciliation are
-reused. An explicit adapter registry rewraps active and pending H2 MFA fields
+reused. An explicit adapter registry rewraps active and pending MFA fields
 inside one transaction, authenticating each seed with source key/account-bound
 AAD and re-encrypting with fresh nonce/target key. A bad field aborts every
 adapter. No ad-hoc ciphertext SQL replacement occurs. Pending enrollment is then
@@ -198,4 +198,4 @@ Setup uses `setup/local-system`; CLI uses `local-operator`. No credential/key,
 seed, dump content or passphrase is audit metadata. If the DB itself is damaged,
 sanitized logs report audit unavailability; they do not imply a durable event exists.
 
-See [operator procedures and local recovery](../deployment/h3-backup-restore.md).
+See [operator procedures and local recovery](../deployment/backup-restore.md).

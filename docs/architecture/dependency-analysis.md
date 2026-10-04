@@ -1,7 +1,7 @@
-# Explainable dependency analysis
+# Dependency impact analysis
 
-Status: C2.3 implemented; subsequent live LXC acceptance complete for its lean scope.
-See the [validation and acceptance record](../testing/release-c2-explainable-dependency-analysis.md)
+The implemented analysis evaluates hypothetical unavailability against accepted dependency knowledge.
+See the [historical validation](../history/validation/release-c2-explainable-dependency-analysis.md)
 for separate implementation-time automated evidence and later live results.
 
 `POST /api/dependency-analysis` derives hypothetical Service consequences from
@@ -34,13 +34,13 @@ Each result contains compact Service identity (`key`, `entity_id`, `name`,
 `href`), `state`, `classification`, `distance`, `reasons`, and `paths`. Reasons
 identify the group or ungrouped edge, strategy, requirement, failure effect,
 satisfaction, consequence, reason code, triggering edge keys, and all visible
-members with their derived states and full canonical C2 graph edges. Additive
+members with their derived states and full canonical operational graph edges. Additive
 summary text is for readability; structured fields are authoritative.
 
 Paths embed their compact nodes and complete edges, so a result limit never
 creates a path referring to an omitted intermediate result. Path nodes run from
 the scenario toward the consequence, while every edge retains canonical
-**dependent Service → provider** direction. C2.4 can use these stable identities
+**dependent Service → provider** direction. Operational views use these stable identities
 for highlighting and “why?” interactions without reverse-engineering prose.
 
 ## Evaluation and assumptions
@@ -63,7 +63,7 @@ means unaffected by this scenario under those assumptions, not healthy in realit
 An unsatisfied set applies its explicit effect: unavailable, degraded or unknown.
 An unresolved set yields unknown: lean semantics cannot establish whether a
 degraded or unknown Service still satisfies its dependants. A satisfied set has
-no consequence. Ungrouped edges retain C2.2's null strategy and unknown effect;
+no consequence. Ungrouped edges retain a null strategy and unknown effect;
 an unavailable ungrouped dependency therefore produces unknown, even if Required.
 An Optional set with degraded effect produces degraded when unsatisfied.
 
@@ -102,10 +102,10 @@ Service. Distance is explanation length, not severity.
 `DependencyAnalysisEngine` uses `OperationalGraphBuilder`'s internal completion
 profile, not a second graph loader. The profile traverses incoming dependencies,
 then includes outgoing sibling members of reached Services to evaluate `any`
-correctly. The generic C2.1 graph API and C1 adapters remain unchanged.
+correctly. The generic graph API and focused compatibility adapters retain their contracts.
 
 All times use one captured clock value. Ended/future dependencies, groups and
-memberships follow the C2.1/C2.2 current-valid rules. Ending group membership
+memberships follow the shared current-valid rules. Ending group membership
 removes its semantics; a still-current underlying dependency remains ungrouped.
 
 Safety limits are explicit:
@@ -146,7 +146,7 @@ active Service details with dependency view permission. It displays textual
 states, requirements, group names, reason summaries, member states and paths,
 plus empty/error/truncation messages. Switching focus or workspace resets it.
 
-C2.4's dashboard/graph redesign, full Impact Analysis, Business Function impact,
+Enterprise Impact Analysis, Business Function impact,
 Asset→Asset failure propagation, minimum/quorum, confidence scoring, recovery
 analysis and change simulation remain deferred.
 

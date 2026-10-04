@@ -88,9 +88,9 @@ Approved standard scale:
 
 | Role | Size | Weight | Line height |
 | --- | ---: | ---: | ---: |
-| Page H1 | 28px | 700 | 1.15 |
-| Section H2 | 16px | 600 | 1.35 |
-| Subsection H3 | 14px | 600 | 1.4 |
+| Page `<h1>` | 28px | 700 | 1.15 |
+| Section `<h2>` | 16px | 600 | 1.35 |
+| Subsection `<h3>` | 14px | 600 | 1.4 |
 | Entity/list title | 15px | 600 | 1.35 |
 | Body | 14px | 400 | 1.5 |
 | Compact/table body | 13px | 400 | 1.45 |
@@ -99,7 +99,7 @@ Approved standard scale:
 
 Use 400/500/600/700 as the normal weight set. Avoid arbitrary sizes and synthesized weights such as 550/650/750 unless there is a documented, font-supported reason.
 
-Semantic heading depth and visual hierarchy must agree. A nested H3 must not render more prominently than its parent H2.
+Semantic heading depth and visual hierarchy must agree. A nested `<h3>` must not render more prominently than its parent `<h2>`.
 
 ### 3.2 Spacing
 
@@ -201,7 +201,7 @@ It should support, as appropriate:
 - optional metadata/context;
 - a documented compact variant for canvas/graph-style screens.
 
-Do not recreate page headings locally or alter H1 size through broad feature wrapper CSS.
+Do not recreate page headings locally or alter `<h1>` size through broad feature wrapper CSS.
 
 Eyebrows should be purposeful, not a mandatory template decoration on every screen.
 
@@ -530,7 +530,7 @@ Review light/dark modes and representative viewport sizes.
 
 ---
 
-## 20. Rules for future contributors and Codex
+## 20. Rules for future contributors and coding agents
 
 1. Reuse an Atlas primitive before creating a page-specific replacement.
 2. Do not introduce arbitrary visual constants where a design token exists.
@@ -553,63 +553,7 @@ Review light/dark modes and representative viewport sizes.
 
 ---
 
-## 21. Recommended migration sequence
-
-### Phase 0 — Baseline
-
-- identify representative routes;
-- capture light/dark and desktop/mobile baselines;
-- inventory selectors/components being replaced;
-- keep unrelated feature work out of the cleanup where practical.
-
-### Phase 1 — Foundation
-
-- deterministic application font;
-- typography/spacing/radius/control tokens;
-- width/layout tokens;
-- universal focus-visible treatment;
-- `Button` and `IconButton`;
-- shared utility SVG icons.
-
-### Phase 2 — Information grammar
-
-- canonical `PageHeader`;
-- status registry + `StatusIndicator`;
-- `EntityIdentity` contract;
-- bounded presentation identity for Service Types and Business Functions;
-- `Section`, `Surface`, `EmptyState`, `Notice`.
-
-### Phase 3 — Collections and tables
-
-- shared `SearchFilterBar`;
-- shared `EntityCollection` foundation;
-- migrate Asset search/filter/rows without losing Asset identity;
-- refactor Services/Business Functions onto shared internals without visually regressing the accepted catalogue experience;
-- production `DataTable`;
-- migrate admin/reference tables.
-
-### Phase 4 — Detail pages
-
-- shared entity-detail shell;
-- Asset detail migration;
-- Service/Business Function identity integration;
-- common form/header/status/completeness presentation.
-
-### Phase 5 — Specialised operational views
-
-Apply shared concerns to Dashboard, Knowledge Graph, Topology, Changes, Knowledge Gaps, Reconciliation and Discovery without flattening their specialised workflows.
-
-### Phase 6 — Production polish
-
-- remove development/sample placeholders;
-- copy/capitalisation sweep;
-- dead CSS removal;
-- responsive and dark-mode visual acceptance;
-- visual regression coverage where practical.
-
----
-
-## 22. Definition of done
+## 21. Definition of done
 
 A UI-system cleanup is not complete because a few screenshots look better.
 
@@ -663,7 +607,7 @@ A UI-system cleanup is not complete because a few screenshots look better.
 
 ---
 
-## 23. Product-level acceptance test
+## 22. Product-level acceptance test
 
 Atlas should pass this simple test:
 
@@ -687,4 +631,4 @@ The goal is not uniformity. It is a coherent product whose shared standards are 
 - Networks remain a reference table because VLAN/CIDR comparison is its current primary task. Canvas geometry, brand lockups, authentication composition, readable monospace data and topology/export layout constants may use specialised dimensions.
 - The dated [September review](../history/product-reviews/atlas-ui-system-review-2026-09.md) records rationale, not implementation status or new requirements. This guide is the canonical future standard.
 
-The acceptance matrix covers 1440, 1024, 800 and 390 px; light/dark themes; default, blue and purple action accents; keyboard focus, long content, table overflow, errors and fallback identity. See [UI system acceptance](../testing/ui-system.md), `apps/web/scripts/check-ui-system-browser.mjs` and the existing entity, Asset icon, operations and topology scripts. Record actual validation results separately from this stable standard.
+The acceptance matrix covers 1440, 1024, 800 and 390 px; light/dark themes; default, blue and purple action accents; keyboard focus, long content, table overflow, errors and fallback identity. See [historical validation](../history/validation/ui-system.md), `apps/web/scripts/check-ui-system-browser.mjs` and the existing entity, Asset icon, operations and topology scripts. Record actual validation results separately from this stable standard.

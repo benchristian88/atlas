@@ -1,6 +1,6 @@
 # Service and Business Function lifecycle
 
-C2.6 applies **Delete mistakes. Archive history.** See
+Entity lifecycle applies **Delete mistakes. Archive history.** See
 [ADR 0002](../decisions/0002-mistaken-entity-tombstones.md).
 
 ## Product behavior and API
@@ -60,7 +60,7 @@ The following block deletion:
   audit event targeting one of the entity's retained gaps.
 
 Original Service declarations are identified by the server-recorded initial
-assertion IDs on new creation audit events. For pre-C2.6 records, the declaration
+assertion IDs on new creation audit events. For records predating migration `20260910_0016`, the declaration
 must share the entity's original PostgreSQL transaction creation timestamp and
 have been first observed before its `service_created` Change. In both cases,
 only one assertion per supported initial predicate is allowed; its value must
@@ -89,7 +89,7 @@ No history is physically removed.
 | `run_observed_entities`, `reconciliation_items` | Any canonical entity reference blocks. |
 | `evidence_records` | No Service/BF FK or canonical entity UUID field; actual associations are via assertions/observed entities, which block. External source identifiers alone are not canonical entity references. |
 | `entity_source_links` | Current schema permits Assets only, with an Asset FK; no Service/BF source-link capability exists. |
-| `documents` | Current persistence/generator is Asset-only, with `asset_id`. No supported Service/BF generated-document reference exists. Future F1/C4 associations must extend this policy. |
+| `documents` | Current persistence/generator is Asset-only, with `asset_id`. No supported Service/BF generated-document reference exists. Future document/Knowledge Object associations must extend this policy. |
 | Asset relationships, interfaces, custom fields | Asset-bound; no first-class Service/BF reference. |
 
 No supported reference type required physical deletion or destruction of history.

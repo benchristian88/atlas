@@ -137,7 +137,7 @@ class UpdateChecker:
             current = release_order(metadata["version"], metadata["release_channel"])
             status = "update_available" if remote > current else "ahead_of_release" if remote < current else "up_to_date"
             anchor = {"docker_compose": "docker-compose-upgrade", "systemd": "nativesystemd-upgrade"}.get(metadata["install_method"])
-            guide = f"{REPOSITORY_URL}/blob/v{latest['latest_version']}/docs/deployment/h4-upgrades.md#{anchor}" if anchor else None
+            guide = f"{REPOSITORY_URL}/blob/v{latest['latest_version']}/docs/deployment/upgrades.md#{anchor}" if anchor else None
             return UpdateStatus(**result, **latest, status=status, upgrade_guide_url=guide)
 
 

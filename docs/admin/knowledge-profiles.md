@@ -1,6 +1,6 @@
 # Administer knowledge profiles
 
-Open **Administration → Asset types**, then select **Configure** in the Knowledge profile column. The profile shows global requirements and rules anchored to that database-defined Asset Type.
+Open **System → Reference Data → Asset Types**, then select **Configure** in the Knowledge profile column. The profile shows global requirements and rules anchored to that database-defined Asset Type.
 
 Use **Add requirement** to choose a level, severity, and structured rule. Asset Types, Relationship Types, and Custom Field Definitions are loaded from Atlas; administrators never paste internal UUIDs. A requirement may be required, conditional, or recommended. Severity expresses operational impact independently of that level.
 

@@ -69,10 +69,19 @@ def test_package_contents_identity_modes_and_installer_paths(packages, tmp_path)
             assert not any(any(part in packager.FORBIDDEN_PARTS for part in Path(member.name).parts) for member in members)
             archive.extractall(tmp_path / method, filter="data")
         tree = tmp_path / method / artifact["filename"].removesuffix(".tar.gz")
+        for name in ("LICENSE", "COMMERCIAL-LICENSING.md", "SECURITY.md", "SUPPORT.md", "THIRD-PARTY-NOTICES.md",
+                     "docs/deployment/installation.md", "docs/deployment/mfa.md",
+                     "docs/deployment/backup-restore.md", "docs/deployment/releases.md", "docs/deployment/upgrades.md"):
+            assert (tree / name).is_file(), name
+        assert (tree / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes()
+        assert not (tree / "docs/history").exists()
+        assert not (tree / "docs/product").exists()
         metadata = policy.load_metadata(tree / "apps/api/app/release.json")
         assert metadata["build_id"] == release["commit_sha"]
         assert metadata["install_method"] == method
-        subprocess.run([sys.executable, str(tree / "infra/install/upgrade.py"), "--help"], check=True, capture_output=True)
+        help_result = subprocess.run([sys.executable, str(tree / "infra/install/upgrade.py"), "--help"], check=True, capture_output=True, text=True)
+        assert "H3" not in help_result.stdout
+        assert "encrypted Atlas backup" in help_result.stdout
         if method == "docker_compose":
             subprocess.run([sys.executable, str(tree / "infra/install/compose.py"), "--help"], check=True, capture_output=True)
             compose = yaml.safe_load((tree / "infra/docker/docker-compose.yml").read_text())

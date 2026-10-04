@@ -1,7 +1,7 @@
 # Knowledge completeness architecture
 
 Current baseline: implemented for Assets and Services. The original v1 Asset
-foundation described below was extended by Release C1 using the same requirement,
+foundation described below was extended to Services using the same requirement,
 gap, summary, and evaluator concepts.
 
 Atlas separates three kinds of knowledge state:

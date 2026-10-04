@@ -126,7 +126,7 @@ def test_cache_expiry_refresh_limits_and_concurrent_calls():
 def test_guidance_is_method_specific(method, anchor):
     checker = updates.UpdateChecker(AsyncMock(return_value=[release("0.2.0")]))
     result = asyncio.run(checker.status(metadata=metadata(method=method)))
-    assert result.upgrade_guide_url == (f"{REPOSITORY_URL}/blob/v0.2.0/docs/deployment/h4-upgrades.md#{anchor}" if anchor else None)
+    assert result.upgrade_guide_url == (f"{REPOSITORY_URL}/blob/v0.2.0/docs/deployment/upgrades.md#{anchor}" if anchor else None)
 
 
 class Stream:

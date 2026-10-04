@@ -1,0 +1,18 @@
+name: Feature discussion
+description: Explain an operational need or suggest an improvement.
+body:
+  - type: markdown
+    attributes:
+      value: Please describe the need without private inventory or credentials.
+  - type: textarea
+    id: need
+    attributes:
+      label: Operator need
+      description: What are you trying to achieve, and where does Atlas fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested behaviour
+      description: Include alternatives or relevant product workflows.

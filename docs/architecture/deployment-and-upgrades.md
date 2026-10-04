@@ -8,7 +8,7 @@ is operational and may be recreated; the PostgreSQL volume must be backed up.
 
 Public beta production installation is supported through **Docker Compose** or
 **native/systemd** only. Direct execution remains a developer workflow. Manual
-production installation is unsupported. See [H1 installation](../deployment/h1-installation.md)
+production installation is unsupported. See [installation and first run](../deployment/installation.md)
 for generated secrets, configuration classification, first-run setup, reset
 commands and native prerequisites.
 
@@ -24,7 +24,7 @@ Builds carry `ATLAS_BUILD_ID` when available and need no runtime Git. The
 protected `/api/system-settings/build-info` endpoint and About display version,
 channel, build ID and installation method (`docker_compose`, `systemd`, or
 `development`). Frontend package versions are tooling metadata, not a separate
-application identity. H4 adds [release packages and update awareness](release-distribution.md).
+application identity. See [release packages and update awareness](release-distribution.md).
 Packaged commit/method identity wins over preserved environment build IDs.
 
 ## Fresh Compose installation
@@ -67,8 +67,8 @@ Managed nginx updates validate before activation and restore previous files on
 failure; unrelated host sites remain untouched. A systemd drop-in enables nginx
 startup after Atlas API/web. Existing secrets/configuration/state survive upgrades;
 legacy explicit cookie settings need deliberate operator review. PostgreSQL
-authority, domain semantics, RBAC and discovery stay intact. Fresh real Debian
-native lifecycle retesting is required after this H4 remediation.
+authority, domain semantics, RBAC and discovery stay intact. Native packaged upgrade and Docker-to-native restore were subsequently
+confirmed in real Debian 13 testing; other host combinations require validation.
 
 To stop containers while retaining data:
 
@@ -82,74 +82,16 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 
 ## Package upgrades
 
-Use the [H4 configuration-preserving upgrade helper and checklist](../deployment/h4-upgrades.md)
-for H1–H3 installations. Create/download an H3 encrypted backup first. Existing
+Use the [configuration-preserving upgrade helper and checklist](../deployment/upgrades.md)
+for supported package installations. Create/download an encrypted backup first. Existing
 `.env`, `/etc/atlas/atlas.env`, database and protected state are retained.
-The following historical migration checklist remains relevant to pre-H1 source
-deployments; it does not replace the package upgrade procedure.
+Migration invariants below describe legacy compatibility; operators use the
+package upgrade helper.
 
-## Legacy foundation upgrade checklist
 
-1. Record the currently deployed commit/image and inspect the release diff and
-   migration notes.
-2. Make a PostgreSQL backup and verify that it is non-empty and restorable.
-   Encrypted MFA additionally depends on `ATLAS_DATA_ENCRYPTION_KEY`; retain its
-   protected configuration. PostgreSQL alone cannot restore MFA to a new key.
-3. Copy `.env` to a separately protected backup. Do not place secrets in the
-   repository or a ticket.
-4. Remove retired `ATLAS_ADMIN_*`, `ATLAS_BOOTSTRAP_ADMIN_*` and
-   `AUTH_SESSION_MINUTES` entries. Existing users/passwords remain. The new
-   session setting starts at 480; set any desired previous custom value through
-   System Settings after upgrading. Retain existing database/signing secrets:
-   the fresh-install generator intentionally refuses an existing environment.
-5. Check for legacy login identifiers that differ only by case or surrounding
-   whitespace. Resolve any rows returned by the query below deliberately before
-   upgrading; the migration refuses to merge accounts automatically:
+## Migration and recovery invariants
 
-   ```sql
-   SELECT lower(btrim(email)) AS normalized_email, count(*)
-   FROM users
-   GROUP BY lower(btrim(email))
-   HAVING count(*) > 1;
-   ```
-
-6. Build/start matching services. Startup migrates before serving traffic.
-7. Check migration logs, `/api/health`, normal login, a scoped account, context
-   selection, topology/inventory counts, and System Settings.
-8. Confirm `/setup` cannot initialize an installation with existing users.
-
-For a short maintenance-window upgrade:
-
-```bash
-docker compose --env-file .env -f infra/docker/docker-compose.yml down
-docker compose --env-file .env -f infra/docker/docker-compose.yml build
-docker compose --env-file .env -f infra/docker/docker-compose.yml up -d
-docker compose --env-file .env -f infra/docker/docker-compose.yml logs --tail=200 api
-```
-
-Running `alembic upgrade head` directly is equivalent to the migration part of
-container startup:
-
-```bash
-docker compose --env-file .env -f infra/docker/docker-compose.yml run --rm api \
-  alembic upgrade head
-```
-
-Do not run two migration jobs concurrently.
-
-## H2 local MFA upgrade
-
-Revision `20261004_0026` adds one-to-one encrypted TOTP state, recovery verifiers
-and bounded login challenges. Existing accounts remain unenrolled; password
-hashes and assignments do not change. Fresh installers generate independent
-256-bit data-encryption material. Existing configurations need the missing key
-added with the protected helper before production startup; it never replaces
-existing secrets. See [H2 deployment](../deployment/h2-mfa.md). H3 now includes
-this material in its passphrase-encrypted payload and rewraps to target data
-material. See [H3 operator recovery](../deployment/h3-backup-restore.md); H2 alone
-did not supply backup/restore or key rotation.
-
-## Foundation migration behavior
+### Foundation migration behaviour
 
 The authentication/access foundation migration is additive and preserves
 legacy inventory:
@@ -183,7 +125,7 @@ legacy inventory:
 The migration does not drop and recreate the database. Check migration logs and
 compare per-customer assets/relationships before and after upgrading.
 
-## User accent preference migration
+### User accent preference migration
 
 Revision `20260717_0005` adds the nullable `users.accent_colour` column. It does
 not rewrite or delete existing user records: a null value deliberately retains
@@ -192,7 +134,7 @@ the Atlas default accent. Normal API startup applies the revision through
 The downgrade removes only this preference column, so export any chosen accent
 values first if they need to be retained across a rollback.
 
-## User theme mode migration
+### User theme mode migration
 
 Revision `20260909_0015` adds nullable `users.theme_mode`, constrained to
 `light`, `dark`, or `system`. Null is returned as `system`, preserving OS-based
@@ -201,68 +143,19 @@ Apply `alembic upgrade head` before serving the updated API (normal API startup
 already does this). No backfill is needed. Downgrading removes the theme mode
 preference only; accent preferences and all other user data are retained.
 
-## H3 encrypted backup and restore
+## Encrypted backup and restore
 
-Use [H3 backup/restore](../deployment/h3-backup-restore.md) for UI download,
+Use [encrypted backup/restore](../deployment/backup-restore.md) for UI download,
 initialized overwrite, first-run restore and exact shared-service Docker/native
 local recovery commands. Target deployment configuration stays local, including
-signing/data keys; MFA is rewrapped and sessions are invalidated. H3 adds protected
+signing/data keys; MFA is rewrapped and sessions are invalidated. Backup/restore uses protected
 `atlas_state` staging/recovery and native `StateDirectory=atlas`, not another
 authoritative operational data store. Match PostgreSQL client/server versions.
 
-## Backup example
+## Recovery
 
-The following creates a PostgreSQL custom-format backup on the Docker host. The
-redirection occurs on the host; protect the resulting file as sensitive data.
-
-```bash
-docker compose --env-file .env -f infra/docker/docker-compose.yml exec -T postgres \
-  sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-  > atlas-before-upgrade.dump
-test -s atlas-before-upgrade.dump
-```
-
-Also test restoration in an isolated PostgreSQL instance on a routine basis. A
-backup that has never been restored is not a verified recovery plan.
-
-## Rollback
-
-Application code and database schema must remain a matched version. The safest
-rollback after a schema migration is:
-
-1. Stop Atlas writers.
-2. Preserve a diagnostic backup of the failed upgraded database.
-3. Recreate an empty PostgreSQL database/volume.
-4. Restore the verified pre-upgrade backup.
-5. Deploy the exact pre-upgrade commit/images and its environment file.
-6. Validate health, login, counts, and a representative asset before reopening
-   access.
-
-Do not merely deploy old application code against a newer schema, and do not
-assume `alembic downgrade` is a data-preserving rollback. Backfilled ownership,
-type conversion, and new administrative writes can make a schema-only downgrade
-lossy. Use revision downgrades only if that specific migration documents and
-tests a safe path.
-
-## Production limitations and checklist
-
-- For HTTPS, terminate TLS at a maintained reverse proxy and configure the
-  gateway's narrow trusted-proxy list; Docker cookie auto mode then marks cookies
-  Secure. Direct LAN HTTP uses non-Secure cookies. Explicit `true` forces HTTPS.
-- PostgreSQL/Redis ports are internal to production Compose. Use the separate
-  development override only when local access is needed.
-- Put secrets in the deployment platform's secret store where possible rather
-  than long-lived plaintext environment files.
-- Leave CORS blank for normal same-origin operation; use a narrow exact origin
-  list only for deliberate split origins. Set security headers/content-security
-  policy at the edge. Cached Asset icons use Atlas itself; allow remote hosts only for
-  the existing Asset Type default images. See [Asset icon caching](asset-icon-cache.md)
-  for the additive migration and PostgreSQL persistence.
-- Send logs and audit events to protected external retention if tamper evidence
-  or regulatory retention is required.
-- Add reverse-proxy rate limits and monitoring for repeated authentication
-  failure until distributed application throttling is available.
-- Atlas local authentication provides optional TOTP, one-time recovery codes and
-  [local MFA break-glass reset](../deployment/h2-mfa.md). SSO and email-based account
-  recovery remain deferred. Maintain a tested database backup
-  and at least two usable global Master Administrators.
+Code and schema must remain a matched version. Follow the
+[operator recovery guide](../deployment/backup-restore.md) with the retained
+matching package and encrypted backup. Do not deploy older application code
+against a newer schema or assume an Alembic downgrade preserves data.
+Keep maintenance closed after a failed recovery until validation succeeds.

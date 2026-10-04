@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "common": [
+    "LICENSE",
+    "COMMERCIAL-LICENSING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "THIRD-PARTY-NOTICES.md",
     "apps/api/app/",
     "apps/api/scripts/",
     "apps/api/migrations/",
@@ -41,6 +46,11 @@
     "infra/install/manage.py"
   ],
   "required_common": [
+    "LICENSE",
+    "COMMERCIAL-LICENSING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "THIRD-PARTY-NOTICES.md",
     "apps/api/app/release.json",
     "apps/api/app/main.py",
     "apps/api/scripts/start.py",
@@ -56,10 +66,10 @@
     "apps/worker/worker/main.py",
     "infra/install/configuration.py",
     "infra/install/upgrade.py",
-    "docs/deployment/h1-installation.md",
-    "docs/deployment/h3-backup-restore.md",
-    "docs/deployment/h4-releases.md",
-    "docs/deployment/h4-upgrades.md",
+    "docs/deployment/installation.md",
+    "docs/deployment/backup-restore.md",
+    "docs/deployment/releases.md",
+    "docs/deployment/upgrades.md",
     "infra/release/package-manifest.json"
   ],
   "required_docker_compose": [

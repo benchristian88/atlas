@@ -7,9 +7,13 @@ name = "atlas-plugin-sdk"
 version = "0.1.0"
 description = "Vendor-neutral plugin contracts for Atlas discovery"
 requires-python = ">=3.12"
+license = { text = "AGPL-3.0-only" }
 
 [project.optional-dependencies]
 dev = ["pytest>=8.4,<9"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[project.urls]
+Source = "https://github.com/benchristian88/atlas"

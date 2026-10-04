@@ -9,15 +9,15 @@ configured separately; this change does not configure branch protection:
 
 | Check | Required validation |
 | --- | --- |
-| **Backend / PostgreSQL** | Python 3.12; full API/SDK/Proxmox regression including H1–H4, real PostgreSQL/migration/nginx tests and H3 Redis restore checks; zero skipped tests; exactly one Alembic head; Python compilation. |
+| **Backend / PostgreSQL** | Python 3.12; full API/SDK/Proxmox regression including installation, MFA, backup and release checks, real PostgreSQL/migration/nginx tests and Redis-backed restore checks; zero skipped tests; exactly one Alembic head; Python compilation. |
 | **Frontend** | Node 22, `npm ci`, `npm test`, `npm run build`; Next telemetry disabled. |
-| **Release & Deployment Integrity** | Canonical metadata, shared H4 release-critical regression, actionlint 1.7.7, whitespace, committed dry-run packages, independent verifier and SHA256SUMS, extracted installer/upgrade help, protected configuration, actual production/development/packaged Compose configuration and packaged API/web/worker image builds. |
+| **Release & Deployment Integrity** | Canonical metadata, shared release-critical regression, actionlint 1.7.7, whitespace, committed dry-run packages, independent verifier and SHA256SUMS, extracted installer/upgrade help, protected configuration, actual production/development/packaged Compose configuration and packaged API/web/worker image builds. |
 
 The backend uses `postgres:17-alpine` and matching PGDG PostgreSQL 17 clients.
 It starts PostgreSQL after generating a protected configuration, so passwords
 are random per job rather than checked-in credentials or repository secrets.
 The bootstrap account creates twelve separate databases owned by a generated
-non-superuser/non-createdb role. Domain, setup, MFA and both H3 databases are
+non-superuser/non-createdb role. Domain, setup, MFA and both backup test databases are
 migrated; seven migration-test databases remain empty. All existing
 `ATLAS_TEST_*` database variables are supplied, and JUnit skips fail the job.
 Redis uses the `redis:7.4.6-alpine` Actions service with a `redis-cli ping`
@@ -32,7 +32,7 @@ loopback upstreams. The fixture checks the original Docker `listen 80` contract,
 then changes only its temporary listener before **both** `nginx -t` and runtime
 startup. It obtains a free port with `bind(('127.0.0.1', 0))`, requires a port
 above 1024, and uses that loopback listener for both validation copies. Routing,
-headers and the 2 GiB H3 upload bound remain unchanged; no root nginx execution
+headers and the 2 GiB restore upload bound remain unchanged; no root nginx execution
 is needed. A regression checks both generated listeners for all four fixture
 variants.
 The PGDG signing-key fingerprint is checked before installing signed client
@@ -52,9 +52,7 @@ GitHub discards the runner and Redis service after the job.
 `release.yml` remains the separate tag/manual release workflow and owns tag
 validation, distribution artifacts and controlled publication. Both workflows
 call `infra/ci/release-critical.sh` from `apps/api` with source SDK/Proxmox
-`PYTHONPATH`. Its selector is unchanged from H4, including native regression;
-H4's historical **228-test** result is historical evidence, not a fixed current
-test count. Routine CI never requires a tag.
+`PYTHONPATH`, including native helper regressions. Routine CI never requires a tag.
 
 ## Equivalent local checks
 
@@ -143,45 +141,18 @@ docker rm --force --volumes atlas-ci-postgres atlas-ci-redis
 rm -rf "$ATLAS_CI_WORK"
 ```
 
-## Limitations and evidence
-
-`npm audit` is omitted from merge gates. H4 recorded five unresolved findings
-(one critical, three high, one moderate); this task changes no dependencies and
-does not claim they are fixed. Run `npm audit --json` separately to reassess
-them. [H4's original validation](h4-release-distribution.md) remains historical.
-
-There is no canonical repository-wide Markdown/link linter. Existing document
-generation and packaged-link regressions run in pytest; changed documentation
-links are also checked locally. CI does not introduce a formatter.
+## Validation scope
 
 The browser scripts under `apps/web/scripts` require an operator-provided real
-stack and Playwright module; they are not part of `npm test`. CI does not start
-that stack or claim browser, native install/upgrade/reboot, or real Debian/systemd
-lifecycle acceptance. Those remain separate acceptance evidence.
+stack and Playwright module; they are separate from `npm test`. CI does not start
+that stack or certify a native host's install/upgrade/reboot lifecycle.
 
-Local implementation validation on 2026-10-04 used Python **3.14.7**, Node
-**24.19.0**, PostgreSQL/client **17.11**, Redis **7.4.6** and a temporary nginx
-**1.28.3** build on macOS:
+Run `npm audit --json` separately when reassessing dependency security. Passing
+regressions do not establish that dependency findings are resolved. Current CI
+and supplied real-world acceptance results are recorded in historical validation,
+separately from these repeatable procedures.
 
-| Executed check | Result |
-| --- | --- |
-| Full canonical API/SDK/Proxmox suite using the new database helper | **853 passed, zero skipped**, 151.13 seconds; JUnit has no failures/errors. Generated environment permissions and refusal to reuse an existing cluster also passed; disposable databases/processes were removed. |
-| Shared H4 selector | **258 passed**, 14.96 seconds; existing deprecation warnings remain. |
-| `npm ci --no-audit`, `npm test`, `NEXT_TELEMETRY_DISABLED=1 npm run build` | Locked installation, **279 passed, zero skipped**, production build passed. Audit was not rerun. |
-| Both workflow YAML files, actionlint **1.7.7**, `bash -n` on CI shell helpers | Passed. Five CI contract tests also passed in the full suite and the final focused recheck. |
-| `compileall`, Alembic head assertion, whitespace checks | Passed; single existing `20261004_0026` head, no migrations. |
-| Metadata, `build --dry-run --worktree`, independent verifier, actual `sha256sum -c SHA256SUMS` | Both package archives and manifest passed. Local uncommitted artifacts use the explicitly non-publishable worktree mode. |
-| Extracted Compose/native installer and upgrade/configuration `--help`; generated configuration validation | Passed; configuration mode **0600**. |
-| Changed Markdown links and code fences | **127** local link targets passed; no unclosed code fences. |
-| Upstream prerequisites | Official nginx archive SHA-256 and PGDG key fingerprint verified; both official container tags exist for Linux/amd64. |
-
-No hosted execution had occurred at the initial implementation validation above.
-The subsequent first hosted run supplied by the user passed Frontend and reported
-**821 passed, 32 errors** in Backend / PostgreSQL. All errors were Docker nginx
-fixture setup failures: its first `nginx -t` still attempted the production port
-80 before the runtime-only adaptation. Release & Deployment Integrity was
-reported otherwise healthy. The fixture now adapts the test listener before
-both validations; a new hosted run must confirm this fix and the Node 24 Action
-pins. Historical H4 evidence is unchanged. Docker CLI/daemon and Linux systemd
-remain unavailable locally; local tests do not establish native lifecycle
-acceptance.
+Repository-wide local Markdown targets and public-language boundaries are
+validated in `tests/test_repository_docs.py`. Packaged-link checks run with the
+release-critical regressions. Documentation changes need truthful feature claims,
+valid links and balanced code fences.

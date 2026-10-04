@@ -2,13 +2,13 @@
 
 ## Typed dependency records
 
-Release C1 reuses Atlas Relationship Types while making endpoint applicability
+Service dependencies reuse Atlas Relationship Types while making endpoint applicability
 explicit. A Relationship Type may be enabled for an endpoint pair such as
 `service → asset` or `service → service`. The API rejects inactive types and
 types that are not enabled for the requested pair. Existing Asset relationship
 behavior is unchanged.
 
-Three temporal link tables provide the C1 model:
+Three temporal link tables provide the dependency model:
 
 - **Service → Asset** says which technical Assets implement or support a
   Service, for example `Authentik runs on authentik-lxc`.
@@ -37,7 +37,7 @@ guess meaning from a key.
 
 Incoming/reverse traversal does not reverse the stored relationship or create a
 new semantic edge. The canonical edge remains source to target; an inverse label
-is presentation metadata only. C2.1 preserves this distinction in its shared
+is presentation metadata only. The operational graph preserves this distinction in its shared
 edge contract.
 
 Adding or changing a dependency creates a declared accepted relationship
@@ -62,14 +62,14 @@ its supporting Services to their Assets, making connected infrastructure visible
 Nodes include entity type, display labels, and navigable UI paths; edges retain
 relationship labels and direction.
 
-These endpoints now use the C2.1 shared operational graph builder while
+These endpoints now use the shared operational graph builder while
 retaining their public response shapes. The builder applies endpoint-by-endpoint
 authorization and current-valid filtering. The focused routes remain structural
 projections: they do not perform outage simulation or full Impact Analysis.
 
 ## Lean dependency semantics
 
-C2.2 preserves `required_for_operation` while adding the minimum homelab
+Dependency semantics preserve `required_for_operation` while adding the minimum homelab
 semantics needed by later analysis. A temporal `DependencyGroup` describes one
 operational need for a subject Service:
 
@@ -98,7 +98,7 @@ The normal Service detail workflow exposes these semantics using “Required”,
 `service_dependencies.view`/`service_dependencies.manage` permissions and
 customer/site checks apply to group reads and mutations.
 
-C2.3 applies these stored semantics through bounded, deterministic,
+Dependency impact analysis applies these stored semantics through bounded, deterministic,
 cycle-safe, authorization-safe analysis and explains results with actual
 dependency paths. See [dependency analysis](dependency-analysis.md) for `all`/`any`
 evaluation, degraded/unknown propagation, conservative aggregation, and the
@@ -107,4 +107,4 @@ support links do not acquire failure semantics.
 
 The model remains additively extensible to `minimum`, quorum,
 `minimum_available`, weighted, conditional, and richer group rules, but those
-are later enterprise capabilities rather than Homelab Ready requirements.
+are later enterprise capabilities rather than homelab beta requirements.

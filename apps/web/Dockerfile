@@ -17,6 +17,10 @@ RUN npm run build
 
 FROM node:22-alpine AS runner
 
+LABEL org.opencontainers.image.title="Atlas Impact" \
+      org.opencontainers.image.source="https://github.com/benchristian88/atlas" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+
 WORKDIR /app
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
