@@ -7,6 +7,7 @@ from app.audit import add_audit_event
 from app.database import SessionLocal
 from app.models import User
 from app.services.mfa import reset_mfa
+from app.services.backup_runtime import normal_operation
 
 
 def main() -> None:
@@ -22,7 +23,7 @@ def main() -> None:
         raise SystemExit("MFA reset cancelled") from None
     if confirmation != "RESET":
         raise SystemExit("MFA reset cancelled")
-    with SessionLocal.begin() as db:
+    with normal_operation(), SessionLocal.begin() as db:
         matches = list(db.scalars(select(User).where(func.lower(User.email) == email)
                                   .with_for_update().execution_options(populate_existing=True)))
         if len(matches) != 1:

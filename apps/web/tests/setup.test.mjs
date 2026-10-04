@@ -8,13 +8,13 @@ test("uninitialized route protection opens setup without granting a user session
   assert.deepEqual(state, { status: "setup", user: null, error: null });
 });
 
-test("setup keeps credentials out of storage and URLs and reserves restore honestly", async () => {
+test("setup keeps credentials out of storage and URLs and reaches authorized restore", async () => {
   const page = await readFile(new URL("../app/setup/page.js", import.meta.url), "utf8");
   assert.doesNotMatch(page, /localStorage|sessionStorage|searchParams/);
   assert.match(page, /form.reset\(\)/);
   assert.match(page, /name="code" type="password"/);
-  assert.match(page, /Restore backup — coming later/);
-  assert.match(page, /<Button disabled>/);
+  assert.match(page, /RestoreBackupForm fresh/);
+  assert.match(page, /setStage\("restore"\)/);
   assert.match(page, /router.replace\("\/login"\)/);
   const shell = await readFile(new URL("../components/root-shell.js", import.meta.url), "utf8");
   assert.match(shell, /getSetupStatus/);

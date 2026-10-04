@@ -4,7 +4,8 @@ Recorded 2026-10-04 on `feature/h2-two-factor-authentication`, based on accepted
 H1 HEAD `51ae821eb17b79bdafcabbec3b03d4764d8f41af`. No commit, push, merge or
 rebase was performed.
 
-**H1/H1.1 — ACCEPTED. H2 — Implemented; release acceptance pending.**
+**H1/H1.1 — ACCEPTED. H2 — ACCEPTED. H3 — implemented and locally validated;
+real Docker acceptance pending.** See [H3 evidence](h3-encrypted-backup-restore.md).
 
 H1's real Debian Docker/LXC acceptance is user-reported evidence: fresh clone,
 production installer, generated secrets, LAN URL, gateway and healthy services,
@@ -12,11 +13,22 @@ setup/reset, first administrator, login/dashboard, actual LXC reboot, direct LAN
 and Nginx Proxy Manager using one upstream without an `/api` custom location.
 It does not establish real native/systemd lifecycle acceptance; that remains H6.
 
-H2 automated and local production browser checks passed. A physical authenticator
-app, the actual Docker MFA reset command and the H2 Docker installation checks
-have not been run in this macOS workspace. Do not label H2 accepted from this
-record. See [architecture](../architecture/local-two-factor-authentication.md)
-and [deployment/recovery commands](../deployment/h2-mfa.md).
+H2 is accepted following the automated evidence below and subsequent real user
+acceptance on Debian Docker/LXC. The user upgraded a throwaway installation using
+`python3 infra/install/configuration.py --add-data-encryption-key --output .env`,
+validated `docker compose --env-file .env -f infra/docker/docker-compose.yml config
+--quiet`, and completed `up -d --build --wait`. The helper preserved existing
+secrets. A second installation containing actual homelab Atlas data was
+snapshotted and upgraded with the same supported procedure; its existing data
+survived and the user tested and confirmed the installed H2 application working.
+
+These are the supplied real Docker acceptance facts. They do not establish more
+granular manual authenticator actions, Docker break-glass execution or a real
+native/systemd lifecycle. The implementation-time local checks below remain
+historical evidence. Native lifecycle remains an H6 release gate; the five
+existing npm audit findings remain unresolved hardening work. See
+[architecture](../architecture/local-two-factor-authentication.md) and
+[deployment/recovery commands](../deployment/h2-mfa.md).
 
 ## Validation actually performed
 
@@ -103,9 +115,12 @@ The added dependencies are pinned: `pyotp==2.9.0` (MIT),
 The npm lockfile preserves existing package versions. Whole-product security
 review and resolution of the existing audit findings belong to H6.
 
-## Remaining release acceptance
+## Historical implementation-time manual checklist
 
-Use a disposable/secondary account and save its recovery codes before testing.
+H2 is now accepted on the supplied Docker evidence above. This historical
+checklist records the originally proposed granular checks; it does not claim
+they were subsequently performed. Use a disposable/secondary account and save
+its recovery codes before testing.
 Do not capture QR/manual keys, recovery codes or submitted OTPs in artifacts.
 
 - Run a real H2 Docker production installation/upgrade with the generated data

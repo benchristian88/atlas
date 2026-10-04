@@ -7,6 +7,7 @@ from app.auth import hash_password
 from app.database import SessionLocal
 from app.models import User
 from app.services.installation import installation_state, is_initialized
+from app.services.backup_runtime import normal_operation
 
 
 def main() -> None:
@@ -23,7 +24,7 @@ def main() -> None:
     if len(password) < 12:
         raise SystemExit("Password must contain at least 12 characters")
 
-    with SessionLocal.begin() as db:
+    with normal_operation(), SessionLocal.begin() as db:
         if not is_initialized(db, installation_state(db, lock=True)):
             raise SystemExit("Create the first administrator through /setup")
         if db.scalar(select(User.id).where(User.email == email)) is not None:

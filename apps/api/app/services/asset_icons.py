@@ -199,7 +199,8 @@ def refresh_icon(asset_id, source: str, token) -> None:
         return
     try:
         data = asyncio.run(fetch_icon(source))
-        with SessionLocal() as db:
+        from app.services.backup_runtime import normal_operation
+        with normal_operation(), SessionLocal() as db:
             # Lock the Asset only after network work; a concurrent edit/delete
             # must not publish stale content or recreate an orphan cache row.
             asset = db.scalar(select(Asset).where(Asset.id == asset_id).with_for_update())

@@ -125,9 +125,10 @@ and bounded login challenges. Existing accounts remain unenrolled; password
 hashes and assignments do not change. Fresh installers generate independent
 256-bit data-encryption material. Existing configurations need the missing key
 added with the protected helper before production startup; it never replaces
-existing secrets. See [H2 deployment](../deployment/h2-mfa.md). H3 must include
-this material in its passphrase-encrypted backup package; H2 does not implement
-backup/restore or key rotation.
+existing secrets. See [H2 deployment](../deployment/h2-mfa.md). H3 now includes
+this material in its passphrase-encrypted payload and rewraps to target data
+material. See [H3 operator recovery](../deployment/h3-backup-restore.md); H2 alone
+did not supply backup/restore or key rotation.
 
 ## Foundation migration behavior
 
@@ -180,6 +181,15 @@ mode selection for existing accounts. The accent preference remains separate.
 Apply `alembic upgrade head` before serving the updated API (normal API startup
 already does this). No backfill is needed. Downgrading removes the theme mode
 preference only; accent preferences and all other user data are retained.
+
+## H3 encrypted backup and restore
+
+Use [H3 backup/restore](../deployment/h3-backup-restore.md) for UI download,
+initialized overwrite, first-run restore and exact shared-service Docker/native
+local recovery commands. Target deployment configuration stays local, including
+signing/data keys; MFA is rewrapped and sessions are invalidated. H3 adds protected
+`atlas_state` staging/recovery and native `StateDirectory=atlas`, not another
+authoritative operational data store. Match PostgreSQL client/server versions.
 
 ## Backup example
 

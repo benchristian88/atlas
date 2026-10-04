@@ -43,6 +43,9 @@ services:
       FORWARDED_ALLOW_IPS: "*"
       ATLAS_INSTALL_METHOD: ${ATLAS_INSTALL_METHOD:-docker_compose}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ATLAS_STATE_DIR: /var/lib/atlas
+    volumes:
+      - atlas_state:/var/lib/atlas
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +92,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-atlas}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the production bootstrap helper or set a development credential}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ATLAS_STATE_DIR: /var/lib/atlas
+    volumes:
+      - atlas_state:/var/lib/atlas:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,3 +132,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  atlas_state:

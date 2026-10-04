@@ -33,10 +33,11 @@ hardcoded encryption fallback. See [deployment and recovery](../deployment/h2-mf
 
 **Atlas MFA encrypted data depends on ATLAS_DATA_ENCRYPTION_KEY.** Restoring
 PostgreSQL alone to an installation with a different key cannot decrypt seeds.
-H3 must include the required key material inside the passphrase-encrypted backup
-package for restoration to a genuinely new installation. H2 does not implement
-backup packages, key rotation or restore. Keep the configuration protected and
-preserve the key alongside database backups until H3 supplies that workflow.
+H3 includes the source key material inside its passphrase-encrypted backup
+payload and rewraps active/pending MFA to the target key without importing
+deployment secrets. H2 alone supplied no backup engine or key rotation. See
+[H3 backup and restore](encrypted-backup-restore.md); retain protected
+configuration with any raw PostgreSQL-only backups.
 
 ## State and transactions
 

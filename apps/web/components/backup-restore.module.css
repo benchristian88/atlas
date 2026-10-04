@@ -1,0 +1,8 @@
+.panels { display: grid; gap: var(--space-6, 24px); }
+.panels > div + div { border-top: 1px solid var(--border); padding-top: var(--space-6, 24px); }
+.panels h3 { font-size: var(--text-sm, 14px); font-weight: 600; margin: 0 0 8px; }
+.panels p, .flow p { margin: 8px 0 16px; }
+.form { display: grid; gap: 16px; max-width: 560px; margin-top: 16px; }
+.form p { margin: 0; }
+.flow { margin-top: 16px; }
+.form input[type="file"] { max-width: 100%; padding: 4px; }

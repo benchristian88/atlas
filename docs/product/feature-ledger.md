@@ -1,3 +1,4 @@
+<!-- Current hardening status supplements the historical audits below. -->
 # Atlas product feature ledger — repository-reconciled edition
 
 **C2.6 working-tree audit:** 10 September 2026; implementation complete, manual acceptance pending
@@ -26,6 +27,20 @@
 > enough to classify a feature as implemented unless the repository contains the necessary
 > schema, reachable backend path, usable frontend path where applicable, and supporting tests.
 
+
+## Hardening acceptance update — 4 October 2026
+
+**H1/H1.1 — ACCEPTED. H2 — ACCEPTED. H3 — implemented and locally validated;
+real Docker acceptance pending.**
+H2 real user acceptance covered the supported key-addition helper, successful
+Compose config/build/upgrade on a disposable Debian Docker/LXC installation,
+and the same upgrade on a snapshotted installation with actual homelab data.
+Existing secrets/data survived and the installed H2 application was tested and
+confirmed working. [H2 evidence](../testing/h2-local-two-factor-authentication.md)
+records the exact supplied facts alongside 627 passing backend/PostgreSQL tests,
+272 passing web tests, production build and local production browser evidence.
+No granular real manual MFA actions or native/systemd lifecycle are inferred.
+The native release gate and existing npm dependency-audit findings remain open.
 
 ## C2.5 working-tree audit — 9 September 2026
 
@@ -451,7 +466,7 @@ unchanged.
 | Initials/image fallback avatar | **Implemented** | UI/account | `user-avatar.js` provides safe fallback behavior. |
 | Avatar/photo upload | **Deferred** | Future account work | No avatar field, media storage or upload endpoint exists. |
 | SSO/OIDC/SAML | **Planned but not implemented** | Production security | Extension fields exist, but no issuer/callback flow exists. |
-| Local TOTP MFA | **Implemented** | H2 security | Profile QR/manual enrollment, two-stage scoped login, replay/attempt protection, replacement/disable and encrypted seeds. H2 release acceptance remains pending real authenticator/Docker checks. |
+| Local TOTP MFA | **Implemented** | H2 security | Profile QR/manual enrollment, two-stage scoped login, replay/attempt protection, replacement/disable and encrypted seeds. H2 is accepted on the supplied real Docker upgrade/user evidence; granular physical-app actions are not inferred. |
 | Forgotten-password email | **Deferred** | Future account work | Explicitly absent in security limitations. |
 | MFA recovery codes | **Implemented** | H2 security | Exactly 12 one-time 120-bit codes, account-bound SHA-256 verifiers, atomic consumption and password+TOTP regeneration. Plaintext returned only on generation. |
 | Per-device session management | **Deferred** | Future account work | Current model has user-level session generation only. |
@@ -1235,16 +1250,16 @@ analysis behavior and card styling remain unchanged. See
 | Capability | Status | Evidence and limits |
 | --- | --- | --- |
 | Canonical version/build/install identity | **Implemented** | `apps/api/app/release.json`, artifact build ID, global-permission build-info API and System Settings About. No update checking. |
-| Secure first-run initialization | **Implemented** | Singleton PostgreSQL state, legacy user backfill, local Argon2 setup verifier/reset, scoped expiring HttpOnly setup authorization, atomic Master creation, disabled Restore entry. |
+| Secure first-run initialization | **Implemented** | Singleton PostgreSQL state, legacy user backfill, local Argon2 setup verifier/reset, scoped expiring HttpOnly setup authorization, atomic Master creation; H3 now supplies the authorized restore choice. |
 | Session lifetime System Setting | **Implemented** | Integer 1–10080, default 480, global settings authorization, login/password-change issuance reads database. Environment value retired. |
 | Production installation foundation | **Implemented** | Compose/native helpers generate independent secrets without overwrite; six Compose restart policies (including nginx gateway) and enabled unprivileged systemd units. H1/H1.1 accepted on real Debian Docker/LXC: fresh clone/install, setup/reset, first admin, login/dashboard, actual reboot, direct LAN and one-upstream NPM. Real native/systemd lifecycle remains H6 acceptance. |
 | Docker single-ingress and cookie auto mode | **Implemented** | H1.1 nginx gateway only publishes detected/configured IPv4:port; internal `/api` routing, explicit external proxy trust, scheme-based cookies and focused regression tests. Real Debian LAN/NPM/actual LXC reboot acceptance passed (user-reported); no NPM `/api` custom location. Native/systemd real lifecycle remains H6 acceptance. |
-| Atlas backup restore | **Planned but not implemented** | H1 reserves a disabled setup choice; no restore endpoint or engine. |
+| Atlas backup restore | **Implemented** | H3 encrypted download, global-Master overwrite and setup-authorized fresh restore, native dump/restore, key rewrap, maintenance and rollback. Real Docker/native H3 acceptance remains separate. |
 
 
 ## H2 local two-factor authentication
 
-**Implemented; acceptance pending** physical authenticator and real Docker checks.
+**ACCEPTED** on automated/local production browser evidence and the supplied real Debian Docker/LXC upgrades and user confirmation. No finer manual actions are inferred.
 See [H2 validation](../testing/h2-local-two-factor-authentication.md).
 
 | Capability | Status | Evidence and limits |
@@ -1254,7 +1269,27 @@ See [H2 validation](../testing/h2-local-two-factor-authentication.md).
 | Replay/recovery protection | **Implemented** | User-row transaction locks; increasing TOTP counter; exactly 12 random 120-bit one-time codes; SHA-256 verifiers, constant-time comparisons, atomic regeneration and consumption. |
 | Encryption/bootstrap support | **Implemented** | AES-256-GCM, random nonces/account binding/version; independent data key generated by both installers and safe existing-file helper; production missing key fails closed. |
 | Administrator/local reset | **Implemented** | Global protected Master boundary, self-admin reset blocked, local explicit confirmation, audit actor/target, password preserved; all sessions/challenges/codes revoked. |
-| H3 portability | **Planned but not implemented** | MFA depends on `ATLAS_DATA_ENCRYPTION_KEY`; future passphrase-encrypted backup package must include it. Database-only restoration with a new key cannot decrypt seeds. |
+| H3 portability | **Implemented** | H3 encrypts source data material in the archive and transactionally rewraps active/pending MFA to the target key. Source signing key is excluded; target configuration is preserved. |
 
-H1/H1.1 remains ACCEPTED. H2 does not claim physical-app, Docker or real
-systemd acceptance from automated/local browser evidence.
+H1/H1.1 and H2 are ACCEPTED. H2 real Docker upgrade evidence is user-supplied;
+real native/systemd lifecycle remains an H6 gate. Existing npm audit findings
+remain unresolved. See the exact H2 acceptance update above.
+
+## H3 encrypted application backup and restore
+
+| Capability | Status | Evidence and limits |
+| --- | --- | --- |
+| Encrypted state export | **Implemented** | Entire PostgreSQL custom dump plus source data key in streaming AES-GCM/Argon2id format v1; password reauthentication; global Master only; one-use expiring UI download. |
+| Existing/fresh restore | **Implemented** | Settings acknowledgement/password/MFA; `/setup` one-time authorization; authenticated preflight; maintenance drain; encrypted rollback; native replacement; forward migration/validation; restored login. |
+| Deployment and MFA portability | **Implemented** | Target environment/signing/data secrets retained; explicit MFA adapters rewrap to target; sessions/challenges/setup retired, current TOTP step retired and dedicated Redis cleared. |
+| Local recovery | **Implemented** | Shared-service interactive CLI create/restore/recover, encrypted crash rollback and trusted portable-backup fallback; Docker wiring and native management/StateDirectory support. |
+| Real deployment acceptance | **Unknown** | Automated PostgreSQL/Redis and passing local production-browser evidence are recorded separately. Actual H3 Docker/LXC drills and native/systemd lifecycle have not run here. |
+
+[Architecture](../architecture/encrypted-backup-restore.md),
+[operator guide](../deployment/h3-backup-restore.md) and
+[actual validation](../testing/h3-encrypted-backup-restore.md) define the scope.
+H3 is application data recovery; the broader Release D protection/recoverability
+domain model remains planned. No graph, tenancy, knowledge or discovery semantics
+change. One API runtime, 2 GiB archives and known H1-or-newer schemas are supported;
+no continuous server-side backup repository, binaries or cross-host environment
+import is implied.

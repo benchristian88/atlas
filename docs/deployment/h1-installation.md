@@ -146,9 +146,10 @@ with the deployment's Secure policy. Five failures impose a database-backed
 fifteen-minute lockout. Creation uses the existing password policy and global
 Master Administrator role. Account, assignment, context, audit and initialization
 commit together under a singleton row lock. Success clears the verifier and
-invalidates every setup authorization, then opens normal sign in. Restore
-Backup is visible but disabled until its later implementation; H1 supplies no
-fake restore endpoint.
+invalidates every setup authorization, then opens normal sign in. H1 reserved
+the restore choice; H3 now implements [encrypted fresh restore](h3-backup-restore.md)
+with the same one-time setup authorization. Restore uses existing accounts and
+does not create a new administrator.
 
 ## Configuration classification
 
@@ -192,8 +193,9 @@ No graph, inventory, tenancy or domain semantics change. `/api/setup/*` and
 the globally authorized `/api/system-settings/build-info` are additive APIs.
 About exposes version/channel/build/install identity without deployment secrets.
 No Git is required at runtime; Compose embeds the build ID in its image and
-native configuration carries it from installation. H2 now supplies [local TOTP and recovery](h2-mfa.md); update checking,
-backup/restore engines and the final security review remain later passes.
+native configuration carries it from installation. H2 now supplies [local TOTP and recovery](h2-mfa.md),
+and H3 supplies [backup/restore](h3-backup-restore.md). Update checking and the
+final whole-product security review remain later passes.
 
 ## H1.1 update of an existing Docker installation
 
