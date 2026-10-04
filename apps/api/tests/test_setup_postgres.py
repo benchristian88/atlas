@@ -269,15 +269,16 @@ def test_local_reset_command_prints_once_and_refuses_initialized(db, client, mon
 
 @pytest.mark.parametrize("scheme,policy,secure", [("http", "auto", False), ("https", "auto", True),
                                                  ("https", "true", True), ("http", "false", False)])
-def test_single_origin_setup_login_authenticated_calls_and_cookie_lifecycle(db, monkeypatch, scheme, policy, secure):
+@pytest.mark.parametrize("deployment", ["docker", "native"])
+def test_single_origin_setup_login_authenticated_calls_and_cookie_lifecycle(db, monkeypatch, scheme, policy, secure, deployment):
     monkeypatch.setenv("AUTH_COOKIE_SECURE", policy)
     monkeypatch.setenv("CORS_ORIGINS", "")
     app.dependency_overrides[get_db] = lambda: db
-    # Matches the private Compose upstream: Uvicorn interprets gateway-sanitized
-    # headers. The separate real nginx test exercises the public trust boundary.
-    upstream = ProxyHeadersMiddleware(app, trusted_hosts="*")
+    # Matches the private ingress upstream; native explicitly trusts loopback
+    # only. The real nginx test exercises the public forwarding boundary.
+    upstream = ProxyHeadersMiddleware(app, trusted_hosts="*" if deployment == "docker" else ["127.0.0.1"])
     origin = f"{scheme}://atlas.test:4300"
-    with TestClient(upstream, base_url=origin, client=("172.20.0.2", 1234),
+    with TestClient(upstream, base_url=origin, client=("172.20.0.2" if deployment == "docker" else "127.0.0.1", 1234),
                     headers={"Origin": origin, "X-Forwarded-Proto": scheme}) as browser:
         code = reset_setup_code(db)
         db.commit()

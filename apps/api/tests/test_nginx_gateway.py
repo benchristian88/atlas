@@ -11,9 +11,11 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 import pytest
 
@@ -30,6 +32,14 @@ def start_upstream(stack, service):
             self.end_headers()
             self.wfile.write(content)
 
+        def do_POST(self):
+            size = len(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            content = json.dumps({"service": service, "path": self.path, "size": size}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
         def log_message(self, *args):
             pass
     upstream = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -41,21 +51,27 @@ def start_upstream(stack, service):
     return upstream.server_port
 
 
-@pytest.fixture(params=["", "127.0.0.1"])
+@pytest.fixture(params=[("docker", ""), ("docker", "127.0.0.1"), ("native", ""), ("native", "127.0.0.1")])
 def gateway(request, tmp_path):
     binary = os.getenv("ATLAS_TEST_NGINX") or shutil.which("nginx")
     if not binary:
         pytest.skip("requires nginx >=1.28 or ATLAS_TEST_NGINX")
     trust = tmp_path / "trusted.conf"
+    method, trusted = request.param
     subprocess.run(["sh", str(GATEWAY / "15-atlas-trusted-proxies.sh")], check=True,
-        env={**os.environ, "ATLAS_TRUSTED_PROXIES": request.param, "ATLAS_TRUSTED_PROXIES_FILE": str(trust)})
+        env={**os.environ, "ATLAS_TRUSTED_PROXIES": trusted, "ATLAS_TRUSTED_PROXIES_FILE": str(trust)})
     with ExitStack() as stack:
         api_port = start_upstream(stack, "api")
         web_port = start_upstream(stack, "web")
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
-        config = (GATEWAY / "default.conf").read_text()
+        if method == "native":
+            sys.path.insert(0, str(GATEWAY.parents[1] / "install"))
+            from native_ingress import render
+            config = render({"ATLAS_BIND_ADDRESS": "127.0.0.1", "ATLAS_PORT": str(port), "ATLAS_TRUSTED_PROXIES": trusted})
+        else:
+            config = (GATEWAY / "default.conf").read_text()
         config = config.replace("/etc/nginx/atlas-trusted-proxies.conf", str(trust))
         (tmp_path / "logs").mkdir()
         production = tmp_path / "production.conf"
@@ -67,6 +83,8 @@ def gateway(request, tmp_path):
         # Production uses Docker DNS; local test uses ephemeral loopback servers.
         config = config.replace("api:8000 resolve", f"127.0.0.1:{api_port}")
         config = config.replace("web:3000 resolve", f"127.0.0.1:{web_port}")
+        config = config.replace("127.0.0.1:8000", f"127.0.0.1:{api_port}")
+        config = config.replace("127.0.0.1:3001", f"127.0.0.1:{web_port}")
         config = config.replace("listen 80;", f"listen 127.0.0.1:{port};")
         path = tmp_path / "nginx.conf"
         path.write_text(f"pid {tmp_path}/nginx.pid;\nerror_log {tmp_path}/error.log;\ndaemon off;\n"
@@ -88,7 +106,7 @@ def gateway(request, tmp_path):
                 time.sleep(.02)
         else:
             pytest.fail("nginx did not become ready")
-        yield f"http://127.0.0.1:{port}", bool(request.param)
+        yield f"http://127.0.0.1:{port}", bool(trusted)
 
 
 @pytest.mark.parametrize("path,service", [("/", "web"), ("/setup", "web"), ("/login", "web"),
@@ -120,3 +138,23 @@ def test_actual_nginx_only_accepts_protocol_from_trusted_peer(gateway, protocol,
     assert headers["X-Real-IP"] == "127.0.0.1"
     assert headers["X-Forwarded-Host"] == url.removeprefix("http://")
     assert "Forwarded" not in headers
+
+
+@pytest.mark.parametrize("prefix", ["setup/restore", "system-settings/restore"])
+def test_actual_ingress_accepts_multi_megabyte_backup_upload(gateway, prefix):
+    url, _ = gateway
+    path = f"/api/{prefix}/12345678-1234-1234-1234-123456789abc/upload"
+    # Transport probe, not a claim of full H3 restore or native lifecycle acceptance.
+    body = bytes(3 * 1024**2)
+    with urlopen(Request(url + path, data=body, headers={"Content-Type": "application/octet-stream"}), timeout=5) as response:
+        result = json.load(response)
+    assert result == {"service": "api", "path": path, "size": len(body)}
+
+
+def test_actual_ingress_rejects_declared_backup_larger_than_h3_bound(gateway):
+    from app.services.backup_archive import MAX_ARCHIVE_BYTES
+    url, _ = gateway
+    with pytest.raises(HTTPError) as error:
+        urlopen(Request(url + "/api/setup/restore/12345678-1234-1234-1234-123456789abc/upload", data=b"",
+                        headers={"Content-Length": str(MAX_ARCHIVE_BYTES + 1)}), timeout=3)
+    assert error.value.code == 413

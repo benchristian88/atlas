@@ -2,28 +2,24 @@
 
 Production installation methods are **Docker Compose** and **native/systemd**.
 Direct execution is for developers; manual production installation is unsupported.
-Docker provides direct single-origin LAN access and supports an optional HTTPS
+Both installers provide direct single-origin LAN access and support an optional HTTPS
 reverse proxy as described in [single-origin deployment](single-origin.md).
-Native/systemd still requires an operator-configured host reverse proxy.
 The installer works in an SSH/LXC terminal and does not open a browser.
 
 ## Docker Compose
 
-Prerequisites: Git, Python 3, Linux `iproute2`, Docker Engine enabled at boot,
-and Compose v2 supporting `up --wait`. Until formal release packaging exists,
-acquire the source and select the supported release tag or commit (substitute
-repository and version values):
+Prerequisites: Python 3, Linux `iproute2`, Docker Engine enabled at boot,
+and Compose v2 supporting `up --wait`. Download the versioned Docker Compose
+package and checksums from the [official releases](https://github.com/benchristian88/atlas/releases),
+[verify before extraction](h4-releases.md#assets-and-validation), then from its
+versioned root run:
 
 ```bash
-git clone <repository-url> atlas
-cd atlas
-git switch --detach <supported-release-tag-or-commit>
 python3 infra/install/compose.py
 ```
 
-For a supported release branch, use `git switch <supported-release-branch>`
-instead. Use the version supplied with the release, not a development feature
-branch. Future release packaging will replace source checkout where appropriate.
+Git is not required for a packaged installation. Do not install from an arbitrary
+development branch. See [H4 package installation/upgrades](h4-upgrades.md).
 The fresh installer requires no existing `.env`; it refuses existing files.
 
 The helper creates root-of-checkout `.env` with mode `0600`, independently
@@ -88,19 +84,37 @@ force flag. It is not a password-reset tool.
 
 ## Native/systemd
 
-The supported helper targets Debian/Ubuntu Linux with systemd and these installed
-prerequisites: Python >=3.12 with venv support, Node.js >=22 at `/usr/bin/node`, npm,
-PostgreSQL (`postgresql.service`, local peer administration / password host
-authentication), Redis (`redis-server.service`) and `runuser`/`useradd`.
-Dependency package installation and TLS/proxy configuration remain host
-preparation; use the helper for Atlas installation rather than a manual
-production procedure.
+The supported helper targets Debian/Ubuntu Linux booted with systemd. Prepare
+Python >=3.12 with working venv/ensurepip (`python3-venv` for that interpreter),
+Node.js >=22 at `/usr/bin/node`, npm, matching PostgreSQL 16/17 server/client tools
+(`psql`, `pg_dump`, `pg_restore`), and Redis. PostgreSQL (`postgresql.service`)
+and Redis (`redis-server.service`) must already be running; local postgres peer
+administration and Atlas password host authentication are required. `runuser`
+and `useradd` must be available. These remain explicit host prerequisites; Atlas
+does not add a third-party Node repository or install them automatically.
 
-From a fresh checkout on the prepared host:
+The installer **installs nginx itself when absent**, using `apt-get install
+--yes --no-install-recommends nginx` from the host's configured distribution
+packages. It adds no repository and executes no remote installer script.
+Prepare current apt package indexes/network access; preflight simulates package
+installation first. Existing nginx must have its distribution systemd service
+and pass `nginx -t`. TLS remains optional operator configuration.
+
+From the verified native/systemd release package root on the prepared host:
 
 ```bash
 sudo python3 infra/install/native.py
 ```
+
+`--help` exits successfully before host checks or installation work. Complete
+preflight reports useful missing requirements together, without subprocess
+tracebacks. It checks root/host, service/tool/version availability, a disposable
+venv creation with the invoking Python, protected filesystem locations, account/
+group, existing installation/state/units, PostgreSQL role/database conflicts,
+bind/port availability, nginx package installability and source/template inputs.
+The temporary venv is removed. All checks precede Atlas account, configuration,
+code, database or unit creation. nginx package failure also precedes those steps;
+apt itself may retain package-manager changes and needs operator diagnosis.
 
 The helper refuses existing `/opt/atlas` or `/etc/atlas/atlas.env`. It creates or
 uses an unprivileged `atlas` service account, installs code and dependencies at
@@ -115,7 +129,27 @@ The helper installs `atlas-api`, `atlas-web`, and `atlas-worker` units, reloads
 systemd and enables/starts them and the required local PostgreSQL/Redis services.
 Units use `WantedBy=multi-user.target`, `Restart=on-failure`, a 15-second retry
 delay, start-rate limits and an unprivileged account. API readiness retries
-accommodate delayed PostgreSQL. Web/API bind loopback; proxy them through HTTPS.
+accommodate delayed PostgreSQL. FastAPI stays on `127.0.0.1:8000`, and native-only
+Next.js uses `127.0.0.1:3001`. Bundled nginx owns the external endpoint at the
+same detected default-route IPv4 address and default port 3000 as Docker, with
+safe `127.0.0.1` fallback. Explicit `ATLAS_BIND_ADDRESS`/`ATLAS_PORT` overrides
+are supported; native refuses wildcard/unusable addresses and private ports
+3001/8000. `/api` and `/api/*` keep their prefix; everything else goes to web.
+Only `/etc/nginx/conf.d/atlas.conf` and the nginx systemd ordering drop-in
+`/etc/systemd/system/nginx.service.d/atlas.conf` are managed. Other sites and
+operator configuration remain in place. Root-owned managed paths reject links
+and non-Atlas files. `nginx -t` runs before activation; failed candidates restore
+previous managed configuration. nginx is enabled at boot and ordered after API/web.
+
+Restore upload routes stream up to H3's 2 GiB cap; ordinary requests allow 20 MiB.
+The helper checks health through nginx, then prints successful installation,
+the actual usable HTTP URL and the same local one-time setup-code handoff as
+Docker. Loopback-only URLs are clearly labelled. No browser launch is attempted.
+Fresh native configuration uses `AUTH_COOKIE_SECURE=auto`: direct HTTP works;
+HTTPS through an allowlisted external proxy keeps Secure cookies. Native Uvicorn
+trusts only loopback; nginx ignores external forwarding unless the peer appears
+in the empty-by-default `ATLAS_TRUSTED_PROXIES` list. See
+[reverse-proxy configuration](reverse-proxy-examples.md#nativesystemd).
 The worker remains the existing limited worker boundary, not new orchestration.
 Only the web cache is writable by its hardened service.
 
@@ -128,7 +162,7 @@ sudo -u atlas /opt/atlas/venv/bin/python \
 
 The wrapper reads the protected file without shell evaluation. The same
 initialized refusal applies. Inspect lifecycle failures with
-`systemctl status atlas-api atlas-web atlas-worker` and `journalctl -u atlas-api`.
+`systemctl status nginx atlas-api atlas-web atlas-worker` and `journalctl -u atlas-api`.
 An interrupted fresh native install needs operator diagnosis of retained paths;
 the helper will not overwrite or remove them automatically.
 
@@ -156,8 +190,8 @@ does not create a new administrator.
 | Category | Configuration |
 | --- | --- |
 | Required generated production secrets | `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY`, `ATLAS_DATA_ENCRYPTION_KEY` |
-| Deployment/browser policy | Docker `AUTH_COOKIE_SECURE=auto` (HTTP non-Secure, trusted HTTPS Secure); explicit `true`/`false` overrides; native default `true`; optional exact `CORS_ORIGINS` for deliberate split origins only |
-| Docker ingress | `ATLAS_BIND_ADDRESS` (IPv4), `ATLAS_PORT` (1–65535, default 3000), `ATLAS_TRUSTED_PROXIES` (empty by default; explicit external proxy IP/CIDR list) |
+| Deployment/browser policy | Both installers generate `AUTH_COOKIE_SECURE=auto` (HTTP non-Secure, trusted HTTPS Secure); explicit `true`/`false` overrides preserved on upgrade; optional exact `CORS_ORIGINS` for deliberate split origins only |
+| Bundled ingress | `ATLAS_BIND_ADDRESS` (IPv4), `ATLAS_PORT` (1–65535, default 3000; native reserves 3001/8000), `ATLAS_TRUSTED_PROXIES` (empty by default; explicit external proxy IP/CIDR list) |
 | Artifact/install identity | `ATLAS_INSTALL_METHOD`, `ATLAS_BUILD_ID`; canonical version/channel in `apps/api/app/release.json` |
 | Standard internal defaults | DB/user `atlas`; Compose DB host `postgres`, Redis `redis://redis:6379/0`, browser API `/api` |
 | Advanced bootstrap overrides | `DATABASE_URL`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `REDIS_URL`, `NEXT_PUBLIC_API_URL` as appropriate; custom URLs remain external |
@@ -192,10 +226,10 @@ expiry; newly issued login/password-change cookies read the database value.
 No graph, inventory, tenancy or domain semantics change. `/api/setup/*` and
 the globally authorized `/api/system-settings/build-info` are additive APIs.
 About exposes version/channel/build/install identity without deployment secrets.
-No Git is required at runtime; Compose embeds the build ID in its image and
-native configuration carries it from installation. H2 now supplies [local TOTP and recovery](h2-mfa.md),
-and H3 supplies [backup/restore](h3-backup-restore.md). Update checking and the
-final whole-product security review remain later passes.
+No Git is required at runtime; H4 artifacts carry their commit and installation
+method in canonical metadata, taking precedence over preserved environment build IDs. H2 now supplies [local TOTP and recovery](h2-mfa.md),
+and H3 supplies [backup/restore](h3-backup-restore.md). H4 provides [informational update awareness](h4-upgrades.md#update-awareness-and-offline-operation).
+The final whole-product security review remains a later pass.
 
 ## H1.1 update of an existing Docker installation
 
@@ -209,8 +243,8 @@ credentials to update an initialized installation. Add the actual LAN IPv4
 supported; `true` requires HTTPS for browser setup/login. Update an external
 proxy to use only the gateway upstream and remove its old separate API location.
 No H1.1 database migration is required. Existing users and initialized setup
-closure remain intact. Native/systemd receives no Docker gateway or ingress
-redesign. H1/H1.1 is accepted on real Debian Docker/LXC, including actual reboot and
+closure remain intact. H4 subsequently adds a dedicated native nginx ingress
+after Debian 13 testing found the old native install unreachable. H1/H1.1 is accepted on real Debian Docker/LXC, including actual reboot and
 one-upstream NPM; see [H1.1 evidence](../testing/h1-docker-ingress.md). Native
-real lifecycle acceptance remains H6. H2 configuration upgrades additionally
+remediated lifecycle requires a fresh real Debian/systemd retest. H2 configuration upgrades additionally
 require the independent data key; see [H2 deployment](h2-mfa.md).

@@ -3,7 +3,7 @@
 Atlas's standard browser routing contract, at one HTTP or HTTPS origin, is:
 
 ```text
-https://<ATLAS_HOST>/*      -> Next.js web service, port 3000
+https://<ATLAS_HOST>/*      -> private Next.js (Docker 3000, native 3001)
 https://<ATLAS_HOST>/api/* -> FastAPI API service, port 8000
 ```
 
@@ -11,8 +11,8 @@ In Docker Compose the included nginx gateway implements this routing and
 preserves the `/api` prefix. It is the only published service; its host endpoint
 is `http://<ATLAS_BIND_ADDRESS>:<ATLAS_PORT>` (default port 3000). Internal web
 and API ports are not browser endpoints. An external HTTPS proxy forwards all
-paths to that one gateway upstream. Native/systemd has no included gateway and
-still needs an operator-configured host proxy with both internal path routes. Atlas does not require or
+paths to that one gateway upstream. Native/systemd bundles host nginx with the
+same single endpoint and private loopback web/API upstreams. Atlas does not require or
 read a public-hostname setting. DNS, TLS termination, and proxy selection belong
 to the operator, and the same Atlas images can move between hostnames without a
 hostname-only rebuild.
@@ -87,11 +87,11 @@ work there alongside setup/login/dashboard. The internal Next.js server does
 not itself proxy `/api`: optional Compose development access publishes it on
 loopback port 3001 and API on 8000, requiring an absolute API base and exact
 `http://localhost:3001` CORS origin. Host-run developers retain 3000/8000 as
-before. Native web access still requires its host proxy for same-origin use.
+before. Native uses bundled nginx for same-origin use.
 
 ## Scheme and proxy trust
 
-Docker generates `AUTH_COOKIE_SECURE=auto`. Direct HTTP issues non-Secure
+Both fresh installers generate `AUTH_COOKIE_SECURE=auto`. Direct HTTP issues non-Secure
 setup/session cookies; HTTPS through a configured trusted external proxy issues
 Secure cookies. Explicit `true` forces Secure and explicit `false` omits it.
 HttpOnly, SameSite=Lax, paths, Origin checks and token validation are unchanged.
@@ -99,7 +99,8 @@ The cookie helper uses the ASGI request scheme and never inspects raw headers.
 
 `ATLAS_TRUSTED_PROXIES` is empty by default. Set the gateway allowlist to the
 actual external proxy source IP or a narrow CIDR (comma-separated, no spaces).
-Recreate the gateway after editing it. Only a matching socket peer may supply an
+Recreate the Docker gateway or run the [native ingress refresh helper](h4-upgrades.md#nativesystemd-upgrade)
+after editing it. Only a matching socket peer may supply an
 exact `http` or `https` in `X-Forwarded-Proto`; malformed/chained values and all
 untrusted forwarding indications use the gateway's own scheme. The gateway
 replaces Host-related forwarding and untrusted client IP chains. A trusted

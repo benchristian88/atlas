@@ -592,8 +592,8 @@ System navigation is Organisation (Users, Roles & permissions, Customers,
 Sites), Reference Data (Asset types, Relationship types, Service types,
 Criticality levels, Custom fields), direct Audit Log and System Settings.
 Existing deep links remain valid; `/admin` redirects. System Settings contains
-General, Backup & Restore (implemented by H3), planned Updates and About using truthful
-web package metadata. H1 added no deployment-secret exposure or update/backup engine; H3 now supplies
+General, Backup & Restore (implemented by H3), Updates (implemented by H4) and About using canonical
+application metadata. H1 added no deployment-secret exposure or update/backup engine; H3 now supplies
 [encrypted application recovery](../architecture/encrypted-backup-restore.md).
 See [C2.6 validation and acceptance](../testing/release-c2-usability-lifecycle-polish.md).
 
@@ -614,11 +614,29 @@ survived and the installed H2 application was confirmed working. Detailed
 [H2 acceptance](../testing/h2-local-two-factor-authentication.md) preserves the
 627 backend/PostgreSQL and 272 frontend passing tests and browser evidence.
 Real native/systemd lifecycle and existing npm audit findings remain later gates.
-**H3 — Encrypted Backup & Restore is implemented and locally validated.**
+**H3 — Encrypted Backup & Restore is ACCEPTED.**
 Encrypted UI downloads, initialized/fresh restore, target-key MFA rewrap,
-maintenance/rollback and local recovery are reachable. Actual H3 Docker/LXC
-backup/restore acceptance is pending; native/systemd lifecycle remains H6.
+maintenance/rollback and local recovery are reachable. The user confirms all
+documented H3 real-world acceptance tests succeeded, including real Docker
+acceptance. Individual observations are not inferred; native/systemd lifecycle
+remains H6 and existing npm audit findings remain unresolved.
 See [H3 evidence and limitations](../testing/h3-encrypted-backup-restore.md).
+
+**H4 — Release Distribution & Update Awareness is implemented and locally validated.**
+Versioned Docker/native packages, manifest/checksums, dry runs and deliberate
+least-privilege release workflow are present. System Settings update awareness
+is informational, bounded and offline-safe, with operator upgrade guidance.
+No publication or hosted workflow execution is claimed; native lifecycle and
+existing dependency findings remain later gates. See
+[H4 validation](../testing/h4-release-distribution.md).
+
+Subsequent real Debian 13 native testing found prerequisite/preflight failures,
+partial installation without venv, no reachable ingress/URL, HTTP Secure-cookie
+setup failure and nginx's default 1 MiB rejecting H3 restore uploads. H4 now
+includes narrowly owned native nginx ingress, complete preflight, the shared
+auto-cookie/trusted-proxy policy and 2 GiB uploads. A fresh real Debian/systemd
+install/upgrade/reboot/restore retest is required; remediation is not accepted
+solely from local nginx and mocked lifecycle tests.
 
 This is a contained quality bar for a high-quality self-hosted release, not
 enterprise production certification:

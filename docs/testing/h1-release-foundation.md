@@ -2,7 +2,7 @@
 
 > **H1 — ACCEPTED**, including H1.1, on real Debian Docker/LXC (user-reported acceptance). Fresh clone and production installer, independent generated secrets, LAN URL, healthy gateway/application/database/cache, setup generation/reset, first administrator, login/dashboard, actual LXC reboot/recovery, direct LAN access and external Nginx Proxy Manager with **one upstream and no `/api` custom location** passed.
 >
-> Native/systemd has automated/static implementation validation only. Real Linux installation and reboot remain an **H6/release-acceptance item**. The original execution evidence below is retained; [H1.1 evidence](h1-docker-ingress.md) records the accepted ingress correction.
+> The original execution evidence below is retained. Subsequent real Debian 13 native testing exposed preflight/partial-install, ingress/URL, HTTP-cookie and restore-upload failures; [H4 remediation](h4-release-distribution.md#native-remediation-after-real-debian-13-testing) records the supplied findings and corrections. Fresh remediated Linux lifecycle acceptance remains required. [H1.1 evidence](h1-docker-ingress.md) records the accepted Docker ingress correction.
 
 Validation date: 2026-10-04. Branch: `feature/release-foundation`.
 Starting commit: `52365fb69a741381a58ee216f867a2bf546f9381`.
@@ -342,4 +342,3 @@ Command actually executed: `git status --short`.
 ```
 
 All changes belong to H1; no pre-existing user edits were present.
-

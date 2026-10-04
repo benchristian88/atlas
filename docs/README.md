@@ -50,7 +50,7 @@ update the audited ledger.
 | Release D — Backup and Recovery | Planned |
 | Release E — full Impact Analysis | Planned; existing structural projections are prerequisites, not partial Impact Analysis |
 | Release F — Documentation and intended state | Generated-document foundation partial; user-facing product and intended-state workflow not implemented |
-| Production and community packaging | Not established |
+| Production and community packaging | H4 package distribution/update awareness implemented; publication and later release gates separate |
 
 **Release C2.1 — Shared Operational Graph** is complete and merged to `dev`.
 **C2.2 — Lean Dependency Semantics** and **C2.3 — Explainable Dependency
@@ -165,3 +165,10 @@ H1/H1.1 and H2 are accepted. H3's [architecture and state inventory](architectur
 [validation/acceptance record](testing/h3-encrypted-backup-restore.md) cover portable
 Atlas state, target-local secrets, MFA rewrap, maintenance and rollback. This does
 not implement the broader Release D protection/recoverability model.
+
+## H4 release distribution
+
+H1/H1.1, H2 and H3 are ACCEPTED. See the [release architecture](architecture/release-distribution.md),
+[release operator guide](deployment/h4-releases.md), [installation/upgrade guide](deployment/h4-upgrades.md)
+and [actual H4 validation](testing/h4-release-distribution.md). Native lifecycle
+and the existing npm audit findings remain later gates.

@@ -38,8 +38,8 @@ service outside Docker.
 Atlas defaults to a single browser origin. The web UI uses the relative API
 base `/api`; the Docker nginx gateway forwards `/api/*` unchanged to
 FastAPI and all other paths to Next.js through one published port. An optional
-external HTTPS proxy needs only that gateway upstream. Native/systemd uses an
-operator-configured host proxy. No public hostname is compiled into
+external HTTPS proxy needs only that gateway upstream. Native/systemd bundles
+nginx with the same single endpoint and private web/API listeners. No public hostname is compiled into
 Atlas, and normal production browser traffic does not depend on CORS.
 The reference web image runs the Next.js standalone production server, not the
 development/HMR server.
@@ -160,7 +160,7 @@ cookies, and session tokens are excluded from API responses and audit details.
 For local HTTP development, `.env.example` sets `AUTH_COOKIE_SECURE=false`.
 Docker installations use `AUTH_COOKIE_SECURE=auto`: direct HTTP works and
 HTTPS through an explicitly trusted proxy issues Secure cookies. Native/systemd
-keeps its HTTPS/`true` default. See the installation guide for proxy trust and
+also generates `auto` for fresh installs; upgrades preserve explicit policies. See the installation guide for proxy trust and
 advanced `true`/`false` overrides. Leave
 `CORS_ORIGINS` blank for normal same-origin operation; for intentional
 split-origin development, restrict it to the exact web origins. Treat
@@ -557,7 +557,19 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 > destroys Atlas data and should be used only for an intentional disposable
 > reset after a verified backup.
 
-## Upgrade an existing installation
+## Release packages and upgrades
+
+Production operators use versioned Docker Compose or native/systemd packages
+from the [official GitHub releases](https://github.com/benchristian88/atlas/releases).
+[Verify checksums before extraction](docs/deployment/h4-releases.md), then invoke
+the existing installer inside the package. For an existing H1–H3 installation,
+create/download an H3 encrypted backup and follow the
+[configuration-preserving upgrade guide](docs/deployment/h4-upgrades.md).
+System Settings provides informational update awareness; upgrades remain local
+operator actions. [Release dry runs](docs/deployment/h4-releases.md#local-dry-run)
+build and validate packages without publication.
+
+## Legacy foundation upgrade
 
 Before upgrading, record the deployed revision and make a verified PostgreSQL
 backup. Remove retired environment administrator credentials and

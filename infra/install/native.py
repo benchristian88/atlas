@@ -1,45 +1,261 @@
-"""Supported Debian/Ubuntu systemd installer with preinstalled dependencies."""
+"""Install Atlas on a prepared Debian/Ubuntu systemd host, including nginx ingress."""
+import argparse
 import json
 import grp
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import subprocess
+import socket
+import tempfile
 import time
 import sys
 
-from configuration import ROOT, generate_configuration
+if __name__ == "__main__":
+    # Even help in an extracted package must not create local bytecode directories.
+    sys.dont_write_bytecode = True
+
+from configuration import ROOT, build_id, generate_configuration
+import native_ingress
 
 DESTINATION = Path("/opt/atlas")
 CONFIGURATION = Path("/etc/atlas/atlas.env")
+STATE = Path("/var/lib/atlas")
+UNITS = Path("/etc/systemd/system")
 
 
 def run(arguments, **kwargs):
     return subprocess.run(arguments, check=True, **kwargs)
 
 
-def main():
-    if sys.version_info < (3, 12):
-        raise SystemExit("Python 3.12 or newer is required.")
+def probe(arguments, **kwargs):
+    return subprocess.run(arguments, capture_output=True, text=True, timeout=30, **kwargs)
+
+
+def host_errors():
+    errors = []
     if os.geteuid() != 0:
-        raise SystemExit("Run this installer as root on a supported systemd host.")
+        errors.append("Run this installer as root.")
+    try:
+        release = dict(line.split("=", 1) for line in Path("/etc/os-release").read_text().splitlines() if "=" in line)
+        supported = release.get("ID", "").strip('"') in {"debian", "ubuntu"}
+    except OSError:
+        supported = False
+    if not supported or not Path("/run/systemd/system").is_dir():
+        errors.append("A Debian/Ubuntu host booted with systemd is required.")
+    return errors
+
+
+def account_errors(*, fresh):
+    try:
+        account = pwd.getpwnam("atlas")
+    except KeyError:
+        if not fresh:
+            return ["The existing unprivileged atlas service account is required."]
+        try:
+            grp.getgrnam("atlas")
+        except KeyError:
+            return []
+        return ["An atlas group exists without its service account; resolve this before installation."]
+    try:
+        group = grp.getgrnam("atlas")
+    except KeyError:
+        return ["The atlas service account requires its dedicated atlas primary group."]
+    if account.pw_uid == 0 or account.pw_gid != group.gr_gid:
+        return ["Atlas requires an unprivileged account with the dedicated atlas primary group."]
+    return []
+
+
+def preflight(*, fresh=True, values=None):
+    """Read-only checks plus a disposable venv probe; no durable Atlas mutation."""
+    errors = host_errors() + account_errors(fresh=fresh)
+    if sys.version_info < (3, 12):
+        errors.append("Python 3.12 or newer is required.")
+    required = ("systemctl", "runuser", "useradd", "npm", "pg_dump", "pg_restore", "psql")
+    available = {name: shutil.which(name) is not None for name in required}
+    errors.extend(f"Required prerequisite is missing: {name}" for name, exists in available.items() if not exists)
+    if not Path("/usr/bin/env").is_file():
+        errors.append("The supported native API unit requires coreutils env at /usr/bin/env.")
+    try:
+        with tempfile.TemporaryDirectory(prefix="atlas-venv-preflight-") as directory:
+            if probe([sys.executable, "-m", "venv", str(Path(directory) / "venv")]).returncode:
+                errors.append("Python venv/ensurepip is unavailable; install python3-venv for this interpreter.")
+    except (OSError, subprocess.SubprocessError):
+        errors.append("Cannot create a disposable Python venv; check python3-venv and temporary storage.")
+    try:
+        version = probe(["/usr/bin/node", "--version"])
+        if version.returncode or int(version.stdout.strip().lstrip("v").split(".")[0]) < 22:
+            errors.append("Node.js 22 or newer is required at /usr/bin/node.")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        errors.append("Node.js 22 or newer is required at /usr/bin/node.")
+    if available["npm"]:
+        try:
+            if probe(["npm", "--version"]).returncode:
+                errors.append("npm is unavailable; install npm compatible with Node.js 22+.")
+        except (OSError, subprocess.SubprocessError):
+            errors.append("npm could not run; check the host Node.js/npm installation.")
+    if available["systemctl"]:
+        for unit in ("postgresql.service", "redis-server.service"):
+            try:
+                if probe(["systemctl", "cat", unit]).returncode:
+                    errors.append(f"Required service is missing: {unit}; install the host distribution package.")
+                elif probe(["systemctl", "is-active", "--quiet", unit]).returncode:
+                    errors.append(f"Start {unit} before installation/preflight.")
+            except (OSError, subprocess.SubprocessError):
+                errors.append(f"Cannot inspect required service: {unit}; check systemd.")
+    try:
+        native_ingress.safe_path(STATE.parent)
+        if STATE.is_symlink():
+            errors.append("Atlas state directory must not be a symlink.")
+        elif fresh and STATE.exists():
+            errors.append(f"Existing Atlas path requires operator review: {STATE}; refusing to overwrite it.")
+        elif STATE.exists():
+            account = pwd.getpwnam("atlas")
+            if not STATE.is_dir() or STATE.stat().st_uid != account.pw_uid or STATE.stat().st_mode & 0o077:
+                errors.append("Existing Atlas state must be a private directory owned by the atlas service account.")
+        for path in (DESTINATION, CONFIGURATION, *(UNITS / f"atlas-{name}.service" for name in ("api", "web", "worker"))):
+            native_ingress.safe_path(path)
+            parent = next(parent for parent in path.parents if parent.exists())
+            if not os.access(parent, os.W_OK):
+                errors.append(f"Required installation location is not writable: {parent}")
+            if fresh and (path.exists() or path.is_symlink()):
+                errors.append(f"Existing Atlas path requires operator review: {path}; refusing to overwrite it.")
+        if not fresh and (not DESTINATION.is_dir() or not (DESTINATION / "venv/bin/python").is_file()):
+            errors.append("An existing /opt/atlas installation and venv are required.")
+        for name in ("apps/api/requirements.txt", "apps/web/package-lock.json", "infra/nginx/native.conf",
+                     "infra/systemd/atlas-api.service", "infra/systemd/atlas-web.service", "infra/systemd/atlas-worker.service"):
+            if not (ROOT / name).is_file():
+                errors.append(f"Required installation file is missing: {name}")
+        native_ingress.check_managed_paths()
+        build_id()  # Validate canonical release metadata before account/config creation.
+    except (OSError, ValueError, KeyError) as exc:
+        errors.append(str(exc))
+    ingress = None
+    try:
+        ingress = native_ingress.settings(values)
+        native_ingress.render(ingress)
+        listeners = [(ingress["ATLAS_BIND_ADDRESS"], int(ingress["ATLAS_PORT"]))]
+        if fresh or not native_ingress.SITE.exists():
+            listeners.append(("127.0.0.1", 3001))
+        if fresh:
+            listeners.append(("127.0.0.1", 8000))
+        for address, port in listeners:
+            # Existing Atlas listeners belong to the upgrade lifecycle. Validate
+            # the new endpoint on first adoption; subsequent upgrades reuse it.
+            if not fresh and native_ingress.SITE.exists():
+                continue
+            if not fresh and address == "127.0.0.1" and port == 3000:
+                continue  # The legacy native web unit owns this until stopped.
+            with socket.socket() as listener:
+                try:
+                    listener.bind((address, port))
+                except OSError:
+                    errors.append(f"Atlas listener is unavailable: {address}:{port}; check the assigned address and port conflicts.")
+    except (OSError, ValueError) as exc:
+        errors.append(str(exc))
+    # Local peer administration, fixed SQL and no inherited PG connection overrides.
+    if available["runuser"] and available["psql"] and os.geteuid() == 0:
+        try:
+            result = probe(["runuser", "-u", "postgres", "--", "psql", "-XAt", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+                "SELECT current_setting('server_version_num'), EXISTS(SELECT FROM pg_roles WHERE rolname='atlas'), "
+                "EXISTS(SELECT FROM pg_database WHERE datname='atlas')"],
+                env={**{key: value for key, value in os.environ.items() if not key.startswith("PG")}, "PGCONNECT_TIMEOUT": "5"})
+            if result.returncode:
+                errors.append("Cannot inspect local PostgreSQL using postgres peer administration; check service/authentication.")
+            else:
+                server, role, database = result.stdout.strip().split("|")
+                major = int(server) // 10000
+                if major not in {16, 17}:
+                    errors.append("The supported native PostgreSQL server is version 16 or 17.")
+                for executable in ("pg_dump", "pg_restore"):
+                    if available[executable]:
+                        version = re.search(r"\(PostgreSQL\) (\d+)", probe([executable, "--version"]).stdout)
+                        if not version or int(version[1]) != major:
+                            errors.append(f"{executable} must match the local PostgreSQL server major {major}.")
+                if fresh and (role == "t" or database == "t"):
+                    errors.append("Atlas PostgreSQL role/database already exists; refusing to replace credentials or data.")
+        except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+            errors.append("Cannot verify local PostgreSQL server/client compatibility and Atlas database/role availability.")
+    needs_nginx = shutil.which("nginx") is None
+    try:
+        if needs_nginx:
+            if not shutil.which("apt-get"):
+                errors.append("nginx is missing and apt-get is unavailable; Debian/Ubuntu package management is required.")
+            elif probe(["apt-get", "--simulate", "install", "--no-install-recommends", "nginx"]).returncode:
+                errors.append("nginx cannot be installed from configured distribution packages; check apt package indexes/dependencies.")
+        else:
+            if probe(["nginx", "-t"]).returncode:
+                errors.append("Existing nginx configuration fails nginx -t; repair it before Atlas installation/upgrade.")
+            if available["systemctl"] and probe(["systemctl", "cat", "nginx.service"]).returncode:
+                errors.append("nginx.service is missing; use the supported distribution nginx package.")
+    except (OSError, subprocess.SubprocessError):
+        errors.append("Cannot verify nginx configuration or distribution package installability.")
+    if errors:
+        raise ValueError("Atlas preflight failed; no Atlas installation changes made:\n" + "\n".join(f"  - {error}" for error in dict.fromkeys(errors)))
+    return ingress, needs_nginx
+
+
+def ensure_nginx(needs_install):
+    if needs_install:
+        print("Installing nginx from configured Debian/Ubuntu packages...")
+        try:
+            run(["apt-get", "install", "--yes", "--no-install-recommends", "nginx"],
+                env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"}, capture_output=True, text=True)
+        except (OSError, subprocess.SubprocessError):
+            raise ValueError("nginx package installation failed; no Atlas files/accounts/database were created. Check apt health and retry.") from None
+    try:
+        native_ingress.command(["nginx", "-t"])
+        native_ingress.command(["systemctl", "cat", "nginx.service"])
+    except (OSError, subprocess.SubprocessError):
+        raise ValueError("nginx is not ready; check distribution package/service/configuration. No Atlas installation changes made.") from None
+
+
+def build_application(account):
+    if not (DESTINATION / "venv").exists():
+        run([sys.executable, "-m", "venv", str(DESTINATION / "venv")])
+    python = str(DESTINATION / "venv/bin/python")
+    run([python, "-m", "pip", "install", "-r", "requirements.txt"], cwd=DESTINATION / "apps/api")
+    environment = {**os.environ, "PATH": "/usr/bin:" + os.environ.get("PATH", "/bin"), "NEXT_PUBLIC_API_URL": "/api"}
+    run(["npm", "ci"], cwd=DESTINATION / "apps/web", env=environment)
+    run(["npm", "run", "build"], cwd=DESTINATION / "apps/web", env=environment)
+    standalone = DESTINATION / "apps/web/.next/standalone"
+    shutil.copytree(DESTINATION / "apps/web/public", standalone / "public", dirs_exist_ok=True)
+    shutil.copytree(DESTINATION / "apps/web/.next/static", standalone / ".next/static", dirs_exist_ok=True)
+    cache = standalone / ".next/cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    for path in (cache, *cache.rglob("*")):
+        os.chown(path, account.pw_uid, account.pw_gid)
+
+
+def install_units():
+    for unit in ("atlas-api", "atlas-web", "atlas-worker"):
+        shutil.copyfile(DESTINATION / f"infra/systemd/{unit}.service", Path(f"/etc/systemd/system/{unit}.service"))
+    run(["systemctl", "daemon-reload"])
+
+
+def wait_for_health(ingress):
+    import urllib.request
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    url = f"http://{ingress['ATLAS_BIND_ADDRESS']}:{ingress['ATLAS_PORT']}"
+    for address in (url + "/api/health", url + "/login"):
+        for attempt in range(60):
+            try:
+                opener.open(address, timeout=2).close()
+                break
+            except OSError:
+                if attempt == 59:
+                    raise ValueError("Atlas did not become ready; inspect systemctl status nginx atlas-api atlas-web.") from None
+                time.sleep(2)
+
+
+def install(ingress, needs_nginx):
+    ensure_nginx(needs_nginx)
     # Application/venv files must be readable by the unprivileged services,
     # even when the invoking root shell has a restrictive umask. Secret file
     # permissions are explicitly enforced by the configuration generator.
     os.umask(0o022)
-    if CONFIGURATION.exists() or DESTINATION.exists():
-        raise SystemExit("Atlas configuration or installation already exists; refusing to overwrite it.")
-    for executable in ("systemctl", "runuser", "python3", "node", "npm", "pg_dump", "pg_restore"):
-        if shutil.which(executable) is None:
-            raise SystemExit(f"Required prerequisite is missing: {executable}")
-    if not Path("/usr/bin/node").is_file():
-        raise SystemExit("The supported native unit requires Node.js at /usr/bin/node.")
-    major = int(subprocess.check_output(["node", "--version"], text=True).strip().lstrip("v").split(".")[0])
-    if major < 22:
-        raise SystemExit("Node.js 22 or newer is required.")
-    for unit in ("postgresql.service", "redis-server.service"):
-        run(["systemctl", "cat", unit], stdout=subprocess.DEVNULL)
     try:
         account = pwd.getpwnam("atlas")
     except KeyError:
@@ -56,25 +272,15 @@ def main():
     CONFIGURATION.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     os.chown(CONFIGURATION.parent, 0, account.pw_gid)
     os.chmod(CONFIGURATION.parent, 0o750)
-    generate_configuration(CONFIGURATION, "systemd")
+    generate_configuration(CONFIGURATION, "systemd", ingress=ingress)
     os.chown(CONFIGURATION, 0, account.pw_gid)
     os.chmod(CONFIGURATION, 0o640)
     DESTINATION.mkdir(mode=0o755)
     for name in ("apps", "infra"):
         shutil.copytree(ROOT / name, DESTINATION / name,
                         ignore=shutil.ignore_patterns("node_modules", ".next", ".venv", "__pycache__", ".env", ".env.*"))
-    run(["python3", "-m", "venv", str(DESTINATION / "venv")])
+    build_application(account)
     python = str(DESTINATION / "venv/bin/python")
-    run([python, "-m", "pip", "install", "-r", "requirements.txt"], cwd=DESTINATION / "apps/api")
-    run(["npm", "ci"], cwd=DESTINATION / "apps/web")
-    run(["npm", "run", "build"], cwd=DESTINATION / "apps/web", env={**os.environ, "NEXT_PUBLIC_API_URL": "/api"})
-    standalone = DESTINATION / "apps/web/.next/standalone"
-    shutil.copytree(DESTINATION / "apps/web/public", standalone / "public", dirs_exist_ok=True)
-    shutil.copytree(DESTINATION / "apps/web/.next/static", standalone / ".next/static", dirs_exist_ok=True)
-    cache = standalone / ".next/cache"
-    cache.mkdir(parents=True, exist_ok=True)
-    for path in (cache, *cache.rglob("*")):
-        os.chown(path, account.pw_uid, account.pw_gid)
     run(["systemctl", "enable", "--now", "postgresql.service", "redis-server.service"])
     values = dict(line.split("=", 1) for line in CONFIGURATION.read_text().splitlines() if line and not line.startswith("#"))
     # Peer-authenticated local provisioning. Password is passed on stdin,
@@ -97,23 +303,30 @@ with psycopg.connect("dbname=postgres", autocommit=True) as db:
 '''
     run(["runuser", "-u", "postgres", "--", python, "-c", provision],
         input=json.dumps({"password": values["POSTGRES_PASSWORD"]}), text=True, cwd="/tmp")
-    for unit in ("atlas-api", "atlas-web", "atlas-worker"):
-        shutil.copyfile(DESTINATION / f"infra/systemd/{unit}.service", Path(f"/etc/systemd/system/{unit}.service"))
-    run(["systemctl", "daemon-reload"])
+    install_units()
     run(["systemctl", "enable", "--now", "atlas-api", "atlas-web", "atlas-worker"])
-    import urllib.request
-    for address in ("http://127.0.0.1:8000/api/health", "http://127.0.0.1:3000/login"):
-        for attempt in range(60):
-            try:
-                urllib.request.urlopen(address, timeout=2).close()
-                break
-            except OSError:
-                if attempt == 59:
-                    raise SystemExit("Atlas did not become ready; inspect systemctl status atlas-api atlas-web.") from None
-                time.sleep(2)
+    native_ingress.install(ingress)
+    wait_for_health(ingress)
     run(["systemctl", "is-active", "--quiet", "atlas-api", "atlas-web", "atlas-worker"])
-    run(["runuser", "-u", "atlas", "--", python, "-m", "scripts.setup_code", "reset"],
-        cwd=DESTINATION / "apps/api", env={**os.environ, **values, "ATLAS_STATE_DIR": "/var/lib/atlas"})
+    handoff = run(["runuser", "-u", "atlas", "--", python, "-m", "scripts.setup_code", "reset", "--access-url",
+         f"http://{ingress['ATLAS_BIND_ADDRESS']}:{ingress['ATLAS_PORT']}/"],
+        cwd=DESTINATION / "apps/api", env={**os.environ, **values, "ATLAS_STATE_DIR": "/var/lib/atlas"}, capture_output=True, text=True)
+    # Emit the intended local handoff only after reset commits successfully.
+    print("Atlas installed successfully.\n", flush=True)
+    print(handoff.stdout, end="")
+
+
+def main():
+    # Parse before even read-only host checks, including --help on non-Linux hosts.
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    try:
+        ingress, needs_nginx = preflight()
+        install(ingress, needs_nginx)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
+    except (OSError, subprocess.SubprocessError):
+        raise SystemExit("Atlas installation could not complete. Inspect host/service health. Retain generated configuration, "
+                         "keys, database and state for operator diagnosis; the installer will not overwrite a partial installation.") from None
 
 
 if __name__ == "__main__":

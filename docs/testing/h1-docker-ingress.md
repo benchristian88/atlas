@@ -6,7 +6,10 @@ healthy gateway/API/web/database/cache, setup-code generation/reset, first
 administrator, login/dashboard and actual LXC reboot/recovery. Direct LAN HTTP
 and external Nginx Proxy Manager HTTPS worked using **one upstream only**, with
 no `/api` custom location. This includes the H1.1 cookie Secure policy.
-Native/systemd has automated/static validation only; real Linux installation and
+This is historical Docker ingress evidence. Subsequent real native findings and
+the required fresh remediated Debian retest are recorded in the
+[H4 report](h4-release-distribution.md#native-remediation-after-real-debian-13-testing).
+At H1.1 validation time native/systemd had automated/static validation only; real Linux installation and
 reboot remain H6/release acceptance. The implementation and original local
 validation below are retained as historical evidence.
 

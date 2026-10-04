@@ -1,5 +1,6 @@
 """Standard-library production configuration generator, shared by installers."""
 import argparse
+import importlib.util
 import ipaddress
 import json
 import os
@@ -76,6 +77,12 @@ def compose_ingress_settings() -> dict[str, str]:
 
 
 def build_id() -> str:
+    spec = importlib.util.spec_from_file_location("atlas_release_policy", ROOT / "apps/api/app/release.py")
+    policy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(policy)
+    metadata = policy.load_metadata(ROOT / "apps/api/app/release.json")
+    if metadata.get("build_id"):
+        return metadata["build_id"]
     try:
         result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
         return result.stdout.strip()
@@ -83,18 +90,18 @@ def build_id() -> str:
         return "unknown"
 
 
-def generate_configuration(path: Path, method: str) -> dict[str, str]:
+def generate_configuration(path: Path, method: str, *, ingress=None) -> dict[str, str]:
     if method not in {"docker_compose", "systemd"}:
         raise ValueError("Unsupported production installation method")
     if path.exists() or path.is_symlink():
         raise FileExistsError(path)
-    ingress = compose_ingress_settings() if method == "docker_compose" else {}
+    ingress = compose_ingress_settings() if ingress is None else ingress
     content = (
         "# Atlas production bootstrap configuration. Keep this file protected.\n"
         f"POSTGRES_PASSWORD={secrets.token_hex(32)}\n"
         f"AUTH_SECRET_KEY={secrets.token_hex(48)}\n"
         f"ATLAS_DATA_ENCRYPTION_KEY={secrets.token_hex(32)}\n"
-        f"AUTH_COOKIE_SECURE={'auto' if method == 'docker_compose' else 'true'}\n"
+        "AUTH_COOKIE_SECURE=auto\n"
         "CORS_ORIGINS=\n"
         f"ATLAS_INSTALL_METHOD={method}\n"
         f"ATLAS_BUILD_ID={build_id()}\n"

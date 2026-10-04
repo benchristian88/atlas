@@ -24,12 +24,13 @@ Builds carry `ATLAS_BUILD_ID` when available and need no runtime Git. The
 protected `/api/system-settings/build-info` endpoint and About display version,
 channel, build ID and installation method (`docker_compose`, `systemd`, or
 `development`). Frontend package versions are tooling metadata, not a separate
-application identity. Update checking is deferred.
+application identity. H4 adds [release packages and update awareness](release-distribution.md).
+Packaged commit/method identity wins over preserved environment build IDs.
 
 ## Fresh Compose installation
 
-Acquire the source and select a supported release as shown in the installation
-guide, then from a fresh checkout:
+Download and verify the Docker release package as shown in the installation
+guide, then from its versioned root:
 
 ```bash
 python3 infra/install/compose.py
@@ -54,10 +55,20 @@ split ports and narrows API proxy trust to loopback. Application cookie auto
 mode reads the ASGI request scheme, never raw forwarded headers. External TLS
 proxies use one gateway upstream; single-origin operation leaves CORS blank.
 
-Native/systemd retains its loopback web/API ports, host-proxy requirement,
-Uvicorn's loopback trust default and `AUTH_COOKIE_SECURE=true`. The Docker
-gateway and LAN detection do not apply to it. H1.1 changes deployment ingress
-only; PostgreSQL authority, domain semantics, RBAC and discovery stay intact.
+Native/systemd bundles distribution nginx, with the same LAN IPv4/port detection
+and loopback fallback. nginx owns the external default port 3000; native web
+uses `127.0.0.1:3001` and API `127.0.0.1:8000`. Its dedicated Atlas site preserves
+`/api`, accepts 2 GiB streamed restore uploads and sanitizes forwarding using
+the same explicit external-proxy allowlist as Docker. Uvicorn trusts only
+loopback and fresh cookie policy is `auto`. Complete read-only prerequisite
+checks (including a disposable venv and database-conflict inspection) precede
+Atlas mutation. Only nginx is automatically installed, using host apt packages.
+Managed nginx updates validate before activation and restore previous files on
+failure; unrelated host sites remain untouched. A systemd drop-in enables nginx
+startup after Atlas API/web. Existing secrets/configuration/state survive upgrades;
+legacy explicit cookie settings need deliberate operator review. PostgreSQL
+authority, domain semantics, RBAC and discovery stay intact. Fresh real Debian
+native lifecycle retesting is required after this H4 remediation.
 
 To stop containers while retaining data:
 
@@ -69,7 +80,15 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 > and Redis volumes. It destroys Atlas data and is appropriate only for an
 > intentional disposable reset after a verified backup.
 
-## Upgrade checklist
+## Package upgrades
+
+Use the [H4 configuration-preserving upgrade helper and checklist](../deployment/h4-upgrades.md)
+for H1–H3 installations. Create/download an H3 encrypted backup first. Existing
+`.env`, `/etc/atlas/atlas.env`, database and protected state are retained.
+The following historical migration checklist remains relevant to pre-H1 source
+deployments; it does not replace the package upgrade procedure.
+
+## Legacy foundation upgrade checklist
 
 1. Record the currently deployed commit/image and inspect the release diff and
    migration notes.

@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "common": [
+    "apps/api/app/",
+    "apps/api/scripts/",
+    "apps/api/migrations/",
+    "apps/api/requirements.txt",
+    "apps/api/alembic.ini",
+    "apps/web/app/",
+    "apps/web/components/",
+    "apps/web/lib/",
+    "apps/web/public/",
+    "apps/web/package.json",
+    "apps/web/package-lock.json",
+    "apps/web/next.config.mjs",
+    "apps/worker/worker/",
+    "docs/deployment/",
+    "infra/release/package-manifest.json",
+    "infra/install/configuration.py",
+    "infra/install/upgrade.py",
+    "docs/architecture/deployment-and-upgrades.md",
+    "docs/architecture/release-distribution.md",
+    "docs/architecture/encrypted-backup-restore.md",
+    "docs/architecture/local-two-factor-authentication.md",
+    "docs/architecture/authentication-and-access-control.md"
+  ],
+  "docker_compose": [
+    "infra/docker/docker-compose.yml",
+    "infra/docker/gateway/",
+    "apps/api/Dockerfile",
+    "apps/web/Dockerfile",
+    "apps/worker/Dockerfile",
+    ".dockerignore",
+    "infra/install/compose.py"
+  ],
+  "systemd": [
+    "infra/systemd/",
+    "infra/nginx/",
+    "infra/install/native_ingress.py",
+    "infra/install/native.py",
+    "infra/install/manage.py"
+  ],
+  "required_common": [
+    "apps/api/app/release.json",
+    "apps/api/app/main.py",
+    "apps/api/scripts/start.py",
+    "apps/api/scripts/seed_system.py",
+    "apps/api/scripts/backup.py",
+    "apps/api/requirements.txt",
+    "apps/api/alembic.ini",
+    "apps/api/migrations/env.py",
+    "apps/web/package.json",
+    "apps/web/package-lock.json",
+    "apps/web/next.config.mjs",
+    "apps/web/app/layout.js",
+    "apps/worker/worker/main.py",
+    "infra/install/configuration.py",
+    "infra/install/upgrade.py",
+    "docs/deployment/h1-installation.md",
+    "docs/deployment/h3-backup-restore.md",
+    "docs/deployment/h4-releases.md",
+    "docs/deployment/h4-upgrades.md",
+    "infra/release/package-manifest.json"
+  ],
+  "required_docker_compose": [
+    "infra/install/compose.py",
+    "infra/docker/docker-compose.yml",
+    "infra/docker/gateway/default.conf",
+    "infra/docker/gateway/15-atlas-trusted-proxies.sh",
+    "apps/api/Dockerfile",
+    "apps/web/Dockerfile",
+    "apps/worker/Dockerfile"
+  ],
+  "required_systemd": [
+    "infra/install/native.py",
+    "infra/install/native_ingress.py",
+    "infra/nginx/native.conf",
+    "infra/install/manage.py",
+    "infra/systemd/atlas-api.service",
+    "infra/systemd/atlas-web.service",
+    "infra/systemd/atlas-worker.service"
+  ]
+}

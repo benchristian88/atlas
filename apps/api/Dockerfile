@@ -15,6 +15,9 @@ COPY scripts ./scripts
 COPY alembic.ini .
 COPY migrations ./migrations
 
+# Malformed canonical metadata fails the image build before distribution.
+RUN python -c "from app.release import load_metadata; load_metadata()"
+
 EXPOSE 8000
 
 ARG ATLAS_BUILD_ID=unknown
