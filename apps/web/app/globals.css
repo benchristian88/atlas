@@ -1241,7 +1241,7 @@ tbody tr:hover { background: var(--surface-muted); }
 
 /* C2.6: compact System contexts and explicit record lifecycle actions. */
 .admin-tabs a { flex-shrink: 0; }
-.system-settings-section { margin-bottom: 16px; }
+.system-settings-section { margin-block: 0 var(--space-4); }
 .system-settings-section > h2 { font-size: var(--type-h2); margin-top: 0; }
 .entity-delete-action { margin-top: 12px; }
 .entity-delete-action > p { font-size: var(--type-compact); margin-bottom: 0; }

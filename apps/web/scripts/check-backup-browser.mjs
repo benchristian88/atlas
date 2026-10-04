@@ -25,6 +25,40 @@ async function otp(seed) {
   return result.stdout.trim();
 }
 function captureErrors(page) { page.on("pageerror", () => errors.push(stage)); }
+async function checkSettingsCards(page) {
+  const cards = await page.evaluate(() => [
+    'section[aria-labelledby="settings-general"]', "#settings-backup", 'section[aria-labelledby="settings-about"]',
+  ].map(selector => {
+    const card = document.querySelector(selector);
+    const heading = card.querySelector("h2");
+    const style = getComputedStyle(card), headingStyle = getComputedStyle(heading);
+    const box = card.getBoundingClientRect();
+    return {
+      family: [style.backgroundColor, style.borderColor, style.borderStyle, style.borderWidth,
+        style.borderRadius, style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft],
+      heading: [headingStyle.fontSize, headingStyle.fontWeight, headingStyle.lineHeight],
+      left: box.left, width: box.width, top: box.top, bottom: box.bottom,
+      contentLeft: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+      contentRight: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+      headingLeft: heading.getBoundingClientRect().left,
+      nestedCards: card.querySelectorAll(".ops-card").length,
+    };
+  }));
+  for (const card of cards.slice(1)) {
+    assert.deepEqual(card.family, cards[0].family, "System Settings cards share border, background, radius and padding");
+    assert.deepEqual(card.heading, cards[0].heading, "System Settings heading hierarchy matches");
+    assert.ok(Math.abs(card.left - cards[0].left) < 1 && Math.abs(card.width - cards[0].width) < 1, "Card outer edges match");
+    assert.ok(Math.abs(card.headingLeft - cards[0].headingLeft) < 1, "Card headings align");
+  }
+  assert.equal(cards[1].nestedCards, 0, "Backup & Restore has one outer card");
+  assert.ok(Math.abs((cards[1].top - cards[0].bottom) - (cards[2].top - cards[1].bottom)) < 1, "Adjacent card spacing matches");
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "No horizontal page overflow");
+  for (const name of ["Create backup", "Restore backup"]) {
+    const button = await page.getByRole("button", { name, exact: true }).boundingBox();
+    assert.ok(button.width < cards[1].contentRight - cards[1].contentLeft - 1, "Actions keep their natural width");
+    assert.ok(button.x >= cards[1].contentLeft - 1 && button.x + button.width <= cards[1].contentRight + 1, "Actions stay within the card padding");
+  }
+}
 async function login(page, origin, seed) {
   await page.goto(`${origin}/login`);
   await page.getByLabel("Email", { exact: true }).fill(email);
@@ -77,14 +111,28 @@ try {
   await security.getByLabel("Authenticator code", { exact: true }).fill(await otp(secret));
   await security.getByRole("button", { name: "Confirm authenticator", exact: true }).click();
   await security.getByRole("button", { name: "I have saved my recovery codes", exact: true }).click();
-  stage = "create encrypted backup";
+  stage = "settings card consistency";
   await page.goto(`${source}/admin/system-settings`);
   await page.getByRole("heading", { name: "Backup & Restore", exact: true }).waitFor();
-  for (const width of [1440, 1024, 800, 390]) {
-    await page.setViewportSize({ width, height: 1000 });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: `${output}/backup-settings-${width}.png`, fullPage: true });
+  const appearance = await (await context.request.get(`${source}/api/auth/me`)).json();
+  for (const theme of ["light", "dark"]) for (const accent of [null, "#2563EB", "#7C3AED"]) {
+    assert.equal((await context.request.patch(`${source}/api/auth/profile`, { data: { display_name: appearance.display_name, theme_mode: theme, accent_colour: accent } })).status(), 200);
+    await page.goto(`${source}/admin/system-settings`);
+    await page.getByRole("heading", { name: "Backup & Restore", exact: true }).waitFor();
+    await page.getByRole("row").filter({ hasText: "Session lifetime" }).waitFor();
+    await page.waitForFunction(value => document.documentElement.dataset.theme === value, theme);
+    await page.evaluate(() => document.fonts.ready);
+    for (const width of [1440, 1024, 800, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await checkSettingsCards(page);
+      const suffix = theme === "light" && accent === null ? `${width}` : `${theme}-${accent?.slice(1) || "default"}-${width}`;
+      await page.screenshot({ path: `${output}/backup-settings-${suffix}.png`, fullPage: true });
+    }
   }
+  assert.equal((await context.request.patch(`${source}/api/auth/profile`, { data: { display_name: appearance.display_name, theme_mode: appearance.theme_mode, accent_colour: appearance.accent_colour } })).status(), 200);
+  await page.goto(`${source}/admin/system-settings`);
+  await page.getByRole("heading", { name: "Backup & Restore", exact: true }).waitFor();
+  stage = "create encrypted backup";
   await page.getByRole("button", { name: "Create backup", exact: true }).click();
   await page.getByLabel("Backup passphrase", { exact: true }).fill(passphrase);
   await page.getByLabel("Confirm backup passphrase", { exact: true }).fill(passphrase);
@@ -131,7 +179,8 @@ try {
   assert.deepEqual(errors, []);
   await writeFile(`${output}/report.json`, JSON.stringify({ result: "passed", backup: true,
     overwriteRestore: true, freshRestore: true, wrongPassphraseNoChange: true, restoredMfa: true,
-    widths: [1440, 1024, 800, 390], physicalAuthenticator: false, docker: false, systemd: false, errors }, null, 2));
+    widths: [1440, 1024, 800, 390], settingsCards: true, themes: ["light", "dark"],
+    accents: [null, "#2563EB", "#7C3AED"], physicalAuthenticator: false, docker: false, systemd: false, errors }, null, 2));
   console.log("PASS: encrypted download, wrong passphrase, overwrite restore, fresh setup restore and restored MFA.");
 } catch {
   throw new Error(`H3 browser acceptance failed at ${stage}; credentials omitted.`);

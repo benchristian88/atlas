@@ -134,7 +134,7 @@ export function BackupRestore() {
     finally { setBusy(false); }
   }
   const preparing = job && ["requested", "preparing"].includes(job.state);
-  return <Section title="Backup & Restore" id="settings-backup" className="system-settings-section">
+  return <Section title="Backup & Restore" id="settings-backup" className="ops-card system-settings-section">
     <div className={styles.panels}>
       <div><h3>Backup Atlas</h3><p>Create a passphrase-protected backup of Atlas application data and the cryptographic material needed to restore encrypted data.</p>
         <JobProgress job={job} error={error} />
