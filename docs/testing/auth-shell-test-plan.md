@@ -23,7 +23,8 @@ the only production Master Administrator.
 ## First-run setup and forced password change
 
 - [ ] Fresh startup creates no user. A local setup-code reset prints one code.
-- [ ] `/setup` verifies that code and shows active new-Atlas / disabled restore choices.
+- [ ] `/setup` verifies that code and offers new-Atlas setup or setup-authorized
+  encrypted restore, following the [backup/restore guide](../deployment/backup-restore.md).
 - [ ] Create the first global Master Administrator with a confirmed strong password.
 - [ ] Sign-in succeeds and `/setup` cannot initialize Atlas again.
 - [ ] Local setup-code reset refuses once initialized.

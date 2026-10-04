@@ -14,18 +14,36 @@ self-hosted focus. No date is promised for 1.0.0.
   and knowledge completeness.
 - Release packages, checksum verification, configuration-preserving upgrades
   and informational update checking.
+- Development CI and operator documentation for installation, recovery and updates.
+
+Core platform hardening is substantially complete and sufficient to proceed to
+integration/plugin and onboarding development. This includes secure installation,
+authentication/MFA, encrypted backup and restore, release packaging, upgrades,
+update awareness, CI and operator guidance. It is not final production security
+certification or 1.0.0 release qualification.
 
 See the [feature reference](feature-ledger.md) for implemented scope and limits.
 Dependency impact analysis uses recorded knowledge and hypothetical scenarios;
 it is not live monitoring or evidence of recovery readiness.
 
-## Before 1.0
+## Next development
 
 - First-party integrations/plugins with a usable configure, test, run and review
   workflow. The Proxmox adapter and plugin contracts are existing foundations.
 - Guided onboarding to help operators establish useful initial knowledge.
-- Final UX refinements, feature documentation and current screenshots.
-- Final security review and release qualification.
+
+## Before 1.0
+
+- Complete the integration/plugin and guided onboarding workflows above.
+- Final UX refinements, feature documentation, current screenshots and documentation freeze.
+- Final dependency/security review, including reassessment and remediation or
+  explicit disposition of known dependency findings.
+- Whole-product security/release qualification after integrations and onboarding,
+  including integration credentials, remote API access, execution and trust boundaries.
+- Final supported-platform and cross-deployment acceptance. Real packaged Docker
+  upgrade acceptance remains outstanding; fresh remediated native installation,
+  native restart/reboot and deployed MFA recovery commands also need explicit
+  lifecycle evidence.
 
 The documentation structure is intended to remain stable as these features land:
 extend their guides, update installation/onboarding where needed, refresh visuals,

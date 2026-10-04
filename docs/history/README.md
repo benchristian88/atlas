@@ -12,6 +12,11 @@ into earlier execution tables.
 - `deployment/`: superseded deployment migration guidance.
 - `validation/`: historical implementation, test and acceptance records.
 
+The [core hardening acceptance closure](validation/core-hardening-acceptance-closure.md)
+consolidates earlier validation and later operator confirmation, with residual
+pre-1.0 acceptance gaps. It supports proceeding to integrations/onboarding;
+it is not final whole-product security or release qualification.
+
 Current guidance is in the documentation index and `docs/product/status.md`.
 Architecture Decision Records remain in `docs/decisions/` because accepted
 architectural rationale is still relevant; they do not declare feature status.

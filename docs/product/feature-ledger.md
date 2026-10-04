@@ -31,7 +31,7 @@ recorded separately.
 | Docker Compose installation | Implemented | `infra/install/compose.py`, protected configuration, single gateway, private internal services and persistent volumes. |
 | Native/systemd installation | Implemented | `infra/install/native.py`, managed nginx ingress, unprivileged services and read-only preflight on prepared Debian/Ubuntu hosts. |
 | Packaged release distribution | Implemented | `infra/release/`, version/channel policy, package manifest, hashes and isolated publication workflow. Publication is deliberate; no registry or signing/attestation claim. |
-| Configuration-preserving upgrades | Implemented | `infra/install/upgrade.py` for both package methods, backup confirmation and health checks. No automatic rollback or self-update. |
+| Configuration-preserving upgrades | Implemented | `infra/install/upgrade.py` for both package methods, backup confirmation and health checks. Real packaged native upgrade is operator-confirmed; real packaged Docker upgrade acceptance remains outstanding despite automated/package/build validation. No automatic rollback or self-update. |
 | Informational update checks | Implemented | `services/updates.py`, global System Settings APIs and Updates card. Fixed public GitHub source, bounded cache/network reads and offline failure handling. |
 | Development CI | Implemented | `.github/workflows/ci.yml`: Backend / PostgreSQL, Frontend, Release & Deployment Integrity. Release publication stays separate. |
 | Public documentation and licence | Implemented | Root policies, operator guides, About project links and AGPL-3.0-only package metadata. |
@@ -44,7 +44,7 @@ recorded separately.
 | Generated operational documents | Partially implemented | `services/markdown_docs.py` generates Markdown and Document records store it. Dedicated document browsing/review is not yet an end-to-end feature. |
 | Guided onboarding | Planned but not implemented | Secure first-run administrator creation exists; guided initial knowledge setup is separate upcoming work. |
 | Final screenshots and documentation freeze | Planned but not implemented | Feature descriptions and screenshots will be refreshed after integration/onboarding work. No stale product screenshots are advertised. |
-| Final security/release qualification | Planned but not implemented | Existing tests and supplied acceptance support the beta; they do not replace final whole-product and dependency review. |
+| Final security/release qualification | Planned but not implemented | Core hardening closure supports continued beta development; final dependency review, cross-deployment acceptance and whole-product security/release qualification follow integrations and onboarding. Known dependency findings are not claimed resolved. |
 
 ## Deliberately deferred
 
