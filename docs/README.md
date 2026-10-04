@@ -157,3 +157,11 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
    release as a reason to reset the database or silently convert legacy records.
 6. Keep C2.2/C2.3/C2.4, B2-lite, F1-lite, Interface-first IP cleanup, and legacy
    Service Asset association distinct from the completed C2.1 scope.
+
+## Encrypted application backup and restore
+
+H1/H1.1 and H2 are accepted. H3's [architecture and state inventory](architecture/encrypted-backup-restore.md),
+[UI/Docker/native recovery guide](deployment/h3-backup-restore.md) and
+[validation/acceptance record](testing/h3-encrypted-backup-restore.md) cover portable
+Atlas state, target-local secrets, MFA rewrap, maintenance and rollback. This does
+not implement the broader Release D protection/recoverability model.

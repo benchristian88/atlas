@@ -7,6 +7,8 @@ import { AccessDenied } from "../../../components/access-denied";
 import { useAuth } from "../../../components/auth-context";
 import { DataTable } from "../../../components/data-table";
 import { PageHeader } from "../../../components/page-header";
+import { BackupRestore } from "../../../components/backup-restore";
+import { canManageBackups } from "../../../lib/backup.mjs";
 
 import { apiRequest } from "../../../lib/api";
 
@@ -19,7 +21,7 @@ function parsedValue(value) {
 }
 
 export default function SystemSettingsAdminPage() {
-  const { hasGlobalPermission } = useAuth();
+  const { hasGlobalPermission, user } = useAuth();
   const [settings, setSettings] = useState([]);
   const [buildInfo, setBuildInfo] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -80,6 +82,7 @@ export default function SystemSettingsAdminPage() {
         { key: "updated_at", label: "Updated", render: setting => new Date(setting.updated_at).toLocaleString() },
       ]} actions={setting => <button className="text-button" onClick={() => { setEditing(setting); setValue(inputValue(setting.value)); }} type="button">Edit</button>} />
       </section>
+      {canManageBackups(user) && <BackupRestore />}
       <section className="ops-card system-settings-section" aria-labelledby="settings-about">
         <h2 id="settings-about">About</h2>
         <p><strong>Atlas Impact</strong></p>

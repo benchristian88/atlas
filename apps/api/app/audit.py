@@ -27,6 +27,9 @@ _SENSITIVE_FRAGMENTS = (
     "recovery_code",
     "manual_key",
     "encryption_key",
+    "passphrase",
+    "data_key",
+    "derived_key",
 )
 
 

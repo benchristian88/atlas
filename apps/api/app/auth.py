@@ -35,6 +35,7 @@ class SessionClaims:
     user_id: uuid.UUID
     session_version: int
     token_id: uuid.UUID
+    restore_epoch: str = ""
 
 
 def validate_password_strength(password: str) -> None:
@@ -81,7 +82,7 @@ def cookie_secure(request: Request) -> bool:
     raise RuntimeError("AUTH_COOKIE_SECURE must be auto, true, or false")
 
 
-def create_session_token(user: User | uuid.UUID, session_version: int = 0, *, duration: timedelta | None = None) -> str:
+def create_session_token(user: User | uuid.UUID, session_version: int = 0, *, duration: timedelta | None = None, restore_epoch: str = "") -> str:
     now = datetime.now(timezone.utc)
     user_id = user.id if isinstance(user, User) else user
     version = int(getattr(user, "session_version", session_version) or 0)
@@ -93,6 +94,7 @@ def create_session_token(user: User | uuid.UUID, session_version: int = 0, *, du
         "iss": TOKEN_ISSUER,
         "aud": TOKEN_AUDIENCE,
         "jti": str(uuid.uuid4()),
+        "restore_epoch": restore_epoch,
     }
     return jwt.encode(payload, _secret_key(), algorithm=ALGORITHM)
 
@@ -116,6 +118,7 @@ def decode_session_token(token: str) -> SessionClaims:
             user_id=uuid.UUID(payload["sub"]),
             session_version=version,
             token_id=uuid.UUID(payload["jti"]),
+            restore_epoch=payload.get("restore_epoch", ""),
         )
     except (InvalidTokenError, KeyError, TypeError, ValueError) as exc:
         raise unauthorized() from exc
@@ -170,6 +173,9 @@ def get_current_user(
     if token is None:
         raise unauthorized()
     claims = decode_session_token(token)
+    from app.services.backups import restore_epoch
+    if claims.restore_epoch != restore_epoch(db):
+        raise unauthorized()
     user = db.scalar(select(User).where(User.id == claims.user_id))
     if (
         user is None

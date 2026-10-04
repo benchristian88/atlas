@@ -36,9 +36,10 @@ def _set_session_cookie(
     response: Response, user_id, session_version: int, db: Session, request: Request
 ) -> None:
     duration = session_duration(db)
+    from app.services.backups import restore_epoch
     response.set_cookie(
         key=COOKIE_NAME,
-        value=create_session_token(user_id, session_version, duration=duration),
+        value=create_session_token(user_id, session_version, duration=duration, restore_epoch=restore_epoch(db)),
         max_age=int(duration.total_seconds()),
         httponly=True,
         secure=cookie_secure(request),

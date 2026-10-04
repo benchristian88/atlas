@@ -1,4 +1,5 @@
 import os
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -39,6 +40,7 @@ from app.routes import (
     users,
     setup,
     mfa,
+    backups,
 )
 
 
@@ -65,7 +67,21 @@ def request_origin_is_allowed(request: Request, origin: str) -> bool:
 async def lifespan(app: FastAPI):
     from app.config import data_encryption_key
     data_encryption_key(required=False)
-    yield
+    from app.services.backup_runtime import cleanup_stale
+    await asyncio.to_thread(cleanup_stale)
+    async def clean_staging():
+        while True:
+            await asyncio.sleep(30)
+            await asyncio.to_thread(cleanup_stale)
+    cleaner = asyncio.create_task(clean_staging())
+    try:
+        yield
+    finally:
+        cleaner.cancel()
+        try:
+            await cleaner
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -93,7 +109,7 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def safe_setup_validation(request: Request, exc: RequestValidationError):
-    if request.url.path.startswith(("/api/auth/", "/api/users")):
+    if request.url.path.startswith(("/api/auth/", "/api/users", "/api/system-settings/backups", "/api/system-settings/restore", "/api/setup/restore")):
         return JSONResponse(status_code=422, content={"detail": "Invalid authentication request. Check the supplied fields."},
                             headers={"Cache-Control": "no-store"})
     if request.url.path.startswith("/api/setup/"):
@@ -122,9 +138,19 @@ async def request_security(request: Request, call_next):
             content={"detail": "Request origin is not allowed"},
             headers={"X-Request-ID": request_id},
         )
-    response = await call_next(request)
+    from app.services.backup_runtime import normal_operation
+    from app.services.backup_archive import BackupError
+    try:
+        if request.url.path == "/api/health" or request.url.path.startswith("/api/restore-status/"):
+            response = await call_next(request)
+        else:
+            with normal_operation():
+                response = await call_next(request)
+    except BackupError:
+        return JSONResponse(status_code=503, content={"detail": "Atlas is in maintenance mode. A restore or local recovery is in progress."},
+                            headers={"Cache-Control": "no-store", "Retry-After": "5", "X-Request-ID": request_id})
     response.headers["X-Request-ID"] = request_id
-    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users")):
+    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users", "/api/system-settings", "/api/restore-status/")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -132,6 +158,9 @@ async def request_security(request: Request, call_next):
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(mfa.router)
+api_router.include_router(backups.router)
+api_router.include_router(backups.setup_router)
+api_router.include_router(backups.status_router)
 api_router.include_router(setup.router)
 api_router.include_router(context.router)
 api_router.include_router(users.router)
@@ -168,7 +197,8 @@ api_router.include_router(protected.router)
 @api_router.get("/health", tags=["health"])
 async def health() -> dict[str, str]:
     """Report whether the API process is available."""
-    return {"status": "ok"}
+    from app.services.backup_runtime import maintenance
+    return {"status": "maintenance" if maintenance() else "ok"}
 
 
 app.include_router(api_router, prefix="/api")

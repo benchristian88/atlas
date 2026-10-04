@@ -17,6 +17,8 @@ def main() -> None:
     _secret_key()
     data_encryption_key(required=False)
     build_metadata()
+    from app.services.backup_runtime import cleanup_stale, maintenance, normal_operation
+    cleanup_stale()
     for attempt in range(30):
         try:
             with engine.connect() as db:
@@ -26,9 +28,13 @@ def main() -> None:
             if attempt == 29:
                 raise SystemExit("Database unavailable after readiness retries") from None
             time.sleep(min(1 + attempt, 5))
-    if subprocess.run(["alembic", "upgrade", "head"]).returncode:
-        raise SystemExit("Atlas migration failed")
-    seed_system()
+    if maintenance() is None:
+        with normal_operation():
+            if subprocess.run(["alembic", "upgrade", "head"]).returncode:
+                raise SystemExit("Atlas migration failed")
+            seed_system()
+    else:
+        print("Atlas remains in maintenance mode; use the local backup recover command.")
     os.execvp("uvicorn", ["uvicorn", "app.main:app", "--host", os.getenv("ATLAS_API_HOST", "0.0.0.0"), "--port", "8000"])
 
 

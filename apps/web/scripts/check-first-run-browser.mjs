@@ -28,7 +28,7 @@ try {
   await page.getByLabel("Setup code", { exact: true }).fill(code);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Set up a new Atlas", exact: true }).waitFor();
-  assert.equal(await page.getByRole("button", { name: "Restore backup — coming later" }).isDisabled(), true);
+  assert.equal(await page.getByRole("button", { name: "Restore existing Atlas backup" }).isEnabled(), true);
   assert.equal(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]).includes("atlas_setup")), false);
   const setupCookie = (await context.cookies()).find(cookie => cookie.name === "atlas_setup");
   assert.equal(setupCookie.httpOnly, true);

@@ -30,7 +30,7 @@ def main():
     os.umask(0o022)
     if CONFIGURATION.exists() or DESTINATION.exists():
         raise SystemExit("Atlas configuration or installation already exists; refusing to overwrite it.")
-    for executable in ("systemctl", "runuser", "python3", "node", "npm"):
+    for executable in ("systemctl", "runuser", "python3", "node", "npm", "pg_dump", "pg_restore"):
         if shutil.which(executable) is None:
             raise SystemExit(f"Required prerequisite is missing: {executable}")
     if not Path("/usr/bin/node").is_file():
@@ -113,7 +113,7 @@ with psycopg.connect("dbname=postgres", autocommit=True) as db:
                 time.sleep(2)
     run(["systemctl", "is-active", "--quiet", "atlas-api", "atlas-web", "atlas-worker"])
     run(["runuser", "-u", "atlas", "--", python, "-m", "scripts.setup_code", "reset"],
-        cwd=DESTINATION / "apps/api", env={**os.environ, **values})
+        cwd=DESTINATION / "apps/api", env={**os.environ, **values, "ATLAS_STATE_DIR": "/var/lib/atlas"})
 
 
 if __name__ == "__main__":

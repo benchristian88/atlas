@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AtlasLogo } from "../../components/atlas-brand.mjs";
 import { Button } from "../../components/button";
+import { RestoreBackupForm } from "../../components/backup-restore";
 import { getSetupStatus, setupRequest } from "../../lib/setup";
 
 export default function SetupPage() {
@@ -69,8 +70,9 @@ export default function SetupPage() {
         {stage === "choices" && <div className="setup-choices">
           <p className="page-description">Choose how to initialize your Atlas installation.</p>
           <section><h2>Set up a new Atlas</h2><p>Create the first administrator and start curating your operational knowledge.</p><Button variant="primary" onClick={() => setStage("administrator")}>Set up a new Atlas</Button></section>
-          <section><h2>Restore an existing Atlas backup</h2><p>Backup restore is reserved for a later hardening pass. The restore engine is not available yet.</p><Button disabled>Restore backup — coming later</Button></section>
+          <section><h2>Restore an existing Atlas backup</h2><p>Restore your encrypted Atlas backup and sign in using an existing account.</p><Button variant="secondary" onClick={() => setStage("restore")}>Restore existing Atlas backup</Button></section>
         </div>}
+        {stage === "restore" && <RestoreBackupForm fresh onCancel={() => setStage("choices")} />}
         {stage === "administrator" && <>
           <p className="page-description">This account receives global Master Administrator access. Use it to manage users and instance settings.</p>
           <form className="login-form" onSubmit={submit}>

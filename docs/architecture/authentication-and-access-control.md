@@ -121,7 +121,8 @@ global Master Administrator assignment, the existing Home/Homelab starter
 context when context-free, initialization marker, verifier deletion, and safe
 audit event commit atomically. No normal user session is issued: the browser
 opens sign in. Initialized installations reject setup mutations independently
-of the UI. Restore Backup is a disabled reserved choice; H1 has no restore API.
+of the UI. H3 now adds setup-authorized encrypted backup restoration; it restores
+existing accounts without creating an administrator. See [H3 security and recovery](encrypted-backup-restore.md).
 
 `ATLAS_BOOTSTRAP_ADMIN_*` and `ATLAS_ADMIN_*` credential seeding is retired.
 The compatibility `scripts.seed_admin` command now only delegates to protected
@@ -316,3 +317,17 @@ Customer-specific managed types/custom-field definitions, cross-site
 relationships, plugin-defined permissions, and uploaded icon storage are
 deliberately deferred. Adding them must preserve the central permission/scope
 policy rather than introducing route-specific trust shortcuts.
+
+## Restore session boundary
+
+H3 retains the target signing key and regenerates internal `auth.restore_epoch`
+for every successful restore. Normal login cookies carry this generation in
+addition to the existing user session version. Old source/target cookies fail
+even when signing keys and version numbers collide. Setup verifier/generation,
+login challenges and pending enrollment are retired; active MFA is rewrapped to
+the target data key. The current TOTP time step is retired to prevent immediate
+code replay after a counter rewind. Backup needs global Master plus password;
+overwrite restore additionally requires an enabled account's current factor and
+explicit acknowledgement. Local management follows the existing protected host
+operator boundary. [H3 details](encrypted-backup-restore.md) document scoped
+progress cookies, maintenance and rollback.

@@ -592,8 +592,9 @@ System navigation is Organisation (Users, Roles & permissions, Customers,
 Sites), Reference Data (Asset types, Relationship types, Service types,
 Criticality levels, Custom fields), direct Audit Log and System Settings.
 Existing deep links remain valid; `/admin` redirects. System Settings contains
-General, planned Backup & Restore, planned Updates and About using truthful
-web package metadata. No deployment secrets or update/backup engine are added.
+General, Backup & Restore (implemented by H3), planned Updates and About using truthful
+web package metadata. H1 added no deployment-secret exposure or update/backup engine; H3 now supplies
+[encrypted application recovery](../architecture/encrypted-backup-restore.md).
 See [C2.6 validation and acceptance](../testing/release-c2-usability-lifecycle-polish.md).
 
 # Homelab Ready hardening
@@ -606,9 +607,18 @@ installation/reboot remains H6/release acceptance; automated/static validation
 is already implemented. See [H1 acceptance](../testing/h1-release-foundation.md).
 
 
-H2 local TOTP MFA is implemented; release acceptance remains pending the
-physical authenticator and real Docker checks recorded in [H2 acceptance](../testing/h2-local-two-factor-authentication.md).
-H3 backup must preserve the required data-encryption material.
+**H2 — Local TOTP MFA is ACCEPTED.** Subsequent user acceptance upgraded a
+throwaway and a snapshotted real homelab Debian Docker/LXC installation using the
+supported key-addition helper and Compose procedure. Existing secrets/data
+survived and the installed H2 application was confirmed working. Detailed
+[H2 acceptance](../testing/h2-local-two-factor-authentication.md) preserves the
+627 backend/PostgreSQL and 272 frontend passing tests and browser evidence.
+Real native/systemd lifecycle and existing npm audit findings remain later gates.
+**H3 — Encrypted Backup & Restore is implemented and locally validated.**
+Encrypted UI downloads, initialized/fresh restore, target-key MFA rewrap,
+maintenance/rollback and local recovery are reachable. Actual H3 Docker/LXC
+backup/restore acceptance is pending; native/systemd lifecycle remains H6.
+See [H3 evidence and limitations](../testing/h3-encrypted-backup-restore.md).
 
 This is a contained quality bar for a high-quality self-hosted release, not
 enterprise production certification:

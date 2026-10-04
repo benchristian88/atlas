@@ -207,7 +207,8 @@ def seed_system(db: Session) -> None:
 
 
 def main() -> None:
-    with SessionLocal.begin() as db:
+    from app.services.backup_runtime import normal_operation
+    with normal_operation(), SessionLocal.begin() as db:
         seed_system(db)
     print("Atlas system definitions ready.")
 

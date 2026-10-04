@@ -8,6 +8,8 @@ from fastapi import HTTPException
 from app.audit import add_audit_event
 from app.database import SessionLocal
 from app.services.installation import reset_setup_code
+from app.services.backup_runtime import normal_operation
+from app.services.backup_archive import BackupError
 
 
 def main() -> None:
@@ -16,10 +18,12 @@ def main() -> None:
     parser.add_argument("--access-url", help="Installer's actual non-secret browser URL")
     args = parser.parse_args()
     try:
-        with SessionLocal.begin() as db:
+        with normal_operation(), SessionLocal.begin() as db:
             code = reset_setup_code(db)
             add_audit_event(db, action="setup.code_reset", target_type="installation",
                             summary="Local operator replaced the setup verifier")
+    except BackupError as exc:
+        raise SystemExit(str(exc)) from None
     except HTTPException as exc:
         if exc.status_code == 409:
             raise SystemExit("Atlas has already been initialised.\nThe setup code cannot be reset on an initialised instance.") from None

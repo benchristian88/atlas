@@ -5,6 +5,12 @@ homelabs, internal IT teams, and MSPs. It combines a customer/site-scoped asset
 and Service inventory with managed dependencies, reference data, enrichment
 fields, knowledge completeness, and an auditable administration foundation.
 
+Global Master Administrators can create passphrase-encrypted state backups from
+**Organisation → System Settings → Backup & Restore**, restore over an existing
+installation, or restore through authorized first-run setup. See the
+[backup/restore and local recovery guide](docs/deployment/h3-backup-restore.md).
+The target keeps its deployment secrets; encrypted MFA is rewrapped to its data key.
+
 ## Repository layout
 
 ```text

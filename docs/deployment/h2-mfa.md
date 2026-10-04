@@ -4,7 +4,8 @@ H2 requires migration `20261004_0026` and a matched API/frontend version. Existi
 accounts remain unenrolled, with their passwords and access assignments intact.
 H1/H1.1 is **ACCEPTED** on real Debian Docker/LXC; native/systemd real lifecycle
 acceptance remains an H6 item. [H2 acceptance](../testing/h2-local-two-factor-authentication.md)
-records the current evidence and remaining manual gates.
+records H2 ACCEPTED on automated/browser evidence and the supplied real Docker
+upgrades and user confirmation, without inferring more granular manual actions.
 
 ## Install or upgrade configuration
 
@@ -45,9 +46,9 @@ MFA enrollment makes the existing seeds unreadable; do not rotate it casually.
 
 **Atlas MFA encrypted data depends on ATLAS_DATA_ENCRYPTION_KEY.** Preserve this
 key with protected database-backup configuration. PostgreSQL alone is insufficient
-to restore MFA to a new installation. H3 must later include the required key
-material inside its passphrase-encrypted backup package. H2 has no backup/restore
-engine and does not place a copy of the key in PostgreSQL.
+to restore MFA to a new installation. H3 now includes the source key material inside its passphrase-encrypted backup
+payload, then rewraps MFA to the target key. See [H3 backup/restore](h3-backup-restore.md).
+H2 alone supplied no backup engine and never put a copy of the key in PostgreSQL.
 
 ## Account use
 

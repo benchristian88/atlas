@@ -12,6 +12,7 @@ User=atlas
 Group=atlas
 WorkingDirectory=/opt/atlas/apps/worker
 EnvironmentFile=/etc/atlas/atlas.env
+Environment=ATLAS_STATE_DIR=/var/lib/atlas
 ExecStart=/opt/atlas/venv/bin/python -m worker.main
 Restart=on-failure
 RestartSec=15
