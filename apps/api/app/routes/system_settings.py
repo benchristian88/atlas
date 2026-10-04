@@ -11,8 +11,21 @@ from app.models import SystemSetting
 from app.schemas import SystemSettingResponse, SystemSettingUpdate
 from app.services.system_settings import SESSION_LIFETIME_KEY, validate_session_minutes
 from app.release import build_metadata
+from app.services.updates import UpdateStatus, checker
 
 router = APIRouter(prefix="/system-settings", tags=["system settings"])
+
+
+@router.get("/updates", response_model=UpdateStatus)
+async def update_status(principal: Principal = Depends(require_permission("system_settings.manage"))):
+    require_global(principal, "system_settings.manage")
+    return await checker.status()
+
+
+@router.post("/updates/check", response_model=UpdateStatus)
+async def check_updates(principal: Principal = Depends(require_permission("system_settings.manage"))):
+    require_global(principal, "system_settings.manage")
+    return await checker.status(refresh=True)
 
 
 @router.get("/build-info")

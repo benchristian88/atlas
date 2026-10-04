@@ -30,8 +30,10 @@
 
 ## Hardening acceptance update — 4 October 2026
 
-**H1/H1.1 — ACCEPTED. H2 — ACCEPTED. H3 — implemented and locally validated;
-real Docker acceptance pending.**
+**H1/H1.1 — ACCEPTED. H2 — ACCEPTED. H3 — ACCEPTED. H4 — implemented and locally validated; publication/native lifecycle gates separate.**
+The user confirms all documented H3 real-world tests succeeded, including real
+Docker acceptance; individual Docker observations are not inferred. See
+[H3 evidence](../testing/h3-encrypted-backup-restore.md).
 H2 real user acceptance covered the supported key-addition helper, successful
 Compose config/build/upgrade on a disposable Debian Docker/LXC installation,
 and the same upgrade on a snapshotted installation with actual homelab data.
@@ -1254,7 +1256,7 @@ analysis behavior and card styling remain unchanged. See
 | Session lifetime System Setting | **Implemented** | Integer 1–10080, default 480, global settings authorization, login/password-change issuance reads database. Environment value retired. |
 | Production installation foundation | **Implemented** | Compose/native helpers generate independent secrets without overwrite; six Compose restart policies (including nginx gateway) and enabled unprivileged systemd units. H1/H1.1 accepted on real Debian Docker/LXC: fresh clone/install, setup/reset, first admin, login/dashboard, actual reboot, direct LAN and one-upstream NPM. Real native/systemd lifecycle remains H6 acceptance. |
 | Docker single-ingress and cookie auto mode | **Implemented** | H1.1 nginx gateway only publishes detected/configured IPv4:port; internal `/api` routing, explicit external proxy trust, scheme-based cookies and focused regression tests. Real Debian LAN/NPM/actual LXC reboot acceptance passed (user-reported); no NPM `/api` custom location. Native/systemd real lifecycle remains H6 acceptance. |
-| Atlas backup restore | **Implemented** | H3 encrypted download, global-Master overwrite and setup-authorized fresh restore, native dump/restore, key rewrap, maintenance and rollback. Real Docker/native H3 acceptance remains separate. |
+| Atlas backup restore | **Implemented** | H3 encrypted download, global-Master overwrite and setup-authorized fresh restore, native dump/restore, key rewrap, maintenance and rollback. H3 is accepted on user-confirmed successful documented real-world/Docker tests; native lifecycle remains H6. |
 
 
 ## H2 local two-factor authentication
@@ -1275,7 +1277,13 @@ H1/H1.1 and H2 are ACCEPTED. H2 real Docker upgrade evidence is user-supplied;
 real native/systemd lifecycle remains an H6 gate. Existing npm audit findings
 remain unresolved. See the exact H2 acceptance update above.
 
-## H3 encrypted application backup and restore
+## H3 encrypted application backup and restore — ACCEPTED
+
+The user confirms successful completion of all documented H3 real-world
+acceptance tests, including real Docker acceptance. No finer Docker observations
+are inferred. Historical implementation evidence is retained in the
+[H3 report](../testing/h3-encrypted-backup-restore.md). Native/systemd lifecycle
+remains H6; existing npm audit findings remain unresolved.
 
 | Capability | Status | Evidence and limits |
 | --- | --- | --- |
@@ -1283,7 +1291,7 @@ remain unresolved. See the exact H2 acceptance update above.
 | Existing/fresh restore | **Implemented** | Settings acknowledgement/password/MFA; `/setup` one-time authorization; authenticated preflight; maintenance drain; encrypted rollback; native replacement; forward migration/validation; restored login. |
 | Deployment and MFA portability | **Implemented** | Target environment/signing/data secrets retained; explicit MFA adapters rewrap to target; sessions/challenges/setup retired, current TOTP step retired and dedicated Redis cleared. |
 | Local recovery | **Implemented** | Shared-service interactive CLI create/restore/recover, encrypted crash rollback and trusted portable-backup fallback; Docker wiring and native management/StateDirectory support. |
-| Real deployment acceptance | **Unknown** | Automated PostgreSQL/Redis and passing local production-browser evidence are recorded separately. Actual H3 Docker/LXC drills and native/systemd lifecycle have not run here. |
+| Real deployment acceptance | **Implemented; ACCEPTED** | User confirms all documented H3 real-world tests succeeded, including real Docker acceptance. Individual Docker observations are not inferred; native/systemd lifecycle remains H6. |
 
 [Architecture](../architecture/encrypted-backup-restore.md),
 [operator guide](../deployment/h3-backup-restore.md) and
@@ -1293,3 +1301,22 @@ domain model remains planned. No graph, tenancy, knowledge or discovery semantic
 change. One API runtime, 2 GiB archives and known H1-or-newer schemas are supported;
 no continuous server-side backup repository, binaries or cross-host environment
 import is implied.
+
+## H4 release distribution and update awareness
+
+**Implemented; locally validated.** Publication and real native/systemd lifecycle
+remain separate gates. H1/H1.1, H2 and H3 are ACCEPTED.
+
+| Capability | Status | Concrete evidence |
+| --- | --- | --- |
+| Canonical version/channel and release identity | **Implemented** | Shared strict SemVer/channel/tag policy, build validation and package-carried commit/method identity; existing build-info/About contract preserved. |
+| Release distribution | **Implemented** | Reviewed package manifest, versioned Docker/native source packages, deterministic archive/manifest construction, SHA-256 checksums and content/identity validation. Same local/CI dry-run tool. No live publication performed. |
+| Deliberate GitHub release workflow | **Implemented component; hosted execution pending** | Exact-commit checkout, metadata/tag/dev ancestry gates, tests/build/package validation, immutable Action pins, read-only build and final contents-write publication job. Manual dispatch cannot publish. Signing/attestation deferred. |
+| Update awareness | **Implemented** | Protected global System Settings GET/status and POST/refresh endpoints, fixed official GitHub transport, bounds/cache, semantic beta/stable selection and sibling-card UI. Controlled real production browser acceptance; no public Atlas release API call. |
+| Operator upgrades | **Implemented helpers; real native lifecycle pending** | Configuration-preserving Docker/native helpers reuse H1 mechanisms, stop writers before migration and preserve H3 state/data/keys. Backup-first guides, no automatic self-update or host control in the app. |
+| Native ingress and preflight remediation | **Implemented; fresh real acceptance pending** | Debian/Ubuntu nginx installation, dedicated validated/rollback-safe Atlas site, private web/API, same-origin endpoint/URL handoff, explicit proxy trust with fresh auto cookies and 2 GiB restore uploads. Aggregate read-only preflight includes venv/service/database checks before Atlas mutation. Subsequent Debian 13 testing exposed legacy native failures; local/helper tests do not prove remediated systemd acceptance. |
+
+See [H4 evidence and completion report](../testing/h4-release-distribution.md).
+No migration, graph/knowledge/discovery/tenancy, MFA or backup-format change.
+Five existing npm audit findings (one critical, three high, one moderate) remain
+unresolved for later hardening. Real native lifecycle remains H6.

@@ -1,6 +1,6 @@
 # Reverse-proxy examples
 
-Docker Compose includes Atlas's nginx gateway. External proxies need **one
+Docker Compose and native/systemd include Atlas nginx ingress. External proxies need **one
 upstream**: `http://<ATLAS_BIND_ADDRESS>:<ATLAS_PORT>`. The gateway preserves
 `/api/*` to FastAPI and routes everything else to Next.js. No separate public
 API port, custom `/api` location, public URL setting or CORS entry is required.
@@ -71,28 +71,27 @@ paths intact. If HTTPS terminates before an HTTP hop, explicitly trust only the
 peer supplying a verified original scheme. No provider-specific runtime,
 headers or hostname assumptions are added to Atlas.
 
-## Native/systemd (unchanged two-upstream host proxy)
+## Native/systemd
 
-Native/systemd has no Docker gateway. Its operator-managed TLS host proxy
-continues to route loopback API and web ports separately:
+Use the same single upstream and optional TLS proxy examples above. Bundled
+nginx owns the public Atlas port, routes `/api` unchanged to loopback 8000 and
+web paths to loopback 3001. The installer manages a dedicated site and nginx
+ordering drop-in, validates with `nginx -t`, and preserves unrelated sites.
+Do not point an old TLS proxy directly at the private Next.js listener.
 
-```nginx
-location /api/ {
-    proxy_pass http://127.0.0.1:8000;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $remote_addr;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $remote_addr;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
+Set `ATLAS_TRUSTED_PROXIES` in `/etc/atlas/atlas.env` to the external TLS proxy's
+actual source IP or narrow CIDR, then apply it:
+
+```bash
+sudo python3 /opt/atlas/infra/install/native_ingress.py
 ```
 
-No trailing URI slash on the API `proxy_pass`: `/api` must remain intact.
-Native configuration retains `AUTH_COOKIE_SECURE=true`, loopback trust and
-loopback service binds. H1.1 does not redesign native ingress.
+Fresh native installations use `AUTH_COOKIE_SECURE=auto`. Upgrades retain the
+existing file and explicit policy; deliberately use `auto` for direct HTTP and
+trusted HTTPS, or retain `true` for HTTPS-only browser access. Restart the API
+after editing cookie policy. Native Uvicorn trusts only loopback, and nginx
+accepts forwarded scheme/client headers only from the explicit allowlist. No
+proxy is automatically trusted, including another process on the host.
+
+For H3 restore, every external proxy must allow the same 2 GiB upload bound as
+bundled ingress and permit streaming; nginx's default 1 MiB causes HTTP 413.

@@ -12,13 +12,15 @@ Running one new component with one old component is unsupported.
 3. Keep the previous containers/images or revision available for rollback.
 4. For Docker, forward the existing frontend hostname to the single Atlas
    gateway bind address/port. Remove any separate `/api` custom location: the
-   gateway handles it internally. Native/systemd still needs its host proxy
-   to route `/api` unchanged to loopback 8000 and other paths to loopback 3000.
+   gateway handles it internally. Native/systemd bundles nginx at the same
+   single endpoint, routing `/api` to loopback 8000 and web to loopback 3001.
 5. Set `NEXT_PUBLIC_API_URL=/api` or remove the value to use the built-in
    fallback. Leave `CORS_ORIGINS` blank for the target same-origin deployment.
-6. For Docker, set `AUTH_COOKIE_SECURE=auto` and allowlist the external proxy
+6. For either method, use `AUTH_COOKIE_SECURE=auto` and allowlist the external proxy
    source IP with `ATLAS_TRUSTED_PROXIES` for HTTPS. Explicit `true` remains an
-   HTTPS-only override; native/systemd retains its `true` default.
+   HTTPS-only override. Fresh native files use `auto`; existing explicit policies
+   are retained until deliberately edited. Follow the [native upgrade guide](h4-upgrades.md#nativesystemd-upgrade)
+   to refresh nginx and restart API after policy changes.
 
 ## Coordinated deployment
 

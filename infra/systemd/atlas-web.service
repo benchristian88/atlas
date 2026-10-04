@@ -10,7 +10,7 @@ Type=simple
 User=atlas
 Group=atlas
 WorkingDirectory=/opt/atlas/apps/web/.next/standalone
-Environment=NODE_ENV=production HOSTNAME=127.0.0.1 PORT=3000
+Environment=NODE_ENV=production HOSTNAME=127.0.0.1 PORT=3001
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=15

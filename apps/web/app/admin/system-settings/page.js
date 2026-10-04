@@ -8,6 +8,7 @@ import { useAuth } from "../../../components/auth-context";
 import { DataTable } from "../../../components/data-table";
 import { PageHeader } from "../../../components/page-header";
 import { BackupRestore } from "../../../components/backup-restore";
+import { Updates } from "../../../components/updates";
 import { canManageBackups } from "../../../lib/backup.mjs";
 
 import { apiRequest } from "../../../lib/api";
@@ -83,6 +84,7 @@ export default function SystemSettingsAdminPage() {
       ]} actions={setting => <button className="text-button" onClick={() => { setEditing(setting); setValue(inputValue(setting.value)); }} type="button">Edit</button>} />
       </section>
       {canManageBackups(user) && <BackupRestore />}
+      <Updates buildInfo={buildInfo} />
       <section className="ops-card system-settings-section" aria-labelledby="settings-about">
         <h2 id="settings-about">About</h2>
         <p><strong>Atlas Impact</strong></p>

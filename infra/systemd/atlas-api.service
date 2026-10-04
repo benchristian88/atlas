@@ -14,10 +14,13 @@ WorkingDirectory=/opt/atlas/apps/api
 EnvironmentFile=/etc/atlas/atlas.env
 Environment=PATH=/opt/atlas/venv/bin:/usr/bin:/bin
 Environment=ATLAS_API_HOST=127.0.0.1
+Environment=FORWARDED_ALLOW_IPS=127.0.0.1
 Environment=ATLAS_STATE_DIR=/var/lib/atlas
 StateDirectory=atlas
 StateDirectoryMode=0700
-ExecStart=/opt/atlas/venv/bin/python -m scripts.start
+# argv overrides EnvironmentFile values too; the private listener/trust boundary
+# cannot be widened accidentally through inherited deployment configuration.
+ExecStart=/usr/bin/env ATLAS_API_HOST=127.0.0.1 FORWARDED_ALLOW_IPS=127.0.0.1 /opt/atlas/venv/bin/python -m scripts.start
 Restart=on-failure
 RestartSec=15
 TimeoutStopSec=30

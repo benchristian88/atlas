@@ -5,9 +5,24 @@ merged H2 HEAD `295c8a0f3330d7d5f61f114b09d3ad518aaadbd2` (also `dev`). The init
 working tree was clean. No commit, push, merge, rebase or history rewrite was
 performed. This report describes uncommitted working-tree implementation.
 
-**H1/H1.1 — ACCEPTED. H2 — ACCEPTED. H3 — implemented and locally validated;
-real Docker acceptance pending.** H3 is not recorded as accepted solely from
-automated/local evidence. Native/systemd real lifecycle remains the H6 gate.
+**H1/H1.1 — ACCEPTED. H2 — ACCEPTED. H3 — ACCEPTED.**
+
+Acceptance update, 2026-10-04: the user confirms that all documented H3
+real-world acceptance tests were undertaken successfully, including real Docker
+acceptance, and accepts H3. This supplied acceptance fact adds to the recorded
+681 backend/PostgreSQL/migration and 276 frontend passing tests and local
+production browser evidence. Individual Docker observations are not inferred.
+The implementation-time execution table below remains historical evidence.
+Real native/systemd lifecycle acceptance remains the later H6 gate. Existing
+npm audit findings remain unresolved. H4 is implemented and locally validated;
+see the [H4 report](h4-release-distribution.md) for its separate remaining gates.
+
+Subsequent supplied Debian 13 native acceptance found a Docker-created archive
+reached the systemd target compatibly, but manually added nginx rejected the
+multi-MiB upload with HTTP 413 at its default 1 MiB bound. The H3 restore slot
+correctly remained reserved until upload-authorization expiry. H4 now bundles
+ingress with the existing 2 GiB application bound; format and locking are
+unchanged. A fresh remediated native restore/lifecycle retest is required.
 
 ## Result and compatibility
 

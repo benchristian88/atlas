@@ -44,8 +44,8 @@ def test_configuration_secrets_permissions_and_no_overwrite(tmp_path):
     other = tmp_path / "native.env"
     module.generate_configuration(other, "systemd")
     assert "ATLAS_INSTALL_METHOD=systemd" in other.read_text()
-    assert "AUTH_COOKIE_SECURE=true" in other.read_text()
-    assert "ATLAS_BIND_ADDRESS" not in other.read_text()
+    assert "AUTH_COOKIE_SECURE=auto" in other.read_text()
+    assert "ATLAS_BIND_ADDRESS" in other.read_text()
     assert settings["AUTH_SECRET_KEY"] not in other.read_text()
     assert settings["ATLAS_DATA_ENCRYPTION_KEY"] not in other.read_text()
 

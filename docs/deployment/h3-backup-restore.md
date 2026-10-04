@@ -1,9 +1,10 @@
 # Encrypted Atlas backup and restore
 
-H1/H1.1 and H2 are **ACCEPTED**. H3's actual implementation/acceptance status is in
-the [validation report](../testing/h3-encrypted-backup-restore.md). Real Docker
-and native lifecycle acceptance must be recorded separately from local browser
-and automated checks.
+H1/H1.1, H2 and H3 are **ACCEPTED**. The user confirms successful documented
+H3 real-world acceptance including Docker; no finer observations are inferred.
+See the [validation report](../testing/h3-encrypted-backup-restore.md). Native
+lifecycle remains H6. Use the [H4 upgrade procedure](h4-upgrades.md), including
+an encrypted backup before upgrading; existing npm audit findings remain open.
 
 ## What you protect
 
@@ -182,6 +183,15 @@ Native prerequisites include PostgreSQL server/client 16 or 17 with matching
 unit adds `StateDirectory=atlas`, mode 0700, and `/var/lib/atlas`; it retains the
 atlas service account, `/etc/atlas/atlas.env`, PrivateTmp, NoNewPrivileges,
 ProtectSystem/ProtectHome and restart policy. The worker sees the same marker.
+
+H4 bundles native nginx at the public Atlas endpoint, keeping API/web private.
+Both bundled ingresses explicitly allow 2 GiB streamed restore uploads. Any
+external proxy must allow the same bound. Real Debian 13 acceptance of the old
+native installer found nginx's default 1 MiB limit caused HTTP 413 on a Docker-
+created multi-MiB archive; a reserved restore authorization correctly remained
+until its ten-minute expiry. This remediation fixes ingress, not H3 locking or
+the archive format. Docker/native portability and target-local keys are preserved.
+A fresh real native restore retest is required.
 
 When updating an existing native deployment, install the matched code and pinned
 requirements, copy the updated API/worker units using the existing upgrade
