@@ -123,6 +123,10 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 
 ## Release testing
 
+- [Routine development CI](testing/continuous-integration.md) — PR/branch merge
+  checks, isolated PostgreSQL/Redis regression, package/Compose integrity and
+  local equivalents; separate from deliberate release publication.
+
 - [H1 release foundation](testing/h1-release-foundation.md) — accepted Debian
   Docker/LXC installation and lifecycle; real native/systemd acceptance remains H6.
 - [H2 local MFA](testing/h2-local-two-factor-authentication.md) — implementation,

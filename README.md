@@ -615,6 +615,13 @@ an Alembic downgrade preserves ownership/type backfills. See
 for backup commands, migration detail, rollback steps, and production security
 limitations.
 
+## Development CI
+
+Pull requests to `dev`/`main` and pushes to those branches run the read-only
+`ci.yml` backend/PostgreSQL, frontend and release/deployment checks. See
+[CI checks and local equivalents](docs/testing/continuous-integration.md).
+The separate `release.yml` retains deliberate release construction/publication.
+
 ## Run services directly
 
 ### API
