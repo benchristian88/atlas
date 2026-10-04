@@ -66,12 +66,17 @@ def gateway(request, tmp_path):
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
+        assert port > 1024, "Test nginx must use an unprivileged ephemeral port"
         if method == "native":
             sys.path.insert(0, str(GATEWAY.parents[1] / "install"))
             from native_ingress import render
             config = render({"ATLAS_BIND_ADDRESS": "127.0.0.1", "ATLAS_PORT": str(port), "ATLAS_TRUSTED_PROXIES": trusted})
         else:
             config = (GATEWAY / "default.conf").read_text()
+            # Preserve the production listener contract, but adapt only this
+            # temporary copy before either nginx -t (which also binds) or start.
+            assert "listen 80;" in config
+            config = config.replace("listen 80;", f"listen 127.0.0.1:{port};")
         config = config.replace("/etc/nginx/atlas-trusted-proxies.conf", str(trust))
         (tmp_path / "logs").mkdir()
         production = tmp_path / "production.conf"
@@ -85,7 +90,6 @@ def gateway(request, tmp_path):
         config = config.replace("web:3000 resolve", f"127.0.0.1:{web_port}")
         config = config.replace("127.0.0.1:8000", f"127.0.0.1:{api_port}")
         config = config.replace("127.0.0.1:3001", f"127.0.0.1:{web_port}")
-        config = config.replace("listen 80;", f"listen 127.0.0.1:{port};")
         path = tmp_path / "nginx.conf"
         path.write_text(f"pid {tmp_path}/nginx.pid;\nerror_log {tmp_path}/error.log;\ndaemon off;\n"
                         f"events {{}}\nhttp {{ access_log off; client_body_temp_path {tmp_path}/body; "
@@ -107,6 +111,16 @@ def gateway(request, tmp_path):
         else:
             pytest.fail("nginx did not become ready")
         yield f"http://127.0.0.1:{port}", bool(trusted)
+
+
+def test_nginx_validation_and_runtime_use_unprivileged_loopback(gateway, tmp_path):
+    url, _ = gateway
+    assert int(url.rsplit(":", 1)[1]) > 1024
+    listener = f"listen {url.removeprefix('http://')};"
+    for name in ("production.conf", "nginx.conf"):
+        listeners = [line.strip() for line in (tmp_path / name).read_text().splitlines()
+                     if line.strip().startswith("listen ")]
+        assert listeners == [listener]
 
 
 @pytest.mark.parametrize("path,service", [("/", "web"), ("/setup", "web"), ("/login", "web"),
