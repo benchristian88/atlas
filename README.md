@@ -57,6 +57,18 @@ See [single-origin deployment](docs/deployment/single-origin.md),
    openssl rand -hex 32
    ```
 
+   Generate the independent MFA data key into the protected development file
+   without displaying it:
+
+   ```bash
+   chmod 600 .env
+   python3 infra/install/configuration.py --add-data-encryption-key --output .env
+   ```
+
+   Production installers generate this key automatically. See
+   [local MFA and break-glass recovery](docs/deployment/h2-mfa.md) for enrollment,
+   upgrade requirements and the key dependency for database recovery.
+
    `.env.example` is development-only. Production uses the generated configuration
    in [H1 installation](docs/deployment/h1-installation.md), through Docker
    Compose or native/systemd. Manual production installation is unsupported.

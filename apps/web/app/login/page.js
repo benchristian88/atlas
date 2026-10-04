@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AtlasLogo } from "../../components/atlas-brand.mjs";
+import { Button } from "../../components/button";
 import { authenticatedHome } from "../../components/auth-context";
-import { getCurrentUser, login } from "../../lib/auth";
+import { cancelLoginMfa, getCurrentUser, login, verifyLoginMfa } from "../../lib/auth";
 import { getSetupStatus } from "../../lib/setup";
 import { checkSession } from "../../lib/session-state.mjs";
 
@@ -15,6 +16,9 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [code, setCode] = useState("");
+  const [method, setMethod] = useState("totp");
 
   useEffect(() => {
     let active = true;
@@ -48,12 +52,16 @@ export default function LoginPage() {
     setSubmitting(true);
     setError("");
     try {
-      const user = await login(email, password);
+      const user = mfaRequired ? await verifyLoginMfa(code, method) : await login(email, password);
+      setPassword(""); setCode("");
+      if (user.mfa_required) { setMfaRequired(true); setMethod("totp"); return; }
       router.replace(authenticatedHome(user));
       router.refresh();
     } catch (requestError) {
+      setPassword(""); setCode("");
+      if (mfaRequired && requestError.status === 401) setMfaRequired(false);
       setError(
-        requestError.status === 401
+        requestError.status === 401 && !mfaRequired
           ? "The email or password is incorrect."
           : requestError.message || "Atlas could not complete the login request.",
       );
@@ -70,11 +78,11 @@ export default function LoginPage() {
         </div>
         <section className="login-card" aria-labelledby="login-title">
           <p className="eyebrow">Welcome back</p>
-          <h1 id="login-title">Sign in</h1>
-          <p className="page-description">Use your database-backed Atlas Impact account.</p>
+          <h1 id="login-title">{mfaRequired ? "Verify two-factor authentication" : "Sign in"}</h1>
+          <p className="page-description">{mfaRequired ? "Enter a current authenticator code or one of your recovery codes." : "Use your database-backed Atlas Impact account."}</p>
           {error && <div className="error-banner" role="alert">{error}</div>}
           <form className="login-form" onSubmit={submit}>
-            <label className="field">
+            {!mfaRequired && <><label className="field">
               <span>Email</span>
               <input
                 autoComplete="email"
@@ -96,14 +104,17 @@ export default function LoginPage() {
                 type="password"
                 value={password}
               />
-            </label>
-            <button
-              className="button button-primary login-submit"
+            </label></>}
+            {mfaRequired && <><label className="field"><span>{method === "totp" ? "Authenticator code" : "Recovery code"}</span><input autoFocus required autoComplete="one-time-code" inputMode={method === "totp" ? "numeric" : "text"} pattern={method === "totp" ? "[0-9]{6}" : undefined} maxLength={method === "totp" ? 6 : 100} value={code} onChange={event => setCode(event.target.value)} disabled={submitting} /></label>
+              <Button disabled={submitting} onClick={() => { setMethod(method === "totp" ? "recovery" : "totp"); setCode(""); setError(""); }}>{method === "totp" ? "Use a recovery code" : "Use an authenticator code"}</Button></>}
+            <Button
+              variant="primary" className="login-submit"
               disabled={submitting || checkingSession}
               type="submit"
             >
-              {checkingSession ? "Checking session…" : submitting ? "Signing in…" : "Sign in"}
-            </button>
+              {checkingSession ? "Checking session…" : submitting ? "Signing in…" : mfaRequired ? "Verify and sign in" : "Sign in"}
+            </Button>
+            {mfaRequired && <Button disabled={submitting} onClick={async () => { setSubmitting(true); try { await cancelLoginMfa(); setMfaRequired(false); setCode(""); setError(""); } catch (requestError) { setError(requestError.message); } finally { setSubmitting(false); } }}>Back to sign in</Button>}
           </form>
         </section>
       </div>

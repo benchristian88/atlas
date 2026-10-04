@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from app.auth import _secret_key
+from app.config import data_encryption_key
 from app.database import engine
 from app.release import build_metadata
 from scripts.seed_system import main as seed_system
@@ -14,6 +15,7 @@ from scripts.seed_system import main as seed_system
 
 def main() -> None:
     _secret_key()
+    data_encryption_key(required=False)
     build_metadata()
     for attempt in range(30):
         try:

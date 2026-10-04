@@ -14,7 +14,7 @@ commands and native prerequisites.
 
 Production configuration is generated with exclusive creation and restrictive
 permissions; installers never overwrite an existing file. Database credentials,
-Redis connectivity, `AUTH_SECRET_KEY`, cookie/CORS policy and installation/build
+Redis connectivity, `AUTH_SECRET_KEY`, `ATLAS_DATA_ENCRYPTION_KEY`, cookie/CORS policy and installation/build
 identity are deployment configuration. Session lifetime is managed in Atlas
 System Settings. `.env.example` is development-only. Neither bootstrap admin
 credential group is read anymore.
@@ -74,6 +74,8 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 1. Record the currently deployed commit/image and inspect the release diff and
    migration notes.
 2. Make a PostgreSQL backup and verify that it is non-empty and restorable.
+   Encrypted MFA additionally depends on `ATLAS_DATA_ENCRYPTION_KEY`; retain its
+   protected configuration. PostgreSQL alone cannot restore MFA to a new key.
 3. Copy `.env` to a separately protected backup. Do not place secrets in the
    repository or a ticket.
 4. Remove retired `ATLAS_ADMIN_*`, `ATLAS_BOOTSTRAP_ADMIN_*` and
@@ -115,6 +117,17 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml run --rm api \
 ```
 
 Do not run two migration jobs concurrently.
+
+## H2 local MFA upgrade
+
+Revision `20261004_0026` adds one-to-one encrypted TOTP state, recovery verifiers
+and bounded login challenges. Existing accounts remain unenrolled; password
+hashes and assignments do not change. Fresh installers generate independent
+256-bit data-encryption material. Existing configurations need the missing key
+added with the protected helper before production startup; it never replaces
+existing secrets. See [H2 deployment](../deployment/h2-mfa.md). H3 must include
+this material in its passphrase-encrypted backup package; H2 does not implement
+backup/restore or key rotation.
 
 ## Foundation migration behavior
 
@@ -220,6 +233,7 @@ tests a safe path.
   or regulatory retention is required.
 - Add reverse-proxy rate limits and monitoring for repeated authentication
   failure until distributed application throttling is available.
-- Atlas local authentication does not yet provide SSO, MFA, email-based account
-  recovery, or a break-glass recovery command. Maintain a tested database backup
+- Atlas local authentication provides optional TOTP, one-time recovery codes and
+  [local MFA break-glass reset](../deployment/h2-mfa.md). SSO and email-based account
+  recovery remain deferred. Maintain a tested database backup
   and at least two usable global Master Administrators.

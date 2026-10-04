@@ -28,6 +28,9 @@ def test_configuration_secrets_permissions_and_no_overwrite(tmp_path):
     settings = dict(line.split("=", 1) for line in content.splitlines() if line and not line.startswith("#"))
     assert len(settings["POSTGRES_PASSWORD"]) == 64
     assert len(settings["AUTH_SECRET_KEY"]) == 96
+    assert len(settings["ATLAS_DATA_ENCRYPTION_KEY"]) == 64
+    assert settings["ATLAS_DATA_ENCRYPTION_KEY"] != settings["POSTGRES_PASSWORD"]
+    assert settings["ATLAS_DATA_ENCRYPTION_KEY"] not in settings["AUTH_SECRET_KEY"]
     assert settings["POSTGRES_PASSWORD"] not in settings["AUTH_SECRET_KEY"]
     assert settings["AUTH_COOKIE_SECURE"] == "auto"
     assert settings["ATLAS_INSTALL_METHOD"] == "docker_compose"
@@ -44,6 +47,30 @@ def test_configuration_secrets_permissions_and_no_overwrite(tmp_path):
     assert "AUTH_COOKIE_SECURE=true" in other.read_text()
     assert "ATLAS_BIND_ADDRESS" not in other.read_text()
     assert settings["AUTH_SECRET_KEY"] not in other.read_text()
+    assert settings["ATLAS_DATA_ENCRYPTION_KEY"] not in other.read_text()
+
+
+def test_add_missing_data_key_preserves_config_permissions_and_refuses_replacement(tmp_path):
+    module = configuration_module()
+    path = tmp_path / "existing.env"
+    original = "AUTH_SECRET_KEY=" + secrets.token_hex(48)
+    path.write_text(original)
+    path.chmod(0o640)
+    module.add_data_encryption_key(path)
+    changed = path.read_text()
+    assert changed.startswith(original + "\nATLAS_DATA_ENCRYPTION_KEY=")
+    assert len(changed.split("ATLAS_DATA_ENCRYPTION_KEY=")[1].strip()) == 64
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
+    module.add_data_encryption_key(path)
+    assert path.read_text() == changed
+    path.write_text(original + "\nATLAS_DATA_ENCRYPTION_KEY=invalid\n")
+    with pytest.raises(ValueError):
+        module.add_data_encryption_key(path)
+    assert path.read_text().endswith("=invalid\n")
+    link = tmp_path / "link"
+    link.symlink_to(path)
+    with pytest.raises(OSError):
+        module.add_data_encryption_key(link)
 
 
 def test_configuration_refuses_symlink(tmp_path):
@@ -111,7 +138,10 @@ def test_deployment_restart_and_security_contracts():
     assert all(service["restart"] == "unless-stopped" for service in services.values())
     assert "ports" not in services["postgres"]
     assert "ports" not in services["redis"]
-    assert "POSTGRES_PASSWORD" not in services["web"].get("environment", {})
+    for key in ("POSTGRES_PASSWORD", "AUTH_SECRET_KEY", "ATLAS_DATA_ENCRYPTION_KEY"):
+        assert key not in services["web"].get("environment", {})
+        assert key not in services["web"].get("build", {}).get("args", {})
+    assert "ATLAS_DATA_ENCRYPTION_KEY" in services["api"]["environment"]
     for name in ("api", "web", "worker"):
         unit = (ROOT / f"infra/systemd/atlas-{name}.service").read_text()
         assert "User=atlas" in unit

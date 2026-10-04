@@ -36,8 +36,29 @@ from app.schemas import (
     UserUpdate,
 )
 from app.routes.crud_helpers import flush
+from app.services import mfa
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.post("/{user_id}/reset-mfa", response_model=UserAdminResponse)
+def reset_user_mfa(user_id: uuid.UUID, request: Request,
+                   principal: Principal = Depends(require_permission("users.edit")),
+                   db: Session = Depends(get_db)):
+    require_global(principal, "users.edit")
+    # Reuse the protected global Master boundary; role creation cannot grant it.
+    if not _has_global_master(db, principal.user.id):
+        raise HTTPException(403, "A global Master Administrator is required to reset MFA")
+    if user_id == principal.user.id:
+        raise HTTPException(403, "Use your profile security settings to manage your own MFA")
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
+    if user is None:
+        raise _not_found()
+    _ensure_target_manageable(principal, _load_principal(user, db))
+    mfa.reset_mfa(db, user)
+    mfa.audit(db, user, "auth.mfa_admin_reset", request, actor=principal.user)
+    db.commit()
+    return _user_response(user, db)
 
 
 def _not_found() -> HTTPException:
@@ -293,7 +314,7 @@ def update_user(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "users.edit")
-    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
     if user is None:
         raise _not_found()
     target_principal = _load_principal(user, db)
@@ -384,7 +405,7 @@ def reset_password(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "users.edit")
-    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
     if user is None:
         raise _not_found()
     _ensure_target_manageable(principal, _load_principal(user, db))

@@ -598,6 +598,18 @@ See [C2.6 validation and acceptance](../testing/release-c2-usability-lifecycle-p
 
 # Homelab Ready hardening
 
+**H1 — Release Foundation & Secure First-Run Setup is ACCEPTED**, including
+H1.1 single ingress and automatic HTTP/HTTPS cookies. Real Debian Docker/LXC
+fresh install, setup/reset, first administrator, login/dashboard, actual reboot,
+direct LAN and one-upstream NPM passed (user-reported). Native/systemd real
+installation/reboot remains H6/release acceptance; automated/static validation
+is already implemented. See [H1 acceptance](../testing/h1-release-foundation.md).
+
+
+H2 local TOTP MFA is implemented; release acceptance remains pending the
+physical authenticator and real Docker checks recorded in [H2 acceptance](../testing/h2-local-two-factor-authentication.md).
+H3 backup must preserve the required data-encryption material.
+
 This is a contained quality bar for a high-quality self-hosted release, not
 enterprise production certification:
 
@@ -735,7 +747,7 @@ attached to feature completion. It should include:
 - licensing and contribution guidance; and
 - repeatable release artifacts.
 
-SSO/MFA, external append-only audit export, enterprise worker hardening, and
+SSO/advanced MFA (optional local TOTP is implemented by H2), external append-only audit export, enterprise worker hardening, and
 formal production certification remain later enterprise/production work. A
 practical security review remains part of Homelab Ready.
 

@@ -23,6 +23,10 @@ _SENSITIVE_FRAGMENTS = (
     "hash",
     "credential",
     "setup_code",
+    "otp",
+    "recovery_code",
+    "manual_key",
+    "encryption_key",
 )
 
 

@@ -1,5 +1,6 @@
 import os
 import uuid
+from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, FastAPI, Request
@@ -37,6 +38,7 @@ from app.routes import (
     topology,
     users,
     setup,
+    mfa,
 )
 
 
@@ -59,11 +61,19 @@ def request_origin_is_allowed(request: Request, origin: str) -> bool:
     return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == request_host
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.config import data_encryption_key
+    data_encryption_key(required=False)
+    yield
+
+
 app = FastAPI(
     title="Atlas API",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
@@ -83,6 +93,9 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def safe_setup_validation(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith(("/api/auth/", "/api/users")):
+        return JSONResponse(status_code=422, content={"detail": "Invalid authentication request. Check the supplied fields."},
+                            headers={"Cache-Control": "no-store"})
     if request.url.path.startswith("/api/setup/"):
         # FastAPI normally echoes invalid input, even with Pydantic's
         # hide_input_in_errors. Setup credentials must never be echoed.
@@ -111,13 +124,14 @@ async def request_security(request: Request, call_next):
         )
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
-    if request.url.path.startswith("/api/setup/"):
+    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(mfa.router)
 api_router.include_router(setup.router)
 api_router.include_router(context.router)
 api_router.include_router(users.router)

@@ -123,6 +123,13 @@ the Dashboard, Knowledge Graph and pending manual acceptance.
 
 ## Release testing
 
+- [H1 release foundation](testing/h1-release-foundation.md) — accepted Debian
+  Docker/LXC installation and lifecycle; real native/systemd acceptance remains H6.
+- [H2 local MFA](testing/h2-local-two-factor-authentication.md) — implementation,
+  automated/browser evidence and remaining physical authenticator/Docker gates.
+  See [security contracts](architecture/local-two-factor-authentication.md) and
+  [deployment/reset commands](deployment/h2-mfa.md).
+
 - [UI system acceptance](testing/ui-system.md) — responsive/theme matrix and shared component, icon, detail and topology checks.
 
 - [`testing/release-c2-operational-graph.md`](testing/release-c2-operational-graph.md)

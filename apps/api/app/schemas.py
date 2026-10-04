@@ -132,7 +132,8 @@ class UserAdminResponse(UserResponse):
 
 
 class LoginResponse(BaseModel):
-    user: UserResponse
+    user: UserResponse | None = None
+    mfa_required: bool = False
 
 
 class ProfileUpdate(BaseModel):

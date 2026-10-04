@@ -27,6 +27,7 @@ from app.schemas import (
     ProfileUpdate,
     UserResponse,
 )
+from app.services import mfa
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -74,6 +75,18 @@ def login(
             detail="Invalid email or password",
         )
 
+    if user.mfa_enabled:
+        challenge = mfa.create_challenge(db, user)
+        # A previous normal browser cookie must not survive this login attempt.
+        response.delete_cookie(COOKIE_NAME, path="/", httponly=True,
+                               secure=cookie_secure(request), samesite="lax")
+        response.set_cookie(mfa.MFA_COOKIE, challenge, max_age=int(mfa.CHALLENGE_DURATION.total_seconds()),
+                            path=mfa.MFA_COOKIE_PATH, httponly=True, secure=cookie_secure(request), samesite="lax")
+        add_audit_event(db, action="auth.mfa_challenge_started", target_type="user", target_id=user.id,
+                        actor=user, request=request)
+        db.commit()
+        return LoginResponse(mfa_required=True)
+
     add_audit_event(
         db,
         action="auth.login_succeeded",
@@ -105,12 +118,9 @@ def logout(
 ) -> None:
     # The MVP uses a per-user session generation. Logging out therefore revokes
     # every outstanding browser session for this account, not just this cookie.
-    locked_user = db.scalar(
-        select(User).where(User.id == user.id).with_for_update()
-    )
-    if locked_user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    locked_user = mfa.locked_user(db, user.id, user.session_version)
     locked_user.session_version += 1
+    mfa.invalidate_challenges(db, locked_user)
     add_audit_event(
         db,
         action="auth.logout",
@@ -178,11 +188,7 @@ def change_password(
     principal: CurrentPrincipal,
     db: Session = Depends(get_db),
 ) -> UserResponse:
-    user = db.scalar(
-        select(User).where(User.id == principal.user.id).with_for_update()
-    )
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user = mfa.locked_user(db, principal.user.id, principal.user.session_version)
     if not verify_password(payload.current_password, user.password_hash):
         add_audit_event(
             db,
@@ -208,6 +214,10 @@ def change_password(
     user.failed_login_count = 0
     user.locked_until = None
     user.session_version += 1
+    mfa.invalidate_challenges(db, user)
+    mfa_state = mfa.state_for(db, user)
+    if mfa_state is not None:
+        mfa.clear_pending(mfa_state)
     add_audit_event(
         db,
         action="profile.password_changed",

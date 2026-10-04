@@ -28,13 +28,14 @@ function formatDate(value) {
 }
 
 export default function UsersAdminPage() {
-  const { hasGlobalPermission, hasPermission } = useAuth();
+  const { user: currentUser, hasGlobalPermission, hasPermission } = useAuth();
   const { customers, sites } = useWorkspaceContext();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [form, setForm] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [resetUser, setResetUser] = useState(null);
+  const [mfaResetUser, setMfaResetUser] = useState(null);
   const [resetPassword, setResetPassword] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,6 +45,7 @@ export default function UsersAdminPage() {
   const canView = hasGlobalPermission("users.view");
   const canEdit = hasGlobalPermission("users.edit");
   const canDisable = hasGlobalPermission("users.disable");
+  const canResetMfa = canEdit && currentUser.assignments?.some(assignment => assignment.scope_type === "global" && assignment.role_name === "Master Administrator");
   const canAssign = hasGlobalPermission("users.assign_roles")
     && hasGlobalPermission("roles.view");
   const canCreate = hasGlobalPermission("users.create") && canAssign;
@@ -173,6 +175,17 @@ export default function UsersAdminPage() {
     }
   }
 
+  async function resetMfa() {
+    setSaving(true); setError("");
+    try {
+      await apiRequest(`/users/${mfaResetUser.id}/reset-mfa`, { method: "POST" });
+      setSuccess(`Two-factor authentication reset for ${mfaResetUser.email}. Existing sessions invalidated. Password unchanged.`);
+      setMfaResetUser(null);
+      await load();
+    } catch (requestError) { setError(requestError.message); }
+    finally { setSaving(false); }
+  }
+
   return (
     <>
       <PageHeader eyebrow="Organisation" title="Users" description="Manage local accounts, lifecycle state, and role assignments. Passwords are never displayed." actions={<>{canCreate && <Button variant="primary" onClick={openCreate} type="button">Add user</Button>}</>} />
@@ -211,11 +224,13 @@ export default function UsersAdminPage() {
 
       {resetUser && <section className="form-card"><div className="form-card-header"><div><h2>Reset password</h2><p className="secondary-text">Set a temporary password for {resetUser.email}. All existing sessions will be invalidated.</p></div><IconButton onClick={() => setResetUser(null)} type="button" label="Close reset form" icon="close" /></div><form onSubmit={submitReset}><label className="field"><span>Temporary password</span><input autoComplete="new-password" minLength={12} onChange={(event) => setResetPassword(event.target.value)} required type="password" value={resetPassword} /></label><div className="form-actions"><Button variant="secondary" onClick={() => setResetUser(null)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">Set temporary password</Button></div></form></section>}
 
+      {mfaResetUser && <section className="form-card" aria-labelledby="mfa-reset-title"><h2 id="mfa-reset-title">Reset two-factor authentication</h2><p>Reset MFA for {mfaResetUser.email}? Their authenticator and recovery codes will be invalidated, and all sessions will end. Their password stays the same.</p><div className="form-actions"><Button disabled={saving} onClick={() => setMfaResetUser(null)}>Cancel</Button><Button variant="danger" disabled={saving} onClick={resetMfa}>Reset MFA</Button></div></section>}
+
       <section className="table-card" aria-label="Users list">
         <div className="table-meta"><span>{loading ? "Loading…" : `${users.length} users`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>
-        <div className="table-scroll"><table><thead><tr><th>User</th><th>Roles</th><th>Scope</th><th>State</th><th>Last login</th>{canEdit && <th>Actions</th>}</tr></thead><tbody>
-          {!loading && users.length === 0 && <tr><td className="empty-state" colSpan={canEdit ? 6 : 5}>No users found.</td></tr>}
-          {users.map((user) => <tr key={user.id}><td><strong>{user.display_name}</strong><br /><span className="secondary-text">{user.email}</span></td><td>{user.roles.join(", ") || "—"}</td><td>{user.assignments.map((assignment) => assignment.scope_type === "global" ? "Global" : assignment.scope_type === "customer" ? customers.find((item) => item.id === assignment.customer_id)?.name || "Customer" : sites.find((item) => item.id === assignment.site_id)?.name || "Site").join(", ")}</td><td>{user.is_active ? "Active" : "Disabled"}{user.force_password_change ? " · Password change required" : ""}</td><td>{formatDate(user.last_login_at)}</td>{canEdit && <td><div className="row-actions"><button className="text-button" onClick={() => openEdit(user)} type="button">Edit</button><button className="text-button" onClick={() => { setResetUser(user); setResetPassword(""); }} type="button">Reset password</button></div></td>}</tr>)}
+        <div className="table-scroll"><table><thead><tr><th>User</th><th>Roles</th><th>Scope</th><th>State</th><th>MFA</th><th>Last login</th>{canEdit && <th>Actions</th>}</tr></thead><tbody>
+          {!loading && users.length === 0 && <tr><td className="empty-state" colSpan={canEdit ? 7 : 6}>No users found.</td></tr>}
+          {users.map((user) => <tr key={user.id}><td><strong>{user.display_name}</strong><br /><span className="secondary-text">{user.email}</span></td><td>{user.roles.join(", ") || "—"}</td><td>{user.assignments.map((assignment) => assignment.scope_type === "global" ? "Global" : assignment.scope_type === "customer" ? customers.find((item) => item.id === assignment.customer_id)?.name || "Customer" : sites.find((item) => item.id === assignment.site_id)?.name || "Site").join(", ")}</td><td>{user.is_active ? "Active" : "Disabled"}{user.force_password_change ? " · Password change required" : ""}</td><td>{user.mfa_enabled ? "MFA enabled" : "MFA not enabled"}</td><td>{formatDate(user.last_login_at)}</td>{canEdit && <td><div className="row-actions"><button className="text-button" onClick={() => openEdit(user)} type="button">Edit</button><button className="text-button" onClick={() => { setResetUser(user); setResetPassword(""); }} type="button">Reset password</button>{canResetMfa && user.id !== currentUser.id && user.mfa_enabled && <button className="text-button text-danger" onClick={() => setMfaResetUser(user)} type="button">Reset MFA</button>}</div></td>}</tr>)}
         </tbody></table></div>
       </section>
     </>

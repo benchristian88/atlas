@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    BigInteger,
     CheckConstraint,
     Date,
     DateTime,
@@ -93,6 +94,47 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mfa_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+
+
+class UserMfa(TimestampMixin, Base):
+    """One active factor and one expiring replacement/enrollment per account."""
+    __tablename__ = "user_mfa"
+    __table_args__ = (
+        CheckConstraint("encryption_version = 1", name="encryption_version"),
+        CheckConstraint("(secret_ciphertext IS NULL) = (secret_nonce IS NULL)", name="active_pair"),
+        CheckConstraint("(pending_ciphertext IS NULL AND pending_nonce IS NULL AND pending_id IS NULL AND pending_expires_at IS NULL) OR (pending_ciphertext IS NOT NULL AND pending_nonce IS NOT NULL AND pending_id IS NOT NULL AND pending_expires_at IS NOT NULL)", name="pending_complete"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    encryption_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    secret_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    secret_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_totp_step: Mapped[int | None] = mapped_column(BigInteger)
+    pending_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    pending_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
+    pending_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pending_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MfaRecoveryCode(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "mfa_recovery_codes"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_mfa.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    verifier: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MfaChallenge(Base):
+    __tablename__ = "mfa_challenges"
+    # One current attempt per account bounds storage and invalidates prior attempts.
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True)
+    session_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):

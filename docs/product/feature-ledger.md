@@ -282,7 +282,7 @@ It also correctly identified that the following remain future work:
 * full Impact Analysis;
 * Backup and Recovery workflows;
 * formal Knowledge Objects;
-* SSO/MFA;
+* SSO (local TOTP MFA subsequently implemented in H2);
 * deeper plugin integrations;
 * automatic conversion of legacy Service Assets.
 
@@ -451,11 +451,11 @@ unchanged.
 | Initials/image fallback avatar | **Implemented** | UI/account | `user-avatar.js` provides safe fallback behavior. |
 | Avatar/photo upload | **Deferred** | Future account work | No avatar field, media storage or upload endpoint exists. |
 | SSO/OIDC/SAML | **Planned but not implemented** | Production security | Extension fields exist, but no issuer/callback flow exists. |
-| MFA     | **Planned but not implemented** | Production security | `mfa_enabled` is only an extension field; no enrollment/challenge workflow exists. |
+| Local TOTP MFA | **Implemented** | H2 security | Profile QR/manual enrollment, two-stage scoped login, replay/attempt protection, replacement/disable and encrypted seeds. H2 release acceptance remains pending real authenticator/Docker checks. |
 | Forgotten-password email | **Deferred** | Future account work | Explicitly absent in security limitations. |
-| Recovery codes | **Deferred** | Future account work | No recovery-code model or route. |
+| MFA recovery codes | **Implemented** | H2 security | Exactly 12 one-time 120-bit codes, account-bound SHA-256 verifiers, atomic consumption and password+TOTP regeneration. Plaintext returned only on generation. |
 | Per-device session management | **Deferred** | Future account work | Current model has user-level session generation only. |
-| Break-glass recovery command | **Deferred** | Production hardening | Explicitly documented as not existing. |
+| Local MFA break-glass command | **Implemented** | H2 security | Confirmed local `scripts.mfa reset --user` and native management wrapper; retires factors/codes/challenges/sessions, preserves password and audits local operator. Real Docker execution remains acceptance work. |
 | External append-only audit export | **Planned but not implemented** | Production hardening | Current audit remains PostgreSQL-backed only. |
 | Arbitrary per-record policy | **Deferred** | Enterprise authorization | Explicit MVP non-goal. |
 | Delegated role administration | **Deferred** | Enterprise authorization | Explicit MVP non-goal. |
@@ -836,7 +836,7 @@ C4 is planned after Homelab Ready. F1-lite does not depend on this formal model.
 ## Production and security hardening
 
 * SSO/OIDC/SAML;
-* MFA;
+* broader MFA methods/policy (optional local TOTP implemented in H2);
 * external append-only audit export;
 * queue/worker identity;
 * scheduled plugin runs;
@@ -852,9 +852,9 @@ The following are explicitly postponed or excluded from the current MVP/C1:
 
 * billing and commercial tenancy above an Atlas workspace;
 * password recovery email;
-* recovery codes;
+* broader account recovery (MFA recovery codes implemented in H2);
 * per-device sessions;
-* break-glass account recovery;
+* broader account recovery (local MFA reset implemented in H2);
 * arbitrary per-record policy;
 * delegated role administration;
 * customer-specific reference taxonomies;
@@ -1230,13 +1230,31 @@ existing layout. Singleton collapse, multi-member grouping, semantic direction,
 analysis behavior and card styling remain unchanged. See
 [routing validation](../testing/knowledge-graph-edge-routing.md).
 
-## H1 release foundation and secure first-run setup
+## H1 release foundation and secure first-run setup — ACCEPTED
 
 | Capability | Status | Evidence and limits |
 | --- | --- | --- |
 | Canonical version/build/install identity | **Implemented** | `apps/api/app/release.json`, artifact build ID, global-permission build-info API and System Settings About. No update checking. |
 | Secure first-run initialization | **Implemented** | Singleton PostgreSQL state, legacy user backfill, local Argon2 setup verifier/reset, scoped expiring HttpOnly setup authorization, atomic Master creation, disabled Restore entry. |
 | Session lifetime System Setting | **Implemented** | Integer 1–10080, default 480, global settings authorization, login/password-change issuance reads database. Environment value retired. |
-| Production installation foundation | **Implemented** | Compose/native helpers generate independent secrets without overwrite; six Compose restart policies (including nginx gateway) and enabled unprivileged systemd units. H1 Docker build/setup/login/dashboard and actual LXC reboot were accepted on Linux; H1.1 gateway/direct HTTP/external HTTPS needs repeat Linux acceptance; real systemd remains unverified. |
-| Docker single-ingress and cookie auto mode | **Implemented** | H1.1 nginx gateway only publishes detected/configured IPv4:port; internal `/api` routing, explicit external proxy trust, scheme-based cookies and focused regression tests. Real Linux/LAN/NPM/reboot revalidation is pending; systemd ingress unchanged. |
+| Production installation foundation | **Implemented** | Compose/native helpers generate independent secrets without overwrite; six Compose restart policies (including nginx gateway) and enabled unprivileged systemd units. H1/H1.1 accepted on real Debian Docker/LXC: fresh clone/install, setup/reset, first admin, login/dashboard, actual reboot, direct LAN and one-upstream NPM. Real native/systemd lifecycle remains H6 acceptance. |
+| Docker single-ingress and cookie auto mode | **Implemented** | H1.1 nginx gateway only publishes detected/configured IPv4:port; internal `/api` routing, explicit external proxy trust, scheme-based cookies and focused regression tests. Real Debian LAN/NPM/actual LXC reboot acceptance passed (user-reported); no NPM `/api` custom location. Native/systemd real lifecycle remains H6 acceptance. |
 | Atlas backup restore | **Planned but not implemented** | H1 reserves a disabled setup choice; no restore endpoint or engine. |
+
+
+## H2 local two-factor authentication
+
+**Implemented; acceptance pending** physical authenticator and real Docker checks.
+See [H2 validation](../testing/h2-local-two-factor-authentication.md).
+
+| Capability | Status | Evidence and limits |
+| --- | --- | --- |
+| Local TOTP enrollment/security UI | **Implemented** | Password reauthentication, ten-minute encrypted pending state, local canvas QR and manual key, atomic confirmation, status/count and replacement preserving old factor. |
+| Two-stage login | **Implemented** | Existing H1 normal session only after factor verification; five-minute scoped HttpOnly challenge, separate audience, one current attempt, bounded failures and persistent account lockout. |
+| Replay/recovery protection | **Implemented** | User-row transaction locks; increasing TOTP counter; exactly 12 random 120-bit one-time codes; SHA-256 verifiers, constant-time comparisons, atomic regeneration and consumption. |
+| Encryption/bootstrap support | **Implemented** | AES-256-GCM, random nonces/account binding/version; independent data key generated by both installers and safe existing-file helper; production missing key fails closed. |
+| Administrator/local reset | **Implemented** | Global protected Master boundary, self-admin reset blocked, local explicit confirmation, audit actor/target, password preserved; all sessions/challenges/codes revoked. |
+| H3 portability | **Planned but not implemented** | MFA depends on `ATLAS_DATA_ENCRYPTION_KEY`; future passphrase-encrypted backup package must include it. Database-only restoration with a new key cannot decrypt seeds. |
+
+H1/H1.1 remains ACCEPTED. H2 does not claim physical-app, Docker or real
+systemd acceptance from automated/local browser evidence.
