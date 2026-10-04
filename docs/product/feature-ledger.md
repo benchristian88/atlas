@@ -1320,3 +1320,15 @@ See [H4 evidence and completion report](../testing/h4-release-distribution.md).
 No migration, graph/knowledge/discovery/tenancy, MFA or backup-format change.
 Five existing npm audit findings (one critical, three high, one moderate) remain
 unresolved for later hardening. Real native lifecycle remains H6.
+
+## Routine development CI
+
+**Implemented component; first GitHub-hosted execution pending.**
+`.github/workflows/ci.yml` provides read-only PR checks for `dev`/`main`, pushes
+to those branches and manual dispatch. Backend/PostgreSQL, Frontend and
+Release & Deployment Integrity jobs cover full API/SDK/Proxmox regression,
+isolated PostgreSQL/Redis/migrations/nginx, frontend tests/build and committed
+dry-run packages/Compose/image builds. The H4 release-critical selector is shared
+with `release.yml`; publication remains solely in that deliberate release
+workflow. No branch protection or product behaviour changes. See
+[CI scope and local equivalents](../testing/continuous-integration.md).
