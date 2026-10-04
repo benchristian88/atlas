@@ -1,6 +1,6 @@
 # Authentication, access control, and administration
 
-This document defines the Atlas MVP security boundary. It is the implementation
+This document defines the Atlas security boundary. It is the implementation
 contract for database-backed users, explicit permissions, customer/site scope,
 administrative reference data, and audit history.
 
@@ -88,8 +88,8 @@ challenge; only valid MFA issues the normal session. PostgreSQL user-row locks
 serialize confirmation, replay protection and code consumption. Seeds use AES-GCM
 with independent `ATLAS_DATA_ENCRYPTION_KEY` bootstrap material. Global Master
 Administrators can reset another account; local management supplies confirmed
-break-glass reset without changing passwords. See [H2 security contracts](local-two-factor-authentication.md)
-and [deployment/recovery commands](../deployment/h2-mfa.md).
+break-glass reset without changing passwords. See [MFA security contracts](local-two-factor-authentication.md)
+and [deployment/recovery commands](../deployment/mfa.md).
 
 ## Secure first-run setup
 
@@ -123,8 +123,8 @@ global Master Administrator assignment, the existing Home/Homelab starter
 context when context-free, initialization marker, verifier deletion, and safe
 audit event commit atomically. No normal user session is issued: the browser
 opens sign in. Initialized installations reject setup mutations independently
-of the UI. H3 now adds setup-authorized encrypted backup restoration; it restores
-existing accounts without creating an administrator. See [H3 security and recovery](encrypted-backup-restore.md).
+of the UI. Encrypted backup/restore provides setup-authorized encrypted restoration; it restores
+existing accounts without creating an administrator. See [encrypted backup/restore security and recovery](encrypted-backup-restore.md).
 
 `ATLAS_BOOTSTRAP_ADMIN_*` and `ATLAS_ADMIN_*` credential seeding is retired.
 The compatibility `scripts.seed_admin` command now only delegates to protected
@@ -210,7 +210,7 @@ ownership. The web client sends the preference as `X-Atlas-Customer-ID` and
 `X-Atlas-Site-ID`; the central context dependency rejects a mismatched site,
 stale ID, or scope the current assignments do not cover.
 
-C2.4 treats the selected Site as a viewpoint for opt-in graph/analysis reads.
+Operational views treat the selected Site as a viewpoint for opt-in graph/analysis reads.
 It retains the selected Customer and per-entity/per-edge permissions, and can
 include directly relevant authorized cross-site providers of customer-wide
 Services. This does not widen any assignment. Customer-wide form mutations
@@ -246,7 +246,7 @@ Administration routes use the same policy layer as inventory routes:
 
 ## Managed types and lifecycle
 
-Asset and relationship types are global reference data in the MVP. Their
+Asset and relationship types are global reference data in the beta. Their
 stable `key` is stored by existing inventory and does not change when an
 administrator edits the display name. A type can be deleted only when it is
 neither system-defined nor referenced. A referenced or retired type can be
@@ -261,7 +261,7 @@ further constrain valid endpoint asset types.
 
 Custom fields use definitions, optional dropdown choices, applicability rows,
 and typed per-asset values rather than arbitrary columns or an unvalidated JSON
-bag. The supported MVP types are single-line text, multiline text, number, date,
+bag. The supported field types are single-line text, multiline text, number, date,
 boolean, absolute HTTP/HTTPS URL, and dropdown.
 
 A global definition applies to every asset type. Type-specific applicability
@@ -299,13 +299,12 @@ retention should export events to an external append-only system.
 
 ## Security limitations and future extensions
 
-This MVP provides local password authentication, scoped RBAC, guarded reference
+Atlas provides local password authentication, scoped RBAC, guarded reference
 data, and an application audit trail. It does not yet provide SSO/OIDC/SAML,
 a self-service forgotten-password email flow, per-session
 device management, or tamper-evident external audit retention. Role,
 assignment, and user identity tables leave room for an external issuer/subject
-without changing inventory ownership. Local MFA is implemented by H2; its
-manual acceptance gates are recorded separately.
+without changing inventory ownership. Optional local TOTP MFA uses the same scoped session and authorization boundary.
 
 `SameSite=Lax`, a narrow credentialed CORS allow-list, and rejection of an
 unapproved `Origin` on state-changing requests are the current browser
@@ -322,7 +321,7 @@ policy rather than introducing route-specific trust shortcuts.
 
 ## Restore session boundary
 
-H3 retains the target signing key and regenerates internal `auth.restore_epoch`
+Encrypted backup/restore retains the target signing key and regenerates internal `auth.restore_epoch`
 for every successful restore. Normal login cookies carry this generation in
 addition to the existing user session version. Old source/target cookies fail
 even when signing keys and version numbers collide. Setup verifier/generation,
@@ -331,5 +330,5 @@ the target data key. The current TOTP time step is retired to prevent immediate
 code replay after a counter rewind. Backup needs global Master plus password;
 overwrite restore additionally requires an enabled account's current factor and
 explicit acknowledgement. Local management follows the existing protected host
-operator boundary. [H3 details](encrypted-backup-restore.md) document scoped
+operator boundary. [encrypted backup/restore details](encrypted-backup-restore.md) document scoped
 progress cookies, maintenance and rollback.

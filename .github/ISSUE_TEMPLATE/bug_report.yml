@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible Atlas Impact problem.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read SUPPORT.md first. Use SECURITY.md for vulnerabilities.
+        Remove credentials, API tokens, session cookies, setup codes, MFA material,
+        backup files, database dumps and private inventory from all content.
+  - type: input
+    id: version
+    attributes:
+      label: Atlas version and installation
+      description: Version/channel/build, install method and host OS.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include expected and actual behaviour and relevant browser details.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Minimal logs or screenshots; review them for secrets and private data.

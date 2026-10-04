@@ -1,10 +1,10 @@
-# H2 local two-factor authentication
+# Local two-factor authentication
 
-H2 extends [Atlas authentication](authentication-and-access-control.md). PostgreSQL
+Local MFA extends [Atlas authentication](authentication-and-access-control.md). PostgreSQL
 remains authoritative, and successful MFA issues the existing Atlas session.
 This is optional local TOTP for individual accounts. No external Atlas service,
 email, SMS, push, passkeys, SSO, remembered devices or mandatory-MFA policy is
-implemented. [Acceptance evidence](../testing/h2-local-two-factor-authentication.md)
+implemented. [historical validation](../history/validation/h2-local-two-factor-authentication.md)
 distinguishes implementation from release acceptance.
 
 ## Cryptographic material
@@ -29,14 +29,14 @@ Docker and systemd fresh installers generate the key independently into their
 existing protected environment files. Production API startup refuses missing or
 malformed material. Development can start without a key for non-MFA work but
 requires an explicitly configured valid key before enrollment. There is no
-hardcoded encryption fallback. See [deployment and recovery](../deployment/h2-mfa.md).
+hardcoded encryption fallback. See [deployment and recovery](../deployment/mfa.md).
 
 **Atlas MFA encrypted data depends on ATLAS_DATA_ENCRYPTION_KEY.** Restoring
 PostgreSQL alone to an installation with a different key cannot decrypt seeds.
-H3 includes the source key material inside its passphrase-encrypted backup
+Encrypted backup/restore includes the source key material inside its passphrase-encrypted backup
 payload and rewraps active/pending MFA to the target key without importing
-deployment secrets. H2 alone supplied no backup engine or key rotation. See
-[H3 backup and restore](encrypted-backup-restore.md); retain protected
+deployment secrets. Key rotation is not provided by MFA management. See
+[encrypted backup and restore](encrypted-backup-restore.md); retain protected
 configuration with any raw PostgreSQL-only backups.
 
 ## State and transactions
@@ -57,7 +57,7 @@ audit commit together. A failure rolls them back. Credential failure counters
 commit deliberately before a sanitized authentication error is returned.
 
 Revision `20261004_0026` adds these three tables. All existing users migrate with
-MFA disabled, including any pre-H2 reserved status flag; identities, hashes,
+MFA disabled, including any legacy reserved status flag; identities, hashes,
 assignments, inventory and accepted knowledge are retained.
 
 ## Enrollment and management
@@ -90,7 +90,7 @@ password plus TOTP or recovery, deletes active/pending factors and recovery code
 clears replay state and invalidates challenges. Enable, replacement and disable
 increment the existing session version, revoke older sessions and refresh only
 the requesting browser's normal session. Password change preserves active MFA,
-clears pending enrollment, invalidates challenges and uses H1 session revocation.
+clears pending enrollment, invalidates challenges and uses ordinary session revocation.
 
 ## Two-stage login
 
@@ -99,13 +99,13 @@ session. `/api/auth/login` returns `{user: null, mfa_required: true}` and issues
 five-minute `atlas_mfa` HttpOnly/SameSite=Lax cookie scoped to `/api/auth/mfa`.
 The signed audience `atlas-mfa-login`, account ID, session version and random
 attempt ID must match the PostgreSQL attempt. Prior attempts are invalidated.
-The cookie uses H1's effective HTTPS Secure policy. It cannot authenticate normal
+The cookie uses the shared effective HTTPS Secure policy. It cannot authenticate normal
 Atlas endpoints, even when supplied as a bearer credential. The frontend keeps
 the verification step on the existing public `/login` route. Cancel revokes the
 exact attempt. Refresh can require starting password login again.
 
 `POST /api/auth/mfa/verify` accepts either TOTP or explicitly selected recovery.
-Success consumes the attempt and issues the ordinary H1 session. Accepted TOTP
+Success consumes the attempt and issues the ordinary Atlas session. Accepted TOTP
 steps must strictly exceed the saved step, including the enrollment step. Five
 invalid attempts exhaust the challenge and impose the existing fifteen-minute
 lockout convention on that account's factor verification, across restarts and
@@ -131,9 +131,9 @@ sanitized verification failures. Existing normal login/logout events remain.
 Actor and target are explicit. OTPs, seeds, QR payloads, codes and keys are absent
 from event metadata. Audit redaction also recognizes MFA credential field names.
 
-H1 Origin/SameSite defenses apply to all MFA mutations and admin reset. Validation
+Shared Origin/SameSite defenses apply to all MFA mutations and admin reset. Validation
 errors for auth/user operations return a generic message without raw input,
 exception context or submitted field names. Status/enrollment/admin operations
 retain backend authorization. Customer/site permissions and operational domain
-models do not change. This H2 diff review does not replace H6's whole-product
+models do not change. These component controls do not replace the final whole-product
 security review.

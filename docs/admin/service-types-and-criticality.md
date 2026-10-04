@@ -1,6 +1,6 @@
 # Service Types and Criticality administration
 
-Release C1 added two managed reference-data areas, now under **System → Reference Data**.
+Service Types and Criticality are managed reference data under **System → Reference Data**.
 Users need `service_types.manage` or `criticality_levels.manage` to change them;
 view-only users can still read active definitions used by Services.
 
@@ -18,7 +18,7 @@ is not normally expected, such as an externally provided capability. Existing
 Services retain an inactive type for historical readability; new Services can
 select only active types.
 
-The **Service** Asset Type shown under Asset Types is not this taxonomy. C1
+The **Service** Asset Type shown under Asset Types is not this taxonomy. Atlas
 preserves that older Asset classification and never converts it automatically.
 
 ## Criticality levels
@@ -45,6 +45,6 @@ links.
 The migration seeds a default Service knowledge profile using the shared
 requirement-definition model. Requirements may be global or limited to a
 Service Type, and conditional JSON can use Criticality rank or Service Type
-configuration. The current C1 UI evaluates and manages resulting gaps; broader
+configuration. The Service UI evaluates and manages resulting gaps; broader
 visual profile authoring for Services can build on the same API in a later
 release.

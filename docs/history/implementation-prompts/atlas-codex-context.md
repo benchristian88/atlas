@@ -9,11 +9,11 @@ implemented.
 
 At that time, the implementation session was directed to read:
 
-- [`../../product/development-roadmap.md`](../../product/development-roadmap.md)
-- [`../../product/release-c2-plan.md`](../../product/release-c2-plan.md)
+- [`../../product/development-roadmap.md`](../product-plans/development-roadmap.md)
+- [`../../product/release-c2-plan.md`](../product-plans/release-c2-plan.md)
 - [`../../architecture/operational-graph.md`](../../architecture/operational-graph.md)
 - [`../../decisions/0001-shared-operational-graph.md`](../../decisions/0001-shared-operational-graph.md)
-- [`../../testing/release-c2-operational-graph.md`](../../testing/release-c2-operational-graph.md)
+- [`../../testing/release-c2-operational-graph.md`](../validation/release-c2-operational-graph.md)
 - [`c2-1-shared-operational-graph-codex-prompt.md`](c2-1-shared-operational-graph-codex-prompt.md)
 
 ## Product and repository
@@ -39,7 +39,7 @@ introduce a preferred framework.
 
 ## Implementation source of truth
 
-[`../../product/feature-ledger.md`](../../product/feature-ledger.md) is the audited
+[`../../product/feature-ledger.md`](../product-reviews/feature-ledger-2026-10-04.md) is the audited
 implementation record at the commit named in that document. The roadmap and this
 context describe planned work but do not prove it exists.
 
@@ -49,7 +49,7 @@ current.
 
 The current readiness baseline is `dev` at
 `4b0bfac6c746c56df9e1bfe16bae33d8dff3721e`, audited on 30 August 2026. Read
-[`../../product/c2-readiness-audit.md`](../../product/c2-readiness-audit.md) and treat
+[`../../product/c2-readiness-audit.md`](../product-plans/c2-readiness-audit.md) and treat
 later repository code as authoritative.
 
 ## Implemented foundation through C1

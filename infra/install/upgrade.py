@@ -111,7 +111,7 @@ def main():
     parser.add_argument("--method", choices=["docker_compose", "systemd"], required=True)
     parser.add_argument("--env-file", type=Path, help="Existing protected Docker configuration; never overwritten")
     parser.add_argument("--validate-only", action="store_true", help="Validate package/prerequisites without changes")
-    parser.add_argument("--backup-confirmed", action="store_true", help="Confirm an H3 backup has been created/downloaded")
+    parser.add_argument("--backup-confirmed", action="store_true", help="Confirm an encrypted Atlas backup has been created/downloaded")
     args = parser.parse_args()
     try:
         metadata = package_identity(args.method)
@@ -126,7 +126,7 @@ def main():
             print(f"Package {metadata['version']} ({args.method}) and protected configuration validated; no changes made.")
             return
         if not args.backup_confirmed:
-            raise ValueError("Create/download an H3 backup first, then pass --backup-confirmed")
+            raise ValueError("Create/download an encrypted Atlas backup first, then pass --backup-confirmed")
         if args.method == "docker_compose":
             docker_upgrade(configuration)
         else:
@@ -136,7 +136,7 @@ def main():
         raise SystemExit(str(exc)) from None
     except (OSError, KeyError, subprocess.SubprocessError):
         raise SystemExit("Upgrade could not complete. Check the verified package, protected configuration and service logs. "
-                         "No secrets were regenerated. If services stopped, keep the maintenance window closed and use documented H3 recovery.") from None
+                         "No secrets were regenerated. If services stopped, keep the maintenance window closed and use documented backup recovery.") from None
 
 
 if __name__ == "__main__":

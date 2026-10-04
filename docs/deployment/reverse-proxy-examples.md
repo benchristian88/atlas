@@ -26,7 +26,7 @@ Inside the operator's TLS server block (replace the illustrative LAN address):
 
 ```nginx
 location / {
-    proxy_pass http://192.168.3.195:3000;
+    proxy_pass http://192.0.2.10:3000;
     proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $remote_addr;
@@ -51,7 +51,7 @@ through HTTPS. Do not add the domain to CORS.
 
 ```caddyfile
 atlas.example.com {
-    reverse_proxy 192.168.3.195:3000
+    reverse_proxy 192.0.2.10:3000
 }
 ```
 
@@ -93,5 +93,5 @@ after editing cookie policy. Native Uvicorn trusts only loopback, and nginx
 accepts forwarded scheme/client headers only from the explicit allowlist. No
 proxy is automatically trusted, including another process on the host.
 
-For H3 restore, every external proxy must allow the same 2 GiB upload bound as
+For encrypted backup restore, every external proxy must allow the same 2 GiB upload bound as
 bundled ingress and permit streaming; nginx's default 1 MiB causes HTTP 413.

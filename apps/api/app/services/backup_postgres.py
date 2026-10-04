@@ -104,7 +104,7 @@ class PostgresBackup:
         except (ValueError, IndexError, OSError, subprocess.SubprocessError):
             raise BackupError("PostgreSQL client version could not be checked.") from None
         if any(client != major for client in client_majors) or major not in {16, 17}:
-            raise BackupError("H3 requires PostgreSQL 16 or 17 and client tools matching the target server major version.")
+            raise BackupError("Atlas backup/restore requires PostgreSQL 16 or 17 and client tools matching the target server major version.")
         return major
 
     def dump(self, destination: Path) -> dict:

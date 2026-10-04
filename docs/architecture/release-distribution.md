@@ -1,7 +1,7 @@
-# H4 release distribution and update awareness
+# Release distribution and update awareness
 
 The canonical version and channel remain in `apps/api/app/release.json`.
-H4 retains the accepted H1–H3 Docker local-build and native/systemd installers.
+Release packages use the existing Docker local-build and native/systemd installers.
 Release packages carry reviewed runtime source/build material, an immutable
 commit identity and method identity; production operators acquire a package
 instead of cloning an arbitrary branch. No container registry is introduced.
@@ -39,17 +39,19 @@ requests have a five-second total timeout, at most 1 MiB across at most three
 links. Incomplete listings fail safely. Startup makes no GitHub request, and
 network/metadata failures return `unavailable` without affecting Atlas operations.
 
-See [operator release guide](../deployment/h4-releases.md) for manifests,
-checksums, local/CI dry runs and deliberate publication, and
-[upgrade guide](../deployment/h4-upgrades.md) for configuration-preserving
-operator procedures and H3 recovery. No persistence or migration changes are
+See [operator release guide](../deployment/releases.md) for manifests,
+checksums and installation, the [maintainer guide](../development/releasing.md)
+for dry runs and publication, and
+[upgrade guide](../deployment/upgrades.md) for configuration-preserving
+operator procedures and encrypted recovery. No persistence or migration changes are
 required, and existing knowledge/graph/authentication contracts remain intact.
 
-H4 native remediation adds a required nginx template and standard-library
+The native package includes a required nginx template and standard-library
 ingress helper to the reviewed native package. They implement the existing
-single-origin contract with loopback-only API/web, explicit proxy trust and H3
+single-origin contract with loopback-only API/web, explicit proxy trust and 2 GiB restore
 upload bounds. Installer preflight precedes durable Atlas mutation; nginx alone
 is installed through distribution apt packages. Native upgrade/validate-only
 reuse these checks, preserve protected configuration and update only managed
-nginx paths with validation/rollback. Subsequent Debian 13 findings and the
-required fresh real lifecycle retest are recorded in the H4 report.
+nginx paths with validation/rollback. Original lifecycle findings are recorded
+in historical validation; later supplied
+Debian 13 restore/packaged-upgrade confirmation is appended separately.

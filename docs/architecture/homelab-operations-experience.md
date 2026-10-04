@@ -1,7 +1,7 @@
-# Homelab Operations Experience (C2.4)
+# Operational views and exploration
 
-Implementation on the C2.4 feature working tree; live/manual acceptance pending.
-See the [validation record](../testing/release-c2-homelab-operations-experience.md).
+The Dashboard and Knowledge Graph present accepted operational knowledge and
+API-owned dependency analysis using shared UI components.
 
 ## Product boundary
 
@@ -11,9 +11,9 @@ Services → Assets as three horizontal lanes. Canonical arrows still follow the
 API's source and target: a Service's Supports edge points toward its Business
 Function even though the Business Function occupies the left lane.
 
-PostgreSQL remains authoritative. C2.1 builds graph records, C2.2 supplies temporal
-dependency-group meaning, and the unchanged C2.3 engine supplies hypothetical
-consequences. No new analysis rules, persistence, scores, schema migrations, or
+PostgreSQL remains authoritative. The graph builder supplies structural records,
+dependency groups supply recorded meaning, and the analysis engine calculates
+hypothetical consequences. No new analysis rules, persistence, scores, schema migrations, or
 live-health assertions are introduced. Recorded Asset status is lifecycle data;
 Service operational status is recorded knowledge, not monitoring.
 
@@ -45,11 +45,11 @@ it. These are narrow compatibility adaptations, not entity-detail redesigns.
 
 ## Read contracts
 
-| Contract | C2.4 addition | Compatibility |
+| Contract | Read behaviour | Compatibility |
 | --- | --- | --- |
 | `GET /api/operational-graph/landscape` | Explicit Customer/Site landscape, existing graph node/edge contracts; empty `focus_key` for Overview | New read-only endpoint |
 | `GET /api/operational-graph` | Optional `site_viewpoint=true` uses selected Customer plus per-object authorization across Sites | Default Site-bound behavior unchanged |
-| `POST /api/dependency-analysis` | Same opt-in `site_viewpoint=true` before calling the existing C2.3 engine | Scenario/response and engine unchanged |
+| `POST /api/dependency-analysis` | Same opt-in `site_viewpoint=true` before calling the existing dependency impact analysis engine | Scenario/response and engine unchanged |
 | `GET /api/dashboard/summary` | Optional `include_customer_wide=true` includes authorized customer-wide completeness/gaps | Default counts unchanged |
 | `GET /api/changes` | Optional `include_customer_wide=true` includes authorized customer-wide changes alongside Site changes | Default filtering unchanged |
 | Operational graph nodes | Optional Site name, criticality rank, required requirement totals/satisfied counts, interface IP and authorized VLAN | Additive metadata |
@@ -97,7 +97,7 @@ unlinked records and visible components, but removes records orphaned by filters
 Dependency markers are generated only from surviving visible member edges.
 Hidden inspector selections fall back to Focus (or the empty Overview inspector).
 Analysis retains its existing overlay context even when relationship lines are
-filtered; this visual projection does not change C2.3 analysis or API traversal.
+filtered; this visual projection does not change dependency impact analysis or API traversal.
 
 
 The full Knowledge Graph uses one mounted graph/inspector tree inside a native
@@ -118,7 +118,7 @@ the same analysis response is projected over the newly visible graph.
 
 `/knowledge-graph` is Overview. `?focus=service:<uuid>` selects Focus; `depth=2`
 expands the backend-bounded neighbourhood. `analysis=unavailable` temporarily
-layers the existing C2.3 scenario onto Focus. Exiting analysis retains focus,
+layers the existing dependency impact analysis scenario onto Focus. Exiting analysis retains focus,
 depth, and filters. Next-integrated native history updates the query state without server navigation,
 preserving refresh, copied URLs, and browser back/forward.
 The `/topology` route now provides [Infrastructure Topology](infrastructure-topology.md);
@@ -134,13 +134,13 @@ rebuilding the graph. Assets show interface-backed IP and authorized VLAN;
 Service explanations use API reason summaries, group fields and canonical paths.
 
 Small dependency-group buttons are presentation objects keyed from existing
-C2.2 group identity. Their subject/member connectors represent the existing
+dependency-group identity. Their subject/member connectors represent the existing
 relationships, and their inspector shows requirement, strategy, failure effect,
 and visible members. They are never persisted as new operational entities.
 Service-to-Service relationships have thinner connectors. Structural Asset
 relationships are hidden by default and can be enabled in Filters.
 
-Analysis merges only entities and edges supplied by the C2.3 response into the
+Analysis merges only entities and edges supplied by the dependency impact analysis response into the
 visible context, retaining canonical endpoints. Entity colors remain stable.
 Unavailable/degraded/unknown use text and solid/dashed borders; unaffected and
 unrelated context are subdued. Only API-reported states are shown. Business
@@ -178,7 +178,7 @@ and dark preference. Desktop uses an adjacent inspector; mobile uses a full-widt
 inspector below a horizontally scrollable graph. The Dashboard preview remains
 pannable and always retains an Open Knowledge Graph action.
 
-## C2.5 entity detail presentation
+## Entity detail presentation
 
 Service and Business Function details reuse `operations-primitives.js`, PageHeader,
 `ops-card`, `ops-badge` and the existing theme tokens. `entity-detail.js` composes
@@ -208,18 +208,17 @@ whole so visible subsets are not presented as complete all/any semantics. These
 are read-access corrections, not new semantics or a parallel authorization model.
 API shapes, writes, graph projection and PostgreSQL schema remain unchanged.
 
-See [C2.5 validation and manual acceptance](../testing/release-c2-entity-detail-ux-polish.md).
+See [historical validation](../history/validation/release-c2-entity-detail-ux-polish.md).
 
 ## Deferred scope and follow-up
 
-C2.5 Entity Detail UX Polish is implemented before F1-lite. Its live/manual
-acceptance remains pending; it adds no major domain semantics.
+Entity detail presentation uses the shared graph and dependency contracts.
 
 IP addresses are authoritative on Interfaces in current product UI. Asset
 create/edit omit the legacy field, and Asset detail shows addresses only in its
 Interfaces section. The deprecated Asset database/API field and reconciliation
 compatibility writers remain; migrating those is separate work. See the
-[Interface-first IP audit](../testing/interface-first-ip-transition.md).
+[historical validation](../history/validation/interface-first-ip-transition.md).
 
 Deferred: enterprise graph scale, minimap, alternate layouts, saved perspectives,
 automatic Workloads(N) clustering, dashboard customization/drag-drop, named

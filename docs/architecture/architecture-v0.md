@@ -1,6 +1,6 @@
-# Atlas architecture v0
+# Atlas Impact architecture
 
-Current baseline: implemented foundation through Release C2.1
+Current architecture of the checked-in beta platform.
 
 ## Purpose
 
@@ -8,8 +8,8 @@ Atlas is a customer/site-scoped infrastructure knowledge, documentation, and
 topology platform. The same ownership and authorization model supports a
 single-site homelab and a multi-customer MSP installation.
 
-This document describes the implemented architecture baseline. Detailed Release
-C2 graph architecture and extension boundaries are documented separately in
+This document describes the implemented architecture baseline. Detailed
+operational graph architecture and extension boundaries are documented separately in
 [`operational-graph.md`](operational-graph.md).
 
 ## Runtime architecture
@@ -41,9 +41,8 @@ simulation, evidence, assertions, reconciliation, and independently tested plugi
 and sync components.
 
 Atlas deliberately validates the knowledge, Service, relationship, and graph
-models with manually entered and curated accepted knowledge. C2.1 is complete;
-B2-lite live Proxmox discovery is a later Homelab Ready increment and must
-preserve the observed-versus-accepted boundary.
+models with manually curated accepted knowledge. Live Proxmox integration
+work must preserve the observed-versus-accepted boundary.
 
 ## Ownership hierarchy
 
@@ -214,7 +213,7 @@ See [`knowledge-completeness.md`](knowledge-completeness.md).
 ### Services and Business Functions
 
 A Service is an operational capability; an Asset is a technical implementation,
-host, connection, or protection component. C1 keeps these concepts separate.
+host, connection, or protection component. Atlas keeps these concepts separate.
 
 Services include purpose, criticality, lifecycle and operational status,
 plain-text owner/contact/support labels, documentation and runbook links, exact
@@ -238,7 +237,7 @@ See [`service-model.md`](service-model.md) and
 
 ## Managed reference and enrichment data
 
-Asset and Relationship Types are global managed records in the current MVP.
+Asset and Relationship Types are global managed records in the current beta.
 Stable keys preserve existing inventory when labels change. System-defined or
 referenced types cannot be deleted; inactive types remain readable but are
 excluded from new-record choices.
@@ -251,11 +250,11 @@ Custom fields are structured definitions and typed value rows. Global and
 Asset-Type applicability share a maximum of 10 active rendered fields for any
 Asset Type. Used definitions and options are deactivated rather than removed.
 
-Icon URLs are metadata, not downloaded server-side content. Atlas accepts HTTPS
-non-SVG URLs and resolves Asset override, type default, then a generic fallback
-in the browser.
+Asset icon URLs are bounded external sources, downloaded and cached by the
+API after safe HTTPS validation. Display uses the cached Asset image, then type
+default and generic fallback. See [icon caching](asset-icon-cache.md).
 
-## Graph architecture at the C2.1 baseline
+## Graph architecture
 
 Atlas has three related graph surfaces:
 
@@ -269,15 +268,15 @@ Atlas has three related graph surfaces:
    bounded depth, deterministic ordering, cycle safety, current-valid temporal
    filtering, edge-family filters, and safe truncation.
 
-The public focused graph schemas retain their C1 UUID contracts, while the
-shared C2.1 contract uses namespaced node and edge identity. The API applies
+The public focused graph schemas retain their existing UUID contracts, while the
+shared graph contract uses namespaced node and edge identity. The API applies
 endpoint-by-endpoint authorization and non-disclosure. These graphs remain
 structural: they intentionally avoid dependency-effect evaluation, outage
 simulation, recovery selection, and planned-change overlays.
 
-C2.1 remains separate from B2-lite Integration/Proxmox completion, the F1-lite
-Documents surface, Interface-first IP cleanup, and legacy Service Asset
-conversion. See
+The graph remains independent of live integration operation and document
+browsing. Interface-owned IPs and legacy Service Asset compatibility keep their
+existing domain boundaries. See
 [`operational-graph.md`](operational-graph.md) and
 [`../decisions/0001-shared-operational-graph.md`](../decisions/0001-shared-operational-graph.md).
 
@@ -297,21 +296,10 @@ See
 for the detailed security design and [`data-model-v0.md`](data-model-v0.md) for
 the detailed entity model.
 
-## Planned architecture evolution
+## Additive evolution
 
-The roadmap preserves this baseline and adds capabilities in layers:
-
-- C2.1 shared operational graph (implemented);
-- C2.2 lean dependency semantics;
-- C2.3 explainable dependency analysis;
-- C2.4 Homelab Operations Experience;
-- F1-lite Homelab Documentation and B2-lite Live Proxmox Discovery;
-- Homelab Ready hardening and release;
-- C3 structured People/Team ownership and C4 formal Knowledge Objects after
-  Homelab Ready;
-- D recovery knowledge and evidence;
-- E failure and recovery-aware impact analysis; and
-- F intended state, change simulation, and post-change reconciliation.
-
-Planned features must remain labelled as planned until the repository code,
-migrations, tests, and feature ledger establish implementation.
+First-party integrations and guided onboarding build on the existing API,
+accepted knowledge and scoped authorization. See [project status](../product/status.md)
+for current product priorities. Structured ownership, formal knowledge objects,
+recovery evidence and intended-state simulation remain later additions; they
+must preserve existing identity, history and domain boundaries.

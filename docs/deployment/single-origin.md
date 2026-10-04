@@ -99,7 +99,7 @@ The cookie helper uses the ASGI request scheme and never inspects raw headers.
 
 `ATLAS_TRUSTED_PROXIES` is empty by default. Set the gateway allowlist to the
 actual external proxy source IP or a narrow CIDR (comma-separated, no spaces).
-Recreate the Docker gateway or run the [native ingress refresh helper](h4-upgrades.md#nativesystemd-upgrade)
+Recreate the Docker gateway or run the [native ingress refresh helper](upgrades.md#nativesystemd-upgrade)
 after editing it. Only a matching socket peer may supply an
 exact `http` or `https` in `X-Forwarded-Proto`; malformed/chained values and all
 untrusted forwarding indications use the gateway's own scheme. The gateway
@@ -119,5 +119,3 @@ CORS is unrelated to same-origin protocol forwarding and remains blank.
 
 The boundary follows [Uvicorn's proxy settings](https://www.uvicorn.org/settings/)
 and [nginx proxy header/URI behavior](https://nginx.org/en/docs/http/ngx_http_proxy_module.html).
-See [H1.1 acceptance](../testing/h1-docker-ingress.md) for direct HTTP and trusted
-external HTTPS regression and real Linux validation.

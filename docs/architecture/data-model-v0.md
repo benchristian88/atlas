@@ -1,8 +1,7 @@
-# Atlas data model v0
+# Atlas data model
 
-Current baseline: foundation relational model plus the Release C1 extension
-summarized below. This document does not imply that planned C2 graph contracts
-are persisted; the operational graph remains a derived read model.
+This reference covers the relational foundation and Service extension. Graph
+contracts are not persisted; the operational graph remains a derived read model.
 
 ## Entity relationships
 
@@ -385,7 +384,7 @@ The foundation migration preserves existing data and seeds stable definitions:
 - Seed/backfill operations are idempotent and never depend on dropping the
   database.
 
-## Release C1 Service extension
+## Service and capability model
 
 Migration `20260720_0013` adds the current Service/capability model:
 
@@ -416,7 +415,10 @@ ending a link preserves history. Service self-dependency is prohibited, while
 cycles among different Services are allowed. Relationship Type applicability
 declares valid endpoint-kind pairs.
 
-The same migration extends completeness to Services and retains C1 text owner,
+The same migration extends completeness to Services and retains text owner,
 contact, runbook, recovery, RTO, and RPO fields. Structured People/Teams,
-Knowledge Objects, Backup/Recovery records, dependency-group semantics, and
-Impact Analysis results are not part of the current schema.
+formal Knowledge Objects and infrastructure protection/recovery records remain
+deferred. Dependency groups and memberships are persisted separately; hypothetical
+analysis results are read-only outputs, not a second operational store. See
+[dependency semantics](service-dependencies.md), [MFA state](local-two-factor-authentication.md)
+and [backup state inventory](encrypted-backup-restore.md) for the current extensions.

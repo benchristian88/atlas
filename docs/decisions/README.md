@@ -15,7 +15,7 @@ remain understandable after the original implementation discussion is gone.
 
 - [`0001-shared-operational-graph.md`](0001-shared-operational-graph.md) — preserve
   PostgreSQL accepted operational knowledge as the source of truth and introduce
-  an API-owned derived operational graph for Release C2.1 and later analysis.
+  an API-owned derived operational graph for structural exploration and dependency analysis.
 
 - [`0002-mistaken-entity-tombstones.md`](0002-mistaken-entity-tombstones.md) —
   distinguish mistaken-record removal from Archive while retaining evidence and

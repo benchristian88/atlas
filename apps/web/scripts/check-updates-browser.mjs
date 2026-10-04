@@ -92,11 +92,27 @@ try {
             headings: getComputedStyle(update.querySelector("h2")).fontSize === getComputedStyle(sibling.querySelector("h2")).fontSize };
         });
         assert.deepEqual(comparison, { same: true, headings: true });
+        const about = page.getByRole("region", { name: "About", exact: true });
+        assert.match(await about.innerText(), /Atlas Impact.*Version.*0\.1\.0.*Licence.*AGPL-3\.0-only/s);
+        for (const name of ["Source repository", "Operator and developer guides", "Security reporting policy", "Commercial licensing information"]) {
+          const link = about.getByRole("link", { name, exact: true });
+          assert.match(await link.getAttribute("href"), /^https:\/\/github\.com\/benchristian88\/atlas(?:\/|$)/);
+          assert.equal(await link.getAttribute("rel"), "noopener noreferrer");
+          assert.equal(await link.getAttribute("target"), "_blank");
+        }
+        const aboutComparison = await page.evaluate(() => {
+          const about = document.querySelector('[aria-labelledby="settings-about"]');
+          const general = document.querySelector('[aria-labelledby="settings-general"]');
+          const a = getComputedStyle(about), g = getComputedStyle(general);
+          return ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderRadius", "borderColor", "backgroundColor"].every(field => a[field] === g[field])
+            && getComputedStyle(about.querySelector("h2")).fontSize === getComputedStyle(general.querySelector("h2")).fontSize;
+        });
+        assert.equal(aboutComparison, true);
         if (accent === null) await page.screenshot({ path: `${output}/updates-${theme}-${width}.png`, fullPage: true });
       }
     }
   }
-  checks.push("sibling card style comparison, 24 responsive/theme/accent combinations");
+  checks.push("Updates and About sibling style comparison, safe project/licence links, 24 responsive/theme/accent combinations");
   info = await scenario("unavailable", "docker_compose");
   assert.equal(info.status, "unavailable");
   await card.getByText("Update information is currently unavailable.", { exact: true }).waitFor();

@@ -1,4 +1,4 @@
-"""Confirmed local recovery through the same H3 service; no CLI passphrases."""
+"""Confirmed local recovery through the shared backup service; no CLI passphrases."""
 import argparse
 import getpass
 import os
