@@ -1,8 +1,10 @@
 import copy
 import importlib.util
 import io
+import os
 import json
 from pathlib import Path
+import re
 import secrets
 import shutil
 import subprocess
@@ -169,6 +171,66 @@ def test_checksums_cover_manifest_and_reject_tampering(packages, tmp_path):
     manifest = target / f"atlas-release-{release['version']}.json"
     manifest.write_bytes(manifest.read_bytes() + b" ")
     with pytest.raises(ValueError, match="checksum"): packager.verify(target)
+
+
+def documented_checksum_commands():
+    guide = (ROOT / "docs/deployment/releases.md").read_text()
+    blocks = re.findall(r"```bash\n(.*?)\n```", guide, re.DOTALL)
+    selection = next(block for block in blocks if block.startswith("awk -v package="))
+    checks = [block for block in blocks if re.match(r"(?:sha256sum|shasum) ", block)]
+    assert checks == ["sha256sum -c SHA256SUMS.selected", "shasum -a 256 -c SHA256SUMS.selected"]
+    return selection, checks
+
+
+def selected_release_download(packages, tmp_path, method):
+    output, release = packages
+    label = packager.METHODS[method]
+    archive = f"atlas-{label}-{release['version']}.tar.gz"
+    manifest = f"atlas-release-{release['version']}.json"
+    for name in (archive, manifest, "SHA256SUMS"):
+        shutil.copyfile(output / name, tmp_path / name)
+    environment = {**os.environ, "ATLAS_VERSION": release["version"], "ATLAS_PACKAGE": label}
+    return archive, manifest, environment
+
+
+@pytest.mark.parametrize("method", ["docker_compose", "systemd"])
+def test_documented_checksums_verify_selected_package_and_manifest_only(packages, tmp_path, method):
+    archive, manifest, environment = selected_release_download(packages, tmp_path, method)
+    selection, checks = documented_checksum_commands()
+    subprocess.run(["bash", "-e", "-c", selection], cwd=tmp_path, env=environment, check=True)
+    lines = (tmp_path / "SHA256SUMS.selected").read_text().splitlines()
+    assert {line.split("  ")[1] for line in lines} == {archive, manifest}
+    for command in checks:
+        result = subprocess.run(["bash", "-e", "-c", command], cwd=tmp_path, check=True, capture_output=True, text=True)
+        assert f"{archive}: OK" in result.stdout and f"{manifest}: OK" in result.stdout
+    assert len(list(tmp_path.glob("*.tar.gz"))) == 1
+    installation = (ROOT / "docs/deployment/installation.md").read_text()
+    assert installation.count("package, release manifest and `SHA256SUMS`") == 2
+    assert "docs/deployment/releases.md#assets-and-validation" in (ROOT / "README.md").read_text()
+
+
+@pytest.mark.parametrize("method", ["docker_compose", "systemd"])
+@pytest.mark.parametrize("defect", ["missing-entry", "duplicate-entry", "missing-package", "missing-manifest", "tampered-package", "tampered-manifest"])
+def test_documented_selected_checksums_reject_missing_duplicate_or_tampered_files(packages, tmp_path, method, defect):
+    archive, manifest, environment = selected_release_download(packages, tmp_path, method)
+    selection, checks = documented_checksum_commands()
+    sums = tmp_path / "SHA256SUMS"
+    if defect in {"missing-entry", "duplicate-entry"}:
+        lines = sums.read_text().splitlines(keepends=True)
+        entry = next(line for line in lines if line.endswith(f"  {manifest}\n"))
+        sums.write_text("".join(line for line in lines if line != entry) if defect == "missing-entry" else "".join(lines) + entry)
+        result = subprocess.run(["bash", "-e", "-c", selection], cwd=tmp_path, env=environment)
+        assert result.returncode != 0
+        return
+    if defect in {"missing-package", "missing-manifest"}:
+        (tmp_path / (manifest if defect == "missing-manifest" else archive)).unlink()
+    else:
+        path = tmp_path / (manifest if defect == "tampered-manifest" else archive)
+        path.write_bytes(path.read_bytes() + b"tampered")
+    subprocess.run(["bash", "-e", "-c", selection], cwd=tmp_path, env=environment, check=True)
+    for command in checks:
+        result = subprocess.run(["bash", "-e", "-c", command], cwd=tmp_path, capture_output=True)
+        assert result.returncode != 0
 
 
 def test_workflow_syntax_permissions_publication_guards_and_pins():

@@ -608,4 +608,3 @@ their regressions passed.
 The UI migration sequence was extracted from the active UI architecture to
 `docs/history/product-plans/ui-migration-sequence.md`. The original CI execution
 narrative is retained in `docs/history/validation/continuous-integration.md`.
-

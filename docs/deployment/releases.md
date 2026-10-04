@@ -26,22 +26,52 @@ A release contains:
 - `atlas-release-<version>.json`;
 - `SHA256SUMS`, covering both archives and the release manifest.
 
-Download **all four files from the same official HTTPS release** into a new
-working directory. Before extracting any archive, verify every entry:
+Download **your chosen archive, the release manifest and `SHA256SUMS` from the
+same official HTTPS release** into a new working directory. Docker Compose users
+need only the Docker archive; native/systemd users need only the systemd archive.
+The unrelated archive is not required.
 
-```bash
-sha256sum -c SHA256SUMS
-```
-
-On macOS use `shasum -a 256 -c SHA256SUMS`. Every file must report `OK`; stop if
-anything is missing or differs. SHA-256 detects corruption relative to the
-checksum file; it is not a digital signature. Signing/attestations are not
-currently part of the release contract.
-
-Set the exact version you selected, then extract the desired verified package:
+Set the exact downloaded version and package type:
 
 ```bash
 ATLAS_VERSION=0.1.0
+ATLAS_PACKAGE=docker-compose
+```
+
+Use `ATLAS_PACKAGE=systemd` for native/systemd. Select the two checksum entries by
+their exact filenames. The command fails if either entry is missing or duplicated:
+
+```bash
+awk -v package="atlas-${ATLAS_PACKAGE}-${ATLAS_VERSION}.tar.gz" \
+    -v manifest="atlas-release-${ATLAS_VERSION}.json" '
+  $2 == package { package_count++; print; next }
+  $2 == manifest { manifest_count++; print }
+  END { if (package_count != 1 || manifest_count != 1) exit 1 }
+' SHA256SUMS > SHA256SUMS.selected
+```
+
+Stop if selection fails. Before extracting, verify **both selected entries**.
+On Linux:
+
+```bash
+sha256sum -c SHA256SUMS.selected
+```
+
+On macOS:
+
+```bash
+shasum -a 256 -c SHA256SUMS.selected
+```
+
+Both the chosen archive and manifest must report `OK`; stop if either file is
+missing or differs. Do not use an option that ignores missing files.
+SHA-256 detects corruption relative to the
+checksum file; it is not a digital signature. Signing/attestations are not
+currently part of the release contract.
+
+After successful verification, extract the chosen package. For Docker Compose:
+
+```bash
 tar -xzf "atlas-docker-compose-${ATLAS_VERSION}.tar.gz"
 cd "atlas-docker-compose-${ATLAS_VERSION}"
 python3 infra/install/compose.py
@@ -50,7 +80,6 @@ python3 infra/install/compose.py
 For native/systemd, after preparing the [host prerequisites](installation.md#nativesystemd):
 
 ```bash
-ATLAS_VERSION=0.1.0
 tar -xzf "atlas-systemd-${ATLAS_VERSION}.tar.gz"
 cd "atlas-systemd-${ATLAS_VERSION}"
 sudo python3 infra/install/native.py
@@ -69,6 +98,9 @@ repository, tag/commit, schema compatibility, package sizes and hashes. Minimum
 supported database revision is `20261004_0025`; pending migrations still run at
 startup. Do not edit package identity to bypass validation.
 
+Maintainers still verify the complete release with both archives using the
+[release verifier](../development/releasing.md#local-dry-run); selecting operator
+checksums does not change its package/manifest identity or contents checks.
 The packager and verifier reject unsafe archive paths/links, duplicates, invalid
 modes, missing required files, inconsistent identity and credential-like contents.
 Caches, development tests, history, environment files, databases and backup

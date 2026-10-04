@@ -10,7 +10,7 @@ The installer works in an SSH/LXC terminal and does not open a browser.
 
 Prerequisites: Python 3, Linux `iproute2`, Docker Engine enabled at boot,
 and Compose v2 supporting `up --wait`. Download the versioned Docker Compose
-package and checksums from the [official releases](https://github.com/benchristian88/atlas/releases),
+package, release manifest and `SHA256SUMS` from the [official releases](https://github.com/benchristian88/atlas/releases),
 [verify before extraction](releases.md#assets-and-validation), then from its
 versioned root run:
 
@@ -100,7 +100,10 @@ Prepare current apt package indexes/network access; preflight simulates package
 installation first. Existing nginx must have its distribution systemd service
 and pass `nginx -t`. TLS remains optional operator configuration.
 
-From the verified native/systemd release package root on the prepared host:
+Download the native/systemd package, release manifest and `SHA256SUMS` from the
+[official releases](https://github.com/benchristian88/atlas/releases) and
+[verify before extraction](releases.md#assets-and-validation). From the verified
+package root on the prepared host:
 
 ```bash
 sudo python3 infra/install/native.py

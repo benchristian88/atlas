@@ -121,6 +121,7 @@ go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
 python infra/release/release.py metadata
 python infra/release/release.py build --dry-run --output dist/release
 python infra/release/release.py verify --require-committed --output dist/release
+git diff-tree --check --root -m HEAD
 git diff --check
 ```
 
@@ -156,3 +157,13 @@ Repository-wide local Markdown targets and public-language boundaries are
 validated in `tests/test_repository_docs.py`. Packaged-link checks run with the
 release-critical regressions. Documentation changes need truthful feature claims,
 valid links and balanced code fences.
+
+For pending documentation, run `python -m pytest tests/test_repository_docs.py -q`
+from `apps/api`. Its whitespace check reads root, `docs` and `.github` Markdown
+directly from disk, including untracked files, and excludes dependency/generated
+directories. It rejects trailing spaces/tabs, missing terminal newlines and extra
+EOF blank lines. Three exact-byte snapshots preserve older hard breaks and an
+older EOF blank line; editing those documents requires cleaning their whitespace.
+No new document receives an exemption. Plain `git diff --check` omits untracked
+files and cannot replace this check. Hosted CI also runs
+`git diff-tree --check --root -m HEAD` against the committed change.

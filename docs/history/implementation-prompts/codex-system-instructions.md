@@ -72,7 +72,7 @@ For each feature, record:
 Do not mark a feature as implemented without confirming it exists in the
 codebase and, where applicable, has tests.
 
-Also update any documentation that needs changing as a result of the new features, or ardchitecture. 
+Also update any documentation that needs changing as a result of the new features, or ardchitecture.
 
 ## Completion criteria
 Before reporting completion:

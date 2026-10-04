@@ -8,13 +8,21 @@ certification.
 
 ## Reporting a vulnerability
 
+Use **GitHub Private Vulnerability Reporting** for Atlas security vulnerabilities.
+Open the [official repository](https://github.com/benchristian88/atlas), select its
+**Security** (or **Security and quality**) tab, then **Report a vulnerability**
+on the advisories page. Submit the report through that private form. See
+[GitHub's reporting instructions](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately).
 Do not publish exploitable details, credentials or private inventory in public
-issues. The repository currently documents no established private reporting
-channel. Through the existing [project owner identity](https://github.com/benchristian88),
-request a private reporting route before sending sensitive details. Do not assume
-a security email, enabled GitHub private reporting or a public issue is private.
+Issues, discussions or pull requests.
 
-Once a private route is agreed, include the affected version/build and install
+This policy does not establish that reporting is enabled in GitHub settings.
+If the reporting button is absent, do not post vulnerability details publicly.
+The repository owner must enable **Private vulnerability reporting** under
+**Settings → Advanced Security** if it is not already enabled; see
+[GitHub's configuration instructions](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository).
+
+In the private report, include the affected version/build and install
 method, the affected component, prerequisites, reproducible steps and observed
 impact. Use a disposable environment and redact credentials, session cookies,
 setup codes, authenticator seeds, recovery codes and customer data. Do not send
