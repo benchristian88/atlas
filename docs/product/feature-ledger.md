@@ -1323,7 +1323,7 @@ unresolved for later hardening. Real native lifecycle remains H6.
 
 ## Routine development CI
 
-**Implemented component; first GitHub-hosted execution pending.**
+**Implemented component; successful GitHub-hosted validation pending.**
 `.github/workflows/ci.yml` provides read-only PR checks for `dev`/`main`, pushes
 to those branches and manual dispatch. Backend/PostgreSQL, Frontend and
 Release & Deployment Integrity jobs cover full API/SDK/Proxmox regression,

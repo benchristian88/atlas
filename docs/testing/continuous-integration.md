@@ -27,11 +27,20 @@ a `pg_isready` healthcheck and a bounded authenticated readiness check.
 Ubuntu 24.04's nginx 1.24 cannot validate the gateway's upstream `resolve`
 directive. CI builds nginx 1.28.3 from an official HTTPS archive checked against
 a fixed SHA-256, under runner temporary storage. The ingress suite runs that
-binary against both production templates and disposable loopback upstreams.
+binary against temporary copies of both production templates and disposable
+loopback upstreams. The fixture checks the original Docker `listen 80` contract,
+then changes only its temporary listener before **both** `nginx -t` and runtime
+startup. It obtains a free port with `bind(('127.0.0.1', 0))`, requires a port
+above 1024, and uses that loopback listener for both validation copies. Routing,
+headers and the 2 GiB H3 upload bound remain unchanged; no root nginx execution
+is needed. A regression checks both generated listeners for all four fixture
+variants.
 The PGDG signing-key fingerprint is checked before installing signed client
 packages; no server/systemd package or Atlas host installation is performed.
 
-All Actions use the same immutable official pins as `release.yml`. The only
+Checkout v7.0.1, setup-node v7.0.0 and setup-python v7.0.0 use official Node 24
+Action runtimes and immutable full commit pins aligned with `release.yml`.
+Atlas's frontend application/test runtime remains **Node 22**. The only
 token permission is `contents: read`; checkout does not retain credentials.
 There is no PR secret input, release/tag creation, registry push, publication
 helper or artifact upload. Only pip's download cache and npm's lockfile-keyed
@@ -166,8 +175,13 @@ Local implementation validation on 2026-10-04 used Python **3.14.7**, Node
 | Changed Markdown links and code fences | **127** local link targets passed; no unclosed code fences. |
 | Upstream prerequisites | Official nginx archive SHA-256 and PGDG key fingerprint verified; both official container tags exist for Linux/amd64. |
 
-Hosted execution of this new workflow has not occurred during implementation.
-The first GitHub run must establish Python 3.12/Node 22 runner execution, signed
-Linux prerequisite installation, Docker health/Compose/image builds and actual
-cancellation/cache behaviour. Docker CLI/daemon and Linux systemd are unavailable
-locally; no Docker config/build or native lifecycle result is claimed here.
+No hosted execution had occurred at the initial implementation validation above.
+The subsequent first hosted run supplied by the user passed Frontend and reported
+**821 passed, 32 errors** in Backend / PostgreSQL. All errors were Docker nginx
+fixture setup failures: its first `nginx -t` still attempted the production port
+80 before the runtime-only adaptation. Release & Deployment Integrity was
+reported otherwise healthy. The fixture now adapts the test listener before
+both validations; a new hosted run must confirm this fix and the Node 24 Action
+pins. Historical H4 evidence is unchanged. Docker CLI/daemon and Linux systemd
+remain unavailable locally; local tests do not establish native lifecycle
+acceptance.

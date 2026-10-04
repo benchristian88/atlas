@@ -6,6 +6,12 @@ import re
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+# Reviewed official release commits whose action.yml declares runs.using=node24.
+NODE24_ACTION_PINS = {
+    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",  # v7.0.1
+    "actions/setup-node": "820762786026740c76f36085b0efc47a31fe5020",  # v7.0.0
+    "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",  # v7.0.0
+}
 
 
 def workflow(name="ci"):
@@ -33,6 +39,12 @@ def test_ci_has_only_read_permissions_pinned_actions_and_no_publication():
     ci, release = workflow(), workflow("release")
     assert ci["permissions"] == {"contents": "read"}
     release_actions = {step["uses"] for job in release["jobs"].values() for step in job["steps"] if "uses" in step}
+    for configuration in (ci, release):
+        for job in configuration["jobs"].values():
+            for step in job["steps"]:
+                name, _, pin = step.get("uses", "").partition("@")
+                if name in NODE24_ACTION_PINS:
+                    assert pin == NODE24_ACTION_PINS[name]
     for job in ci["jobs"].values():
         assert "permissions" not in job and "if" not in job
         for step in job["steps"]:
