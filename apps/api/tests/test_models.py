@@ -5,6 +5,9 @@ from app.models import Base
 
 
 EXPECTED_TABLES = {
+    "user_mfa",
+    "mfa_recovery_codes",
+    "mfa_challenges",
     "users",
     "roles",
     "permissions",

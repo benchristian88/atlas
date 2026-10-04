@@ -27,7 +27,8 @@ branch. Future release packaging will replace source checkout where appropriate.
 The fresh installer requires no existing `.env`; it refuses existing files.
 
 The helper creates root-of-checkout `.env` with mode `0600`, independently
-generates a 256-bit PostgreSQL password and 384-bit session-signing key, builds
+generates a 256-bit PostgreSQL password, 384-bit session-signing key and independent
+256-bit MFA data-encryption key, builds
 the stack, waits for health, and prints one setup code. Secrets are never
 displayed. An existing file, including an empty file or symlink, is refused.
 There is no automatic overwrite or credential rotation. If installation stops
@@ -153,7 +154,7 @@ fake restore endpoint.
 
 | Category | Configuration |
 | --- | --- |
-| Required generated production secrets | `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY` |
+| Required generated production secrets | `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY`, `ATLAS_DATA_ENCRYPTION_KEY` |
 | Deployment/browser policy | Docker `AUTH_COOKIE_SECURE=auto` (HTTP non-Secure, trusted HTTPS Secure); explicit `true`/`false` overrides; native default `true`; optional exact `CORS_ORIGINS` for deliberate split origins only |
 | Docker ingress | `ATLAS_BIND_ADDRESS` (IPv4), `ATLAS_PORT` (1–65535, default 3000), `ATLAS_TRUSTED_PROXIES` (empty by default; explicit external proxy IP/CIDR list) |
 | Artifact/install identity | `ATLAS_INSTALL_METHOD`, `ATLAS_BUILD_ID`; canonical version/channel in `apps/api/app/release.json` |
@@ -191,7 +192,7 @@ No graph, inventory, tenancy or domain semantics change. `/api/setup/*` and
 the globally authorized `/api/system-settings/build-info` are additive APIs.
 About exposes version/channel/build/install identity without deployment secrets.
 No Git is required at runtime; Compose embeds the build ID in its image and
-native configuration carries it from installation. Update checking, TOTP,
+native configuration carries it from installation. H2 now supplies [local TOTP and recovery](h2-mfa.md); update checking,
 backup/restore engines and the final security review remain later passes.
 
 ## H1.1 update of an existing Docker installation
@@ -207,4 +208,7 @@ supported; `true` requires HTTPS for browser setup/login. Update an external
 proxy to use only the gateway upstream and remove its old separate API location.
 No H1.1 database migration is required. Existing users and initialized setup
 closure remain intact. Native/systemd receives no Docker gateway or ingress
-redesign. Repeat the [H1.1 Linux acceptance](../testing/h1-docker-ingress.md).
+redesign. H1/H1.1 is accepted on real Debian Docker/LXC, including actual reboot and
+one-upstream NPM; see [H1.1 evidence](../testing/h1-docker-ingress.md). Native
+real lifecycle acceptance remains H6. H2 configuration upgrades additionally
+require the independent data key; see [H2 deployment](h2-mfa.md).

@@ -1,10 +1,14 @@
 # H1.1 Docker single-ingress correction and acceptance
 
-H1.1 corrects issues found during real Debian Docker/LXC H1 acceptance. The user
-confirmed H1 production build, generated secrets, healthy five-service stack,
-setup-code generation/reset, first administrator, login/dashboard and actual LXC
-reboot recovery. Those results do not prove the newly added gateway. Native/
-systemd ingress is unchanged and its acceptance remains separate.
+**H1 / H1.1 — ACCEPTED.** User-reported real Debian Docker/LXC acceptance
+proved fresh clone, production installer, generated secrets, detected LAN URL,
+healthy gateway/API/web/database/cache, setup-code generation/reset, first
+administrator, login/dashboard and actual LXC reboot/recovery. Direct LAN HTTP
+and external Nginx Proxy Manager HTTPS worked using **one upstream only**, with
+no `/api` custom location. This includes the H1.1 cookie Secure policy.
+Native/systemd has automated/static validation only; real Linux installation and
+reboot remain H6/release acceptance. The implementation and original local
+validation below are retained as historical evidence.
 
 ## Implementation report (A–K)
 
@@ -18,8 +22,8 @@ systemd ingress is unchanged and its acceptance remains separate.
 | F — Installer output | Actual URL and one-time code after health readiness. Local-only loopback and explicit wildcard guidance. Independent database/auth secrets remain protected and absent from output/subprocess arguments. |
 | G — Cookie auto mode | Docker configuration defaults to `auto`; the shared helper uses `Request.url.scheme`. Setup issue/delete, login, password change and logout all use it. `true`/`false` still force policy; native generation remains `true`. HttpOnly, SameSite=Lax, paths, token checks and Origin protections retained. |
 | H — Trust boundary | Empty external allowlist by default. nginx accepts an exact forwarded http/https only from an explicitly allowlisted socket peer; otherwise it uses its own scheme. It replaces untrusted client/Host forwarding. API Uvicorn accepts sanitized headers on the unpublished trusted Compose network. Do not publish API or connect untrusted containers with this setting. Trusted edge proxies must replace browser forwarding headers. |
-| I — Direct HTTP | Automated PostgreSQL setup→admin→login→authenticated context→password change→logout passes with non-Secure cookies and blank CORS. Actual nginx routes/URI/Host preservation and ignored spoofed headers pass. Real LAN browser acceptance still required. |
-| J — External HTTPS | Automated trusted-Uvicorn scheme/cookie checks and PostgreSQL full lifecycle pass with Secure cookies. Real nginx accepts HTTPS indication only from an allowlisted peer and rejects malformed/chained indications. Actual TLS/NPM/browser acceptance still required. |
+| I — Direct HTTP | Automated PostgreSQL setup→admin→login→authenticated context→password change→logout passes with non-Secure cookies and blank CORS. Actual nginx routes/URI/Host preservation and ignored spoofed headers pass. Real LAN browser acceptance subsequently passed on Debian. |
+| J — External HTTPS | Automated trusted-Uvicorn scheme/cookie checks and PostgreSQL full lifecycle pass with Secure cookies. Real nginx accepts HTTPS indication only from an allowlisted peer and rejects malformed/chained indications. Actual TLS/NPM/browser acceptance subsequently passed on Debian. |
 | K — CORS | No generated proxy domains or public URL setting. Normal single-origin CORS remains blank; existing exact split-origin compatibility remains. Custom host port is retained for existing Origin checks. |
 
 Sanitized installer output (illustrative address/code, no real credential):
@@ -113,7 +117,7 @@ they do not claim the complete remote Docker/TLS browser journey passed.
   `docs/architecture/authentication-and-access-control.md`: actual deployment and
   authentication boundary.
 - `docs/product/feature-ledger.md`: implemented correction with Linux revalidation
-  pending; recorded user-reported H1 Linux evidence and separate native limitation.
+  accepted; recorded user-reported H1/H1.1 Linux evidence and separate native limitation.
 - `docs/testing/h1-release-foundation.md`: historical H1 baseline clearly linked
   to this correction; original evidence retained.
 - `docs/testing/h1-docker-ingress.md`: completion evidence and exact Linux steps.

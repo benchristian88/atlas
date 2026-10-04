@@ -1,5 +1,16 @@
 """Configuration required before connecting to the system of record."""
 import os
+import re
+
+
+def data_encryption_key(*, required: bool = True) -> bytes | None:
+    """Independent 256-bit bootstrap material; never derive it from auth keys."""
+    value = os.getenv("ATLAS_DATA_ENCRYPTION_KEY", "")
+    if not value and not required and os.getenv("ATLAS_INSTALL_METHOD", "development") == "development":
+        return None
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", value):
+        raise RuntimeError("ATLAS_DATA_ENCRYPTION_KEY must be configured as 64 hexadecimal characters (32 random bytes)")
+    return bytes.fromhex(value)
 
 from sqlalchemy import URL
 

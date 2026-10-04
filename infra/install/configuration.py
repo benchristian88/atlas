@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import secrets
 import subprocess
+import fcntl
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -91,6 +93,7 @@ def generate_configuration(path: Path, method: str) -> dict[str, str]:
         "# Atlas production bootstrap configuration. Keep this file protected.\n"
         f"POSTGRES_PASSWORD={secrets.token_hex(32)}\n"
         f"AUTH_SECRET_KEY={secrets.token_hex(48)}\n"
+        f"ATLAS_DATA_ENCRYPTION_KEY={secrets.token_hex(32)}\n"
         f"AUTH_COOKIE_SECURE={'auto' if method == 'docker_compose' else 'true'}\n"
         "CORS_ORIGINS=\n"
         f"ATLAS_INSTALL_METHOD={method}\n"
@@ -106,11 +109,42 @@ def generate_configuration(path: Path, method: str) -> dict[str, str]:
     return ingress
 
 
+def add_data_encryption_key(path: Path) -> None:
+    """Upgrade protected configuration without replacing any existing secret."""
+    descriptor = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "r+") as output:
+        fcntl.flock(output, fcntl.LOCK_EX)
+        content = output.read()
+        values = [line.split("=", 1)[1] for line in content.splitlines()
+                  if line.startswith("ATLAS_DATA_ENCRYPTION_KEY=")]
+        if values:
+            if len(values) != 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", values[0]):
+                raise ValueError("Existing ATLAS_DATA_ENCRYPTION_KEY is invalid; refusing to replace cryptographic material")
+            return
+        output.seek(0, os.SEEK_END)
+        output.write(("\n" if content and not content.endswith("\n") else "")
+                     + f"ATLAS_DATA_ENCRYPTION_KEY={secrets.token_hex(32)}\n")
+        output.flush()
+        os.fsync(output.fileno())
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate protected Atlas production configuration")
-    parser.add_argument("--method", choices=["docker_compose", "systemd"], required=True)
+    parser.add_argument("--method", choices=["docker_compose", "systemd"])
+    parser.add_argument("--add-data-encryption-key", action="store_true", help="Add only the missing key to an existing protected file")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.add_data_encryption_key:
+        if args.method:
+            parser.error("--method cannot be combined with --add-data-encryption-key")
+        try:
+            add_data_encryption_key(args.output)
+        except (OSError, ValueError):
+            raise SystemExit("Cannot add data-encryption material; check the existing file, key and permissions") from None
+        print("Data-encryption configuration is ready. Existing secrets were preserved; key is not displayed.")
+        return
+    if not args.method:
+        parser.error("--method is required for fresh configuration")
     try:
         generate_configuration(args.output, args.method)
     except FileExistsError:

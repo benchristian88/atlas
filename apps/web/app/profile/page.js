@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "../../components/button";
+import { MfaSecurity } from "../../components/mfa-security";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -402,6 +403,8 @@ export default function ProfilePage() {
             </div>
           </form>
         </section>
+
+        <MfaSecurity passwordChangeRequired={user.force_password_change} />
 
         <section className="profile-access-card" aria-labelledby="access-title">
           <p className="eyebrow">Authorisation</p>

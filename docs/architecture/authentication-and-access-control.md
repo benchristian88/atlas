@@ -30,6 +30,11 @@ sequenceDiagram
     W->>A: POST login (credentials included)
     A->>D: Load active user by normalized email
     A->>A: Verify password hash
+    opt Account has local MFA enabled
+        A-->>B: Scoped MFA challenge cookie (no session)
+        B->>A: Verify TOTP or one-time recovery code
+        A->>D: Consume factor/attempt atomically
+    end
     A->>D: Record login audit event
     A-->>B: HttpOnly, SameSite=Lax session cookie
     B->>A: Scoped API request with cookie
@@ -71,6 +76,18 @@ page; it does not expose inventory or administrative records. All
 permission-protected application routes continue to return `403`. A profile
 update can change `display_name`; it cannot change email, roles, scopes, active
 state, or session version through mass assignment.
+
+## Local two-factor authentication
+
+Profile supports optional local TOTP enrollment, local QR/manual setup, 12
+one-time recovery codes, replacement, regeneration and disable. Password-only
+authentication for an enrolled account receives a separate five-minute scoped
+challenge; only valid MFA issues the normal session. PostgreSQL user-row locks
+serialize confirmation, replay protection and code consumption. Seeds use AES-GCM
+with independent `ATLAS_DATA_ENCRYPTION_KEY` bootstrap material. Global Master
+Administrators can reset another account; local management supplies confirmed
+break-glass reset without changing passwords. See [H2 security contracts](local-two-factor-authentication.md)
+and [deployment/recovery commands](../deployment/h2-mfa.md).
 
 ## Secure first-run setup
 
@@ -281,10 +298,11 @@ retention should export events to an external append-only system.
 
 This MVP provides local password authentication, scoped RBAC, guarded reference
 data, and an application audit trail. It does not yet provide SSO/OIDC/SAML,
-MFA, recovery codes, a self-service forgotten-password email flow, per-session
+a self-service forgotten-password email flow, per-session
 device management, or tamper-evident external audit retention. Role,
 assignment, and user identity tables leave room for an external issuer/subject
-and MFA state without changing inventory ownership.
+without changing inventory ownership. Local MFA is implemented by H2; its
+manual acceptance gates are recorded separately.
 
 `SameSite=Lax`, a narrow credentialed CORS allow-list, and rejection of an
 unapproved `Origin` on state-changing requests are the current browser

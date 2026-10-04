@@ -36,6 +36,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the production bootstrap helper or set a development credential}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY must be set}
+      ATLAS_DATA_ENCRYPTION_KEY: ${ATLAS_DATA_ENCRYPTION_KEY:?ATLAS_DATA_ENCRYPTION_KEY must be set to 64 random hex characters}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-auto}
       # API has no host port. Only trusted Compose services can reach it;
       # gateway sanitizes public headers before Uvicorn interprets them.

@@ -188,3 +188,10 @@ assignment, frontend-only assumptions, cross-customer totals, custom-field
 validation, icon SSRF/script paths, cascade behavior, last-master invariants,
 and secret-bearing audit/log data. Record any deferred route or control as a
 known limitation rather than treating UI hiding as coverage.
+
+## H2 local MFA regression
+
+See [H2 automated/browser evidence and manual acceptance checklist](h2-local-two-factor-authentication.md)
+for enrollment, scoped challenges, replay/races, recovery, resets and deployment
+key handling. H1/H1.1 is accepted on Debian Docker/LXC; real native lifecycle
+remains H6. No final whole-product security acceptance is inferred from H2.

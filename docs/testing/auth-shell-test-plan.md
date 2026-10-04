@@ -114,3 +114,10 @@ the only production Master Administrator.
   accessible labels/focus behavior.
 - [ ] Narrow-screen layout keeps the current context and logout/profile actions
   reachable.
+
+## H2 local MFA regression
+
+See [H2 automated/browser evidence and manual acceptance checklist](h2-local-two-factor-authentication.md)
+for enrollment, scoped challenges, replay/races, recovery, resets and deployment
+key handling. H1/H1.1 is accepted on Debian Docker/LXC; real native lifecycle
+remains H6. No final whole-product security acceptance is inferred from H2.

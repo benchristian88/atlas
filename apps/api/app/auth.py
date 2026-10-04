@@ -135,6 +135,7 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
         select(User)
         .where(func.lower(User.email) == normalized_email)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     stored_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
     valid_password = verify_password(password, stored_hash)
@@ -153,7 +154,8 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
         return None
     user.failed_login_count = 0
     user.locked_until = None
-    user.last_login_at = now
+    if not user.mfa_enabled:
+        user.last_login_at = now
     return user
 
 

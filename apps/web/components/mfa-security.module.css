@@ -1,0 +1,7 @@
+.qr { display: block; max-width: 100%; height: auto; }
+.manualKey { font-family: monospace; }
+.codes { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.codes code { overflow-wrap: anywhere; }
+.recovery { min-width: 0; }
+@media (max-width: 390px) { .codes { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .actions { flex-direction: column; align-items: stretch; } .actions > button { width: 100%; } }
