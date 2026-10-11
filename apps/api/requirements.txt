@@ -11,3 +11,4 @@ Pillow==12.3.0
 cryptography==46.0.5
 pyotp==2.9.0
 redis==6.4.0
+jsonschema[format-nongpl]==4.25.1

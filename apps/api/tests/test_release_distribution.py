@@ -50,7 +50,7 @@ def test_dry_run_and_byte_reproducibility(packages, tmp_path):
     assert {path.name: path.read_bytes() for path in output.iterdir()} == {path.name: path.read_bytes() for path in other.iterdir()}
     assert release["version"] == policy.load_metadata()["version"]
     assert release["source_state"] == "working_tree"
-    assert release["current_schema"] == "20261004_0026"
+    assert release["current_schema"] == "20261011_0027"
     assert packager.verify(output) == release
     with pytest.raises(ValueError, match="cannot be published"): packager.verify(output, require_committed=True)
     with pytest.raises(ValueError, match="exactly match"): packager.verify(output, tag="v99.0.0")
@@ -90,7 +90,7 @@ def test_package_contents_identity_modes_and_installer_paths(packages, tmp_path)
             for service in compose["services"].values():
                 if "build" in service:
                     context = (tree / "infra/docker" / service["build"]["context"]).resolve()
-                    assert context.is_dir() and (context / "Dockerfile").is_file()
+                    assert context.is_dir() and (context / service["build"].get("dockerfile", "Dockerfile")).is_file()
             config = tmp_path / "existing.env"
             # Random, ephemeral configuration; no committed fixture credentials.
             config.write_text("ATLAS_INSTALL_METHOD=docker_compose\n" + "".join(f"{key}={secrets.token_hex(32)}\n" for key in ("POSTGRES_PASSWORD", "AUTH_SECRET_KEY", "ATLAS_DATA_ENCRYPTION_KEY")))
@@ -101,7 +101,7 @@ def test_package_contents_identity_modes_and_installer_paths(packages, tmp_path)
             assert config.read_bytes() == before
         else:
             subprocess.run([sys.executable, str(tree / "infra/install/native.py"), "--help"], check=True, capture_output=True)
-            for service in ("api", "web", "worker"):
+            for service in ("api", "web", "worker", "runtime"):
                 assert (tree / f"infra/systemd/atlas-{service}.service").is_file()
             assert "StateDirectory=atlas" in (tree / "infra/systemd/atlas-api.service").read_text()
             assert (tree / "infra/nginx/native.conf").is_file()
@@ -293,12 +293,13 @@ def test_docker_upgrade_stops_writers_after_build_and_preserves_configuration(mo
     module = installer_module("upgrade")
     calls = []
     monkeypatch.setattr(module, "run", lambda arguments, **kwargs: calls.append(arguments))
+    monkeypatch.setattr(module, "protected_configuration", lambda path, method: {})
     environment = tmp_path / "existing.env"
     environment.write_text("operator configuration"); before = environment.read_bytes()
     module.docker_upgrade(environment)
     tails = [call[6:] for call in calls]
     assert tails[0] == ["config", "--quiet"]
-    assert tails[1] == ["build", "api", "web", "worker"]
+    assert tails[1] == ["build", "api", "web", "worker", "runtime", "runtime-init"]
     assert tails[2] == ["stop", "gateway", "web", "worker", "api"]
     assert "up" in tails[3]
     assert not any("down" in call or "-v" in call for call in calls)
@@ -332,6 +333,9 @@ def test_native_upgrade_reuses_install_primitives_and_preserves_state(monkeypatc
     settings = {"ATLAS_BIND_ADDRESS": "192.0.2.10", "ATLAS_PORT": "3000", "ATLAS_TRUSTED_PROXIES": ""}
     monkeypatch.setattr(module, "native_upgrade_preflight", lambda values: (settings, False))
     monkeypatch.setattr(native, "ensure_nginx", lambda needed: calls.append(["nginx-ready"]))
+    monkeypatch.setattr(native, "configure_runtime", lambda: calls.append(["runtime-configured"]))
+    monkeypatch.setattr(native, "start_runtime", lambda values: calls.append(["runtime-started"]))
+    monkeypatch.setattr(native, "stop_runtime", lambda: calls.append(["runtime-stopped"]))
     import native_ingress
     monkeypatch.setattr(native_ingress, "install", lambda values: calls.append(["ingress", values["ATLAS_PORT"]]))
     monkeypatch.setattr(native, "build_application", lambda account: calls.append(["build", account.pw_uid]))
@@ -341,8 +345,10 @@ def test_native_upgrade_reuses_install_primitives_and_preserves_state(monkeypatc
     try: module.native_upgrade(values)
     finally: module.os.umask(previous_umask)
     assert calls[0] == ["nginx-ready"]
-    assert calls[1] == ["systemctl", "stop", "atlas-web", "atlas-worker", "atlas-api"]
-    assert calls[2:4] == [["build", 10001], ["units"]]
+    assert calls[1] == ["runtime-configured"]
+    assert calls[2] == ["runtime-stopped"]
+    assert calls[3] == ["systemctl", "stop", "atlas-web", "atlas-worker", "atlas-api"]
+    assert calls[4:7] == [["build", 10001], ["units"], ["runtime-started"]]
     assert ["ingress", "3000"] in calls
     assert (destination / "apps/marker").read_text() == "new"
     assert (destination / "venv/identity").read_text() == "preserve"

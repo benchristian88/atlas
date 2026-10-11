@@ -73,7 +73,7 @@ def preflight(*, fresh=True, values=None):
     errors = host_errors() + account_errors(fresh=fresh)
     if sys.version_info < (3, 12):
         errors.append("Python 3.12 or newer is required.")
-    required = ("systemctl", "runuser", "useradd", "npm", "pg_dump", "pg_restore", "psql")
+    required = ("systemctl", "runuser", "useradd", "groupadd", "usermod", "npm", "pg_dump", "pg_restore", "psql")
     available = {name: shutil.which(name) is not None for name in required}
     errors.extend(f"Required prerequisite is missing: {name}" for name, exists in available.items() if not exists)
     if not Path("/usr/bin/env").is_file():
@@ -115,7 +115,7 @@ def preflight(*, fresh=True, values=None):
             account = pwd.getpwnam("atlas")
             if not STATE.is_dir() or STATE.stat().st_uid != account.pw_uid or STATE.stat().st_mode & 0o077:
                 errors.append("Existing Atlas state must be a private directory owned by the atlas service account.")
-        for path in (DESTINATION, CONFIGURATION, *(UNITS / f"atlas-{name}.service" for name in ("api", "web", "worker"))):
+        for path in (DESTINATION, CONFIGURATION, *(UNITS / f"atlas-{name}.service" for name in ("api", "web", "worker", "runtime"))):
             native_ingress.safe_path(path)
             parent = next(parent for parent in path.parents if parent.exists())
             if not os.access(parent, os.W_OK):
@@ -125,7 +125,8 @@ def preflight(*, fresh=True, values=None):
         if not fresh and (not DESTINATION.is_dir() or not (DESTINATION / "venv/bin/python").is_file()):
             errors.append("An existing /opt/atlas installation and venv are required.")
         for name in ("apps/api/requirements.txt", "apps/web/package-lock.json", "infra/nginx/native.conf",
-                     "infra/systemd/atlas-api.service", "infra/systemd/atlas-web.service", "infra/systemd/atlas-worker.service"):
+                     "infra/systemd/atlas-api.service", "infra/systemd/atlas-web.service", "infra/systemd/atlas-worker.service",
+                     "apps/runtime/ansible/requirements.lock", "infra/systemd/atlas-runtime.service", "infra/install/runtime.py"):
             if not (ROOT / name).is_file():
                 errors.append(f"Required installation file is missing: {name}")
         native_ingress.check_managed_paths()
@@ -141,6 +142,7 @@ def preflight(*, fresh=True, values=None):
             listeners.append(("127.0.0.1", 3001))
         if fresh:
             listeners.append(("127.0.0.1", 8000))
+            listeners.append(("127.0.0.1", 8091))
         for address, port in listeners:
             # Existing Atlas listeners belong to the upgrade lifecycle. Validate
             # the new endpoint on first adoption; subsequent upgrades reuse it.
@@ -212,11 +214,24 @@ def ensure_nginx(needs_install):
         raise ValueError("nginx is not ready; check distribution package/service/configuration. No Atlas installation changes made.") from None
 
 
+def install_contracts():
+    # Install the original staged contract files at their canonical repository
+    # locations. The API adapter has no competing schema copy/package.
+    contracts = DESTINATION / "docs/architecture/integrations/contracts"
+    if any(path.is_symlink() for path in (contracts, *contracts.parents)):
+        raise ValueError("Managed contract directory must not be a symlink")
+    contracts.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "docs/architecture/integrations/contracts/connector-manifest-v1.schema.json", contracts / "connector-manifest-v1.schema.json")
+    shutil.copytree(ROOT / "docs/architecture/integrations/contracts/manifests", contracts / "manifests", dirs_exist_ok=True)
+
+
 def build_application(account):
+    install_contracts()
     if not (DESTINATION / "venv").exists():
         run([sys.executable, "-m", "venv", str(DESTINATION / "venv")])
     python = str(DESTINATION / "venv/bin/python")
     run([python, "-m", "pip", "install", "-r", "requirements.txt"], cwd=DESTINATION / "apps/api")
+    build_runtime()
     environment = {**os.environ, "PATH": "/usr/bin:" + os.environ.get("PATH", "/bin"), "NEXT_PUBLIC_API_URL": "/api"}
     run(["npm", "ci"], cwd=DESTINATION / "apps/web", env=environment)
     run(["npm", "run", "build"], cwd=DESTINATION / "apps/web", env=environment)
@@ -229,10 +244,49 @@ def build_application(account):
         os.chown(path, account.pw_uid, account.pw_gid)
 
 
+def build_runtime():
+    """Dependency failure is diagnosed without stopping the knowledge plane."""
+    runtime_environment = DESTINATION / "runtime-venv"
+    if runtime_environment.is_symlink():
+        raise ValueError("Runtime environment must not be a symlink")
+    try:
+        if not runtime_environment.exists():
+            run([sys.executable, "-m", "venv", str(runtime_environment)])
+        runtime_python = str(runtime_environment / "bin/python")
+        run([runtime_python, "-m", "pip", "install", "--no-deps", "-r", "requirements.lock"], cwd=DESTINATION / "apps/runtime/ansible")
+        run([runtime_python, "-m", "pip", "check"])
+    except (OSError, subprocess.SubprocessError):
+        print("Local runtime dependencies could not be prepared; Atlas knowledge services will continue. Inspect runtime-venv and the Runtime page.")
+
+
 def install_units():
-    for unit in ("atlas-api", "atlas-web", "atlas-worker"):
+    for unit in ("atlas-api", "atlas-web", "atlas-worker", "atlas-runtime"):
         shutil.copyfile(DESTINATION / f"infra/systemd/{unit}.service", Path(f"/etc/systemd/system/{unit}.service"))
     run(["systemctl", "daemon-reload"])
+
+
+def configure_runtime():
+    from runtime import configure
+    configure(CONFIGURATION, STATE.parent / "atlas-connectors")
+
+
+def start_runtime(values):
+    try:
+        if values.get("ATLAS_RUNTIME_ENABLED", "true").lower() in {"false", "0", "no"}:
+            run(["systemctl", "disable", "--now", "atlas-runtime"])
+        else:
+            # Runtime readiness is a product health state; it cannot block startup
+            # of the API/web knowledge plane and has no Requires dependency there.
+            run(["systemctl", "enable", "--now", "atlas-runtime"])
+    except (OSError, subprocess.SubprocessError):
+        print("Local runtime could not start or stop; Atlas knowledge services will continue. Inspect atlas-runtime.service and the Runtime page.")
+
+
+def stop_runtime():
+    try:
+        run(["systemctl", "stop", "atlas-runtime"])
+    except (OSError, subprocess.SubprocessError):
+        print("Local runtime was unavailable during upgrade; Atlas knowledge services will continue. Inspect atlas-runtime.service after upgrade.")
 
 
 def wait_for_health(ingress):
@@ -250,7 +304,7 @@ def wait_for_health(ingress):
                 time.sleep(2)
 
 
-def install(ingress, needs_nginx):
+def install(ingress, needs_nginx, *, runtime_enabled=True):
     ensure_nginx(needs_nginx)
     # Application/venv files must be readable by the unprivileged services,
     # even when the invoking root shell has a restrictive umask. Secret file
@@ -272,9 +326,10 @@ def install(ingress, needs_nginx):
     CONFIGURATION.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
     os.chown(CONFIGURATION.parent, 0, account.pw_gid)
     os.chmod(CONFIGURATION.parent, 0o750)
-    generate_configuration(CONFIGURATION, "systemd", ingress=ingress)
+    generate_configuration(CONFIGURATION, "systemd", ingress=ingress, runtime_enabled=runtime_enabled)
     os.chown(CONFIGURATION, 0, account.pw_gid)
     os.chmod(CONFIGURATION, 0o640)
+    configure_runtime()
     DESTINATION.mkdir(mode=0o755)
     for name in ("apps", "infra"):
         shutil.copytree(ROOT / name, DESTINATION / name,
@@ -304,6 +359,7 @@ with psycopg.connect("dbname=postgres", autocommit=True) as db:
     run(["runuser", "-u", "postgres", "--", python, "-c", provision],
         input=json.dumps({"password": values["POSTGRES_PASSWORD"]}), text=True, cwd="/tmp")
     install_units()
+    start_runtime(values)
     run(["systemctl", "enable", "--now", "atlas-api", "atlas-web", "atlas-worker"])
     native_ingress.install(ingress)
     wait_for_health(ingress)
@@ -318,10 +374,15 @@ with psycopg.connect("dbname=postgres", autocommit=True) as db:
 
 def main():
     # Parse before even read-only host checks, including --help on non-Linux hosts.
-    argparse.ArgumentParser(description=__doc__).parse_args()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manual-only", action="store_true", help="Install the Atlas knowledge plane with the local runtime disabled")
+    args = parser.parse_args()
     try:
         ingress, needs_nginx = preflight()
-        install(ingress, needs_nginx)
+        if args.manual_only:
+            install(ingress, needs_nginx, runtime_enabled=False)
+        else:
+            install(ingress, needs_nginx)
     except ValueError as exc:
         raise SystemExit(str(exc)) from None
     except (OSError, subprocess.SubprocessError):

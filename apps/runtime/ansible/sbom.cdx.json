@@ -1,0 +1,426 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "atlas-ansible-runtime",
+      "version": "0.1.0"
+    },
+    "properties": [
+      {
+        "name": "atlas:scope",
+        "value": "Python runtime dependencies; reference wheel artifacts are CPython 3.12 Linux x86_64. OS/image packages require release image qualification."
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "ansible-core",
+      "version": "2.19.7",
+      "purl": "pkg:pypi/ansible-core@2.19.7",
+      "licenses": [
+        {
+          "license": {
+            "name": "GNU General Public License v3 or later (GPLv3+)"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "edeaadbff4eeaf0e677ae11b2ea9cc4faf9a250a59923a55e48fcb10cd66f35a"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "ansible_core-2.19.7-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/ansible-core/COPYING,notices/ansible-core/Apache-License.txt,notices/ansible-core/MIT-license.txt,notices/ansible-core/PSF-license.txt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ansible-runner",
+      "version": "2.4.3",
+      "purl": "pkg:pypi/ansible-runner@2.4.3",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache Software License, Version 2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "cdac6daa151a50084ffda710e769db23fa975fc0507796191d7708831b286e37"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "ansible_runner-2.4.3-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/ansible-runner/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cffi",
+      "version": "2.1.1",
+      "purl": "pkg:pypi/cffi@2.1.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT-0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/cffi/LICENSE"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cryptography",
+      "version": "50.0.2",
+      "purl": "pkg:pypi/cryptography@50.0.2",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0 OR BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "630ebfea3bf689d075f82316324ff7433dc447fe6bc1bfc76524b74b4a9567d2"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "cryptography-50.0.2-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/cryptography/LICENSE,notices/cryptography/LICENSE.APACHE,notices/cryptography/LICENSE.BSD"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "purl": "pkg:pypi/jinja2@3.1.6",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD License"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "jinja2-3.1.6-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/jinja2/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lockfile",
+      "version": "0.12.2",
+      "purl": "pkg:pypi/lockfile@0.12.2",
+      "licenses": [
+        {
+          "license": {
+            "name": "UNKNOWN"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6c3cb24f344923d30b2785d5ad75182c8ea7ac1b6171b08657258ec7429d50fa"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "lockfile-0.12.2-py2.py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "MarkupSafe",
+      "version": "3.0.4",
+      "purl": "pkg:pypi/markupsafe@3.0.4",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "8e124f974786f831d6043728e38296969d3579db8896fe004682f5758e613581"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/markupsafe/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0 OR BSD-2-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "packaging-26.3-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/packaging/LICENSE,notices/packaging/LICENSE.APACHE,notices/packaging/LICENSE.BSD"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pexpect",
+      "version": "4.9.0",
+      "purl": "pkg:pypi/pexpect@4.9.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "ISC license"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7236d1e080e4936be2dc3e326cec0af72acf9212a7e1d060210e70a47e253523"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "pexpect-4.9.0-py2.py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/pexpect/LICENSE"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ptyprocess",
+      "version": "0.7.0",
+      "purl": "pkg:pypi/ptyprocess@0.7.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "UNKNOWN"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4b41f3967fce3af57cc7e94b888626c18bf37a083e3651ca8feeb66d492fef35"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "ptyprocess-0.7.0-py2.py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/ptyprocess/LICENSE"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pycparser",
+      "version": "3.11",
+      "purl": "pkg:pypi/pycparser@3.11",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "pycparser-3.11-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/pycparser/LICENSE"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "python-daemon",
+      "version": "3.1.2",
+      "purl": "pkg:pypi/python-daemon@3.1.2",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache Software License"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b906833cef63502994ad48e2eab213259ed9bb18d54fa8774dcba2ff7864cec6"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "python_daemon-3.1.2-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/python-daemon/LICENSE.ASF-2,notices/python-daemon/LICENSE.GPL-3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "purl": "pkg:pypi/pyyaml@6.0.3",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/pyyaml/LICENSE"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "resolvelib",
+      "version": "1.2.1",
+      "purl": "pkg:pypi/resolvelib@1.2.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "ISC License"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fb06b66c8da04172d9e72a21d7d06186d8919e32ae5ab5cdf5b9d920be805ac2"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:artifact",
+          "value": "resolvelib-1.2.1-py3-none-any.whl"
+        },
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/resolvelib/LICENSE"
+        }
+      ]
+    }
+  ]
+}

@@ -25,7 +25,8 @@ services:
   api:
     restart: unless-stopped
     build:
-      context: ../../apps/api
+      context: ../..
+      dockerfile: apps/api/Dockerfile
       args:
         ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:-unknown}
     environment:
@@ -44,8 +45,19 @@ services:
       ATLAS_INSTALL_METHOD: ${ATLAS_INSTALL_METHOD:-docker_compose}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       ATLAS_STATE_DIR: /var/lib/atlas
+      ATLAS_RUNTIME_ENABLED: ${ATLAS_RUNTIME_ENABLED:-true}
+      ATLAS_RUNTIME_URL: http://runtime:8091
+      ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
+      ATLAS_RUNTIME_BASELINE_FILE: /app/runtime-baseline/baseline.json
+      ATLAS_CONNECTOR_SCHEMA_FILE: /app/contracts/connector-manifest-v1.schema.json
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
     volumes:
       - atlas_state:/var/lib/atlas
+      - runtime_control:/run/atlas-runtime-control:ro
+      - connector_store:/var/lib/atlas-connectors
+    networks:
+      - default
+      - runtime_private
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,6 +113,45 @@ services:
       redis:
         condition: service_healthy
 
+  # The provisioner has no listener and exits after durable secret creation.
+  # Only these private volumes are writable; it receives no Atlas credentials.
+  runtime-init:
+    build:
+      context: ../../apps/runtime/ansible
+    user: "0:0"
+    command: ["python", "-m", "atlas_runtime.bootstrap"]
+    network_mode: none
+    volumes:
+      - runtime_control:/run/atlas-runtime-control
+      - connector_store:/var/lib/atlas-connectors
+
+  runtime:
+    restart: unless-stopped
+    build:
+      context: ../../apps/runtime/ansible
+    environment:
+      ATLAS_RUNTIME_PACKAGING_MODE: docker_compose
+      ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
+    volumes:
+      - runtime_control:/run/atlas-runtime-control:ro
+      - connector_store:/var/lib/atlas-connectors:ro
+    networks:
+      - runtime_private
+      - runtime_source
+    depends_on:
+      runtime-init:
+        condition: service_completed_successfully
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "atlas_runtime.healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   postgres:
     restart: unless-stopped
     image: postgres:17-alpine
@@ -133,3 +184,15 @@ volumes:
   postgres_data:
   redis_data:
   atlas_state:
+  runtime_control:
+  connector_store:
+
+networks:
+  default:
+  runtime_private:
+    internal: true
+  # Runtime-only source egress; control traffic stays on runtime_private.
+  # A routed bridge supplies outbound access without publishing runtime ports.
+  runtime_source:
+    driver: bridge
+    internal: false

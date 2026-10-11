@@ -12,7 +12,7 @@ import shutil
 import stat
 import subprocess
 
-from configuration import ROOT
+from configuration import ROOT, add_runtime_configuration
 
 
 def package_identity(method):
@@ -64,9 +64,19 @@ def docker_upgrade(configuration):
     # Suppress rendered configuration: Compose config can contain credentials.
     run(compose + ["config", "--quiet"])
     # Build before the maintenance window. Writers stop before API migration.
-    run(compose + ["build", "api", "web", "worker"])
+    run(compose + ["build", "api", "web", "worker", "runtime", "runtime-init"])
     run(compose + ["stop", "gateway", "web", "worker", "api"])
-    run(compose + ["up", "-d", "--wait", "--wait-timeout", "300"])
+    values = protected_configuration(configuration, "docker_compose")
+    services = ["gateway", "api", "web", "worker", "postgres", "redis"]
+    runtime_enabled = values.get("ATLAS_RUNTIME_ENABLED", "true").lower() not in {"false", "0", "no"}
+    if not runtime_enabled:
+        run(compose + ["stop", "runtime"])
+    run(compose + ["up", "-d", "--wait", "--wait-timeout", "300", *services])
+    if runtime_enabled:
+        try:
+            run(compose + ["up", "-d", "--wait", "--wait-timeout", "60", "runtime"])
+        except (OSError, subprocess.SubprocessError):
+            print("Local runtime is unavailable; Atlas knowledge services are ready. Inspect the runtime service and Runtime page.")
     run(compose + ["exec", "-T", "api", "python", "-c",
                   "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).close()"])
 
@@ -75,19 +85,21 @@ def native_upgrade_preflight(values):
     from native import DESTINATION, preflight
     if ROOT == DESTINATION or DESTINATION in ROOT.parents:
         raise ValueError("Extract the new package outside /opt/atlas")
-    for name in ("apps", "infra", "venv"):
+    for name in ("apps", "infra", "venv", "runtime-venv"):
         if (DESTINATION / name).is_symlink():
             raise ValueError("Managed installation tree must not be a symlink")
     return preflight(fresh=False, values=values)
 
 
 def native_upgrade(values, *, prepared=None):
-    from native import DESTINATION, build_application, ensure_nginx, install_units, wait_for_health
+    from native import DESTINATION, build_application, configure_runtime, ensure_nginx, install_units, start_runtime, stop_runtime, wait_for_health
     import native_ingress
     ingress, needs_nginx = prepared if prepared is not None else native_upgrade_preflight(values)
     ensure_nginx(needs_nginx)  # Package failure precedes the maintenance window.
     account = pwd.getpwnam("atlas")
     os.umask(0o022)
+    configure_runtime()
+    stop_runtime()  # Legacy installations do not yet have this unit.
     run(["systemctl", "stop", "atlas-web", "atlas-worker", "atlas-api"])
     # Only managed application/configuration-free trees are replaced. Database,
     # /etc/atlas, /var/lib/atlas and the existing venv identity stay in place.
@@ -100,6 +112,7 @@ def native_upgrade(values, *, prepared=None):
         shutil.copytree(ROOT / name, destination)
     build_application(account)
     install_units()
+    start_runtime(values)
     run(["systemctl", "start", "atlas-api", "atlas-web", "atlas-worker"])
     native_ingress.install(ingress)
     wait_for_health(ingress)
@@ -127,6 +140,8 @@ def main():
             return
         if not args.backup_confirmed:
             raise ValueError("Create/download an encrypted Atlas backup first, then pass --backup-confirmed")
+        add_runtime_configuration(configuration, args.method)
+        values = protected_configuration(configuration, args.method)
         if args.method == "docker_compose":
             docker_upgrade(configuration)
         else:

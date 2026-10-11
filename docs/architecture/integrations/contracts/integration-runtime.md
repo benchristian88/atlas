@@ -50,7 +50,16 @@ must be implemented before I1 acceptance. Requests cannot treat loopback/private
 addressing as authentication. Service-secret failure returns sanitized
 unauthorized/unavailable states without disclosing expected values.
 
-Docker exposes no host/public runtime port; use private Compose networking.
+Docker exposes no host/public runtime port. API and runtime use the dedicated
+`runtime_private` bridge with `internal: true` for authenticated control traffic.
+Runtime also joins `runtime_source`, a dedicated non-internal bridge with normal
+outbound routing to source infrastructure. No other Atlas service joins
+`runtime_source`; PostgreSQL, Redis, gateway, web, worker and API retain their
+existing networks. Source egress does not authorize control requests or create a
+host/LAN runtime endpoint. Retain the read-only root filesystem, read-only
+control/store mounts, dropped capabilities and `no-new-privileges`; do not use
+host networking, privileged mode, `NET_ADMIN`, Docker socket or broad host mounts.
+
 Native/systemd binds loopback and uses a pinned native Python/Ansible/Collection
 environment; Docker/Podman is not required. Source stays in main Atlas repo,
 packaging extends `infra/install`, `infra/docker`, `infra/systemd`, `infra/release`.
@@ -85,9 +94,12 @@ in-flight work under Atlas ownership without causing absence.
 
 ## Acceptance by phase
 
-I1 proves private health/control/verification, default/manual-only packaging,
-protected store and safe independent knowledge plane. I2 proves generic bounded
-Test Connection/leases without claiming live vendor support before I4–I6.
+I1 proves private health/control/verification, dedicated Docker source-egress
+topology, default/manual-only packaging, protected store and safe independent
+knowledge plane. Source reachability requires operator verification in the
+deployment environment; network configuration alone is not live connectivity
+evidence. I2 proves generic bounded Test Connection/leases without claiming live
+vendor support before I4–I6.
 I3 proves job dispatch, request replay, callbacks/finalisation/cancellation and
 recovery with existing maintenance/quiescence. I4–I6 prove actual source calls;
 I8 qualifies both deployment methods, failure injection and restore behaviour.

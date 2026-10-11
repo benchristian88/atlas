@@ -104,7 +104,7 @@ def validate_tree(files, method, metadata, commit, manifest):
             # expressions in installer source are not literal credential values.
             text = data.decode("utf-8")
             if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", text) or re.search(
-                    r"(?m)^\s*(?:POSTGRES_PASSWORD|AUTH_SECRET_KEY|ATLAS_DATA_ENCRYPTION_KEY)\s*=\s*[a-fA-F0-9]{32,}\s*$", text):
+                    r"(?m)^\s*(?:POSTGRES_PASSWORD|AUTH_SECRET_KEY|ATLAS_DATA_ENCRYPTION_KEY|ATLAS_RUNTIME_CONTROL_SECRET)\s*=\s*[a-fA-F0-9]{32,}\s*$", text):
                 raise ValueError("Credential-like content in release package")
     packaged = parse_metadata(files["apps/api/app/release.json"][0])
     if packaged != {**metadata, "build_id": commit, "install_method": method}:
@@ -113,7 +113,7 @@ def validate_tree(files, method, metadata, commit, manifest):
         script = "infra/docker/gateway/15-atlas-trusted-proxies.sh"
         if files[script][1] != 0o755:
             raise ValueError("Gateway entrypoint must be executable")
-        for app in ("api", "web", "worker"):
+        for app in ("api", "web", "worker", "runtime/ansible"):
             dockerfile = files[f"apps/{app}/Dockerfile"][0].decode()
             for line in dockerfile.splitlines():
                 parts = line.split()
@@ -122,7 +122,7 @@ def validate_tree(files, method, metadata, commit, manifest):
                 sources = [part for part in parts[1:-1] if not part.startswith("--")]
                 import fnmatch
                 for source in sources:
-                    prefix = f"apps/{app}/" + source.rstrip("/")
+                    prefix = ("" if app == "api" else f"apps/{app}/") + source.rstrip("/")
                     if source != "." and not any(fnmatch.fnmatch(name, prefix) or name.startswith(prefix + "/") for name in files):
                         raise ValueError("Docker COPY source missing from package")
     # Local JS/CSS imports are runtime dependencies even if accidentally placed
@@ -134,9 +134,10 @@ def validate_tree(files, method, metadata, commit, manifest):
                 path = posixpath.normpath(str(PurePosixPath(name).parent / target))
                 if not any(candidate in files for candidate in (path, path + ".js", path + ".mjs", path + "/index.js")):
                     raise ValueError(f"Missing frontend import: {name} -> {target}")
-    for unit in ("api", "web", "worker") if method == "systemd" else ():
+    for unit in ("api", "web", "worker", "runtime") if method == "systemd" else ():
         content = files[f"infra/systemd/atlas-{unit}.service"][0].decode()
-        if "User=atlas" not in content or "NoNewPrivileges=true" not in content:
+        expected_user = "User=atlas-runtime" if unit == "runtime" else "User=atlas\n"
+        if expected_user not in content or "NoNewPrivileges=true" not in content:
             raise ValueError("Native unit privilege contract missing")
     if not any(name.startswith("apps/web/public/") for name in files):
         raise ValueError("Missing public web assets")

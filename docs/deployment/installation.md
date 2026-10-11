@@ -5,6 +5,8 @@ Direct execution is for developers; manual production installation is unsupporte
 Both installers provide direct single-origin LAN access and support an optional HTTPS
 reverse proxy as described in [single-origin deployment](single-origin.md).
 The installer works in an SSH/LXC terminal and does not open a browser.
+Both methods include the authenticated isolated [local integration runtime](integration-runtime.md)
+by default; `--manual-only` preserves explicit manual-only operation.
 
 ## Docker Compose
 
@@ -38,7 +40,8 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml exec api \
 
 Only the nginx gateway publishes a host port. It routes `/api` and `/api/*`
 unchanged to `api:8000`, and all other paths to `web:3000`. API, web, PostgreSQL,
-Redis and worker have no host ports. The installer inspects Linux IPv4 default
+Redis, worker and runtime have no host ports. The runtime uses a separate internal
+network and a durable independently generated control-secret volume. The installer inspects Linux IPv4 default
 routes, chooses the unique interface with the lowest route metric, obtains the
 kernel-selected source address without sending packets or using DNS, and checks
 that it is a suitable global-scope IPv4 address assigned to that interface.
@@ -70,7 +73,7 @@ A trusted proxy must replace incoming `X-Forwarded-Proto` and client forwarding
 headers with its own verified values. See [reverse-proxy examples](reverse-proxy-examples.md).
 
 Configure host Docker automatic startup; inside an LXC this remains the
-operator's container/host responsibility. All six services use `unless-stopped`,
+operator's container/host responsibility. All persistent services use `unless-stopped`,
 including gateway, PostgreSQL and Redis.
 Health dependencies govern initial startup; the API independently retries
 database readiness with a bounded increasing delay and migrates before serving.
@@ -128,7 +131,8 @@ Secrets use the same independent randomness as Compose and never enter process
 arguments. PostgreSQL provisioning passes its credential on stdin and refuses
 an existing Atlas role/database; it never changes existing database credentials.
 
-The helper installs `atlas-api`, `atlas-web`, and `atlas-worker` units, reloads
+The helper installs `atlas-api`, `atlas-web`, `atlas-worker` and the separately
+isolated `atlas-runtime` units, reloads
 systemd and enables/starts them and the required local PostgreSQL/Redis services.
 Units use `WantedBy=multi-user.target`, `Restart=on-failure`, a 15-second retry
 delay, start-rate limits and an unprivileged account. API readiness retries

@@ -23,6 +23,13 @@ into `atlas-connector-sdk`; that separate project becomes the **sole canonical
 schema source** consumed by Atlas and `atlas-connectors`. Do not wire production
 code to these staged copies or create an in-repository duplicate SDK package.
 
+**I1 implementation evidence:** the [completion record](i1-completion-report.md)
+describes the local runtime/catalogue shell and the request's explicitly authorized
+isolated staging-adapter fallback because no separate owned SDK project exists.
+The schemas remain unchanged and are not relicensed. External canonical SDK
+extraction and pinned consumption remain a release hand-off, rather than a second
+SDK architecture. Qualified vendor bundles and remote provenance are not claimed.
+
 # Executive summary
 
 Atlas already contains most of the difficult knowledge-management
@@ -286,10 +293,15 @@ session, and a run token cannot submit data for another run.
 
 ## 3.5 Decision E - private local runtime transport
 
-The default runtime has no public listener. Docker deployments expose it only
-on the private Compose network. Native/systemd deployments bind it to loopback.
-The same API may support authenticated remote runtimes later, but network
-location alone is never treated as authentication.
+The default runtime has no host-published public listener. Docker deployments
+use `runtime_private`, a dedicated bridge with `internal: true`, for authenticated
+Atlas API-to-runtime control traffic. Runtime also joins a separate
+`runtime_source` bridge with normal outbound routing (`internal: false`) to source
+infrastructure; only runtime joins this source network. The source bridge does
+not publish a runtime port or give it a direct LAN address. Native/systemd
+deployments bind control to loopback. The same API may support authenticated
+remote runtimes later, but network location alone is never treated as
+authentication.
 
 ## 3.6 Decision F - runtime is installed and enabled by default
 
@@ -617,7 +629,9 @@ AIP validation, callback submission and cleanup.
 
 ## 4.3 Docker deployment
 
-Docker Compose installs the runtime by default on a private internal network. No
+Docker Compose installs the runtime by default on internal `runtime_private`
+for authenticated Atlas control and dedicated non-internal `runtime_source`
+for outbound source connectivity. Only runtime joins the source bridge; no
 runtime port is published externally. Runtime dependencies are pinned in the
 Atlas-approved runtime image/environment. Connector bundles are mounted or
 copied through a protected approved store and are read-only to jobs.
@@ -1747,9 +1761,10 @@ Treat these independently:
 
 ## 17.2 Atlas to runtime
 
-Runtime transport is private by default: Docker private network or systemd
-loopback. Every control request also requires the dedicated runtime service
-secret. Do not rely on private addressing alone.
+Runtime control transport is private by default: Docker `runtime_private` with
+`internal: true`, or systemd loopback. Every control request also requires the
+dedicated runtime service secret, including when the Docker runtime also has
+source egress. Do not rely on private addressing alone.
 
 Remote runtime mode is future work and must add transport protection appropriate
 to a remote trust boundary without changing the control contract.
@@ -1794,6 +1809,17 @@ Runtime service identity receives no general Atlas session credential, no direct
 write access to Atlas PostgreSQL and no ability to modify the protected Connector
 store. Jobs are bounded by timeout/concurrency/resource limits and use ephemeral
 workspaces.
+
+Docker separates authenticated control connectivity from source connectivity.
+API and runtime join `runtime_private`; only runtime joins the non-internal
+`runtime_source` bridge, whose gateway provides outbound source routing.
+PostgreSQL, Redis, gateway, web, worker and API do not join `runtime_source`.
+No runtime port is published on the host/LAN. Preserve the read-only root
+filesystem, read-only control/store mounts, dropped capabilities and
+`no-new-privileges`. Source egress requires none of host networking, privileged
+mode, `NET_ADMIN`, Docker socket access, macvlan or broad host mounts. Source
+endpoint validation, TLS and credential controls remain separate requirements;
+an outbound route is not evidence of qualified vendor discovery.
 
 ## 17.9 Catalogue supply chain
 
@@ -2205,6 +2231,10 @@ alignment audit.
 
 - Installed/enabled by default in normal Docker and systemd installs.
 - Docker runtime has no published external port; systemd binds loopback.
+- Docker retains internal `runtime_private` control connectivity and gives only
+  runtime a separate non-internal `runtime_source` bridge for outbound routing.
+- Docker runtime retains read-only root/control/store mounts, dropped
+  capabilities and `no-new-privileges`.
 - Dedicated runtime-control secret authenticates every control request.
 - Runtime failure does not take down Atlas knowledge plane.
 - Runtime executes only verified installed Connector ID/version/digest entry

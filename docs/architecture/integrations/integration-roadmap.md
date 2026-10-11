@@ -16,7 +16,7 @@ Manual knowledge and explicit manual-only deployment remain supported.
 | Phase | Target scope | Current status / acceptance boundary |
 | --- | --- | --- |
 | I0 | Repository audit, one v1.3 architecture, durable ADRs, staged AIP/Manifest/interface specs and sanitized examples/tests | Specification components implemented; runtime/vendor feature still partial foundations only. See completion/validation record. No production schema, API, permissions or UI changes. |
-| I1 | Runtime and catalogue shell | Planned but not implemented. Extract sole canonical SDK schemas first; private default health/control, service authentication, protected verified package store, bootstrap/catalogue shell and generic states, current installer/package parity. No live discovery, credential persistence or scheduling/AIP callbacks. |
+| I1 | Runtime and catalogue shell | Implemented shell with documented follow-ups. Authenticated isolated local health/control, pinned baseline, protected verified-package store, global installed state/RBAC, offline metadata and real UI, both installer/package definitions. External SDK extraction uses the explicitly authorized isolated staging adapter fallback; remote provenance fails closed. Real Docker/systemd acceptance remains pending. See [completion/validation](i1-completion-report.md). No live discovery, source credentials or scheduling/AIP callbacks. |
 | I2 | Generic Integration, SecretProvider, mappings and bounded Test Connection | Planned but not implemented. Add scoped generic config/write-only secrets using existing application key/rewrap, global mapping/update gates and generated Atlas-owned controls. Implement generic probe transport/capability handling; source-specific qualification belongs to I4–I6. |
 | I3 | Worker orchestration and AIP ingestion | Planned but not implemented. Extend current worker/Redis with durable PostgreSQL schedule/run intent, fixed presets, immediate initial run, Run Now, overlap prevention and bounded retry/backoff. Add run tokens, replay receipt ledger, conservative finalisation and adapters into existing evidence/source-link/assertion/reconciliation/lifecycle, with maintenance/quiescence and secret cleanup. |
 | I4 | Proxmox | Planned but not implemented through AIP. Preserve existing plugin/client/normalization regressions. Mandatory dated external review, exact least-privilege API-call/ACL matrix, dedicated token/Privilege Separation setup, capability/TLS/permission probe, stable infrastructure identity and coverage edge-case fixtures/live tests. |
@@ -101,9 +101,10 @@ capabilities. Add materially relevant current release/issue lessons at review.
 
 ## Remaining implementation research
 
-I1: actual GitHub/Sigstore verifier and offline proof, protected store layout/
-installer ownership, SDK publishing/rights and exact pinned native/container
-baseline/dependency lock. I3: canonical selected-scope encoding and concrete
+I1: external SDK publishing/rights, reviewed GitHub/Sigstore verifier/trust roots,
+and real Docker/native lifecycle acceptance remain documented follow-ups.
+Protected store, exact bootstrap verification, pinned baseline and both deployment
+definitions are implemented. I3: canonical selected-scope encoding and concrete
 bounded dispatch/callback recovery/quiescence implementation. I4: dated source
 review, Collection/API coverage and final call/ACL matrix. I5: Collection/SSH
 implementation and workload ordinal/standalone identity proof. I6: supported

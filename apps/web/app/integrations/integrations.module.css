@@ -1,0 +1,20 @@
+.page { min-width: 0; }
+.grid { display: grid; gap: var(--space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.card { display: flex; flex-direction: column; gap: var(--space-4); height: 100%; }
+.card h3, .runtime h3 { margin: 0; font-size: var(--type-h3); font-weight: var(--weight-semibold); line-height: var(--leading-h3); }
+.card h3 { font-size: var(--type-title); }
+.card p, .runtime p { margin: 0; }
+.card dl, .runtime dl { margin: 0; }
+.card > div:last-of-type { margin: 0; }
+.runtime { display: grid; gap: var(--space-4); }
+.technical { color: var(--muted); font-size: var(--type-label); border-top: 1px solid var(--border); padding-top: var(--space-4); }
+.technical summary { cursor: pointer; }
+.technical dl, .technical ul { margin-top: var(--space-4); }
+.technical dd { overflow-wrap: anywhere; }
+.section { margin-top: 0; }
+.meta { color: var(--muted); font-size: var(--type-label); margin-block: var(--space-4); }
+.stats { display: flex; flex-wrap: wrap; gap: var(--space-5); margin-block: 0 var(--space-5); }
+.stats dl { flex: 1; min-width: 160px; margin: 0; }
+.stats dt { color: var(--muted); font-size: var(--type-label); margin-bottom: var(--space-2); }
+.stats dd { margin: 0; font-weight: var(--weight-semibold); }
+@media (max-width: 800px) { .grid { grid-template-columns: minmax(0, 1fr); } }

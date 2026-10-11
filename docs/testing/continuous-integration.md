@@ -11,14 +11,14 @@ configured separately; this change does not configure branch protection:
 | --- | --- |
 | **Backend / PostgreSQL** | Python 3.12; full API/SDK/Proxmox regression including installation, MFA, backup and release checks, real PostgreSQL/migration/nginx tests and Redis-backed restore checks; zero skipped tests; exactly one Alembic head; Python compilation. |
 | **Frontend** | Node 22, `npm ci`, `npm test`, `npm run build`; Next telemetry disabled. |
-| **Release & Deployment Integrity** | Canonical metadata, shared release-critical regression, actionlint 1.7.7, whitespace, committed dry-run packages, independent verifier and SHA256SUMS, extracted installer/upgrade help, protected configuration, actual production/development/packaged Compose configuration and packaged API/web/worker image builds. |
+| **Release & Deployment Integrity** | Canonical metadata, shared release-critical regression, actionlint 1.7.7, whitespace, committed dry-run packages, independent verifier and SHA256SUMS, extracted installer/upgrade help, protected configuration, actual production/development/packaged Compose configuration and packaged API/web/worker/runtime image builds. |
 
 The backend uses `postgres:17-alpine` and matching PGDG PostgreSQL 17 clients.
 It starts PostgreSQL after generating a protected configuration, so passwords
 are random per job rather than checked-in credentials or repository secrets.
-The bootstrap account creates twelve separate databases owned by a generated
+The bootstrap account creates thirteen separate databases owned by a generated
 non-superuser/non-createdb role. Domain, setup, MFA and both backup test databases are
-migrated; seven migration-test databases remain empty. All existing
+migrated; eight migration-test databases remain empty. All existing
 `ATLAS_TEST_*` database variables are supplied, and JUnit skips fail the job.
 Redis uses the `redis:7.4.6-alpine` Actions service with a `redis-cli ping`
 healthcheck. Both servers publish only on runner loopback. PostgreSQL also has
@@ -52,7 +52,9 @@ GitHub discards the runner and Redis service after the job.
 `release.yml` remains the separate tag/manual release workflow and owns tag
 validation, distribution artifacts and controlled publication. Both workflows
 call `infra/ci/release-critical.sh` from `apps/api` with source SDK/Proxmox
-`PYTHONPATH`, including native helper regressions. Routine CI never requires a tag.
+`PYTHONPATH`, including native helper and runtime/package security regressions. I0 contract tests
+run separately to avoid the existing legacy SDK pytest module-name collision.
+Routine CI never requires a tag.
 
 ## Equivalent local checks
 
@@ -115,7 +117,7 @@ All optional PostgreSQL/nginx suites should execute with **zero skips**. From
 
 ```bash
 python -m compileall -q apps/api/app apps/api/scripts apps/api/migrations \
-  apps/api/tests apps/worker/worker infra/install infra/release infra/ci plugins
+  apps/api/tests apps/worker/worker apps/runtime infra/install infra/release infra/ci plugins
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
   .github/workflows/ci.yml .github/workflows/release.yml
 python infra/release/release.py metadata

@@ -284,6 +284,7 @@ def test_native_completion_uses_same_local_setup_code_url_handoff(monkeypatch, t
     monkeypatch.setattr(native.grp, "getgrnam", lambda name: SimpleNamespace(gr_gid=10001))
     monkeypatch.setattr(native.os, "chown", lambda *args: None)
     monkeypatch.setattr(native, "ensure_nginx", lambda needed: None)
+    monkeypatch.setattr(native, "configure_runtime", lambda: None)
     monkeypatch.setattr(native.shutil, "copytree", lambda *args, **kwargs: None)
     monkeypatch.setattr(native, "build_application", lambda account: None)
     monkeypatch.setattr(native, "install_units", lambda: None)
