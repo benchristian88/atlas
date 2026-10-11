@@ -277,4 +277,3 @@ def test_live_configured_and_disabled_usage_blocks_update_and_uninstall(db, harn
         assert len(audits(db, harness)) == 1
     assert db.get(type(integration), integration.id).status == status
     assert harness.store.verify_connector("proxmox", "1.0.0", harness.packages["1.0.0"].bundle_digest)["state"] == "verified"
-
