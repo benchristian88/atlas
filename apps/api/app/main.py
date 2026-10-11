@@ -41,6 +41,7 @@ from app.routes import (
     setup,
     mfa,
     backups,
+    integrations,
 )
 
 
@@ -109,6 +110,9 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def safe_setup_validation(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/api/integration-catalogue/"):
+        return JSONResponse(status_code=422, content={"detail": "Invalid Connector package selection"},
+                            headers={"Cache-Control": "no-store"})
     if request.url.path.startswith(("/api/auth/", "/api/users", "/api/system-settings/backups", "/api/system-settings/restore", "/api/setup/restore")):
         return JSONResponse(status_code=422, content={"detail": "Invalid authentication request. Check the supplied fields."},
                             headers={"Cache-Control": "no-store"})
@@ -150,7 +154,7 @@ async def request_security(request: Request, call_next):
         return JSONResponse(status_code=503, content={"detail": "Atlas is in maintenance mode. A restore or local recovery is in progress."},
                             headers={"Cache-Control": "no-store", "Retry-After": "5", "X-Request-ID": request_id})
     response.headers["X-Request-ID"] = request_id
-    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users", "/api/system-settings", "/api/restore-status/")):
+    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users", "/api/system-settings", "/api/restore-status/", "/api/integration-runtime", "/api/integration-catalogue", "/api/installed-connectors")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -192,6 +196,7 @@ api_router.include_router(knowledge.router)
 api_router.include_router(knowledge_completeness.router)
 api_router.include_router(changes.router)
 api_router.include_router(protected.router)
+api_router.include_router(integrations.router)
 
 
 @api_router.get("/health", tags=["health"])

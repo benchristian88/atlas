@@ -9,15 +9,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY apps/api/requirements.txt .
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY scripts ./scripts
-COPY alembic.ini .
-COPY migrations ./migrations
+COPY apps/api/app ./app
+COPY apps/api/scripts ./scripts
+COPY apps/api/alembic.ini .
+COPY apps/api/migrations ./migrations
+COPY docs/architecture/integrations/contracts/connector-manifest-v1.schema.json ./contracts/connector-manifest-v1.schema.json
+COPY docs/architecture/integrations/contracts/manifests ./contracts/manifests
+COPY apps/runtime/ansible/baseline.json apps/runtime/ansible/requirements.lock ./runtime-baseline/
 
 # Malformed canonical metadata fails the image build before distribution.
 RUN python -c "from app.release import load_metadata; load_metadata()"

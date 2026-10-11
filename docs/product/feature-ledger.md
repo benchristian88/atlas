@@ -4,8 +4,11 @@ This reference describes the checked-in beta platform, inspected on 4 October
 2026 from base commit `e63b552c1149c883cc9b103d9aa6c85eb129a717`, with the public
 documentation and licence changes at that baseline. Integration specification
 status was updated on 11 October 2026 against
-`90e04a76982c314fff2191e84ca6bd1a8cabcb07`; implementation boundaries are recorded
-in the Integration alignment matrix. Code, migrations,
+`90e04a76982c314fff2191e84ca6bd1a8cabcb07`; the runtime/catalogue shell was added
+after merged baseline `77eeff71e9a803f0f665ffa150b24537e29b83a6`.
+Implementation and validation boundaries are recorded in the
+[runtime completion report](../architecture/integrations/i1-completion-report.md).
+Code, migrations,
 reachable routes and regression tests determine implementation status. A status
 here does not claim that validation was rerun; current execution results are
 recorded separately.
@@ -44,8 +47,9 @@ recorded separately.
 | Capability | Status | Boundary |
 | --- | --- | --- |
 | Live first-party integrations/plugins | Partially implemented | `plugins/sdk`, tested `plugins/proxmox` adapter and Data Source/Integration persistence exist. Complete configure/test/Run Now/results/reconcile journey remains upcoming. Worker is a placeholder, not mature job orchestration. |
-| Integration architecture and staged contracts | Implemented | Specification component only: `docs/architecture/integrations/`, alignment matrix, ADRs 0003–0009, AIP/Manifest schemas, interface specs and sanitized static contract tests. One accepted target design; no runtime/catalogue/credential/ingestion/vendor UI implementation. SDK extraction precedes runtime work. |
-| Catalogue/runtime and generic configured discovery | Planned but not implemented | Follow the [Integration roadmap](../architecture/integrations/integration-roadmap.md). Existing knowledge lifecycle is reused; worker dispatch, SecretProvider and signed package management still require implementation. |
+| Integration architecture and staged contracts | Implemented | Specification component: alignment matrix, ADRs 0003–0009, unchanged AIP/Manifest schemas, interface specs and contract tests. Separate canonical SDK extraction remains pending; a hash-pinned isolated application adapter consumes staging under the explicitly authorized fallback. No legacy AGPL implementation was relicensed. |
+| Runtime and catalogue shell | Implemented | `apps/runtime/ansible`, authenticated bounded API client, protected package store, offline verified metadata, installed-state migration and global RBAC, real Configured/Catalogue/Runtime UI. Three vendor entries are unreleased metadata only. Docker/native packaging is implemented; live Docker/systemd acceptance and external SDK/provenance follow-ups remain in the validation report. |
+| Generic configured discovery | Planned but not implemented | Follow the [Integration roadmap](../architecture/integrations/integration-roadmap.md). Source credentials, configuration, Test Connection, worker dispatch, scheduling, AIP ingestion and qualified vendor bundles remain later work. Remote packages fail closed until an approved provenance verifier is supplied. |
 | Generated operational documents | Partially implemented | `services/markdown_docs.py` generates Markdown and Document records store it. Dedicated document browsing/review is not yet an end-to-end feature. |
 | Guided onboarding | Planned but not implemented | Secure first-run administrator creation exists; guided initial knowledge setup is separate upcoming work. |
 | Final screenshots and documentation freeze | Planned but not implemented | Feature descriptions and screenshots will be refreshed after integration/onboarding work. No stale product screenshots are advertised. |

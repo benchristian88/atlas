@@ -10,6 +10,13 @@ with references after extraction; never import it into production or create a
 second in-repository SDK. Existing AGPL SDK/plugin code remains unchanged;
 extraction/ownership review must establish rights for new artifacts and any reuse.
 
+I1 uses the request's explicitly authorized fallback: a narrowly isolated Atlas
+application adapter consumes this exact hash-pinned Manifest schema while the
+separate SDK project/licence boundary is unavailable. No schemas were copied or
+relicensed, and this does not complete canonical SDK extraction. See the
+[I1 record](../i1-completion-report.md) for the operator action and release gate.
+These fixtures remain non-installable specification examples.
+
 ## Artifacts and validation
 
 - [AIP v1](aip-v1.schema.json) and [Manifest v1](connector-manifest-v1.schema.json).

@@ -41,6 +41,8 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "audit.view": ("View audit events", "Audit"),
     "integrations.view": ("View integrations and discovery runs", "Integrations"),
     "integrations.manage": ("Manage integrations and discovery runs", "Integrations"),
+    "integration_runtime.view": ("Inspect the local integration runtime", "Integrations"),
+    "integration_runtime.manage": ("Manage global Connector packages", "Integrations"),
     "discovery_runs.archive": ("Archive and restore discovery runs", "Discovery"),
     "discovery_runs.delete": ("Safely delete unused discovery runs", "Discovery"),
     "assertions.retract": ("Retract knowledge assertions", "Knowledge"),

@@ -1,0 +1,37 @@
+[Unit]
+Description=Atlas Impact isolated Ansible runtime
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=atlas-runtime
+Group=atlas-runtime
+SupplementaryGroups=atlas-runtime-control
+WorkingDirectory=/opt/atlas/apps/runtime/ansible
+Environment=ATLAS_RUNTIME_PACKAGING_MODE=systemd
+Environment=ATLAS_RUNTIME_CONTROL_SECRET_FILE=/etc/atlas-runtime/control.secret
+Environment=ATLAS_CONNECTOR_STORE_PATH=/var/lib/atlas-connectors
+# The runtime receives no database/auth/user environment file. Native server
+# binding is fixed to 127.0.0.1 in code, regardless of inherited host variables.
+ExecStart=/opt/atlas/runtime-venv/bin/python -m atlas_runtime.server
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/var/lib/atlas-connectors /etc/atlas-runtime
+
+[Install]
+WantedBy=multi-user.target

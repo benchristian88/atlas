@@ -27,7 +27,15 @@
     "docs/architecture/release-distribution.md",
     "docs/architecture/encrypted-backup-restore.md",
     "docs/architecture/local-two-factor-authentication.md",
-    "docs/architecture/authentication-and-access-control.md"
+    "docs/architecture/authentication-and-access-control.md",
+    "apps/runtime/ansible/atlas_runtime/",
+    "apps/runtime/ansible/requirements.lock",
+    "apps/runtime/ansible/baseline.json",
+    "apps/runtime/ansible/sbom.cdx.json",
+    "apps/runtime/ansible/notices/",
+    "infra/install/runtime.py",
+    "docs/architecture/integrations/contracts/connector-manifest-v1.schema.json",
+    "docs/architecture/integrations/contracts/manifests/"
   ],
   "docker_compose": [
     "infra/docker/docker-compose.yml",
@@ -36,7 +44,8 @@
     "apps/web/Dockerfile",
     "apps/worker/Dockerfile",
     ".dockerignore",
-    "infra/install/compose.py"
+    "infra/install/compose.py",
+    "apps/runtime/ansible/Dockerfile"
   ],
   "systemd": [
     "infra/systemd/",
@@ -70,7 +79,13 @@
     "docs/deployment/backup-restore.md",
     "docs/deployment/releases.md",
     "docs/deployment/upgrades.md",
-    "infra/release/package-manifest.json"
+    "infra/release/package-manifest.json",
+    "apps/runtime/ansible/atlas_runtime/server.py",
+    "apps/runtime/ansible/requirements.lock",
+    "apps/runtime/ansible/baseline.json",
+    "apps/runtime/ansible/sbom.cdx.json",
+    "docs/architecture/integrations/contracts/connector-manifest-v1.schema.json",
+    "infra/install/runtime.py"
   ],
   "required_docker_compose": [
     "infra/install/compose.py",
@@ -79,7 +94,9 @@
     "infra/docker/gateway/15-atlas-trusted-proxies.sh",
     "apps/api/Dockerfile",
     "apps/web/Dockerfile",
-    "apps/worker/Dockerfile"
+    "apps/worker/Dockerfile",
+    "apps/runtime/ansible/Dockerfile",
+    "apps/runtime/ansible/atlas_runtime/bootstrap.py"
   ],
   "required_systemd": [
     "infra/install/native.py",
@@ -88,6 +105,7 @@
     "infra/install/manage.py",
     "infra/systemd/atlas-api.service",
     "infra/systemd/atlas-web.service",
-    "infra/systemd/atlas-worker.service"
+    "infra/systemd/atlas-worker.service",
+    "infra/systemd/atlas-runtime.service"
   ]
 }

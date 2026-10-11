@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Shared H4 selector. Run from apps/api with SDK/Proxmox source PYTHONPATH.
+# Shared release/runtime selector. Run from apps/api with SDK/Proxmox source PYTHONPATH.
 set -euo pipefail
 python -m pytest tests/test_release_foundation.py tests/test_docker_ingress.py \
   tests/test_native_install.py tests/test_backups.py tests/test_mfa.py \
   tests/test_release_distribution.py tests/test_updates.py \
+  tests/test_integration_runtime.py tests/test_runtime_packaging.py \
+  tests/test_connector_packages.py tests/test_integration_catalogue_api.py \
   ../../plugins/sdk/tests ../../plugins/proxmox/tests -q

@@ -90,7 +90,7 @@ def build_id() -> str:
         return "unknown"
 
 
-def generate_configuration(path: Path, method: str, *, ingress=None) -> dict[str, str]:
+def generate_configuration(path: Path, method: str, *, ingress=None, runtime_enabled=True) -> dict[str, str]:
     if method not in {"docker_compose", "systemd"}:
         raise ValueError("Unsupported production installation method")
     if path.exists() or path.is_symlink():
@@ -105,6 +105,9 @@ def generate_configuration(path: Path, method: str, *, ingress=None) -> dict[str
         "CORS_ORIGINS=\n"
         f"ATLAS_INSTALL_METHOD={method}\n"
         f"ATLAS_BUILD_ID={build_id()}\n"
+        f"ATLAS_RUNTIME_ENABLED={'true' if runtime_enabled else 'false'}\n"
+        f"ATLAS_RUNTIME_URL={'http://runtime:8091' if method == 'docker_compose' else 'http://127.0.0.1:8091'}\n"
+        f"ATLAS_RUNTIME_CONTROL_SECRET_FILE={'/run/atlas-runtime-control/control.secret' if method == 'docker_compose' else '/etc/atlas-runtime/control.secret'}\n"
     )
     content += "".join(f"{key}={value}\n" for key, value in ingress.items())
     # Exclusive creation also refuses symlinks and empty existing files.
@@ -133,6 +136,33 @@ def add_data_encryption_key(path: Path) -> None:
                      + f"ATLAS_DATA_ENCRYPTION_KEY={secrets.token_hex(32)}\n")
         output.flush()
         os.fsync(output.fileno())
+
+
+def add_runtime_configuration(path: Path, method: str) -> None:
+    """Add local runtime settings once; preserve opt-out and all existing secrets."""
+    if method not in {"docker_compose", "systemd"}:
+        raise ValueError("Unsupported installation method")
+    defaults = {
+        "ATLAS_RUNTIME_ENABLED": "true",
+        "ATLAS_RUNTIME_URL": "http://runtime:8091" if method == "docker_compose" else "http://127.0.0.1:8091",
+        "ATLAS_RUNTIME_CONTROL_SECRET_FILE": "/run/atlas-runtime-control/control.secret" if method == "docker_compose" else "/etc/atlas-runtime/control.secret",
+    }
+    descriptor = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "r+") as output:
+        fcntl.flock(output, fcntl.LOCK_EX)
+        import stat
+        if not stat.S_ISREG(os.fstat(output.fileno()).st_mode):
+            raise ValueError("Configuration must be a regular file")
+        content = output.read()
+        keys = [line.split("=", 1)[0] for line in content.splitlines() if line and not line.startswith("#")]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Duplicate configuration keys require operator review")
+        additions = "".join(f"{key}={value}\n" for key, value in defaults.items() if key not in keys)
+        if additions:
+            output.seek(0, os.SEEK_END)
+            output.write(("\n" if content and not content.endswith("\n") else "") + additions)
+            output.flush()
+            os.fsync(output.fileno())
 
 
 def main():

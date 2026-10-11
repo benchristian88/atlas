@@ -134,8 +134,9 @@ def test_deployment_restart_and_security_contracts():
     import yaml  # Included by the existing uvicorn[standard] dependency.
     compose = yaml.safe_load((ROOT / "infra/docker/docker-compose.yml").read_text())
     services = compose["services"]
-    assert set(services) == {"gateway", "api", "web", "worker", "postgres", "redis"}
-    assert all(service["restart"] == "unless-stopped" for service in services.values())
+    assert set(services) == {"gateway", "api", "web", "worker", "postgres", "redis", "runtime", "runtime-init"}
+    assert all(service["restart"] == "unless-stopped" for name, service in services.items() if name != "runtime-init")
+    assert "restart" not in services["runtime-init"]
     assert "ports" not in services["postgres"]
     assert "ports" not in services["redis"]
     for key in ("POSTGRES_PASSWORD", "AUTH_SECRET_KEY", "ATLAS_DATA_ENCRYPTION_KEY"):

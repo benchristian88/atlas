@@ -887,6 +887,37 @@ class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class InstalledConnectorPackage(TimestampMixin, Base):
+    """Instance-global active identity; immutable catalogue content stays packaged.
+
+    One primary-key row per Connector serializes activation. Privileged lifecycle
+    audit events preserve earlier identities; the store retains verified bundles
+    for deliberate catalogue-driven rollback.
+    """
+
+    __tablename__ = "installed_connector_packages"
+    __table_args__ = (
+        CheckConstraint("verification_status = 'verified'", name="verified_only"),
+        CheckConstraint("status = 'active'", name="active_only"),
+        CheckConstraint("length(bundle_digest) = 64", name="digest_length"),
+    )
+
+    connector_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    bundle_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    protocol_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    publisher_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    trust_tier: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    runtime_baseline_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    runtime_baseline_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="active")
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "data_sources"
     __table_args__ = (

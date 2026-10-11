@@ -13,5 +13,13 @@ License. Refer to the installed components' licence notices and upstream sources
 when redistributing them; this document is not an exhaustive dependency licence
 audit.
 
+The separately deployed Atlas Ansible Runtime pins its complete Python baseline
+in [requirements.lock](apps/runtime/ansible/requirements.lock). Its initial
+[CycloneDX inventory](apps/runtime/ansible/sbom.cdx.json) records exact versions,
+reference wheel hashes and licence metadata; [upstream notices](apps/runtime/ansible/notices)
+are retained verbatim. The inventory covers reference Python wheels, not a final
+image/OS or every native platform licence audit. Ansible and its GPL dependencies
+remain in the isolated runtime environment; Atlas API does not import Ansible.
+
 External Asset icon sources are operator-selected. Confirm permission to use
 their artwork; Atlas does not grant rights to third-party logos.

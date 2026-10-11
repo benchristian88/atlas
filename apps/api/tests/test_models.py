@@ -17,6 +17,7 @@ EXPECTED_TABLES = {
     "customers",
     "sites",
     "integrations",
+    "installed_connector_packages",
     "discovery_runs",
     "data_sources",
     "entity_source_links",

@@ -1,0 +1,45 @@
+{
+  "catalogue_version": "1.0",
+  "release_identity": "atlas-i1-catalogue-shell",
+  "entries": [
+    {
+      "connector_id": "proxmox",
+      "name": "Proxmox VE",
+      "description": "Read-only discovery of Proxmox infrastructure is planned. An executable Connector bundle has not been released.",
+      "category": "virtualization",
+      "icon_key": "server",
+      "publisher": "Atlas Impact",
+      "trust_tier": "atlas_official",
+      "licence": "Not published",
+      "manifest_ref": "proxmox.json",
+      "manifest_digest": "2d2be539324f20ce39afb503715909fc2f804e2dbef170457f800141f1944793",
+      "package": null
+    },
+    {
+      "connector_id": "docker",
+      "name": "Docker + Compose",
+      "description": "Read-only discovery of Docker and Compose workloads is planned. An executable Connector bundle has not been released.",
+      "category": "containers",
+      "icon_key": "container",
+      "publisher": "Atlas Impact",
+      "trust_tier": "atlas_official",
+      "licence": "Not published",
+      "manifest_ref": "docker.json",
+      "manifest_digest": "318b6c17e6ac5d8c2cc7a04b0a43eeeca54b1e920baf8d077ba5c18e0c851443",
+      "package": null
+    },
+    {
+      "connector_id": "unifi-network",
+      "name": "UniFi Network",
+      "description": "Read-only discovery of UniFi network infrastructure is planned. An executable Connector bundle has not been released.",
+      "category": "networking",
+      "icon_key": "network",
+      "publisher": "Atlas Impact",
+      "trust_tier": "atlas_official",
+      "licence": "Not published",
+      "manifest_ref": "unifi-network.json",
+      "manifest_digest": "83ab75cd75eb558787286cf96b5a7c8da7972c6d9c5a03037d6d8e3ec678373c",
+      "package": null
+    }
+  ]
+}

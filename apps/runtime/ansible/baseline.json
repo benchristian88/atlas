@@ -1,0 +1,27 @@
+{
+  "aip_versions": [
+    "1.0"
+  ],
+  "baseline_id": "atlas-ansible-i1-v1",
+  "baseline_version": "1.0.0",
+  "collections": {},
+  "dependencies": {
+    "ansible-core": "2.19.7",
+    "ansible-runner": "2.4.3",
+    "cffi": "2.1.1",
+    "cryptography": "50.0.2",
+    "jinja2": "3.1.6",
+    "lockfile": "0.12.2",
+    "markupsafe": "3.0.4",
+    "packaging": "26.3",
+    "pexpect": "4.9.0",
+    "ptyprocess": "0.7.0",
+    "pycparser": "3.11",
+    "python-daemon": "3.1.2",
+    "pyyaml": "6.0.3",
+    "resolvelib": "1.2.1"
+  },
+  "dependency_lock_digest": "437f84305958af89ed0864ca5d72c6fbfe740a3f422d1bdd5b0d610a6ab70a59",
+  "protocol_version": "integration-runtime-v1",
+  "runtime_version": "0.1.0"
+}

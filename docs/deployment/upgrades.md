@@ -36,13 +36,15 @@ python3 infra/install/upgrade.py --method docker_compose \
 ```
 
 Substitute the actual existing configuration path. The file stays in place,
-unchanged, including `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY`,
+preserving `POSTGRES_PASSWORD`, `AUTH_SECRET_KEY`,
 `ATLAS_DATA_ENCRYPTION_KEY`, `ATLAS_BIND_ADDRESS`, `ATLAS_PORT`, proxy/cookie
 settings and Compose project name overrides. Retain the old package directory
 because it contains the protected configuration. Record the new active root and
 use its Compose file together with that **same env-file** for subsequent commands.
 
-The helper validates Compose, builds API/web/worker before stopping writers,
+Missing local runtime settings are appended once; existing runtime opt-out,
+control credential and store volumes are preserved. The helper validates Compose,
+builds API/web/worker and isolated runtime images before stopping writers,
 stops gateway/web/API/worker, then starts the new matching stack and waits for
 health. It never removes volumes. The existing project name `atlas` (or an
 existing `COMPOSE_PROJECT_NAME` override) preserves PostgreSQL, Redis and protected
@@ -75,8 +77,10 @@ systemctl status nginx atlas-api atlas-web atlas-worker
 
 The helper always reads the existing `/etc/atlas/atlas.env` and preserves it,
 the database, signing/data keys, `/var/lib/atlas` protected application state and
-existing service account. It stops writers, replaces only managed `apps`/`infra`
-trees under `/opt/atlas`, installs matching dependencies using the existing venv,
+existing service account. It also preserves `/etc/atlas-runtime/control.secret`
+and the root-owned `/var/lib/atlas-connectors` store. It stops writers, replaces
+managed `apps`/`infra` trees and the original contract artifacts under `/opt/atlas`,
+installs matching dependencies using the existing application and isolated runtime venvs,
 builds standalone Next.js and repairs its cache ownership using the existing
 unprivileged atlas identity. Shared installer functions install units,
 reload systemd and wait for health. New API startup migrates and seeds before
@@ -98,7 +102,10 @@ packages or Atlas files. Read-only validation does not run an upgrade or exercis
 Native packaged upgrades and Docker-to-native restore have also been confirmed
 in real Debian 13 testing; validate your own host and backup before proceeding.
 
-The environment file is preserved byte-for-byte. For legacy files without
+Existing environment values are preserved; missing local runtime settings are
+appended idempotently. Runtime health/failed readiness does not block core Atlas
+health or setup hand-off. See [local runtime operations](integration-runtime.md).
+For legacy files without
 ingress settings, address detection and default port 3000 are used. Deliberately
 add the actual `ATLAS_BIND_ADDRESS`, `ATLAS_PORT`, and any narrowly scoped
 `ATLAS_TRUSTED_PROXIES` to the protected file to pin them. Legacy

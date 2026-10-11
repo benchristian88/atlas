@@ -80,7 +80,7 @@ def test_backend_enables_every_optional_database_suite_and_rejects_skips():
     for path in (ROOT / "apps/api/tests").glob("test_*.py"):
         required.update(re.findall(r"ATLAS_TEST_[A-Z0-9_]+URL", path.read_text()))
     assert required - {"ATLAS_TEST_H3_REDIS_URL"} == set(databases)
-    assert len({name for name, _ in databases.values()}) == len(databases) == 12
+    assert len({name for name, _ in databases.values()}) == len(databases) == 13
     assert sum(migrate for _, migrate in databases.values()) == 5
     assert all(not migrate for key, (_, migrate) in databases.items() if "MIGRATION" in key)
     assert "NOSUPERUSER NOCREATEDB NOCREATEROLE" in source
@@ -90,6 +90,9 @@ def test_backend_enables_every_optional_database_suite_and_rejects_skips():
     assert "--env-file" in shell and "configuration.py --method docker_compose" in shell
     assert "tests ../../plugins/sdk/tests ../../plugins/proxmox/tests" in shell
     assert "assert not skipped" in shell and "assert len(heads) == 1" in shell
+    assert "compileall -q" in shell and "apps/worker/worker apps/runtime" in shell
+    contract_steps = [step for step in job["steps"] if step.get("run", "").startswith("python -m pytest docs/architecture/integrations/contracts/tests")]
+    assert len(contract_steps) == 1
     assert "pip install -e" not in shell and "requirements-dev.txt" not in shell
     dependencies = (ROOT / "infra/ci/install-linux-dependencies.sh").read_text()
     assert "postgresql-client-17" in dependencies and "nginx-1.28.3.tar.gz" in dependencies
@@ -103,14 +106,20 @@ def test_release_integrity_reuses_h4_and_builds_without_publication():
     selector = (ROOT / "infra/ci/release-critical.sh").read_text()
     for path in re.findall(r"(?:tests|\.\./\.\./plugins)/[^\s\\]+", selector):
         assert (ROOT / "apps/api" / path).exists(), path
+    for name in ("test_integration_runtime.py", "test_runtime_packaging.py", "test_connector_packages.py", "test_integration_catalogue_api.py"):
+        assert f"tests/{name}" in selector
+    assert "test_i1_migration_postgres.py" not in selector and "test_connector_lifecycle_postgres.py" not in selector
     shell = runs(job)
     for command in ("release.py metadata", "build --dry-run", "verify --require-committed",
                     "sha256sum -c SHA256SUMS", "compose.py --help", "native.py --help",
-                    "upgrade.py", "protected_configuration", "config --quiet", "build api web worker",
+                    "upgrade.py", "protected_configuration", "config --quiet", "build api web worker runtime runtime-init",
                     "docker-compose.dev.yml", "git diff --check", "actionlint@v1.7.7"):
         assert command in shell
     assert "--worktree" not in shell
     assert all(" up " not in step.get("run", "") for step in job["steps"])
+    for configured_job in (job, workflow("release")["jobs"]["build"]):
+        assert "build api web worker runtime runtime-init" in runs(configured_job)
+        assert "python -m pytest docs/architecture/integrations/contracts/tests" in runs(configured_job)
 
 
 def test_frontend_uses_node22_lockfile_tests_and_build():

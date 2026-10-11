@@ -92,8 +92,11 @@ jobs:
           skipped = report.findall('.//testcase/skipped')
           assert not skipped, f'{len(skipped)} tests skipped; all PostgreSQL/nginx suites must run'
           PY
+      - name: I0 AIP and Manifest contract regression
+        # Run separately: legacy SDK tests also use the test_contracts basename.
+        run: python -m pytest docs/architecture/integrations/contracts/tests -q --tb=short
       - name: Compile Python source, migrations, tests and tooling
-        run: python -m compileall -q apps/api/app apps/api/scripts apps/api/migrations apps/api/tests apps/worker/worker infra/install infra/release infra/ci plugins
+        run: python -m compileall -q apps/api/app apps/api/scripts apps/api/migrations apps/api/tests apps/worker/worker apps/runtime infra/install infra/release infra/ci plugins
       - name: Remove disposable PostgreSQL and protected configuration
         if: always()
         run: |
@@ -154,6 +157,8 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/plugins/sdk:${{ github.workspace }}/plugins/proxmox
         run: bash ../../infra/ci/release-critical.sh
+      - name: I0 AIP and Manifest contract regression
+        run: python -m pytest docs/architecture/integrations/contracts/tests -q --tb=short
       - name: Workflow lint and repository whitespace
         run: |
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/ci.yml .github/workflows/release.yml
@@ -192,7 +197,7 @@ jobs:
           docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f infra/docker/docker-compose.yml config --quiet
           docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml config --quiet
           docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f "$RUNNER_TEMP"/atlas-ci-packages/atlas-docker-compose-*/infra/docker/docker-compose.yml config --quiet
-          docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f "$RUNNER_TEMP"/atlas-ci-packages/atlas-docker-compose-*/infra/docker/docker-compose.yml build api web worker
+          docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f "$RUNNER_TEMP"/atlas-ci-packages/atlas-docker-compose-*/infra/docker/docker-compose.yml build api web worker runtime runtime-init
       - name: Remove protected package configuration
         if: always()
         run: rm -f "$RUNNER_TEMP/atlas-ci-package.env"

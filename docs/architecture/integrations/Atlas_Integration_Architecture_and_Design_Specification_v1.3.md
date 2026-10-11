@@ -23,6 +23,13 @@ into `atlas-connector-sdk`; that separate project becomes the **sole canonical
 schema source** consumed by Atlas and `atlas-connectors`. Do not wire production
 code to these staged copies or create an in-repository duplicate SDK package.
 
+**I1 implementation evidence:** the [completion record](i1-completion-report.md)
+describes the local runtime/catalogue shell and the request's explicitly authorized
+isolated staging-adapter fallback because no separate owned SDK project exists.
+The schemas remain unchanged and are not relicensed. External canonical SDK
+extraction and pinned consumption remain a release hand-off, rather than a second
+SDK architecture. Qualified vendor bundles and remote provenance are not claimed.
+
 # Executive summary
 
 Atlas already contains most of the difficult knowledge-management
