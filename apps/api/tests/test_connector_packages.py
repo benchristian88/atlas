@@ -513,4 +513,3 @@ def test_committed_connector_cleanup_cannot_remove_new_concurrent_identity(tmp_p
     store.install(package, verifier)
     store.finish_remove(token)
     assert store.verify_connector(package.connector_id, package.version, package.bundle_digest)["state"] == "verified"
-
