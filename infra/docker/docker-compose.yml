@@ -49,7 +49,6 @@ services:
       ATLAS_RUNTIME_URL: http://runtime:8091
       ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
       ATLAS_RUNTIME_BASELINE_FILE: /app/runtime-baseline/baseline.json
-      ATLAS_CONNECTOR_SCHEMA_FILE: /app/contracts/connector-manifest-v1.schema.json
       ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
     volumes:
       - atlas_state:/var/lib/atlas
@@ -117,7 +116,8 @@ services:
   # Only these private volumes are writable; it receives no Atlas credentials.
   runtime-init:
     build:
-      context: ../../apps/runtime/ansible
+      context: ../..
+      dockerfile: apps/runtime/ansible/Dockerfile
     user: "0:0"
     command: ["python", "-m", "atlas_runtime.bootstrap"]
     network_mode: none
@@ -125,10 +125,36 @@ services:
       - runtime_control:/run/atlas-runtime-control
       - connector_store:/var/lib/atlas-connectors
 
+  # Stage release-approved offline packages using the trusted Atlas installer.
+  # Match the API/store owner without receiving its configuration or credentials.
+  connector-bootstrap:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      args:
+        ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:-unknown}
+    user: "10001:10001"
+    command: ["python", "-m", "scripts.stage_integration_bootstrap"]
+    environment:
+      ATLAS_INSTALL_METHOD: docker_compose
+    network_mode: none
+    volumes:
+      - connector_store:/var/lib/atlas-connectors
+    depends_on:
+      runtime-init:
+        condition: service_completed_successfully
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
   runtime:
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     restart: unless-stopped
     build:
-      context: ../../apps/runtime/ansible
+      context: ../..
+      dockerfile: apps/runtime/ansible/Dockerfile
     environment:
       ATLAS_RUNTIME_PACKAGING_MODE: docker_compose
       ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
@@ -140,7 +166,7 @@ services:
       - runtime_private
       - runtime_source
     depends_on:
-      runtime-init:
+      connector-bootstrap:
         condition: service_completed_successfully
     read_only: true
     cap_drop: [ALL]

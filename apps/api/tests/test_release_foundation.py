@@ -134,9 +134,44 @@ def test_deployment_restart_and_security_contracts():
     import yaml  # Included by the existing uvicorn[standard] dependency.
     compose = yaml.safe_load((ROOT / "infra/docker/docker-compose.yml").read_text())
     services = compose["services"]
-    assert set(services) == {"gateway", "api", "web", "worker", "postgres", "redis", "runtime", "runtime-init"}
-    assert all(service["restart"] == "unless-stopped" for name, service in services.items() if name != "runtime-init")
+    assert set(services) == {
+        "gateway", "api", "web", "worker", "postgres", "redis",
+        "runtime", "runtime-init", "connector-bootstrap",
+    }
+    assert all(
+        service["restart"] == "unless-stopped"
+        for name, service in services.items()
+        if name not in {"runtime-init", "connector-bootstrap"}
+    )
     assert "restart" not in services["runtime-init"]
+    staging = services["connector-bootstrap"]
+    assert staging["command"] == ["python", "-m", "scripts.stage_integration_bootstrap"]
+    assert staging["restart"] == "no"
+    assert staging["user"] == "10001:10001"
+    assert staging["environment"] == {"ATLAS_INSTALL_METHOD": "docker_compose"}
+    assert "env_file" not in staging
+    assert set(staging["build"].get("args", {})) == {"ATLAS_BUILD_ID"}
+    assert staging["network_mode"] == "none"
+    assert "ports" not in staging and "expose" not in staging
+    assert staging["read_only"] is True
+    # An exact mount allowlist excludes Docker/PostgreSQL sockets, host roots
+    # and writable source trees while permitting trusted package staging.
+    assert staging["volumes"] == ["connector_store:/var/lib/atlas-connectors"]
+    assert not staging.get("volumes_from")
+    assert not staging.get("tmpfs")
+    assert not staging.get("devices")
+    assert not staging.get("privileged", False)
+    assert not staging.get("cap_add")
+    assert staging["cap_drop"] == ["ALL"]
+    assert staging["security_opt"] == ["no-new-privileges:true"]
+    assert set(services["runtime"]["volumes"]) == {
+        "runtime_control:/run/atlas-runtime-control:ro",
+        "connector_store:/var/lib/atlas-connectors:ro",
+    }
+    assert staging["depends_on"] == {"runtime-init": {"condition": "service_completed_successfully"}}
+    assert services["runtime"]["depends_on"] == {
+        "connector-bootstrap": {"condition": "service_completed_successfully"},
+    }
     assert "ports" not in services["postgres"]
     assert "ports" not in services["redis"]
     for key in ("POSTGRES_PASSWORD", "AUTH_SECRET_KEY", "ATLAS_DATA_ENCRYPTION_KEY"):

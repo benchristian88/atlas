@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, or_, and_
 
 from app.models import InstalledConnectorPackage, Integration
 
@@ -19,7 +19,8 @@ def connector_usage_count(db, connector_id: str) -> int:
     No current legacy status establishes the future audited retirement workflow.
     """
     return db.scalar(select(func.count()).select_from(Integration)
-                     .where(Integration.plugin_id == connector_id)) or 0
+                     .where(or_(and_(Integration.connector_id == connector_id, Integration.retired_at.is_(None)),
+                                and_(Integration.connector_id.is_(None), Integration.plugin_id == connector_id)))) or 0
 
 
 def require_unused(db, connector_id: str, usage_counter=connector_usage_count):
@@ -49,6 +50,10 @@ def activate(db, stored, health: dict):
             or health.get("status") != "healthy"):
         raise ValueError("Only verified packages can become active")
     lock_connector(db, stored.connector_id)
+    from app.services.connector_mappings import require_resolved
+    from app.services.integration_connections import validate_dependents
+    require_resolved(db, stored.manifest, auto_map=True)
+    dependents = validate_dependents(db, stored.manifest)
     active = db.get(InstalledConnectorPackage, stored.connector_id)
     now = datetime.now(timezone.utc)
     values = dict(version=stored.version, bundle_digest=stored.bundle_digest.removeprefix("sha256:"),
@@ -63,6 +68,12 @@ def activate(db, stored, health: dict):
     else:
         for field, value in values.items():
             setattr(active, field, value)
+    db.flush()
+    for integration in dependents:
+        integration.connector_version = stored.version
+        integration.connector_digest = stored.bundle_digest.removeprefix("sha256:")
+        integration.config_schema_version = stored.manifest["manifest_version"]
+        integration.last_test_at = integration.last_test_status = integration.source_version = integration.source_compatibility = None
     db.flush()
     return active
 

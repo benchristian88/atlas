@@ -6,12 +6,58 @@ catalogue, or **Runtime** with a global runtime-view grant to inspect health,
 versions and the approved dependency baseline. The browser calls Atlas API;
 it never connects directly to the runtime.
 
-The current Proxmox VE, Docker + Compose and UniFi Network entries are verified
-catalogue metadata. Their executable bundles are not released or qualified yet.
-There is no Configure, Test Connection, Run Now or source-credential flow in this
-shell. Package installation actions appear only when an approved verified release
-bundle and a compatible runtime actually exist. Arbitrary archive uploads,
-download URLs, Git repositories, playbooks and Galaxy installs are not supported.
+I2 includes a hash-pinned local Proxmox VE 0.1.0 **Test Connection-only**
+package. Its source-version qualification is explicitly unqualified; no inventory
+or AIP is produced. Docker + Compose and UniFi Network remain metadata only.
+Install the approved package as a global package administrator, then use **Add
+integration** with Customer/Site-scoped `integrations.manage` permission. Runtime
+health and package compatibility must pass before activation/configuration.
+Remote executable installation still fails closed pending GitHub/Sigstore
+qualification. No archive upload, download URL, Git, playbook or Galaxy input exists.
+
+## Configure and test
+
+Choose an authorized Customer/Site, name and installed Connector. Forms use the
+verified Manifest, including its secret markers, required fields and TLS condition.
+Both Proxmox token identity and token secret are write-only. Use a dedicated API
+token; password/root login is unsupported. No real credential belongs in a command,
+fixture, screenshot or support log. Saved forms show Configured/Not configured and
+provide full **Replace credentials** or explicit **Clear credentials** actions.
+Clearing leaves the connection unconfigured; it does not remove its DataSource.
+Disabling preserves config/credentials. Removal destroys live credentials and
+retires the Integration while retaining provenance/history.
+
+`integrations.run` authorizes Test Connection within the same Customer/Site.
+An unsaved preview also requires manage permission and stores only safe audit
+metadata. A saved test persists a sanitized result/version; it creates no inventory,
+evidence, DiscoveryRun or AIP state. Supported/untested/incompatible derives from
+the exact Manifest; Proxmox I2 results remain untested until I4 qualification.
+There are no Run Now, scheduling or discovery controls.
+
+TLS verifies certificates by default. For a self-signed deployment, choose
+fingerprint and obtain the SHA-256 certificate fingerprint through a trusted
+channel; it is checked before token transmission. An explicit insecure exception
+is visibly warned and is never an automatic fallback. HTTPS is mandatory. Userinfo,
+query/fragment, redirect following, loopback/link-local/metadata endpoints and
+invalid ports are refused. Private LAN/ULA addresses are allowed. DNS results are
+checked and the connection uses a vetted numeric peer with the original TLS
+hostname; ambient proxy settings are ignored. Calls are bounded and cannot walk
+inventory. The token-permissions endpoint and version endpoint alone are probed.
+
+Taxonomy mappings are global per Connector/version. **Resolve mappings** is
+available only to global package administrators and selects existing active
+reference types. Only exact stable-key recommendations auto-map. Required
+unresolved mappings block activation/use; optional Manifest declarations can be
+explicitly ignored. No reference types are created by a Connector. Package updates
+validate dependent config/scopes/credential field presence without decrypting
+secrets and preserve the active tuple if changes require configuration.
+
+Source credentials use the existing `ATLAS_DATA_ENCRYPTION_KEY` and encrypted
+backup/restore rewrap. Retain that key under the normal operator lifecycle. A raw
+SQL dump contains ciphertext but cannot migrate it to an unrelated key; use
+[encrypted backup/restore](backup-restore.md). After restore, revalidate installed
+package bytes/trust and runtime baseline before testing. Control secrets and
+source keys never appear in normal responses.
 
 ## Deployment and authentication
 
@@ -31,8 +77,9 @@ read-only root filesystem and read-only control/store mounts, drops all Linux
 capabilities and uses `no-new-privileges`. It has no host networking, privileged
 mode, `NET_ADMIN`, Docker socket or broad host mount.
 
-The runtime receives no PostgreSQL, Redis, user/session or source-system
-credentials. A networkless one-shot provisioner creates a random 384-bit control
+The runtime receives no PostgreSQL, Redis or user/session credentials. Source
+credentials arrive only for a bounded probe through authenticated private control
+transport and are removed after execution. A networkless one-shot provisioner creates a random 384-bit control
 credential in the durable `runtime_control` volume. API and runtime mount that
 volume read-only. Existing valid material is preserved and invalid existing
 material is refused.
@@ -48,12 +95,16 @@ and runtime have that supplementary reader group. The runtime never receives
 Every health, capability and package-inspection request authenticates with this
 independent control credential. It is never shown by normal UI/API responses or
 logs. Protect and retain it across upgrade/reinstall; neither installer silently
-rotates an existing valid value. Source credentials and later run-scoped callback
-credentials have separate ownership and are not implemented here.
+rotates an existing valid value. Source credentials have separate scoped ownership. Run-scoped callback
+credentials remain I3 work.
 
 ## Failure and manual-only operation
 
-Runtime requests have a three-second total timeout and bounded response parsing.
+Health/control requests have a three-second timeout; Test Connection has a
+28-second API deadline and a 22-second child-process deadline. Results are bounded
+and sanitized. Four concurrent probes are allowed. A private 0700 workspace uses
+0600 input/result files and suppressed Ansible events/output; process completion,
+failure and timeout remove it, and startup cleans abandoned owned probe directories.
 An outage produces **Unavailable**; a changed protocol/dependency baseline produces
 **Incompatible**. Accepted Atlas knowledge remains usable in either state.
 Runtime startup/readiness failures are reported without preventing core API/web
@@ -87,17 +138,17 @@ give the runtime PostgreSQL access or add arbitrary writable source/socket mount
 Apply the updated Compose file in the existing deployed checkout. Reuse the
 existing environment file, project name and override files; these examples run
 from the checkout root with `.env` and the default `atlas` project. Recreate only
-runtime to apply network membership while preserving the running API, control
-credential and Connector store. A container restart alone does not apply the
-network change.
+runtime and its one-shot prerequisites to apply network membership and stage the
+packaged Connector while preserving the running API, control credential and
+Connector store. A container restart alone does not apply the network change.
 
 ```bash
 atlas_compose() {
   docker compose --env-file .env -f infra/docker/docker-compose.yml "$@"
 }
 atlas_compose config --quiet
-atlas_compose build runtime
-atlas_compose up -d --no-deps --force-recreate --wait --wait-timeout 60 runtime
+atlas_compose build runtime runtime-init connector-bootstrap
+atlas_compose up -d --force-recreate --wait --wait-timeout 60 runtime
 
 atlas_runtime_id="$(atlas_compose ps -q runtime)"
 docker inspect "$atlas_runtime_id" --format 'Networks={{range $name, $network := .NetworkSettings.Networks}}{{$name}} {{end}}Ports={{json .NetworkSettings.Ports}} ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}'
@@ -135,6 +186,23 @@ still fails, investigate the LXC/host route and firewall using the exact error.
 
 ## Protected packages and compatibility
 
+Docker installs/upgrades start `runtime-init` to provision the control credential
+and volume permissions, then the distinct one-shot `connector-bootstrap` service
+runs `python -m scripts.stage_integration_bootstrap` from the API image. It has
+`network_mode: none`, no database/authentication credentials, and only the
+`connector_store` volume mounted writable. UID/GID 10001 match the API/store owner,
+including its protected installation lock; native staging still requires root.
+The existing catalogue verifier and `PackageStore.install` authenticate the
+release-approved Proxmox 0.1.0 ID/version/digest and stage its immutable layout
+offline. No database activation occurs. A global administrator still activates
+the package through the Catalogue.
+
+The runtime waits for successful staging and mounts the store read-only. Staging
+failure exits nonzero and prevents runtime startup; API/knowledge startup remains
+independent. Repeated staging verifies existing bytes and preserves them. Tampered
+bundles or stored contents fail closed instead of being replaced silently. Avoid
+`--no-deps` when applying this packaging fix, because that skips both prerequisites.
+
 Catalogue content is release-packaged JSON; PostgreSQL records only the active
 installed identity and safe verification/baseline metadata. Packages are global,
 with one active version per Connector. `integration_runtime.manage` must be held
@@ -142,9 +210,11 @@ globally; scoped `integrations.manage` never authorizes executable installation.
 All live configured connections, including disabled connections, block removal.
 Package removal never deletes Assets, runs, assertions, evidence or Changes.
 
-The store is `/var/lib/atlas-connectors`. Native ownership is root with runtime
-read-only access; its future executable release install path must retain the
-privileged operator/package boundary. Docker exposes a writable store only to
+The store is `/var/lib/atlas-connectors`. Native ownership is root with API/runtime read-only access through the existing
+control-reader group. The root installer stages fixed approved bootstrap packages
+using the same verifier; administrator activation verifies an existing exact tuple
+without acquiring store write access. Missing packages require a reviewed operator
+package update, and native filesystem removal remains operator-owned. Docker exposes a writable store only to
 trusted Atlas package-management code; the runtime's mount is read-only.
 Exact identity, SHA-256, approved bootstrap allowlist/provenance, Manifest schema,
 embedded metadata and bounded plain USTAR contents are checked before atomic
@@ -159,12 +229,13 @@ Official remote installation is disabled and fails closed while the reviewed
 GitHub/Sigstore verifier, pinned trust roots and official release workflow are
 unavailable. There is no skip-verification switch. Bundled packages, when qualified
 and shipped later, require exact digests bound to the trusted Atlas release.
-The current offline catalogue needs no Internet connection and ships no executable
-vendor bundles.
+The current offline catalogue needs no Internet connection and ships one exact
+Proxmox probe archive produced in `atlas-connectors`. Its bootstrap digest is bound
+to the Atlas release; this is local qualification, not remote attestation proof.
 
 The approved environment identifies runtime `0.1.0`, protocol
 `integration-runtime-v1`, baseline `atlas-ansible-i1-v1` version `1.0.0`,
-ansible-core `2.19.7` and ansible-runner `2.4.3`. All fourteen Python dependencies
+ansible-core `2.19.7` and ansible-runner `2.4.3`. All fourteen runtime dependencies and the separate Apache-2.0 SDK 1.1.0 artifact
 are pinned; no vendor Collections are prequalified and no dependencies install
 dynamically. Missing declared dependencies require a runtime update. The initial
 CycloneDX inventory and upstream notices are included in both release packages;

@@ -1,0 +1,137 @@
+{
+  "manifest_version": "1.1",
+  "id": "proxmox",
+  "version": "0.1.0",
+  "publisher": {
+    "id": "atlas-official",
+    "name": "Atlas Impact"
+  },
+  "display": {
+    "name": "Proxmox VE",
+    "description": "API-token authentication and source version connection probe. Inventory discovery is not available.",
+    "category": "virtualization",
+    "documentation_uri": "https://github.com/benchristian88/atlas-connectors/tree/main/connectors/proxmox"
+  },
+  "compatibility": {
+    "aip": [
+      "1.0"
+    ],
+    "sdk": {
+      "minimum": "1.1.0",
+      "exclusive_maximum": "2.0.0"
+    },
+    "atlas": {
+      "minimum": "0.1.0",
+      "exclusive_maximum": "1.0.0"
+    },
+    "runtime": {
+      "capability": "integration-runtime-v1",
+      "baseline": {
+        "minimum": "1.0.0",
+        "exclusive_maximum": "2.0.0"
+      }
+    }
+  },
+  "source_versions": {
+    "qualification": "unqualified",
+    "qualified_versions": [],
+    "known_incompatible": [],
+    "newer_untested_policy": "allow_with_warning"
+  },
+  "capabilities": {
+    "test_connection": true,
+    "discover": false,
+    "scheduling": false,
+    "complete_snapshot": false
+  },
+  "connection_fields": [
+    {
+      "key": "endpoint",
+      "label": "HTTPS endpoint",
+      "type": "url",
+      "required": true,
+      "secret": false,
+      "help": "Proxmox HTTPS address, including port 8006 when applicable. Private LAN addresses are supported."
+    },
+    {
+      "key": "token_id",
+      "label": "API token ID",
+      "type": "secret",
+      "required": true,
+      "secret": true,
+      "validation": {
+        "max_length": 255
+      },
+      "help": "Dedicated API token identity. Password and root login are not supported."
+    },
+    {
+      "key": "token_secret",
+      "label": "API token secret",
+      "type": "secret",
+      "required": true,
+      "secret": true,
+      "validation": {
+        "max_length": 2048
+      }
+    },
+    {
+      "key": "tls_policy",
+      "label": "TLS policy",
+      "type": "enum",
+      "required": true,
+      "secret": false,
+      "options": [
+        "verify",
+        "fingerprint",
+        "insecure"
+      ],
+      "default": "verify",
+      "help": "Verify certificates by default. Insecure disables certificate verification; use only as an explicit advanced exception."
+    },
+    {
+      "key": "fingerprint",
+      "label": "SHA-256 certificate fingerprint",
+      "type": "fingerprint",
+      "required": true,
+      "secret": false,
+      "visible_when": {
+        "field": "tls_policy",
+        "equals": "fingerprint"
+      },
+      "validation": {
+        "min_length": 64,
+        "max_length": 95
+      },
+      "help": "Verify this certificate fingerprint through a trusted channel before entering it."
+    }
+  ],
+  "implementation": {
+    "runtime": "ansible",
+    "entry_points": {
+      "test_connection": "test_connection"
+    },
+    "dependencies": []
+  },
+  "licensing": {
+    "licence": "Apache-2.0",
+    "notices": [
+      "NOTICE"
+    ],
+    "sbom": {
+      "format": "SPDX",
+      "path": "sbom.spdx.json"
+    }
+  },
+  "distribution": {
+    "bundle_digest": "sha256:81addfe3509d3b7858523542382e4b2124b18eec7a1da2af52d7981d651a61f1",
+    "asset_uri": "https://github.com/benchristian88/atlas-connectors/releases/download/proxmox-v0.1.0/proxmox-0.1.0.tar.gz",
+    "provenance": {
+      "method": "github-artifact-attestation-sigstore",
+      "publisher_id": "atlas-official",
+      "repository": "benchristian88/atlas-connectors",
+      "workflow": ".github/workflows/release.yml",
+      "source_commit": "6733d7e8269bfa154538fee233b1c5dae236b0cf",
+      "evidence_uri": "https://github.com/benchristian88/atlas-connectors/attestations"
+    }
+  }
+}

@@ -19,13 +19,13 @@ import tarfile
 import threading
 
 ROOT = Path(__file__).resolve().parents[1]
-MAX_BODY = 4096
+MAX_BODY = 128 * 1024
 MAX_BUNDLE = 20 * 1024 * 1024
 MAX_METADATA = 256 * 1024
 MAX_FILES = 256
 MAX_FILE = 10 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
-OPERATIONS = ["health", "capabilities", "verify_connector"]
+OPERATIONS = ["health", "capabilities", "verify_connector", "test_connection"]
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DIGEST = re.compile(r"^[a-f0-9]{64}$")
@@ -85,12 +85,26 @@ class Runtime:
     def __init__(self, secret: str, store: Path, packaging_mode: str):
         self._secret = secret
         self.store = store
+        self._probe_slots = threading.BoundedSemaphore(4)
         if packaging_mode not in {"docker_compose", "systemd", "development"}:
             raise ValueError("invalid_packaging_mode")
         self.packaging_mode = packaging_mode
 
     def authenticate(self, authorization: str) -> bool:
         return hmac.compare_digest(authorization.encode("utf-8"), ("Bearer " + self._secret).encode("utf-8"))
+
+    def test_connection(self, payload):
+        from atlas_runtime.probe import execute
+        if not self._probe_slots.acquire(blocking=False):
+            if isinstance(payload, dict) and isinstance(payload.get("credentials"), dict):
+                payload["credentials"].clear()
+            return {"success": False, "category": "runtime_unavailable", "source_version": None}
+        try:
+            return execute(self, payload)
+        finally:
+            if isinstance(payload, dict) and isinstance(payload.get("credentials"), dict):
+                payload["credentials"].clear()
+            self._probe_slots.release()
 
     def health(self):
         raw = read_regular(ROOT / "baseline.json", MAX_METADATA)
@@ -102,6 +116,10 @@ class Runtime:
             except PackageNotFoundError:
                 dependencies[name] = None
         matches = dependencies == baseline["dependencies"]
+        try:
+            matches = matches and version("atlas-connector-sdk") == baseline["sdk_version"]
+        except PackageNotFoundError:
+            matches = False
         matches = matches and hashlib.sha256(read_regular(ROOT / "requirements.lock", MAX_METADATA)).hexdigest() == baseline["dependency_lock_digest"]
         return {
             "state": "healthy" if matches else "incompatible",
@@ -254,6 +272,11 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get("Content-Type") != "application/json":
                     raise ValueError("invalid_request")
                 payload = runtime.verify_connector(json.loads(self.rfile.read(size)))
+            elif method == "POST" and self.path == "/v1/connectors/test-connection":
+                from atlas_connector_sdk.contracts import strict_json
+                if self.headers.get("Content-Type") != "application/json":
+                    raise ValueError("invalid_request")
+                payload = runtime.test_connection(strict_json(self.rfile.read(size), maximum=MAX_BODY))
             else:
                 self.respond(404, {"diagnostic_code": "unsupported_operation"})
                 return
@@ -301,6 +324,8 @@ def main():
     # Native binding is deliberately independent of inherited host configuration.
     host = "0.0.0.0" if mode == "docker_compose" else "127.0.0.1"
     try:
+        from atlas_runtime.probe import cleanup_stale
+        cleanup_stale()
         secret = load_secret(Path(os.environ["ATLAS_RUNTIME_CONTROL_SECRET_FILE"]))
         runtime = Runtime(secret, Path(os.environ.get("ATLAS_CONNECTOR_STORE_PATH", "/var/lib/atlas-connectors")), mode)
         Server((host, 8091), runtime).serve_forever()

@@ -50,8 +50,22 @@ def test_docker_runtime_is_private_isolated_read_only_and_failure_independent():
     assert not any("DATABASE" in key or "AUTH_SECRET" in key for key in runtime["environment"])
     assert "runtime" not in compose["services"]["api"]["depends_on"]
     assert "runtime-init" not in compose["services"]["api"]["depends_on"]
+    assert "connector-bootstrap" not in compose["services"]["api"]["depends_on"]
     assert "runtime_private" in compose["services"]["api"]["networks"]
     assert compose["services"]["runtime-init"]["network_mode"] == "none"
+    assert compose["services"]["runtime-init"]["command"] == ["python", "-m", "atlas_runtime.bootstrap"]
+    staging = compose["services"]["connector-bootstrap"]
+    assert staging["build"] == compose["services"]["api"]["build"]
+    assert staging["command"] == ["python", "-m", "scripts.stage_integration_bootstrap"]
+    assert staging["user"] == "10001:10001"
+    assert staging["environment"] == {"ATLAS_INSTALL_METHOD": "docker_compose"}
+    assert staging["network_mode"] == "none" and "ports" not in staging
+    assert staging["volumes"] == ["connector_store:/var/lib/atlas-connectors"]
+    assert staging["restart"] == "no" and staging["read_only"] is True
+    assert staging["cap_drop"] == ["ALL"]
+    assert staging["security_opt"] == ["no-new-privileges:true"]
+    assert staging["depends_on"] == {"runtime-init": {"condition": "service_completed_successfully"}}
+    assert runtime["depends_on"] == {"connector-bootstrap": {"condition": "service_completed_successfully"}}
     assert runtime["healthcheck"]["test"] == ["CMD", "python", "-m", "atlas_runtime.healthcheck"]
     assert not any("runtime" in str(value) for value in compose["services"]["gateway"].get("environment", {}).values())
 
@@ -152,21 +166,15 @@ def test_native_secret_provision_is_protected_idempotent_and_preserves_store(mon
     assert secret.read_bytes() == credential
 
 
-def test_native_installs_original_contracts_without_overwriting_other_docs(monkeypatch, tmp_path):
-    native = importlib.import_module("native")
-    destination = tmp_path / "installation"
-    monkeypatch.setattr(native, "DESTINATION", destination)
-    unrelated = destination / "docs/operator-notes.md"
-    unrelated.parent.mkdir(parents=True)
-    unrelated.write_text("preserve operator notes")
-    for _ in range(2):
-        native.install_contracts()
-        target = destination / "docs/architecture/integrations/contracts"
-        source = ROOT / "docs/architecture/integrations/contracts"
-        assert (target / "connector-manifest-v1.schema.json").read_bytes() == (source / "connector-manifest-v1.schema.json").read_bytes()
-        assert {path.name: path.read_bytes() for path in (target / "manifests").glob("*.json")} == {path.name: path.read_bytes() for path in (source / "manifests").glob("*.json")}
-        assert unrelated.read_text() == "preserve operator notes"
-        assert not (target / "aip-v1.schema.json").exists()
+def test_native_installs_hash_pinned_canonical_sdk(monkeypatch, tmp_path):
+    import sys
+    sys.path.insert(0, str(ROOT / "infra/install"))
+    import native
+    calls = []
+    monkeypatch.setattr(native, "run", lambda args, **kwargs: calls.append(args))
+    native.install_sdk("python")
+    assert "--no-index" in calls[0] and "--require-hashes" in calls[0] and "--no-deps" in calls[0]
+    assert calls[0][-1].endswith("vendor/sdk/requirements.txt")
 
 
 def test_native_runtime_start_failure_does_not_abort_knowledge_startup(monkeypatch, capsys):
@@ -212,7 +220,7 @@ def test_dependency_baseline_sbom_and_notices_are_exact_and_core_boundary_preser
     assert {name.lower().replace("_", "-"): value for name, value in pins.items()} == baseline["dependencies"]
     assert hashlib.sha256((root / "requirements.lock").read_bytes()).hexdigest() == baseline["dependency_lock_digest"]
     sbom = json.loads((root / "sbom.cdx.json").read_text())
-    assert {entry["name"]: entry["version"] for entry in sbom["components"]} == pins
+    assert {entry["name"]: entry["version"] for entry in sbom["components"]} == {**pins, "atlas-connector-sdk": baseline["sdk_version"]}
     for entry in sbom["components"]:
         assert entry["licenses"] and entry["hashes"][0]["alg"] == "SHA-256"
         notices = next(prop["value"] for prop in entry["properties"] if prop["name"] == "atlas:upstream-notices")
@@ -222,3 +230,13 @@ def test_dependency_baseline_sbom_and_notices_are_exact_and_core_boundary_preser
     for path in (ROOT / "apps/api/app").rglob("*.py"):
         assert not re.search(r"(?m)^\s*(?:import|from)\s+(?:ansible|ansible_runner|atlas_runtime)\b", path.read_text()), path
     assert "ansible" not in (ROOT / "apps/api/requirements.txt").read_text()
+
+
+def test_native_bootstrap_staging_has_fixed_identity_and_no_database_activation():
+    source = (ROOT / 'apps/api/scripts/stage_integration_bootstrap.py').read_text()
+    native = (ROOT / 'infra/install/native.py').read_text()
+    assert 'os.geteuid() != 0' in source
+    assert 'PackageStore(Path("/var/lib/atlas-connectors"))' in source
+    assert 'store.install(package, catalogue.verifier())' in source
+    assert 'lifecycle.activate' not in source and 'argparse' not in source
+    assert '[python, "-m", "scripts.stage_integration_bootstrap"]' in native

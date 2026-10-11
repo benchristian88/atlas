@@ -2,7 +2,7 @@
 
 Use `.atlasbackup` to move or recover application state across supported Docker
 Compose and native/systemd deployments. Deployment-local secrets and configuration
-stay on the target; active MFA is rewrapped to its data key. Create and download
+stay on the target; active MFA and Integration credentials are rewrapped to its data key. Create and download
 an encrypted backup before a [packaged upgrade](upgrades.md).
 
 ## What you protect
@@ -11,13 +11,14 @@ An `.atlasbackup` file contains the full PostgreSQL Atlas state and the source
 application data-encryption material, inside passphrase-authenticated encryption.
 It preserves accounts/password hashes, access assignments, customers/sites,
 inventory, Services/Business Functions, relationships, accepted knowledge and
-history, settings, documents, audit history and active MFA/recovery verifiers.
+history, settings, documents, audit history, active MFA/recovery verifiers and
+encrypted Integration credential revisions.
 
 It does not contain application binaries/images, source `.env`, database or
 Redis credentials, authentication signing key, bind/network/host settings,
 certificates or proxy configuration. It is not a VM/container snapshot. Keep the
 matching supported Atlas release available separately. A raw PostgreSQL dump is
-still insufficient to move encrypted MFA to a different data key.
+still insufficient to move encrypted MFA or Integration credentials to a different data key.
 
 Use a long passphrase, at least 12 characters, and keep it safely separate from
 the archive. **Atlas cannot recover this backup if the passphrase is lost.**
@@ -77,7 +78,8 @@ the download URL. Browser progress does not reveal internal encryption material.
 
 The target keeps its database password/URL, Redis URL, signing/data keys, bind
 address/port, host/proxy configuration and installation method. Application
-settings stored in PostgreSQL are restored. MFA seeds are rewrapped to the
+settings stored in PostgreSQL are restored. MFA seeds and Integration credentials
+are authenticated and rewrapped in one transaction to the
 target data key; no source `.env` or signing key is needed. Source/target old
 sessions and challenges are invalidated. Setup remains permanently closed.
 
@@ -206,3 +208,14 @@ sudo -u atlas /opt/atlas/venv/bin/python /opt/atlas/infra/install/manage.py \
 If normal startup is unavailable, these commands load the protected target
 configuration and use the same backup/restore service. Protect local access and
 test recovery on disposable data before relying on it for a real incident.
+
+## Integration credentials after restore
+
+The destination retains its data key. The existing rewrap registry handles every
+Integration credential field with fresh nonces and unchanged ownership/revision
+AAD; any invalid field aborts the restore/rewrap transaction. DataSource and
+Integration IDs remain stable. Protected executable store contents and the runtime
+control credential are deployment-local, so verify the exact installed package
+and runtime health before Test Connection. There are no persistent probe leases
+or discovery tokens in I2. Credential removal cannot erase historical encrypted
+archives already downloaded under your retention policy.

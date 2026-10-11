@@ -862,6 +862,13 @@ class ServiceBusinessFunction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "integrations"
     __table_args__ = (
+        UniqueConstraint("id", "customer_id", "site_id", name="uq_integrations_identity_scope"),
+        UniqueConstraint("customer_id", "site_id", "creation_key", name="uq_integrations_creation_key"),
+        UniqueConstraint("data_source_id", name="uq_integrations_data_source"),
+        ForeignKeyConstraint(["data_source_id", "customer_id", "site_id"],
+            ["data_sources.id", "data_sources.customer_id", "data_sources.site_id"],
+            name="fk_integrations_data_source_scope", ondelete="RESTRICT"),
+        CheckConstraint("connector_id IS NULL OR (data_source_id IS NOT NULL AND connector_version IS NOT NULL AND connector_digest IS NOT NULL AND config_schema_version IS NOT NULL)", name="generic_identity"),
         ForeignKeyConstraint(
             ["customer_id", "site_id"],
             ["sites.customer_id", "sites.id"],
@@ -885,6 +892,53 @@ class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="pending", index=True
     )
+    connector_id: Mapped[str | None] = mapped_column(String(100), index=True)
+    connector_version: Mapped[str | None] = mapped_column(String(64))
+    connector_digest: Mapped[str | None] = mapped_column(String(64))
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    creation_key: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    credential_reference: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("integration_secrets.id", ondelete="SET NULL", use_alter=True))
+    config_schema_version: Mapped[str | None] = mapped_column(String(16))
+    config_json: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    selected_scopes: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_test_status: Mapped[str | None] = mapped_column(String(50))
+    source_version: Mapped[str | None] = mapped_column(String(100))
+    source_compatibility: Mapped[str | None] = mapped_column(String(32))
+
+
+class IntegrationSecret(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "integration_secrets"
+    __table_args__ = (
+        ForeignKeyConstraint(["integration_id", "customer_id", "site_id"],
+            ["integrations.id", "integrations.customer_id", "integrations.site_id"], ondelete="RESTRICT"),
+        CheckConstraint("encryption_version = 1", name="encryption_version"),
+    )
+    integration_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    site_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    encryption_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    encrypted_fields: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+
+class ConnectorMapping(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "connector_mappings"
+    __table_args__ = (
+        UniqueConstraint("connector_id", "connector_version", "kind", "source_key"),
+        CheckConstraint("kind IN ('asset', 'relationship')", name="mapping_kind"),
+        CheckConstraint("(ignored AND target_key IS NULL) OR NOT ignored", name="ignored_target"),
+        CheckConstraint("(kind = 'asset' AND target_key IS NOT DISTINCT FROM asset_type_key AND relationship_type_key IS NULL) OR (kind = 'relationship' AND target_key IS NOT DISTINCT FROM relationship_type_key AND asset_type_key IS NULL)", name="mapping_target_fk"),
+    )
+    connector_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    connector_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_key: Mapped[str | None] = mapped_column(String(100))
+    asset_type_key: Mapped[str | None] = mapped_column(ForeignKey("asset_types.key", ondelete="RESTRICT"))
+    relationship_type_key: Mapped[str | None] = mapped_column(ForeignKey("relationship_types.key", ondelete="RESTRICT"))
+    ignored: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
 
 class InstalledConnectorPackage(TimestampMixin, Base):
@@ -921,9 +975,10 @@ class InstalledConnectorPackage(TimestampMixin, Base):
 class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "data_sources"
     __table_args__ = (
+        UniqueConstraint("id", "customer_id", "site_id", name="uq_data_sources_identity_scope"),
         CheckConstraint(
             "source_type IN ('manual', 'simulated_discovery', 'proxmox', 'pbs', "
-            "'docker', 'unifi', 'netbox', 'imported_file', 'generated_inference')",
+            "'docker', 'unifi', 'netbox', 'imported_file', 'generated_inference', 'connector')",
             name="valid_source_type",
         ),
         ForeignKeyConstraint(

@@ -19,7 +19,8 @@ def read(path):
     return json.loads((CONTRACTS / path).read_text())
 
 
-SCHEMAS = {name: read(name + ".schema.json") for name in ("aip-v1", "connector-manifest-v1")}
+from atlas_connector_sdk.contracts import schema_bytes
+SCHEMAS = {name: json.loads(schema_bytes(name)) for name in ("aip-v1", "connector-manifest-v1")}
 VALIDATORS = {name: Draft202012Validator(schema, format_checker=FormatChecker())
               for name, schema in SCHEMAS.items()}
 MANIFESTS = {p.stem: json.loads(p.read_text()) for p in (CONTRACTS / "manifests").glob("*.json")}
@@ -33,139 +34,8 @@ def unique(rows, key, context):
     return {row[key]: row for row in rows}
 
 
-def validate_manifest(manifest):
-    VALIDATORS["connector-manifest-v1"].validate(manifest)
-    classes = unique(manifest["object_classes"], "key", "object class")
-    fields = unique(manifest["connection_fields"], "key", "connection field")
-    unique(manifest["facts"], "key", "fact declaration")
-    unique(manifest["relationship_classes"], "key", "relationship class")
-    unique(manifest["discovery_scopes"], "key", "scope")
-    for field in fields.values():
-        condition = field.get("visible_when")
-        if condition:
-            control = fields.get(condition["field"])
-            if control is None or control["secret"] or control["key"] == field["key"] or "visible_when" in control:
-                raise ValueError("Visibility must reference an unconditional non-secret field")
-            if "options" in control and condition["equals"] not in control["options"]:
-                raise ValueError("Unknown visibility option")
-        if field["type"] == "enum" and "default" in field and field["default"] not in field["options"]:
-            raise ValueError("Unknown default option")
-    for declaration in manifest["facts"]:
-        if not set(declaration["object_classes"]) <= classes.keys():
-            raise ValueError("Undeclared fact object class")
-        namespace = declaration["key"].split(".", 1)[0]
-        if any(k.split(".", 1)[0] != namespace for k in declaration["object_classes"]):
-            raise ValueError("Fact namespace mismatch")
-        # Canonical values stay explicit AIP fields; not arbitrary fact aliases.
-        if declaration["key"].split(".", 1)[1] in {"status", "name", "hostname", "asset_type", "vlan_id", "cidr", "gateway", "ip_address", "mac_address"}:
-            raise ValueError("Canonical concept hidden in fact")
-    for declaration in manifest["relationship_classes"]:
-        for side in ("source_object_classes", "target_object_classes"):
-            if not set(declaration[side]) <= classes.keys() or any(classes[k]["kind"] != "asset" for k in declaration[side]):
-                raise ValueError("Invalid relationship endpoint class")
-    for scope in manifest["discovery_scopes"]:
-        if not set(scope["object_classes"]) <= classes.keys():
-            raise ValueError("Undeclared scope class")
-        if scope["required"] and not scope["default_enabled"]:
-            raise ValueError("Required scope disabled by default")
-        for selection in scope.get("filters", []):
-            if not set(selection["default_values"]) <= set(selection["allowed_values"]):
-                raise ValueError("Unknown scope filter default")
-    return manifest
-
-
-def validate_batch(batch, manifest):
-    VALIDATORS["aip-v1"].validate(batch)
-    if batch["connector"] != {"id": manifest["id"], "version": manifest["version"],
-                              "bundle_digest": manifest["distribution"]["bundle_digest"]}:
-        raise ValueError("Connector identity mismatch")
-    if batch["message_type"] != "observations":
-        return
-    classes = {row["key"]: row for row in manifest["object_classes"]}
-    facts = {row["key"]: row for row in manifest["facts"]}
-    relationships = {row["key"]: row for row in manifest["relationship_classes"]}
-    for domain, kind in (("assets", "asset"), ("networks", "network"), ("interfaces", "interface")):
-        if batch[domain] and domain not in batch["coverage"]["domains"]:
-            raise ValueError("Observation outside coverage")
-        for row in batch[domain]:
-            declaration = classes.get(row["object_class"])
-            if declaration is None or declaration["kind"] != kind:
-                raise ValueError("Undeclared or wrong-kind object class")
-            unique(row["facts"], "key", "entity fact")
-            for fact in row["facts"]:
-                declaration = facts.get(fact["key"])
-                if declaration is None or row["object_class"] not in declaration["object_classes"]:
-                    raise ValueError("Undeclared or inapplicable fact")
-                if any(fact[k] != declaration[k] for k in ("value_type", "class", "cardinality")):
-                    raise ValueError("Incompatible fact metadata")
-            for field in ("ip_address", "gateway"):
-                if field in row:
-                    ipaddress.ip_address(row[field])
-            if "cidr" in row:
-                ipaddress.ip_network(row["cidr"], strict=True)
-    if batch["relationships"] and "relationships" not in batch["coverage"]["domains"]:
-        raise ValueError("Relationship outside coverage")
-    for row in batch["relationships"]:
-        if row["relationship_class"] not in relationships:
-            raise ValueError("Undeclared relationship class")
-
-
-def body_hash(message):
-    return hashlib.sha256(json.dumps(message, sort_keys=True, separators=(",", ":"),
-                                    ensure_ascii=False, allow_nan=False).encode()).hexdigest()
-
-
-def validate_example_stream(messages, manifest):
-    """Validate a static message set, not an ingestion/replay service."""
-    completions = [row for row in messages if row["message_type"] == "completion"]
-    if len(completions) != 1:
-        raise ValueError("One explicit completion required")
-    completion = completions[0]
-    batches = {}
-    for row in messages:
-        validate_batch(row, manifest)
-        for key in ("run_id", "integration_id", "connector", "coverage", "source"):
-            if row.get(key) != completion.get(key):
-                raise ValueError("Stream binding mismatch")
-        if row["message_type"] == "observations":
-            sequence = row["batch"]["sequence"]
-            if sequence in batches and body_hash(row) != body_hash(batches[sequence]):
-                raise ValueError("Conflicting sequence bodies")
-            batches[sequence] = row
-    if set(batches) != set(range(1, completion["last_sequence"] + 1)):
-        raise ValueError("Incomplete receipt set")
-    if completion["status"] == "completed" and not batches:
-        raise ValueError("Successful inventory needs a batch, including empty inventory")
-    if completion["completeness"] == "complete":
-        if not manifest["capabilities"]["complete_snapshot"]:
-            raise ValueError("Manifest does not support complete snapshots")
-        incomplete_codes = {"permission_limited", "source_unavailable", "authentication_failed",
-                            "tls_trust_required", "source_incompatible", "invalid_source_record", "timeout"}
-        if any(diagnostic["code"] in incomplete_codes for row in messages
-               for diagnostic in row.get("warnings", [])):
-            raise ValueError("Incomplete coverage cannot seal complete")
-    domains = {domain: [] for domain in ("assets", "networks", "interfaces", "relationships")}
-    for sequence in sorted(batches):
-        batch = batches[sequence]
-        for domain in domains:
-            domains[domain].extend(batch[domain])
-    for domain, rows in domains.items():
-        unique(rows, "external_id", domain + " source identity")
-    assets = {row["external_id"]: row for row in domains["assets"]}
-    networks = {row["external_id"]: row for row in domains["networks"]}
-    for row in domains["interfaces"]:
-        if row["asset_external_id"] not in assets or (
-            "network_external_id" in row and row["network_external_id"] not in networks
-        ):
-            raise ValueError("Unresolved example attachment")
-    declarations = {row["key"]: row for row in manifest["relationship_classes"]}
-    for row in domains["relationships"]:
-        declaration = declarations[row["relationship_class"]]
-        for side in ("source", "target"):
-            endpoint = assets.get(row[side]["external_id"])
-            if endpoint is None or endpoint["object_class"] not in declaration[side + "_object_classes"]:
-                raise ValueError("Unresolved or incompatible relationship endpoint")
-    return domains
+from atlas_connector_sdk.contracts import validate_manifest
+from atlas_connector_sdk.aip import validate_batch, validate_example_stream, body_hash
 
 
 @pytest.mark.parametrize("name", SCHEMAS)
@@ -271,13 +141,13 @@ def test_receipts_replay_and_cross_batch_reference_validation():
     messages = [deepcopy(FIXTURES[key]) for key in ("proxmox-complete-1", "proxmox-complete-2", "proxmox-complete-completion")]
     expected = validate_example_stream(messages, MANIFESTS["proxmox"])
     assert validate_example_stream(messages[::-1] + [deepcopy(messages[0])], MANIFESTS["proxmox"]) == expected
-    with pytest.raises(ValueError, match="Incomplete receipt"):
+    with pytest.raises(ValueError, match="incomplete_receipts"):
         validate_example_stream(messages[1:], MANIFESTS["proxmox"])
     changed = deepcopy(messages[0]); changed["assets"][0]["name"] = "Changed"
-    with pytest.raises(ValueError, match="Conflicting sequence"):
+    with pytest.raises(ValueError, match="conflicting_receipt"):
         validate_example_stream(messages + [changed], MANIFESTS["proxmox"])
     messages[1]["interfaces"][0]["asset_external_id"] = "unknown"
-    with pytest.raises(ValueError, match="Unresolved example"):
+    with pytest.raises(ValueError, match="invalid_interface_binding"):
         validate_example_stream(messages, MANIFESTS["proxmox"])
 
 
@@ -315,12 +185,12 @@ def test_partial_warnings_and_manifest_capability_prevent_complete_seal():
     for message in messages:
         message["coverage"]["snapshot_mode"] = "full"
     messages[1]["completeness"] = "complete"
-    with pytest.raises(ValueError, match="Incomplete coverage"):
+    with pytest.raises(ValueError, match="incomplete_coverage"):
         validate_example_stream(messages, MANIFESTS["proxmox"])
     messages = [deepcopy(FIXTURES[key]) for key in ("docker-complete-1", "docker-complete-completion")]
     manifest = deepcopy(MANIFESTS["docker"])
     manifest["capabilities"]["complete_snapshot"] = False
-    with pytest.raises(ValueError, match="does not support complete"):
+    with pytest.raises(ValueError, match="incomplete_coverage"):
         validate_example_stream(messages, manifest)
 
 
@@ -334,7 +204,7 @@ def test_inferred_relationship_is_valid_and_empty_complete_inventory_is_explicit
     assert all(not rows for rows in validate_example_stream([batch, completion], MANIFESTS["docker"]).values())
     missing_batch = deepcopy(completion)
     missing_batch["last_sequence"] = 0
-    with pytest.raises(ValueError, match="needs a batch"):
+    with pytest.raises(ValueError, match="missing_observation_batch"):
         validate_example_stream([missing_batch], MANIFESTS["docker"])
 
 

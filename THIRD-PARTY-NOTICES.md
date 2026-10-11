@@ -23,3 +23,12 @@ remain in the isolated runtime environment; Atlas API does not import Ansible.
 
 External Asset icon sources are operator-selected. Confirm permission to use
 their artwork; Atlas does not grant rights to third-party logos.
+
+The separate `atlas-connector-sdk` and official `atlas-connectors` projects use
+Apache-2.0 under the accepted ownership boundary. Atlas and its runtime source
+remain AGPL-3.0-only. The exact SDK 1.1.0 wheel and hash lock are in
+[vendor/sdk](vendor/sdk); SDK upstream notices are also included in
+[runtime notices](apps/runtime/ansible/notices/atlas-connector-sdk). The bundled
+Proxmox archive includes its Apache licence, NOTICE and SPDX inventory. No legacy
+AGPL implementation was copied into these Apache projects. These engineering
+ownership records do not replace upstream redistribution/licence review.

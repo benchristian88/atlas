@@ -1,4 +1,4 @@
-"""I1 catalogue/runtime shell. No source credentials or discovery execution."""
+"""Global package management and safe scoped configured Integration views."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models import Customer, InstalledConnectorPackage, Integration, Site
 from app.services import connector_lifecycle as lifecycle
 from app.services.integration_runtime import runtime
+from app.services.integration_connections import UpdateRequiresConfiguration
 
 router = APIRouter(tags=["integrations"])
 _CONNECTOR_ID = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
@@ -47,10 +48,19 @@ def configured_integrations(context: RequestContext,
         statement = statement.where(Integration.site_id == context.site_id)
     # Preserve useful legacy identity/status without exposing endpoint, username
     # or secret references; no configuration/edit flow is added here.
-    return [{"id": item.id, "name": item.name, "connector_id": item.plugin_id,
-             "customer_id": item.customer_id, "site_id": item.site_id, "status": item.status,
-             "customer_name": customer_name, "site_name": site_name}
-            for item, customer_name, site_name in db.execute(statement.order_by(Integration.name, Integration.id).limit(500))]
+    from app.services.integration_connections import response
+    from app.services.integration_secrets import AtlasEncryptedSecretProvider
+    provider = AtlasEncryptedSecretProvider(db)
+    result = []
+    for item, customer_name, site_name in db.execute(statement.order_by(Integration.name, Integration.id).limit(500)):
+        if item.connector_id:
+            value = response(item, provider, detail=False)
+        else:
+            value = {"id": item.id, "name": item.name, "connector_id": item.plugin_id,
+                "customer_id": item.customer_id, "site_id": item.site_id, "status": item.status, "generic": False}
+        result.append({**value, "customer_name": customer_name, "site_name": site_name})
+    return result
+
 
 
 @router.get("/integration-runtime")
@@ -59,12 +69,31 @@ async def runtime_health(principal: Principal = Depends(require_permission("inte
     return {**await runtime.health(), "installed_connector_count": len(_installed(db))}
 
 
+def catalogue_entries(db, principal, health):
+    from app.services.connector_catalogue import catalogue
+    entries = catalogue.entries(runtime=health, installed=_installed(db))
+    if principal.can("integration_runtime.manage"):
+        from app.services.integration_connections import validate_dependents
+        from app.services.connector_mappings import require_resolved
+        for entry in entries:
+            if entry["state"] != "update_available":
+                continue
+            manifest = catalogue.get(entry["connector_id"], entry["version"]).manifest
+            try:
+                require_resolved(db, manifest)
+                validate_dependents(db, manifest, lock=False)
+            except ValueError:
+                entry.update(state="update_requires_configuration", supported_actions=[],
+                    message="Review dependent connection configuration and required global mappings before updating.")
+    return entries
+
+
 @router.get("/integration-catalogue")
 async def catalogue_list(principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db)):
     from app.services.connector_catalogue import catalogue
     from app.services.connector_contracts import ConnectorPackageError
     try:
-        return {"entries": catalogue.entries(runtime=await runtime.health(), installed=_installed(db)),
+        return {"entries": catalogue_entries(db, principal, await runtime.health()),
                 "source": "bootstrap", "checked_at": datetime.now(timezone.utc).isoformat(), "verification_status": "metadata_verified"}
     except ConnectorPackageError:
         raise HTTPException(503, "The packaged Connector catalogue could not be verified") from None
@@ -76,7 +105,7 @@ async def catalogue_detail(connector_id: str, principal: Principal = Depends(req
     from app.services.connector_contracts import ConnectorPackageError
     _id(connector_id)
     try:
-        entry = next((item for item in catalogue.entries(runtime=await runtime.health(), installed=_installed(db))
+        entry = next((item for item in catalogue_entries(db, principal, await runtime.health())
                       if item["connector_id"] == connector_id), None)
     except ConnectorPackageError:
         raise HTTPException(503, "The packaged Connector catalogue could not be verified") from None
@@ -117,7 +146,10 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
         if result["state"] not in {"compatible", "installable"}:
             raise HTTPException(409, "This Connector requires a compatible Atlas runtime")
         lifecycle.lock_connector(db, connector_id)
-        lifecycle.require_unused(db, connector_id)
+        # Activation validates all live generic owners against the new Manifest.
+        # Legacy owners retain the conservative I1 update guard.
+        if db.scalar(select(Integration.id).where(Integration.connector_id.is_(None), Integration.plugin_id == connector_id).limit(1)):
+            raise lifecycle.ConnectorInUse("Legacy configured connections must be migrated before changing this Connector package")
         stored = lifecycle.package_store().install(package, catalogue.verifier())
         reference = {"connector_id": stored.connector_id, "version": stored.version, "digest": stored.bundle_digest.removeprefix("sha256:")}
         if (await runtime.verify_connector(reference))["state"] != "verified":
@@ -127,6 +159,9 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
             summary="Verified Connector package activated", metadata=reference, request=request)
         db.commit()
         return lifecycle.installed_response(active)
+    except UpdateRequiresConfiguration:
+        db.rollback()
+        raise HTTPException(409, {"code": "update_requires_configuration", "message": "Review dependent connection configuration before updating. The active version is unchanged."}) from None
     except lifecycle.ConnectorInUse as exc:
         db.rollback()
         raise HTTPException(409, str(exc)) from None
@@ -179,6 +214,9 @@ def uninstall_connector(connector_id: str, request: Request,
             # has no executable identity; report cleanup without restoring it.
             return {"status": "removed", "cleanup_pending": True, **reference}
         return {"status": "removed", "cleanup_pending": False, **reference}
+    except UpdateRequiresConfiguration:
+        db.rollback()
+        raise HTTPException(409, {"code": "update_requires_configuration", "message": "Review dependent connection configuration before updating. The active version is unchanged."}) from None
     except lifecycle.ConnectorInUse as exc:
         db.rollback()
         raise HTTPException(409, str(exc)) from None

@@ -1,7 +1,7 @@
 // Presentation of recorded values only; never infer operational consequences.
 const groups = {
-  success: ["operational", "active", "success", "completed", "connected", "running", "confirmed", "accepted", "resolved", "complete", "operationally_complete", "healthy", "compatible", "installed", "verified"],
-  warning: ["degraded", "pending", "warning", "unreviewed", "conflicted", "conflicting", "unresolved", "needs_review", "inferred", "medium", "required", "open", "exception", "incomplete", "exception_accepted", "update_available", "runtime_update_required"],
+  success: ["operational", "active", "success", "completed", "connected", "running", "confirmed", "accepted", "resolved", "complete", "operationally_complete", "healthy", "compatible", "installed", "verified", "configured"],
+  warning: ["unconfigured", "degraded", "pending", "warning", "unreviewed", "conflicted", "conflicting", "unresolved", "needs_review", "inferred", "medium", "required", "open", "exception", "incomplete", "exception_accepted", "update_available", "update_requires_configuration", "runtime_update_required"],
   danger: ["outage", "unavailable", "inactive", "failed", "error", "stale", "rejected", "retracted", "critical", "high", "critical_gaps", "incompatible", "verification_failed", "verification_unavailable", "runtime_unavailable"],
   info: ["maintenance", "observed", "declared", "intended", "current_from_source", "low", "conditional", "recommended", "available", "installable"],
   neutral: ["planned", "deprecated", "deleted", "draft", "unknown", "superseded", "archived", "historical", "deferred", "not_evaluated", "cancelled", "retired", "disabled", "metadata_only", "bundle_not_released"],

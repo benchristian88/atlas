@@ -34,8 +34,7 @@
     "apps/runtime/ansible/sbom.cdx.json",
     "apps/runtime/ansible/notices/",
     "infra/install/runtime.py",
-    "docs/architecture/integrations/contracts/connector-manifest-v1.schema.json",
-    "docs/architecture/integrations/contracts/manifests/"
+    "vendor/sdk/"
   ],
   "docker_compose": [
     "infra/docker/docker-compose.yml",
@@ -84,8 +83,9 @@
     "apps/runtime/ansible/requirements.lock",
     "apps/runtime/ansible/baseline.json",
     "apps/runtime/ansible/sbom.cdx.json",
-    "docs/architecture/integrations/contracts/connector-manifest-v1.schema.json",
-    "infra/install/runtime.py"
+    "infra/install/runtime.py",
+    "vendor/sdk/requirements.txt",
+    "vendor/sdk/atlas_connector_sdk-1.1.0-py3-none-any.whl"
   ],
   "required_docker_compose": [
     "infra/install/compose.py",

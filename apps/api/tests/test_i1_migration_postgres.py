@@ -22,8 +22,8 @@ def test_i1_upgrade_preserves_knowledge_and_scoped_grants_and_single_active_iden
         workspace = db.scalar(text("INSERT INTO workspaces (name,slug) VALUES ('I1 preserved','i1-preserved') RETURNING id"))
         customer = db.scalar(text("INSERT INTO customers (workspace_id,name) VALUES (:workspace,'Preserved') RETURNING id"), {"workspace": workspace})
         original_grants = db.execute(text("SELECT rp.role_id,rp.permission_id FROM role_permissions rp JOIN roles r ON r.id=rp.role_id WHERE r.name IN ('Customer Administrator','Viewer') ORDER BY rp.role_id,rp.permission_id")).all()
-    command.upgrade(config, "head")
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261011_0027")
+    command.upgrade(config, "20261011_0027")
     inspector = inspect(engine)
     assert inspector.get_pk_constraint("installed_connector_packages")["constrained_columns"] == ["connector_id"]
     assert not inspector.get_foreign_keys("installed_connector_packages")

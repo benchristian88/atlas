@@ -6,11 +6,13 @@ LABEL org.opencontainers.image.title="Atlas Ansible Runtime" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements.lock .
+COPY vendor/sdk /vendor/sdk
+RUN pip install --no-index --no-deps --require-hashes --find-links /vendor/sdk -r /vendor/sdk/requirements.txt
+COPY apps/runtime/ansible/requirements.lock .
 RUN pip install --no-cache-dir --no-deps -r requirements.lock && pip check \
     && useradd --system --uid 10001 atlas-runtime
-COPY atlas_runtime ./atlas_runtime
-COPY baseline.json sbom.cdx.json ./
-COPY notices ./notices
+COPY apps/runtime/ansible/atlas_runtime ./atlas_runtime
+COPY apps/runtime/ansible/baseline.json apps/runtime/ansible/sbom.cdx.json ./
+COPY apps/runtime/ansible/notices ./notices
 USER atlas-runtime
 CMD ["python", "-m", "atlas_runtime.server"]
