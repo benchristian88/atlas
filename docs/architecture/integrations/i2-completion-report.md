@@ -1,14 +1,23 @@
 # I2 — Generic Integrations, SecretProvider and Test Connection
 
-12 October 2026. **PASS WITH DOCUMENTED FOLLOW-UPS** for the applicable local I2
-scope. Live Proxmox, Docker engine/systemd and external GitHub provenance acceptance
-are explicitly unavailable, not inferred from fixtures or packaging tests.
-No repository was committed, pushed, tagged, merged or published.
+12 October 2026. **PASS WITH DOCUMENTED FOLLOW-UPS** for I2, including completed
+operator-reported live Docker upgrade and Proxmox connection acceptance. Native/
+systemd, remote GitHub provenance and I4 source/discovery qualification remain
+separate follow-ups. The live evidence below comes from the operator's deployment,
+not from intercepted browser fixtures or local package tests.
+
+The original implementation audit/results and Git inventory below are historical
+snapshots of that development run. The operator subsequently committed/deployed
+the feature branch. This acceptance follow-up began on clean Atlas HEAD
+`2af196fd73aad1c8a1c18d253594c6bfb1e1292d`, branch
+`feature/integrations-i2-generic-secrets-test-connection`; its edits are uncommitted
+and unpushed. No live credential, private key or certificate fingerprint value is
+recorded here.
 
 ## Audit, authority and starting state
 
-All three repositories were readable/writable and clean at the start. Their
-branches and HEADs are unchanged:
+All three repositories were readable/writable and clean at the original start.
+The original implementation run used these branches and HEADs:
 
 | Repository | Branch | HEAD | Starting status |
 | --- | --- | --- | --- |
@@ -253,13 +262,28 @@ No real/source credential values appear in screenshots or reports.
 
 ## Deployment and external acceptance
 
-**Docker: statically validated, not live engine-tested.** Root build context carries
+**Docker: live acceptance completed; operator report recorded 12 October 2026.** Root build context carries
 the exact SDK wheel offline with hash verification in API/runtime. Runtime retains
 no published port, private control/source-egress separation, read-only root/store,
 capability drop and no-new-privileges; ephemeral `/tmp` is a bounded tmpfs. It has
 no Docker socket, DB mount, signing/data key or user session. Both package methods
-passed independent worktree archive/identity/checksum verification. A Docker engine
-is unavailable on this host, so no image/Compose container acceptance is claimed.
+passed independent worktree archive/identity/checksum verification. The original
+local host had no Docker engine; the operator has now separately confirmed real
+image builds and successful upgrade of an existing Docker deployment. Both
+one-shot services exited 0: `runtime-init` provisioned control/store permissions,
+and `connector-bootstrap` ran `python -m scripts.stage_integration_bootstrap`
+through the trusted catalogue verifier/store path. Proxmox 0.1.0 was staged at:
+
+```text
+/var/lib/atlas-connectors/proxmox/0.1.0/81addfe3509d3b7858523542382e4b2124b18eec7a1da2af52d7981d651a61f1
+```
+
+This is the exact release-approved archive digest recorded above, not a manually
+extracted or unverified package. Alembic reached `20261012_0028`. Installation via
+the real Atlas Catalogue UI succeeded, and the probe-only package correctly
+showed zero discovery taxonomy mappings. Database activation remained an explicit
+administrator action. These facts are operator-reported live evidence; this
+follow-up does not invent deployment image IDs or a deployed commit hash.
 
 **Native/systemd: statically validated, not privileged Linux-tested.** Fixed loopback
 8091, dedicated runtime account/control credential, pinned separate venv and
@@ -291,10 +315,31 @@ qualification requires the reviewed pushed workflow, immutable assets, authentic
 attestation issuer/predicate/repository/workflow/source commit, trust roots and
 revocation/negative cases before enabling remote production installation.
 
-**Live Proxmox:** no operator live credentials/environment were available. No root/
-admin credential was requested. Valid/invalid token, permissions, TLS/pin/no-downgrade,
-version and bounded-error cases are deterministic Connector tests. A dedicated
-least-privilege live token and actual source must still qualify these outcomes.
+**Live Proxmox: I2 connection acceptance completed; operator report recorded 12 October 2026.** The
+operator confirmed the Add Integration wizard end-to-end, including successful
+live authentication with a dedicated least-privilege API token. The self-signed
+Proxmox certificate was validated using SHA-256 fingerprint pinning. The detected
+source version was **9.2.11**; compatibility correctly remained **untested** and
+Manifest source qualification remained **unqualified**. This successful connection
+is not an I4 qualified-version, permission/ACL or discovery acceptance result.
+
+Review and saved detail pages neither displayed credential values nor rehydrated
+secret fields. A saved Test Connection succeeded using the stored encrypted
+credentials. After a runtime restart, a further saved Test Connection succeeded
+without re-entering credentials. No token identity/value, private key, endpoint
+or certificate fingerprint value is recorded in this acceptance evidence. The
+operator did not report live invalid-token/failure-injection tests; existing
+deterministic negative/security tests remain distinct evidence.
+
+**UI acceptance follow-up:** the operator found Catalogue → Configured tab
+navigation failing although direct `/integrations` worked. The Configured link
+now explicitly selects `?tab=configured`, matching the existing Catalogue/Runtime
+query-routing pattern. The default `/integrations` route remains supported; the
+page layout and Runtime permissions are unchanged. Production browser regressions
+click Catalogue → Configured → Catalogue → Runtime → Configured, verify URL,
+selected navigation/content, and retain Runtime hiding/fallback for a scoped
+viewer. Local follow-up execution results are recorded below; they are separate
+from the operator's live source/deployment results.
 
 ## Executed validation
 
@@ -335,6 +380,38 @@ Local logs, protected test setup and browser evidence are under `/private/tmp`.
 They are validation artifacts, not source/product state. The disposable web,
 PostgreSQL and Redis validation services were stopped after completion.
 
+## Acceptance follow-up validation — 12 October 2026
+
+The operator-reported live Docker/Proxmox outcomes are recorded in the deployment
+section above. This coding-session validation used local production Chrome with
+intercepted API state; it did not repeat the live source tests or receive credentials.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Before-fix tab regression | Production browser script against the previous build | Failed at Catalogue → Configured: explicit configured-tab URL was not reached |
+| Frontend regression | From `apps/web`: `npm test` | 289 passed, zero failures/skips |
+| Production build | From `apps/web`: `npm run build` | Passed |
+| Navigation/browser regression | From `apps/web`: `ATLAS_PLAYWRIGHT_MODULE=/private/tmp/atlas-i1-browser-tools/node_modules/playwright/index.mjs ATLAS_CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ATLAS_BROWSER_OUTPUT=/private/tmp/atlas-i2-tab-navigation-after node scripts/check-i2-integrations-browser.mjs` against production port 3137 | 12 complete workflows passed; zero page errors; tab URL/selected content/Runtime permission assertions included |
+| Repository documentation | From `apps/api`: `python -m pytest tests/test_repository_docs.py -q` | 14 passed |
+| Whitespace | `git diff --check` | Passed |
+
+Changed files: the Integrations page uses an explicit Configured query link;
+the production browser script adds real navigation and Runtime permission
+regressions; this report, the Integration roadmap, feature ledger and product
+status record the completed live acceptance without extending I2 scope. There
+are no migration, backend/API or authorization contract changes.
+
+Follow-up `git status --short` (all changes uncommitted/unpushed):
+
+```text
+ M apps/web/app/integrations/page.js
+ M apps/web/scripts/check-i2-integrations-browser.mjs
+ M docs/architecture/integrations/i2-completion-report.md
+ M docs/architecture/integrations/integration-roadmap.md
+ M docs/product/feature-ledger.md
+ M docs/product/status.md
+```
+
 ## Deferred hand-off and security observations
 
 I3 must add durable orchestration/Run Now/schedules, run-bound token/ingestion receipt/
@@ -350,18 +427,21 @@ lifecycle. Source reachability is an operator configuration boundary; private LA
 addresses are intentionally allowed but local/metadata destinations are denied.
 No direct source calls occur in Atlas core. No plaintext source credentials,
 Authorization header, exception/stacktrace, arbitrary executable path or cross-tenant
-object identifier is included in normal API/UI/audit output. No production secret
-was used or added to any repository. Physical memory erasure is not guaranteed by
+object identifier is included in normal API/UI/audit output. No live secret was supplied to this coding session or added to any repository.
+The operator supplied the dedicated token only to the deployed write-only UI. Physical memory erasure is not guaranteed by
 managed runtimes; access revocation and file cleanup are the tested guarantees.
 
-Follow-ups are live Proxmox qualification, privileged Linux/Docker acceptance,
-remote release/attestation verification and guided future package-config migration.
+Remaining follow-ups are I4 source/discovery qualification, privileged native/
+systemd acceptance, remote release/attestation verification and guided future
+package-config migration. Live Docker upgrade and I2 Proxmox connection acceptance
+are completed; they are no longer outstanding follow-ups.
 They are explicit external/later-phase boundaries, not claims of current support.
 
 ## Material files and final repository state
 
-The following inventory lists every changed file with its purpose, followed by
-exact `git status --short --untracked-files=all`. All edits remain uncommitted.
+The following historical inventory lists original implementation files and the
+exact Git status captured at that time. It is not the current follow-up checkout
+state; original edits were subsequently committed by the operator.
 
 
 ### atlas

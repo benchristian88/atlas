@@ -55,6 +55,17 @@ try {
       await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });
     await page.setViewportSize({ width, height: 1000 });
+    // Start on the query-selected page and use real Next links throughout.
+    // The Configured link must replace the previous tab query explicitly.
+    await page.goto(`${origin}/integrations?tab=catalogue`);
+    const tabs = page.getByRole("navigation", { name: "Integration views" });
+    for (const [label, tab] of [["Configured", "configured"], ["Catalogue", "catalogue"], ["Runtime", "runtime"], ["Configured", "configured"]]) {
+      await tabs.getByRole("link", { name: label, exact: true }).click();
+      await page.waitForURL(url => url.pathname === "/integrations" && url.searchParams.get("tab") === tab);
+      if (tab === "configured") await page.getByText("No configured integrations", { exact: true }).waitFor();
+      else await page.getByRole("heading", { name: tab === "catalogue" ? "Connector catalogue" : "Integration runtime", exact: true }).waitFor();
+      assert.equal(await tabs.getByRole("link", { name: label, exact: true }).getAttribute("aria-current"), "page");
+    }
     await page.goto(`${origin}/integrations`);
     await page.getByText("No configured integrations", { exact: true }).waitFor();
     if (!accent) await page.screenshot({ path: `${output}/configured-${theme}-${width}.png`, fullPage: true });
@@ -113,7 +124,11 @@ try {
     assert.equal(await page.getByRole("button", { name: "Test Connection", exact: true }).count(), 0);
     await page.goto(`${origin}/integrations/mappings/fixture`);
     assert.equal(await page.getByLabel("Map Host").count(), 0);
-    checks.push({ theme, accent, width, workflow: "scope/configuration/TLS/probe/review/create/detail/replace/clear/mappings/viewer" });
+    await page.goto(`${origin}/integrations?tab=runtime`);
+    await page.getByRole("table", { name: "Configured integrations", exact: true }).waitFor();
+    assert.equal(await tabs.getByRole("link", { name: "Runtime", exact: true }).count(), 0);
+    assert.equal(await tabs.getByRole("link", { name: "Configured", exact: true }).getAttribute("aria-current"), "page");
+    checks.push({ theme, accent, width, workflow: "tab-navigation/runtime-permissions/scope/configuration/TLS/probe/review/create/detail/replace/clear/mappings/viewer" });
     await context.close();
     process.stdout.write(`Checked ${theme} ${width} ${accent || "default"}\n`);
   }

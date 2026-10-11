@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
   const activeError = errors[tab];
   return <div className={styles.page}>
     <PageHeader eyebrow="Connections" title="Integrations" description="Inspect configured connections, Connector availability and the local runtime." actions={tab === "configured" && hasPermissionInContext("integrations.manage", workspace.customerId, workspace.siteId) ? <Button href="/integrations/new" variant="primary">Add integration</Button> : tab === "catalogue" && canViewRuntime ? <Button href="/integrations?tab=runtime">View runtime</Button> : undefined} />
-    <nav className="admin-tabs" aria-label="Integration views">{INTEGRATION_TABS.filter(value => value !== "runtime" || canViewRuntime).map(value => <Link key={value} href={value === "configured" ? "/integrations" : `/integrations?tab=${value}`} className={tab === value ? "active" : ""} aria-current={tab === value ? "page" : undefined}>{value[0].toUpperCase() + value.slice(1)}</Link>)}</nav>
+    <nav className="admin-tabs" aria-label="Integration views">{INTEGRATION_TABS.filter(value => value !== "runtime" || canViewRuntime).map(value => <Link key={value} href={`/integrations?tab=${value}`} className={tab === value ? "active" : ""} aria-current={tab === value ? "page" : undefined}>{value[0].toUpperCase() + value.slice(1)}</Link>)}</nav>
     {activeError && <div className="error-banner" role="alert">{activeError}</div>}
     {success && <div className="success-banner" role="status">{success}</div>}
     {tab === "configured" && <>

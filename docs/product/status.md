@@ -19,7 +19,9 @@ self-hosted focus. No date is promised for 1.0.0.
   with global verified-package state and Configured/Catalogue/Runtime views.
   Generic scoped configuration, write-only encrypted credentials, global taxonomy
   mappings and bounded Test Connection are implemented. Proxmox is probe-only and
-  unqualified; Docker and UniFi remain metadata only. No discovery is dispatched.
+  unqualified. Live Docker upgrade and fingerprint-pinned Proxmox 9.2.11 connection
+  acceptance are operator-confirmed, including saved probes after runtime restart.
+  Docker/Compose and UniFi source Connectors remain metadata only. No discovery is dispatched.
 
 Core platform hardening is substantially complete and sufficient to proceed to
 integration/plugin and onboarding development. This includes secure installation,
@@ -42,8 +44,8 @@ it is not live monitoring or evidence of recovery readiness.
   Proxmox adapter/plugin contracts remain foundations; target design is not live
   configured discovery. Core hardening is retained, with its acceptance gaps.
   The [I2 validation record](../architecture/integrations/i2-completion-report.md)
-  records completed SDK extraction and outstanding remote provenance, live source
-  and deployment acceptance.
+  records completed SDK extraction, live Docker/Proxmox connection acceptance and
+  the remaining native/systemd, remote provenance and I4 qualification boundaries.
 - Guided onboarding to help operators establish useful initial knowledge.
 
 ## Before 1.0
