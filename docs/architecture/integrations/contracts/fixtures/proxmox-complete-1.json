@@ -1,0 +1,62 @@
+{
+  "protocol_version": "1.0",
+  "message_type": "observations",
+  "connector": {
+    "id": "proxmox",
+    "version": "0.0.0-i0",
+    "bundle_digest": "sha256:50bfe8a442eb0756d2e1a7dc3094e99c3d1cf9343437087c9e145f045678bad9"
+  },
+  "integration_id": "11111111-1111-4111-8111-111111111111",
+  "run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "observed_at": "2026-10-11T00:00:00Z",
+  "source": {
+    "version": "8.4.0"
+  },
+  "coverage": {
+    "key": "proxmox:endpoint-a:inventory:v1",
+    "snapshot_mode": "full",
+    "domains": [
+      "assets",
+      "networks",
+      "interfaces",
+      "relationships"
+    ]
+  },
+  "batch": {
+    "sequence": 1
+  },
+  "assets": [
+    {
+      "external_id": "node/pve-01",
+      "object_class": "proxmox.node",
+      "name": "pve-01",
+      "status": "active",
+      "facts": []
+    },
+    {
+      "external_id": "qemu/100",
+      "object_class": "proxmox.qemu",
+      "name": "vm-100",
+      "status": "active",
+      "facts": [
+        {
+          "key": "proxmox.vmid",
+          "value_type": "integer",
+          "class": "identity",
+          "cardinality": "single",
+          "value": 100
+        },
+        {
+          "key": "proxmox.power_state",
+          "value_type": "string",
+          "class": "operational",
+          "cardinality": "single",
+          "value": "running"
+        }
+      ]
+    }
+  ],
+  "networks": [],
+  "interfaces": [],
+  "relationships": []
+}

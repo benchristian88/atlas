@@ -1,0 +1,100 @@
+{
+  "protocol_version": "1.0",
+  "message_type": "observations",
+  "connector": {
+    "id": "unifi-network",
+    "version": "0.0.0-i0",
+    "bundle_digest": "sha256:73b675b3ea7cf4ac73b2094f634603a456544e04285ee8d3adf2b7609c05d55f"
+  },
+  "integration_id": "33333333-3333-4333-8333-333333333333",
+  "run_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "observed_at": "2026-10-11T00:00:00Z",
+  "source": {
+    "version": "9.0.0"
+  },
+  "coverage": {
+    "key": "unifi:controller-a:site-a:inventory:v1",
+    "snapshot_mode": "full",
+    "domains": [
+      "assets",
+      "networks",
+      "interfaces",
+      "relationships"
+    ]
+  },
+  "batch": {
+    "sequence": 1
+  },
+  "assets": [
+    {
+      "external_id": "site/site-a/device/gateway-a",
+      "object_class": "unifi.gateway",
+      "name": "Gateway",
+      "status": "active",
+      "facts": []
+    },
+    {
+      "external_id": "site/site-a/device/switch-a",
+      "object_class": "unifi.switch",
+      "name": "Switch",
+      "status": "active",
+      "facts": []
+    },
+    {
+      "external_id": "site/site-a/device/ap-a",
+      "object_class": "unifi.access_point",
+      "name": "Access point",
+      "status": "active",
+      "facts": [
+        {
+          "key": "unifi.firmware_version",
+          "value_type": "string",
+          "class": "informational",
+          "cardinality": "single",
+          "value": "7.0.0"
+        }
+      ]
+    }
+  ],
+  "networks": [
+    {
+      "external_id": "site/site-a/network/network-a",
+      "object_class": "unifi.network",
+      "name": "Infrastructure",
+      "network_type": "vlan",
+      "vlan_id": 10,
+      "cidr": "198.51.100.0/24",
+      "gateway": "198.51.100.1",
+      "facts": []
+    }
+  ],
+  "interfaces": [
+    {
+      "external_id": "site/site-a/device/ap-a/interface/management",
+      "object_class": "unifi.interface",
+      "asset_external_id": "site/site-a/device/ap-a",
+      "name": "eth0",
+      "network_external_id": "site/site-a/network/network-a",
+      "ip_address": "198.51.100.10",
+      "mac_address": "02:00:00:00:00:01",
+      "is_primary": true,
+      "facts": []
+    }
+  ],
+  "relationships": [
+    {
+      "external_id": "relationship/unifi.uplink/site/site-a/device/ap-a/site/site-a/device/switch-a",
+      "relationship_class": "unifi.uplink",
+      "source": {
+        "kind": "asset",
+        "external_id": "site/site-a/device/ap-a"
+      },
+      "target": {
+        "kind": "asset",
+        "external_id": "site/site-a/device/switch-a"
+      },
+      "truth_classification": "observed",
+      "confidence": 1.0
+    }
+  ]
+}

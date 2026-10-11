@@ -1,0 +1,166 @@
+{
+  "protocol_version": "1.0",
+  "message_type": "observations",
+  "connector": {
+    "id": "docker",
+    "version": "0.0.0-i0",
+    "bundle_digest": "sha256:b58e284597fe141574dcf0c433fc6fa91caa9ecf049564030a9e153387c4b81f"
+  },
+  "integration_id": "22222222-2222-4222-8222-222222222222",
+  "run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "observed_at": "2026-10-11T00:00:00Z",
+  "source": {
+    "version": "27.3.1"
+  },
+  "coverage": {
+    "key": "docker:engine-a:inventory:v1",
+    "snapshot_mode": "full",
+    "domains": [
+      "assets",
+      "networks",
+      "interfaces",
+      "relationships"
+    ]
+  },
+  "batch": {
+    "sequence": 1
+  },
+  "assets": [
+    {
+      "external_id": "engine/engine-a",
+      "object_class": "docker.engine",
+      "name": "Docker engine",
+      "status": "active",
+      "facts": [
+        {
+          "key": "docker.engine_id",
+          "value_type": "string",
+          "class": "identity",
+          "cardinality": "single",
+          "value": "engine-a"
+        }
+      ]
+    },
+    {
+      "external_id": "engine/engine-a/project/photos",
+      "object_class": "docker.compose_project",
+      "name": "Photos",
+      "status": "active",
+      "facts": [
+        {
+          "key": "docker.compose_project",
+          "value_type": "string",
+          "class": "identity",
+          "cardinality": "single",
+          "value": "photos"
+        }
+      ]
+    },
+    {
+      "external_id": "engine/engine-a/project/photos/service/web/replica/1",
+      "object_class": "docker.compose_workload",
+      "name": "Photos web",
+      "status": "active",
+      "facts": [
+        {
+          "key": "docker.compose_project",
+          "value_type": "string",
+          "class": "identity",
+          "cardinality": "single",
+          "value": "photos"
+        },
+        {
+          "key": "docker.compose_service",
+          "value_type": "string",
+          "class": "identity",
+          "cardinality": "single",
+          "value": "web"
+        },
+        {
+          "key": "docker.replica_ordinal",
+          "value_type": "integer",
+          "class": "identity",
+          "cardinality": "single",
+          "value": 1
+        },
+        {
+          "key": "docker.container_id",
+          "value_type": "string",
+          "class": "informational",
+          "cardinality": "single",
+          "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        {
+          "key": "docker.image",
+          "value_type": "string",
+          "class": "configuration",
+          "cardinality": "single",
+          "value": "example/photos:1.0"
+        },
+        {
+          "key": "docker.published_ports",
+          "value_type": "string",
+          "class": "configuration",
+          "cardinality": "multi",
+          "value": [
+            "8080:80/tcp"
+          ]
+        }
+      ]
+    }
+  ],
+  "networks": [
+    {
+      "external_id": "engine/engine-a/network/network-a",
+      "object_class": "docker.network",
+      "name": "photos_default",
+      "network_type": "docker_bridge",
+      "cidr": "172.23.0.0/16",
+      "gateway": "172.23.0.1",
+      "facts": []
+    }
+  ],
+  "interfaces": [
+    {
+      "external_id": "engine/engine-a/project/photos/service/web/replica/1/interface/0",
+      "object_class": "docker.interface",
+      "asset_external_id": "engine/engine-a/project/photos/service/web/replica/1",
+      "name": "eth0",
+      "network_external_id": "engine/engine-a/network/network-a",
+      "ip_address": "172.23.0.7",
+      "mac_address": "02:00:00:00:00:01",
+      "is_primary": true,
+      "facts": []
+    }
+  ],
+  "relationships": [
+    {
+      "external_id": "relationship/docker.runs_on/engine/engine-a/project/photos/engine/engine-a",
+      "relationship_class": "docker.runs_on",
+      "source": {
+        "kind": "asset",
+        "external_id": "engine/engine-a/project/photos"
+      },
+      "target": {
+        "kind": "asset",
+        "external_id": "engine/engine-a"
+      },
+      "truth_classification": "observed",
+      "confidence": 1.0
+    },
+    {
+      "external_id": "relationship/docker.runs_on/engine/engine-a/project/photos/service/web/replica/1/engine/engine-a",
+      "relationship_class": "docker.runs_on",
+      "source": {
+        "kind": "asset",
+        "external_id": "engine/engine-a/project/photos/service/web/replica/1"
+      },
+      "target": {
+        "kind": "asset",
+        "external_id": "engine/engine-a"
+      },
+      "truth_classification": "observed",
+      "confidence": 1.0
+    }
+  ]
+}

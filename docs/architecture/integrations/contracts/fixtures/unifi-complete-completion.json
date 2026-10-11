@@ -1,0 +1,28 @@
+{
+  "protocol_version": "1.0",
+  "message_type": "completion",
+  "connector": {
+    "id": "unifi-network",
+    "version": "0.0.0-i0",
+    "bundle_digest": "sha256:73b675b3ea7cf4ac73b2094f634603a456544e04285ee8d3adf2b7609c05d55f"
+  },
+  "integration_id": "33333333-3333-4333-8333-333333333333",
+  "run_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "observed_at": "2026-10-11T00:00:00Z",
+  "source": {
+    "version": "9.0.0"
+  },
+  "coverage": {
+    "key": "unifi:controller-a:site-a:inventory:v1",
+    "snapshot_mode": "full",
+    "domains": [
+      "assets",
+      "networks",
+      "interfaces",
+      "relationships"
+    ]
+  },
+  "status": "completed",
+  "completeness": "complete",
+  "last_sequence": 1
+}

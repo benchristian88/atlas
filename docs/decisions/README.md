@@ -21,6 +21,14 @@ remain understandable after the original implementation discussion is gone.
   distinguish mistaken-record removal from Archive while retaining evidence and
   excluding tombstones from operational reads.
 
+- [0003 — Runtime-neutral AIP and isolated Ansible execution](0003-runtime-neutral-integrations.md).
+- [0004 — Reuse application-key secrets with separate control and callback credentials](0004-integration-secret-lifecycle.md).
+- [0005 — Three-project Integration ownership and licences](0005-connector-project-ownership.md).
+- [0006 — Official immutable catalogue and protected verified execution](0006-verified-connector-supply-chain.md).
+- [0007 — Global one-version packages and scoped connection lifecycle](0007-global-connector-scoped-integration.md).
+- [0008 — Exact global taxonomy mapping and declared namespaced facts](0008-connector-taxonomy-and-facts.md).
+- [0009 — Read-only technical discovery for official v1 Connectors](0009-read-only-official-connectors.md).
+
 ## ADR maintenance
 
 Create or supersede an ADR when a change affects any of the following:

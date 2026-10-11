@@ -1,0 +1,28 @@
+{
+  "protocol_version": "1.0",
+  "message_type": "completion",
+  "connector": {
+    "id": "docker",
+    "version": "0.0.0-i0",
+    "bundle_digest": "sha256:b58e284597fe141574dcf0c433fc6fa91caa9ecf049564030a9e153387c4b81f"
+  },
+  "integration_id": "22222222-2222-4222-8222-222222222222",
+  "run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "observed_at": "2026-10-11T00:00:00Z",
+  "source": {
+    "version": "27.3.1"
+  },
+  "coverage": {
+    "key": "docker:engine-a:inventory:v1",
+    "snapshot_mode": "full",
+    "domains": [
+      "assets",
+      "networks",
+      "interfaces",
+      "relationships"
+    ]
+  },
+  "status": "completed",
+  "completeness": "complete",
+  "last_sequence": 1
+}

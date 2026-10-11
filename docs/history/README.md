@@ -10,6 +10,8 @@ into earlier execution tables.
 - `product-reviews/`: dated feature and UI audits, including the previous detailed ledger.
 - `implementation-prompts/`: completed implementation prompts and agent context.
 - `deployment/`: superseded deployment migration guidance.
+- `integrations/`: superseded Integration design provenance; current target is
+  [v1.3](../architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md).
 - `validation/`: historical implementation, test and acceptance records.
 
 The [core hardening acceptance closure](validation/core-hardening-acceptance-closure.md)

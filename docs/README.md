@@ -55,6 +55,9 @@ Services you operate. See [project status](product/status.md) for the path to 1.
 - [UI architecture](architecture/ui-architecture.md),
   [topology](architecture/infrastructure-topology.md) and
   [entity lifecycle](architecture/entity-lifecycle.md).
+- [Integration target architecture](architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
+  and [implementation roadmap/contracts](architecture/integrations/integration-roadmap.md) —
+  accepted specification; live configured discovery remains upcoming.
 - [Architecture decisions](decisions/README.md) — decision rationale; implementation
   is established by the current code and tests.
 
