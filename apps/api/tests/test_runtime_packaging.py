@@ -50,8 +50,22 @@ def test_docker_runtime_is_private_isolated_read_only_and_failure_independent():
     assert not any("DATABASE" in key or "AUTH_SECRET" in key for key in runtime["environment"])
     assert "runtime" not in compose["services"]["api"]["depends_on"]
     assert "runtime-init" not in compose["services"]["api"]["depends_on"]
+    assert "connector-bootstrap" not in compose["services"]["api"]["depends_on"]
     assert "runtime_private" in compose["services"]["api"]["networks"]
     assert compose["services"]["runtime-init"]["network_mode"] == "none"
+    assert compose["services"]["runtime-init"]["command"] == ["python", "-m", "atlas_runtime.bootstrap"]
+    staging = compose["services"]["connector-bootstrap"]
+    assert staging["build"] == compose["services"]["api"]["build"]
+    assert staging["command"] == ["python", "-m", "scripts.stage_integration_bootstrap"]
+    assert staging["user"] == "10001:10001"
+    assert staging["environment"] == {"ATLAS_INSTALL_METHOD": "docker_compose"}
+    assert staging["network_mode"] == "none" and "ports" not in staging
+    assert staging["volumes"] == ["connector_store:/var/lib/atlas-connectors"]
+    assert staging["restart"] == "no" and staging["read_only"] is True
+    assert staging["cap_drop"] == ["ALL"]
+    assert staging["security_opt"] == ["no-new-privileges:true"]
+    assert staging["depends_on"] == {"runtime-init": {"condition": "service_completed_successfully"}}
+    assert runtime["depends_on"] == {"connector-bootstrap": {"condition": "service_completed_successfully"}}
     assert runtime["healthcheck"]["test"] == ["CMD", "python", "-m", "atlas_runtime.healthcheck"]
     assert not any("runtime" in str(value) for value in compose["services"]["gateway"].get("environment", {}).values())
 

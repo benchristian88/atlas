@@ -299,7 +299,7 @@ def test_docker_upgrade_stops_writers_after_build_and_preserves_configuration(mo
     module.docker_upgrade(environment)
     tails = [call[6:] for call in calls]
     assert tails[0] == ["config", "--quiet"]
-    assert tails[1] == ["build", "api", "web", "worker", "runtime", "runtime-init"]
+    assert tails[1] == ["build", "api", "web", "worker", "runtime", "runtime-init", "connector-bootstrap"]
     assert tails[2] == ["stop", "gateway", "web", "worker", "api"]
     assert "up" in tails[3]
     assert not any("down" in call or "-v" in call for call in calls)

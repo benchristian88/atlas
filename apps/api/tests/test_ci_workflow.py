@@ -112,13 +112,13 @@ def test_release_integrity_reuses_h4_and_builds_without_publication():
     shell = runs(job)
     for command in ("release.py metadata", "build --dry-run", "verify --require-committed",
                     "sha256sum -c SHA256SUMS", "compose.py --help", "native.py --help",
-                    "upgrade.py", "protected_configuration", "config --quiet", "build api web worker runtime runtime-init",
+                    "upgrade.py", "protected_configuration", "config --quiet", "build api web worker runtime runtime-init connector-bootstrap",
                     "docker-compose.dev.yml", "git diff --check", "actionlint@v1.7.7"):
         assert command in shell
     assert "--worktree" not in shell
     assert all(" up " not in step.get("run", "") for step in job["steps"])
     for configured_job in (job, workflow("release")["jobs"]["build"]):
-        assert "build api web worker runtime runtime-init" in runs(configured_job)
+        assert "build api web worker runtime runtime-init connector-bootstrap" in runs(configured_job)
         assert "python -m pytest docs/architecture/integrations/contracts/tests" in runs(configured_job)
 
 

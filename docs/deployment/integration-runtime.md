@@ -138,17 +138,17 @@ give the runtime PostgreSQL access or add arbitrary writable source/socket mount
 Apply the updated Compose file in the existing deployed checkout. Reuse the
 existing environment file, project name and override files; these examples run
 from the checkout root with `.env` and the default `atlas` project. Recreate only
-runtime to apply network membership while preserving the running API, control
-credential and Connector store. A container restart alone does not apply the
-network change.
+runtime and its one-shot prerequisites to apply network membership and stage the
+packaged Connector while preserving the running API, control credential and
+Connector store. A container restart alone does not apply the network change.
 
 ```bash
 atlas_compose() {
   docker compose --env-file .env -f infra/docker/docker-compose.yml "$@"
 }
 atlas_compose config --quiet
-atlas_compose build runtime
-atlas_compose up -d --no-deps --force-recreate --wait --wait-timeout 60 runtime
+atlas_compose build runtime runtime-init connector-bootstrap
+atlas_compose up -d --force-recreate --wait --wait-timeout 60 runtime
 
 atlas_runtime_id="$(atlas_compose ps -q runtime)"
 docker inspect "$atlas_runtime_id" --format 'Networks={{range $name, $network := .NetworkSettings.Networks}}{{$name}} {{end}}Ports={{json .NetworkSettings.Ports}} ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}'
@@ -185,6 +185,23 @@ as passed only after this probe succeeds in the operator's deployment. If it
 still fails, investigate the LXC/host route and firewall using the exact error.
 
 ## Protected packages and compatibility
+
+Docker installs/upgrades start `runtime-init` to provision the control credential
+and volume permissions, then the distinct one-shot `connector-bootstrap` service
+runs `python -m scripts.stage_integration_bootstrap` from the API image. It has
+`network_mode: none`, no database/authentication credentials, and only the
+`connector_store` volume mounted writable. UID/GID 10001 match the API/store owner,
+including its protected installation lock; native staging still requires root.
+The existing catalogue verifier and `PackageStore.install` authenticate the
+release-approved Proxmox 0.1.0 ID/version/digest and stage its immutable layout
+offline. No database activation occurs. A global administrator still activates
+the package through the Catalogue.
+
+The runtime waits for successful staging and mounts the store read-only. Staging
+failure exits nonzero and prevents runtime startup; API/knowledge startup remains
+independent. Repeated staging verifies existing bytes and preserves them. Tampered
+bundles or stored contents fail closed instead of being replaced silently. Avoid
+`--no-deps` when applying this packaging fix, because that skips both prerequisites.
 
 Catalogue content is release-packaged JSON; PostgreSQL records only the active
 installed identity and safe verification/baseline metadata. Packages are global,

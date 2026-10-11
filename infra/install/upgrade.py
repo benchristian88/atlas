@@ -64,7 +64,7 @@ def docker_upgrade(configuration):
     # Suppress rendered configuration: Compose config can contain credentials.
     run(compose + ["config", "--quiet"])
     # Build before the maintenance window. Writers stop before API migration.
-    run(compose + ["build", "api", "web", "worker", "runtime", "runtime-init"])
+    run(compose + ["build", "api", "web", "worker", "runtime", "runtime-init", "connector-bootstrap"])
     run(compose + ["stop", "gateway", "web", "worker", "api"])
     values = protected_configuration(configuration, "docker_compose")
     services = ["gateway", "api", "web", "worker", "postgres", "redis"]

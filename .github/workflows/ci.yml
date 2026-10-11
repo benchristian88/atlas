@@ -201,7 +201,7 @@ jobs:
           docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f infra/docker/docker-compose.yml config --quiet
           docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml config --quiet
           docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f "$RUNNER_TEMP"/atlas-ci-packages/atlas-docker-compose-*/infra/docker/docker-compose.yml config --quiet
-          docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f "$RUNNER_TEMP"/atlas-ci-packages/atlas-docker-compose-*/infra/docker/docker-compose.yml build api web worker runtime runtime-init
+          docker compose --env-file "$RUNNER_TEMP/atlas-ci-package.env" -f "$RUNNER_TEMP"/atlas-ci-packages/atlas-docker-compose-*/infra/docker/docker-compose.yml build api web worker runtime runtime-init connector-bootstrap
       - name: Remove protected package configuration
         if: always()
         run: rm -f "$RUNNER_TEMP/atlas-ci-package.env"
