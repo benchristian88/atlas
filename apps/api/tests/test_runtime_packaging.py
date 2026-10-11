@@ -24,10 +24,28 @@ def test_docker_runtime_is_private_isolated_read_only_and_failure_independent():
     compose = yaml.safe_load((ROOT / "infra/docker/docker-compose.yml").read_text())
     runtime = compose["services"]["runtime"]
     assert "ports" not in runtime
-    assert runtime["networks"] == ["runtime_private"]
+    assert runtime["networks"] == ["runtime_private", "runtime_source"]
     assert compose["networks"]["runtime_private"]["internal"] is True
+    assert compose["networks"]["runtime_source"]["driver"] == "bridge"
+    assert compose["networks"]["runtime_source"]["internal"] is False
+    assert {
+        name for name, service in compose["services"].items()
+        if "runtime_source" in service.get("networks", [])
+    } == {"runtime"}
+    assert {
+        name for name, service in compose["services"].items()
+        if "runtime_private" in service.get("networks", [])
+    } == {"api", "runtime"}
     assert runtime["read_only"] is True
-    assert all(mount.endswith(":ro") for mount in runtime["volumes"])
+    assert runtime["cap_drop"] == ["ALL"]
+    assert runtime["security_opt"] == ["no-new-privileges:true"]
+    assert not runtime.get("privileged", False)
+    assert "network_mode" not in runtime
+    assert not runtime.get("cap_add") and not runtime.get("devices")
+    assert set(runtime["volumes"]) == {
+        "runtime_control:/run/atlas-runtime-control:ro",
+        "connector_store:/var/lib/atlas-connectors:ro",
+    }
     assert not any("postgres" in mount or "docker.sock" in mount for mount in runtime["volumes"])
     assert not any("DATABASE" in key or "AUTH_SECRET" in key for key in runtime["environment"])
     assert "runtime" not in compose["services"]["api"]["depends_on"]

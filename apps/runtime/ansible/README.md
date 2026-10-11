@@ -14,7 +14,11 @@ versions reports incompatible.
 
 Compose creates the control credential once in `runtime_control`, using a
 one-shot provisioner with no network. API and runtime mount it read-only; the
-runtime has no host port and uses only an internal private network. Native
+runtime has no host port. It uses the internal `runtime_private` network for
+authenticated API control and a dedicated, non-internal `runtime_source` bridge
+for outbound source connectivity. Only runtime joins the source bridge; its
+read-only mounts/root filesystem, dropped capabilities and no-new-privileges
+remain enforced. Native
 installation creates `/etc/atlas-runtime/control.secret` root-owned, readable
 only by the dedicated control group. The dedicated runtime account cannot read
 Atlas's database/authentication configuration. Existing credentials and store

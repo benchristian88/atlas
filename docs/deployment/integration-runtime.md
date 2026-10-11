@@ -15,12 +15,27 @@ download URLs, Git repositories, playbooks and Galaxy installs are not supported
 
 ## Deployment and authentication
 
-Docker runs `runtime` on the internal `runtime_private` network. It has no host
-port; only the existing nginx gateway exposes Atlas. The runtime receives no
-PostgreSQL, Redis, user/session or source-system credentials. A networkless
-one-shot provisioner creates a random 384-bit control credential in the durable
-`runtime_control` volume. API and runtime mount that volume read-only. Existing
-valid material is preserved and invalid existing material is refused.
+Docker attaches `runtime` to two dedicated bridge networks:
+
+- `runtime_private` has `internal: true` and carries authenticated API-to-runtime
+  control traffic. Only API and runtime join this network.
+- `runtime_source` is a normal outbound-routing bridge (`internal: false`) for
+  reaching source infrastructure. Only runtime joins it; PostgreSQL, Redis,
+  gateway, web, worker and API do not join it.
+
+The source bridge supplies the outbound gateway that an internal-only runtime
+lacks. It does not publish a runtime port or give the container a direct LAN
+address; only the existing nginx gateway exposes Atlas. Every runtime-control
+request still requires the independent control credential. The runtime keeps a
+read-only root filesystem and read-only control/store mounts, drops all Linux
+capabilities and uses `no-new-privileges`. It has no host networking, privileged
+mode, `NET_ADMIN`, Docker socket or broad host mount.
+
+The runtime receives no PostgreSQL, Redis, user/session or source-system
+credentials. A networkless one-shot provisioner creates a random 384-bit control
+credential in the durable `runtime_control` volume. API and runtime mount that
+volume read-only. Existing valid material is preserved and invalid existing
+material is refused.
 
 Native installs create a separate `/opt/atlas/runtime-venv` with pinned Python
 dependencies, and `atlas-runtime.service` under the dedicated `atlas-runtime`
@@ -66,6 +81,57 @@ journalctl -u atlas-runtime
 
 Use the applicable command for your deployment method. Do not publish port 8091,
 give the runtime PostgreSQL access or add arbitrary writable source/socket mounts.
+
+## Docker source-connectivity verification
+
+Apply the updated Compose file in the existing deployed checkout. Reuse the
+existing environment file, project name and override files; these examples run
+from the checkout root with `.env` and the default `atlas` project. Recreate only
+runtime to apply network membership while preserving the running API, control
+credential and Connector store. A container restart alone does not apply the
+network change.
+
+```bash
+atlas_compose() {
+  docker compose --env-file .env -f infra/docker/docker-compose.yml "$@"
+}
+atlas_compose config --quiet
+atlas_compose build runtime
+atlas_compose up -d --no-deps --force-recreate --wait --wait-timeout 60 runtime
+
+atlas_runtime_id="$(atlas_compose ps -q runtime)"
+docker inspect "$atlas_runtime_id" --format 'Networks={{range $name, $network := .NetworkSettings.Networks}}{{$name}} {{end}}Ports={{json .NetworkSettings.Ports}} ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}'
+docker network inspect atlas_runtime_private atlas_runtime_source --format '{{.Name}} internal={{.Internal}} containers={{range .Containers}}{{.Name}} {{end}}'
+
+atlas_compose exec -T runtime python - <<'PY'
+import socket
+with socket.create_connection(("192.168.99.28", 8006), timeout=5):
+    print("TCP connected to 192.168.99.28:8006")
+PY
+
+atlas_compose exec -T api python - <<'PY'
+import urllib.error
+import urllib.request
+request = urllib.request.Request("http://runtime:8091/v1/health")
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+try:
+    opener.open(request, timeout=5)
+except urllib.error.HTTPError as error:
+    assert error.code == 401, error.code
+    print("Unauthenticated runtime health: HTTP 401")
+else:
+    raise SystemExit("FAIL: runtime health accepted an unauthenticated request")
+PY
+```
+
+Expect both runtime networks, `Ports={}`, `ReadonlyRootfs=true`, `CapDrop=["ALL"]`
+and `no-new-privileges:true`. The private network must report `internal=true`
+with API and runtime; the source network must report `internal=false` with only
+runtime. Check **Integrations → Runtime** is healthy after recreation. The socket
+probe proves outbound TCP reachability only; it uses no source credentials and
+does not test TLS, Proxmox authentication or discovery. Record live connectivity
+as passed only after this probe succeeds in the operator's deployment. If it
+still fails, investigate the LXC/host route and firewall using the exact error.
 
 ## Protected packages and compatibility
 

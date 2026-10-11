@@ -1,12 +1,18 @@
 # I1 runtime and catalogue completion record
 
-Date: **11 October 2026**. Result: **PASS WITH DOCUMENTED FOLLOW-UPS**.
+Date: **11 October 2026**. Original shell result: **PASS WITH DOCUMENTED
+FOLLOW-UPS**. Follow-up Docker source-connectivity acceptance: **PENDING
+OPERATOR RETEST AFTER REMEDIATION**.
 
 The requested runtime/catalogue shell is implemented and validated. This result
 does **not** certify a live Docker/systemd deployment, complete external SDK
 extraction, enable remote package installation, or qualify vendor discovery.
 The explicitly permitted SDK and fail-closed provenance fallbacks are described
-below. All changes remain uncommitted and unpushed.
+below. The source-egress follow-up changes remain uncommitted and unpushed.
+
+The Docker LXC finding and two-network remediation below supersede the original
+internal-only topology. Earlier test totals, artifact hashes and repository-state
+inventory describe the original I1 work, not qualification of this remediation.
 
 ## Repository baseline and audit
 
@@ -106,8 +112,9 @@ production isolation is defined by the separate container/native venv and accoun
 ## Docker networking and deployment proof
 
 `infra/docker/docker-compose.yml` defines separate `runtime` and networkless
-`runtime-init` services. Runtime has **no ports mapping**, connects only to
-`runtime_private` with `internal: true`, mounts control/store volumes read-only,
+`runtime-init` services. Runtime has **no ports mapping**, connects to
+`runtime_private` with `internal: true` for control and a dedicated non-internal
+`runtime_source` bridge for source egress, mounts control/store volumes read-only,
 uses a read-only filesystem, drops capabilities and enables no-new-privileges.
 It has a credential-authenticated healthcheck and `unless-stopped` restart policy.
 No Docker socket, PostgreSQL data/socket, host root or writable source mount exists.
@@ -117,11 +124,111 @@ remains the only public ingress. API/web readiness does not depend on runtime or
 its provisioner. The installer starts core services first and treats optional
 runtime readiness failure as an explicit warning; upgrades preserve this isolation.
 
-This networking/packaging evidence is source/static regression proof. Docker is
-not installed on this macOS host, so image builds, actual Compose configuration,
-fresh startup, public ingress and stop/restart recovery in a disposable Docker
-deployment remain operator acceptance items. Both CI workflows now build the
-runtime/provisioner alongside API/web/worker; Actions were not executed here.
+Original local networking/packaging evidence was source/static regression proof.
+Docker is not installed on this macOS host. The operator subsequently supplied
+the live Docker LXC evidence below; the corrected deployment/source route has
+not been retested here. Both CI workflows build the runtime/provisioner alongside
+API/web/worker; Actions were not executed here.
+
+## Docker LXC source-egress finding and remediation
+
+Follow-up baseline: branch `feature/integrations-i1-runtime-catalogue`, HEAD
+`e6005c8b1d752a317ca8242d46a2a9a11c045dc1`, initially clean working tree.
+The operator reported a separately healthy `atlas-runtime-1`; stopping runtime
+left Atlas operational and the catalogue available; restarting runtime restored
+health without restarting Atlas. Deployed inspection also passed no host ports
+(`NetworkSettings.Ports == {}`), internal control networking, unauthenticated
+API-to-runtime health returning HTTP 401, read-only control/store mounts,
+`ReadonlyRootfs=true`, `CapDrop=["ALL"]` and `no-new-privileges=true`.
+
+The same real runtime could not connect to Proxmox VE `192.168.99.28:8006`:
+`OSError [Errno 101] Network is unreachable`. Inspection showed its sole network
+was `atlas_runtime_private`, with `Internal=true`. The implementation mistakenly
+used an internal control network as the runtime's only network, leaving it with
+no outbound route to the source infrastructure it is intended to reach.
+
+The smallest remediation adds `runtime_source` (`driver: bridge`,
+`internal: false`) and attaches only runtime to it. `runtime_private` stays
+internal with exactly API and runtime; API keeps `http://runtime:8091` for control.
+PostgreSQL, Redis, gateway, web, worker and the networkless provisioner do not
+join the source bridge. No existing dependency or runtime hardening is changed.
+No application/schema/authentication/vendor-discovery change or migration is
+required.
+
+The source bridge provides outbound NAT/gateway routing under
+[Docker's default bridge rules](https://docs.docker.com/engine/network/drivers/bridge/)
+without publishing a runtime port or assigning a direct LAN
+address. The existing container listener remains unchanged; this is not a claim
+that it binds exclusively to the control interface. Every control operation
+still requires the independent credential. Docker host administration remains
+trusted; a bridge is not an egress destination allowlist. No host networking,
+privileged mode, added capabilities/`NET_ADMIN`, Docker socket, macvlan or broad
+host mounts were introduced. Existing API RBAC and customer/site authority are
+unchanged. The active v1.3 control/source/security text and accepted ADRs
+0003/0004/0006/0009 were reviewed: this clarifies the existing separate trust
+boundaries and does not require superseding or rewriting an ADR.
+
+Material follow-up files:
+
+- `infra/docker/docker-compose.yml`: dedicated runtime-only routed source bridge.
+- `apps/api/tests/test_runtime_packaging.py`: dual-network membership/exclusivity,
+  no published ports, exact read-only mounts and retained container hardening,
+  plus existing API startup/outage independence.
+- `apps/runtime/ansible/README.md`: correct the internal-only deployment text.
+- `docs/architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md`:
+  explicit two-network control/source/security and acceptance requirements.
+- `docs/architecture/integrations/contracts/integration-runtime.md`: topology,
+  authentication/hardening and live source-evidence boundary.
+- `docs/deployment/integration-runtime.md`: topology and precise runtime-only
+  rebuild/recreate, inspection, TCP and unauthenticated-health operator commands.
+- `docs/architecture/integrations/i1-completion-report.md`: this finding,
+  remediation, validation and remaining acceptance record.
+
+The [operator runtime guide](../../deployment/integration-runtime.md#docker-source-connectivity-verification)
+contains the exact redeploy and `192.168.99.28:8006` socket probe. Preserve the
+existing Compose project/environment/overrides and durable volumes; rebuild and
+recreate only runtime with `--no-deps`. Live source connectivity remains
+**pending** until the operator reruns the corrected container and records a
+successful TCP connection. This does not certify TLS, source authentication or
+Proxmox/vendor discovery.
+
+Follow-up validation executed from `apps/api`, using the protected environment
+of the existing disposable loopback PostgreSQL 17 test cluster:
+
+```bash
+source /private/tmp/atlas-i1-validation-15_hurfs/closure.env
+export ATLAS_TEST_NGINX=/private/tmp/atlas-i1-test-services/nginx/sbin/nginx
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH=/private/tmp/atlas-i0-test-deps:.:../../plugins/sdk:../../plugins/proxmox
+export PATH="$PWD/.venv/bin:$PATH"
+bash ../../infra/ci/release-critical.sh
+.venv/bin/python -m pytest tests/test_connector_lifecycle_api.py \
+  tests/test_connector_lifecycle_postgres.py tests/test_auth.py \
+  tests/test_ci_workflow.py tests/test_repository_docs.py \
+  tests/test_markdown_docs.py -q -rs --tb=short -W ignore
+.venv/bin/alembic heads
+.venv/bin/python -m pytest tests/test_repository_docs.py \
+  tests/test_markdown_docs.py tests/test_runtime_packaging.py \
+  -q --tb=short -W ignore
+# From the repository root:
+git diff --check
+```
+
+| Follow-up check | Actual result |
+| --- | --- |
+| Focused runtime packaging | 10 passed. |
+| I1 Docker/runtime/security/native/release critical selector, including existing runtime HTTP 401 and catalogue/API outage tests | 412 passed; zero skips/failures. Existing dependency deprecation warnings only. |
+| Additional package lifecycle/PostgreSQL, authorization, CI and documentation tests | 75 passed; zero skips/failures. |
+| Operator guide shell blocks checked with `bash -n` | All 3 passed. |
+| Alembic heads | Single unchanged head `20261011_0027`; no migration required. |
+| Final documentation and runtime-packaging recheck | 28 passed. |
+| `git diff --check` | Clean. |
+
+Docker image build, actual Compose configuration and the corrected LXC/source
+socket test could not be executed locally because Docker tooling is absent.
+The operator's earlier passes are reported evidence, not newly executed local
+checks. Feature-ledger classification stays unchanged: the runtime shell is
+implemented, while live deployment acceptance/follow-ups remain in this report.
 
 ## Native/systemd packaging and credential lifecycle
 
@@ -473,8 +580,10 @@ The exact complete path inventory, including every upstream notice, is the
    the isolated staging adapter. No remote repository was created.
 2. Qualify the official immutable Connector release pipeline and pinned
    GitHub/Sigstore/offline trust-root verifier before remote installation.
-3. Perform real disposable Docker image/configuration/start/ingress/outage/restart
-   and upgrade acceptance; Docker tooling is absent here.
+3. Retest the corrected Docker LXC source-egress topology and
+   `192.168.99.28:8006` connectivity; preserve the operator's reported runtime
+   stop/restart/authentication/hardening passes above. Complete any remaining
+   fresh-install/ingress/upgrade acceptance; Docker tooling is absent here.
 4. Perform privileged Debian/systemd fresh install, actual account/file permissions,
    reboot persistence, idempotent upgrade and runtime failure acceptance; this
    macOS host cannot run that environment.
@@ -532,7 +641,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/private/tmp/atlas-i0-test-deps:. \
   tests/test_repository_docs.py -q -W ignore
 ```
 
-## Repository state
+## Original I1 repository state (before its subsequent commit)
 
 Command: `git status --short --untracked-files=all`.
 
@@ -627,4 +736,19 @@ Command: `git status --short --untracked-files=all`.
 ?? docs/deployment/integration-runtime.md
 ?? infra/install/runtime.py
 ?? infra/systemd/atlas-runtime.service
+```
+
+## Source-egress remediation repository state
+
+Command: `git status --short`. The seven follow-up files are uncommitted;
+no commit or push was performed.
+
+```text
+ M apps/api/tests/test_runtime_packaging.py
+ M apps/runtime/ansible/README.md
+ M docs/architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md
+ M docs/architecture/integrations/contracts/integration-runtime.md
+ M docs/architecture/integrations/i1-completion-report.md
+ M docs/deployment/integration-runtime.md
+ M infra/docker/docker-compose.yml
 ```

@@ -138,6 +138,7 @@ services:
       - connector_store:/var/lib/atlas-connectors:ro
     networks:
       - runtime_private
+      - runtime_source
     depends_on:
       runtime-init:
         condition: service_completed_successfully
@@ -190,3 +191,8 @@ networks:
   default:
   runtime_private:
     internal: true
+  # Runtime-only source egress; control traffic stays on runtime_private.
+  # A routed bridge supplies outbound access without publishing runtime ports.
+  runtime_source:
+    driver: bridge
+    internal: false
