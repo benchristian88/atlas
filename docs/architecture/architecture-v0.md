@@ -189,7 +189,12 @@ Atlas keeps related knowledge concepts separate:
 - meaningful Knowledge Changes for product history; and
 - Knowledge Gaps for absent, stale, or insufficient knowledge.
 
-A discovery observation does not silently overwrite accepted knowledge. Manual
+The evidence/assertion/reconciliation path separates source-current observations
+from accepted knowledge. The legacy plugin `AtlasDiscoverySync` compatibility
+path still updates records directly and has different taxonomy/absence behavior;
+the [Integration alignment audit](integrations/integration-alignment-matrix.md)
+records this discrepancy. New Integration ingestion must extend the existing
+evidence/reconciliation owners rather than use direct sync. Manual
 accepted edits create declared assertions and meaningful changes. Complete
 snapshot absence detection creates reviewable lifecycle items rather than
 deleting Assets.
@@ -299,7 +304,10 @@ the detailed entity model.
 ## Additive evolution
 
 First-party integrations and guided onboarding build on the existing API,
-accepted knowledge and scoped authorization. See [project status](../product/status.md)
+accepted knowledge and scoped authorization. The
+[Integration target architecture](integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
+defines the isolated runtime/catalogue programme without claiming it is already
+implemented. See [project status](../product/status.md)
 for current product priorities. Structured ownership, formal knowledge objects,
 recovery evidence and intended-state simulation remain later additions; they
 must preserve existing identity, history and domain boundaries.

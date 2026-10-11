@@ -1,0 +1,212 @@
+{
+  "manifest_version": "1.0",
+  "id": "proxmox",
+  "version": "0.0.0-i0",
+  "publisher": {
+    "id": "atlas-official",
+    "name": "Atlas Impact"
+  },
+  "display": {
+    "name": "Proxmox VE",
+    "description": "I0 specification example; not a qualified executable release.",
+    "category": "virtualization",
+    "documentation_uri": "https://example.test/connectors/proxmox"
+  },
+  "compatibility": {
+    "aip": [
+      "1.0"
+    ],
+    "sdk": {
+      "minimum": "1.0.0",
+      "exclusive_maximum": "2.0.0"
+    },
+    "atlas": {
+      "minimum": "0.1.0",
+      "exclusive_maximum": "1.0.0"
+    },
+    "runtime": {
+      "capability": "integration-runtime-v1",
+      "baseline": {
+        "minimum": "1.0.0",
+        "exclusive_maximum": "2.0.0"
+      }
+    }
+  },
+  "source_versions": {
+    "qualification": "example",
+    "qualified_versions": [],
+    "known_incompatible": [],
+    "newer_untested_policy": "allow_with_warning"
+  },
+  "capabilities": {
+    "test_connection": true,
+    "discover": "read_only",
+    "scheduling": true,
+    "complete_snapshot": true
+  },
+  "connection_fields": [
+    {
+      "key": "endpoint",
+      "label": "Endpoint",
+      "type": "url",
+      "required": true,
+      "secret": false
+    },
+    {
+      "key": "token_id",
+      "label": "Token id",
+      "type": "text",
+      "required": true,
+      "secret": false
+    },
+    {
+      "key": "token_secret",
+      "label": "Token secret",
+      "type": "secret",
+      "required": true,
+      "secret": true
+    },
+    {
+      "key": "verify_tls",
+      "label": "Verify tls",
+      "type": "boolean",
+      "required": true,
+      "secret": false,
+      "default": true
+    }
+  ],
+  "discovery_scopes": [
+    {
+      "key": "inventory",
+      "label": "Infrastructure inventory",
+      "required": true,
+      "default_enabled": true,
+      "domains": [
+        "assets",
+        "networks",
+        "interfaces",
+        "relationships"
+      ],
+      "object_classes": [
+        "proxmox.node",
+        "proxmox.qemu",
+        "proxmox.lxc",
+        "proxmox.storage",
+        "proxmox.network",
+        "proxmox.interface"
+      ]
+    }
+  ],
+  "object_classes": [
+    {
+      "key": "proxmox.node",
+      "kind": "asset",
+      "label": "Node",
+      "required": true,
+      "recommended_asset_type_key": "hypervisor_node"
+    },
+    {
+      "key": "proxmox.qemu",
+      "kind": "asset",
+      "label": "Qemu",
+      "required": true,
+      "recommended_asset_type_key": "virtual_machine"
+    },
+    {
+      "key": "proxmox.lxc",
+      "kind": "asset",
+      "label": "Lxc",
+      "required": false,
+      "recommended_asset_type_key": "container"
+    },
+    {
+      "key": "proxmox.storage",
+      "kind": "asset",
+      "label": "Storage",
+      "required": true,
+      "recommended_asset_type_key": "storage_pool"
+    },
+    {
+      "key": "proxmox.network",
+      "kind": "network",
+      "label": "Network",
+      "required": true
+    },
+    {
+      "key": "proxmox.interface",
+      "kind": "interface",
+      "label": "Interface",
+      "required": true
+    }
+  ],
+  "relationship_classes": [
+    {
+      "key": "proxmox.runs_on",
+      "label": "Runs on",
+      "recommended_relationship_type_key": "runs_on",
+      "required": true,
+      "source_object_classes": [
+        "proxmox.qemu",
+        "proxmox.lxc"
+      ],
+      "target_object_classes": [
+        "proxmox.node"
+      ],
+      "direction": "source_to_target"
+    }
+  ],
+  "facts": [
+    {
+      "key": "proxmox.vmid",
+      "label": "Vmid",
+      "value_type": "integer",
+      "class": "identity",
+      "cardinality": "single",
+      "object_classes": [
+        "proxmox.qemu",
+        "proxmox.lxc"
+      ]
+    },
+    {
+      "key": "proxmox.power_state",
+      "label": "Power state",
+      "value_type": "string",
+      "class": "operational",
+      "cardinality": "single",
+      "object_classes": [
+        "proxmox.qemu",
+        "proxmox.lxc"
+      ]
+    }
+  ],
+  "implementation": {
+    "runtime": "ansible",
+    "entry_points": {
+      "test_connection": "test_connection",
+      "discover": "discover"
+    },
+    "dependencies": []
+  },
+  "licensing": {
+    "licence": "Apache-2.0",
+    "notices": [
+      "NOTICE"
+    ],
+    "sbom": {
+      "format": "SPDX",
+      "path": "sbom.spdx.json"
+    }
+  },
+  "distribution": {
+    "bundle_digest": "sha256:50bfe8a442eb0756d2e1a7dc3094e99c3d1cf9343437087c9e145f045678bad9",
+    "asset_uri": "https://example.test/releases/proxmox/0.0.0-i0/bundle.tar.gz",
+    "provenance": {
+      "method": "github-artifact-attestation-sigstore",
+      "publisher_id": "atlas-official",
+      "repository": "atlas-example/atlas-connectors",
+      "workflow": ".github/workflows/release.yml",
+      "source_commit": "0000000000000000000000000000000000000000",
+      "evidence_uri": "https://example.test/attestations/proxmox"
+    }
+  }
+}

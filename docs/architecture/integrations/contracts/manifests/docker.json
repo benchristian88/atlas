@@ -1,0 +1,264 @@
+{
+  "manifest_version": "1.0",
+  "id": "docker",
+  "version": "0.0.0-i0",
+  "publisher": {
+    "id": "atlas-official",
+    "name": "Atlas Impact"
+  },
+  "display": {
+    "name": "Docker and Compose",
+    "description": "I0 specification example; not a qualified executable release.",
+    "category": "containers",
+    "documentation_uri": "https://example.test/connectors/docker"
+  },
+  "compatibility": {
+    "aip": [
+      "1.0"
+    ],
+    "sdk": {
+      "minimum": "1.0.0",
+      "exclusive_maximum": "2.0.0"
+    },
+    "atlas": {
+      "minimum": "0.1.0",
+      "exclusive_maximum": "1.0.0"
+    },
+    "runtime": {
+      "capability": "integration-runtime-v1",
+      "baseline": {
+        "minimum": "1.0.0",
+        "exclusive_maximum": "2.0.0"
+      }
+    }
+  },
+  "source_versions": {
+    "qualification": "example",
+    "qualified_versions": [],
+    "known_incompatible": [],
+    "newer_untested_policy": "allow_with_warning"
+  },
+  "capabilities": {
+    "test_connection": true,
+    "discover": "read_only",
+    "scheduling": true,
+    "complete_snapshot": true
+  },
+  "connection_fields": [
+    {
+      "key": "host",
+      "label": "Host",
+      "type": "host",
+      "required": true,
+      "secret": false
+    },
+    {
+      "key": "ssh_port",
+      "label": "Ssh port",
+      "type": "number",
+      "required": true,
+      "secret": false,
+      "default": 22,
+      "validation": {
+        "minimum": 1,
+        "maximum": 65535
+      }
+    },
+    {
+      "key": "ssh_user",
+      "label": "Ssh user",
+      "type": "text",
+      "required": true,
+      "secret": false
+    },
+    {
+      "key": "ssh_private_key",
+      "label": "Ssh private key",
+      "type": "ssh_private_key",
+      "required": true,
+      "secret": true
+    },
+    {
+      "key": "host_key_fingerprint",
+      "label": "Host key fingerprint",
+      "type": "fingerprint",
+      "required": true,
+      "secret": false
+    }
+  ],
+  "discovery_scopes": [
+    {
+      "key": "inventory",
+      "label": "Infrastructure inventory",
+      "required": true,
+      "default_enabled": true,
+      "domains": [
+        "assets",
+        "networks",
+        "interfaces",
+        "relationships"
+      ],
+      "object_classes": [
+        "docker.engine",
+        "docker.compose_project",
+        "docker.compose_workload",
+        "docker.network",
+        "docker.interface"
+      ]
+    }
+  ],
+  "object_classes": [
+    {
+      "key": "docker.engine",
+      "kind": "asset",
+      "label": "Engine",
+      "required": true,
+      "recommended_asset_type_key": "docker_host"
+    },
+    {
+      "key": "docker.compose_project",
+      "kind": "asset",
+      "label": "Compose project",
+      "required": true,
+      "recommended_asset_type_key": "application"
+    },
+    {
+      "key": "docker.compose_workload",
+      "kind": "asset",
+      "label": "Compose workload",
+      "required": true,
+      "recommended_asset_type_key": "docker_container"
+    },
+    {
+      "key": "docker.network",
+      "kind": "network",
+      "label": "Network",
+      "required": true
+    },
+    {
+      "key": "docker.interface",
+      "kind": "interface",
+      "label": "Interface",
+      "required": true
+    }
+  ],
+  "relationship_classes": [
+    {
+      "key": "docker.runs_on",
+      "label": "Runs on",
+      "recommended_relationship_type_key": "runs_on",
+      "required": true,
+      "source_object_classes": [
+        "docker.compose_project",
+        "docker.compose_workload"
+      ],
+      "target_object_classes": [
+        "docker.engine"
+      ],
+      "direction": "source_to_target"
+    }
+  ],
+  "facts": [
+    {
+      "key": "docker.engine_id",
+      "label": "Engine id",
+      "value_type": "string",
+      "class": "identity",
+      "cardinality": "single",
+      "object_classes": [
+        "docker.engine"
+      ]
+    },
+    {
+      "key": "docker.compose_project",
+      "label": "Compose project",
+      "value_type": "string",
+      "class": "identity",
+      "cardinality": "single",
+      "object_classes": [
+        "docker.compose_project",
+        "docker.compose_workload"
+      ]
+    },
+    {
+      "key": "docker.compose_service",
+      "label": "Compose service",
+      "value_type": "string",
+      "class": "identity",
+      "cardinality": "single",
+      "object_classes": [
+        "docker.compose_workload"
+      ]
+    },
+    {
+      "key": "docker.replica_ordinal",
+      "label": "Replica ordinal",
+      "value_type": "integer",
+      "class": "identity",
+      "cardinality": "single",
+      "object_classes": [
+        "docker.compose_workload"
+      ]
+    },
+    {
+      "key": "docker.container_id",
+      "label": "Container id",
+      "value_type": "string",
+      "class": "informational",
+      "cardinality": "single",
+      "object_classes": [
+        "docker.compose_workload"
+      ]
+    },
+    {
+      "key": "docker.image",
+      "label": "Image",
+      "value_type": "string",
+      "class": "configuration",
+      "cardinality": "single",
+      "object_classes": [
+        "docker.compose_workload"
+      ]
+    },
+    {
+      "key": "docker.published_ports",
+      "label": "Published ports",
+      "value_type": "string",
+      "class": "configuration",
+      "cardinality": "multi",
+      "object_classes": [
+        "docker.compose_workload"
+      ]
+    }
+  ],
+  "implementation": {
+    "runtime": "ansible",
+    "entry_points": {
+      "test_connection": "test_connection",
+      "discover": "discover"
+    },
+    "dependencies": []
+  },
+  "licensing": {
+    "licence": "Apache-2.0",
+    "notices": [
+      "NOTICE"
+    ],
+    "sbom": {
+      "format": "SPDX",
+      "path": "sbom.spdx.json"
+    }
+  },
+  "distribution": {
+    "bundle_digest": "sha256:b58e284597fe141574dcf0c433fc6fa91caa9ecf049564030a9e153387c4b81f",
+    "asset_uri": "https://example.test/releases/docker/0.0.0-i0/bundle.tar.gz",
+    "provenance": {
+      "method": "github-artifact-attestation-sigstore",
+      "publisher_id": "atlas-official",
+      "repository": "atlas-example/atlas-connectors",
+      "workflow": ".github/workflows/release.yml",
+      "source_commit": "0000000000000000000000000000000000000000",
+      "evidence_uri": "https://example.test/attestations/docker"
+    }
+  }
+}

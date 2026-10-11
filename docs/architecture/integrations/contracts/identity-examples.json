@@ -1,0 +1,23 @@
+{
+  "proxmox": {
+    "node": "pve-01",
+    "vmid": 100,
+    "storage": "shared-zfs"
+  },
+  "docker": {
+    "engine_id": "engine-a",
+    "project": "photos",
+    "service": "web",
+    "replica_ordinal": 1,
+    "container_id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "unifi-network": {
+    "source_site_id": "site-a",
+    "device_ids": [
+      "gateway-a",
+      "switch-a",
+      "ap-a"
+    ],
+    "network_id": "network-a"
+  }
+}

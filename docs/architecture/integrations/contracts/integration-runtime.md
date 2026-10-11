@@ -1,0 +1,93 @@
+# IntegrationRuntime v1 specification
+
+**I0 interface specification only.** This runtime-neutral boundary is owned by
+Atlas; no corresponding service/client exists yet. AnsibleRuntime is the first
+adapter; AIP and domain requests have no playbook/inventory dependency. See
+[contract ownership and AIP semantics](README.md).
+
+## Operations and explicit types
+
+| Operation | Request | Result |
+| --- | --- | --- |
+| health | no domain input | RuntimeHealth: state healthy/unavailable/incompatible, runtime version, approved baseline ID/digest, packaging mode, sanitised diagnostic code |
+| capabilities | no domain input | RuntimeCapabilities: integration-runtime-v1, AIP versions, exact installed dependency/baseline versions and supported operations |
+| verify_connector | VerifiedConnectorRef | RuntimeConnectorState: exact ID/version/digest verified in protected store or unavailable/incompatible; no store mutation |
+| test_connection | TestRequest | ConnectionTestResult: success/failure, detected source version if available, Supported/Newer-untested/Known-incompatible, enabled-domain capabilities, missing capability/path codes, TLS/SSH trust state |
+| start_discovery | DiscoveryRequest | RuntimeJobRef: opaque job ID, accepted timestamp and immutable request identity; duplicate request ID returns same job |
+| get_job | opaque job ID bound to caller request | RuntimeJobStatus: queued/running/succeeded/failed/cancelled, timestamps, bounded progress/diagnostic codes; no secret/stdout payload |
+| cancel_job | opaque job ID bound to caller request | idempotent cancellation receipt; terminal-state races resolved without losing evidence/cleanup |
+
+`VerifiedConnectorRef` = stable Connector ID, exact SemVer, SHA-256 archive digest.
+`TestRequest` = opaque request ID, verified reference, operation `test_connection`,
+validated non-secret configuration, selected declared scopes, internal job-secret
+lease reference and timeout. It has no ingestion token or evidence acceptance
+because testing is not a discovery run. Source version/capabilities are returned
+through the authenticated control response.
+
+`DiscoveryRequest` adds persisted run/Integration IDs, echoed coverage key/mode/
+domains, operation `discover`, run-scoped callback capability and resource bounds.
+Atlas constructs callback location itself from trusted configuration; neither
+Connector/browser chooses an arbitrary callback URL. Tokens and secret material
+are sensitive control-transport data outside AIP and outside loggable request
+representations. The API never accepts arbitrary command/path/playbook text,
+source URL for executable code, uploaded archive or Galaxy identifier.
+
+Both requests use an Atlas-issued idempotency ID bound to a request body hash.
+Changed body at an existing ID conflicts. Runtime job ID is metadata, never
+permission to operate another job. Runtime recomputes/checks the installed
+ID/version/digest and approved entry selector immediately before each execution.
+It cannot install/mutate its own protected store; only the approved privileged
+Atlas installer can stage/activate code. `verify_connector` replaces the draft's
+ambiguous `ensure_connector` installation wording.
+
+## Transport and process authority
+
+Control uses private HTTP with a generated high-entropy installation service
+secret on **every** operation. It is independent of `AUTH_SECRET` and
+`ATLAS_DATA_ENCRYPTION_KEY`. Constant-time credential comparison, bounded inputs,
+redacted logging, protected secret files and deliberate rotation/restart overlap
+must be implemented before I1 acceptance. Requests cannot treat loopback/private
+addressing as authentication. Service-secret failure returns sanitized
+unauthorized/unavailable states without disclosing expected values.
+
+Docker exposes no host/public runtime port; use private Compose networking.
+Native/systemd binds loopback and uses a pinned native Python/Ansible/Collection
+environment; Docker/Podman is not required. Source stays in main Atlas repo,
+packaging extends `infra/install`, `infra/docker`, `infra/systemd`, `infra/release`.
+Normal installs include/enabled runtime; explicit manual-only opt-out remains.
+Runtime failure cannot block viewing/editing existing Atlas knowledge.
+
+Runtime has no Atlas user session, no general PostgreSQL access and no canonical
+acceptance/tenancy authority. Atlas derives scope from persisted Integration/run.
+Its worker owns schedule timing, overlap prevention, bounded retries and durable
+run state. Runtime controls only bounded jobs, ephemeral workspaces, approved
+source calls, normalization/validation, callbacks and cleanup. No new broker.
+
+## Leases, completion and failure
+
+Only declared required credential fields are leased internally for one test/job.
+Use protected ephemeral material, `no_log` where relevant, redaction of events/
+errors and final cleanup on success/failure/cancel/crash recovery. Runtime never
+returns secret-bearing raw results. Credentials never appear in AIP.
+
+AIP callback authentication is separate: short-lived audience/run/Integration/
+Connector-bound token with JTI/expiry and revocation. Runtime may submit only
+validated batches/completion for that run. Atlas verifies and seals them before
+its lifecycle service decides absence. Control-job success without durable AIP
+completion is insufficient for a complete snapshot. Callback failure/timeouts
+produce a partial/failed Atlas run; no invented absence.
+
+Use bounded request/job deadlines and sanitized diagnostic enums. Expired leases,
+known-incompatible source/runtime, invalid mappings/configuration or changed
+package digest fail before source execution. Cancellation revokes callback/lease
+authority and cleanup is idempotent. Integration removal/disable must settle
+in-flight work under Atlas ownership without causing absence.
+
+## Acceptance by phase
+
+I1 proves private health/control/verification, default/manual-only packaging,
+protected store and safe independent knowledge plane. I2 proves generic bounded
+Test Connection/leases without claiming live vendor support before I4–I6.
+I3 proves job dispatch, request replay, callbacks/finalisation/cancellation and
+recovery with existing maintenance/quiescence. I4–I6 prove actual source calls;
+I8 qualifies both deployment methods, failure injection and restore behaviour.

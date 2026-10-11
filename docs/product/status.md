@@ -28,8 +28,14 @@ it is not live monitoring or evidence of recovery readiness.
 
 ## Next development
 
-- First-party integrations/plugins with a usable configure, test, run and review
-  workflow. The Proxmox adapter and plugin contracts are existing foundations.
+- Catalogue-driven integrations follow the accepted
+  [Integration architecture](../architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
+  and [phased roadmap](../architecture/integrations/integration-roadmap.md):
+  architecture/contracts alignment, then isolated runtime/catalogue, generic
+  configuration/secrets, orchestration/ingestion, Proxmox, Docker/Compose, local
+  UniFi infrastructure, onboarding and final integration acceptance. The current
+  Proxmox adapter/plugin contracts remain foundations; target design is not live
+  configured discovery. Core hardening is retained, with its acceptance gaps.
 - Guided onboarding to help operators establish useful initial knowledge.
 
 ## Before 1.0

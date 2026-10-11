@@ -1,0 +1,76 @@
+{
+  "protocol_version": "1.0",
+  "message_type": "observations",
+  "connector": {
+    "id": "proxmox",
+    "version": "0.0.0-i0",
+    "bundle_digest": "sha256:50bfe8a442eb0756d2e1a7dc3094e99c3d1cf9343437087c9e145f045678bad9"
+  },
+  "integration_id": "11111111-1111-4111-8111-111111111111",
+  "run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "observed_at": "2026-10-11T00:00:00Z",
+  "source": {
+    "version": "8.4.0"
+  },
+  "coverage": {
+    "key": "proxmox:endpoint-a:inventory:v1",
+    "snapshot_mode": "full",
+    "domains": [
+      "assets",
+      "networks",
+      "interfaces",
+      "relationships"
+    ]
+  },
+  "batch": {
+    "sequence": 2
+  },
+  "assets": [
+    {
+      "external_id": "storage/shared-zfs",
+      "object_class": "proxmox.storage",
+      "name": "Shared ZFS",
+      "status": "active",
+      "facts": []
+    }
+  ],
+  "networks": [
+    {
+      "external_id": "network/pve-01/vmbr0",
+      "object_class": "proxmox.network",
+      "name": "vmbr0",
+      "network_type": "bridge",
+      "cidr": "192.0.2.0/24",
+      "facts": []
+    }
+  ],
+  "interfaces": [
+    {
+      "external_id": "qemu/100/interface/0",
+      "object_class": "proxmox.interface",
+      "asset_external_id": "qemu/100",
+      "name": "eth0",
+      "network_external_id": "network/pve-01/vmbr0",
+      "ip_address": "192.0.2.100",
+      "mac_address": "02:00:00:00:00:01",
+      "is_primary": true,
+      "facts": []
+    }
+  ],
+  "relationships": [
+    {
+      "external_id": "relationship/proxmox.runs_on/qemu/100/node/pve-01",
+      "relationship_class": "proxmox.runs_on",
+      "source": {
+        "kind": "asset",
+        "external_id": "qemu/100"
+      },
+      "target": {
+        "kind": "asset",
+        "external_id": "node/pve-01"
+      },
+      "truth_classification": "observed",
+      "confidence": 1.0
+    }
+  ]
+}

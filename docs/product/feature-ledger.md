@@ -2,7 +2,10 @@
 
 This reference describes the checked-in beta platform, inspected on 4 October
 2026 from base commit `e63b552c1149c883cc9b103d9aa6c85eb129a717`, with the public
-documentation and licence changes in the current working tree. Code, migrations,
+documentation and licence changes at that baseline. Integration specification
+status was updated on 11 October 2026 against
+`90e04a76982c314fff2191e84ca6bd1a8cabcb07`; implementation boundaries are recorded
+in the Integration alignment matrix. Code, migrations,
 reachable routes and regression tests determine implementation status. A status
 here does not claim that validation was rerun; current execution results are
 recorded separately.
@@ -23,7 +26,7 @@ recorded separately.
 | Dashboard and graph exploration | Implemented | Dashboard, Knowledge Graph Overview/Focus/Analysis, inspector, workspace viewpoints and responsive presentation. |
 | Infrastructure Topology and Showcase | Implemented | Topology routes/UI over hosting, Network membership and recorded connectivity; presentation exports do not alter accepted knowledge. |
 | History-preserving entity lifecycle | Implemented | `services/entity_lifecycle.py`, guarded Service/Function deletion and archive/restore. Tombstones retain history. |
-| Evidence, assertions and Changes | Implemented | Knowledge models/services/routes and history/Changes UI. Observations never silently overwrite accepted knowledge. |
+| Evidence, assertions and Changes | Implemented | Knowledge models/services/routes and history/Changes UI. The evidence/reconciliation path separates observations from accepted knowledge; the [Integration alignment audit](../architecture/integrations/integration-alignment-matrix.md) documents different legacy direct-sync behavior that new ingestion must bypass. |
 | Discovery simulation and reconciliation | Implemented | Simulation/run routes, normalized ingestion and reviewable reconciliation decisions. Live plugin operation is separate. |
 | Knowledge completeness | Implemented | Structured requirements, profiles, idempotent evaluation, summaries and gap lifecycle for Assets and Services. Broader entity coverage is deferred. |
 | Asset icon caching | Implemented | Bounded HTTPS retrieval and authorized local serving with existing fallback chain. |
@@ -41,6 +44,8 @@ recorded separately.
 | Capability | Status | Boundary |
 | --- | --- | --- |
 | Live first-party integrations/plugins | Partially implemented | `plugins/sdk`, tested `plugins/proxmox` adapter and Data Source/Integration persistence exist. Complete configure/test/Run Now/results/reconcile journey remains upcoming. Worker is a placeholder, not mature job orchestration. |
+| Integration architecture and staged contracts | Implemented | Specification component only: `docs/architecture/integrations/`, alignment matrix, ADRs 0003–0009, AIP/Manifest schemas, interface specs and sanitized static contract tests. One accepted target design; no runtime/catalogue/credential/ingestion/vendor UI implementation. SDK extraction precedes runtime work. |
+| Catalogue/runtime and generic configured discovery | Planned but not implemented | Follow the [Integration roadmap](../architecture/integrations/integration-roadmap.md). Existing knowledge lifecycle is reused; worker dispatch, SecretProvider and signed package management still require implementation. |
 | Generated operational documents | Partially implemented | `services/markdown_docs.py` generates Markdown and Document records store it. Dedicated document browsing/review is not yet an end-to-end feature. |
 | Guided onboarding | Planned but not implemented | Secure first-run administrator creation exists; guided initial knowledge setup is separate upcoming work. |
 | Final screenshots and documentation freeze | Planned but not implemented | Feature descriptions and screenshots will be refreshed after integration/onboarding work. No stale product screenshots are advertised. |
@@ -50,7 +55,9 @@ recorded separately.
 
 Structured People/Teams, formal Knowledge Objects, evidence-backed recovery
 readiness, enterprise impact scoring, intended-state/change simulation, ITSM,
-production-scale orchestration and multiple discovery plugins are deferred.
+production-scale orchestration and additional discovery Connectors beyond the
+three initial Proxmox/Docker/UniFi references are deferred. Those three follow
+the accepted Integration programme; they are not already live configured features.
 Service RTO/RPO fields describe objectives, not proof of recoverability. Atlas
 application backups do not implement an infrastructure protection/recovery model.
 No automatic conversion of legacy Service/Application Assets is planned as an
