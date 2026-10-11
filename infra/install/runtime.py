@@ -30,7 +30,7 @@ def configure(configuration: Path, store: Path):
     run(["usermod", "--append", "--groups", "atlas-runtime-control", "atlas-runtime"])
     secret_group = grp.getgrnam("atlas-runtime-control").gr_gid
     secret_directory = configuration.parent.parent / "atlas-runtime"
-    for directory, group in ((secret_directory, secret_group), (store, account.pw_gid)):
+    for directory, group in ((secret_directory, secret_group), (store, secret_group)):
         if any(parent.is_symlink() for parent in (directory, *directory.parents)):
             raise ValueError("Protected runtime directories must not be symlinks")
         if directory.exists() and (not directory.is_dir() or directory.stat().st_uid != 0 or directory.stat().st_mode & 0o022):

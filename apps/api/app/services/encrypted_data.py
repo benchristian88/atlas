@@ -9,7 +9,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 
-from app.models import UserMfa
+from app.models import UserMfa, IntegrationSecret
 from app.services.backup_archive import BackupError
 
 
@@ -52,7 +52,31 @@ def rewrap_mfa(db, source_key: bytes, target_key: bytes) -> int:
             db.expunge(record)
 
 
-ENCRYPTED_DATA_ADAPTERS = (rewrap_mfa,)
+def rewrap_integrations(db, source_key: bytes, target_key: bytes) -> int:
+    from app.services.integration_secrets import decrypt_fields, encrypt_fields, SecretProviderError
+    count, cursor = 0, None
+    while True:
+        statement = select(IntegrationSecret).order_by(IntegrationSecret.id).limit(200).with_for_update()
+        if cursor is not None:
+            statement = statement.where(IntegrationSecret.id > cursor)
+        records = list(db.scalars(statement))
+        if not records:
+            return count
+        for record in records:
+            try:
+                values = decrypt_fields(record, source_key, record.encrypted_fields.keys())
+                record.encrypted_fields = encrypt_fields(record, values, target_key)
+                values.clear()
+            except SecretProviderError:
+                raise BackupError("Encrypted application data could not be restored.") from None
+            count += len(record.encrypted_fields)
+            cursor = record.id
+        db.flush()
+        for record in records:
+            db.expunge(record)
+
+
+ENCRYPTED_DATA_ADAPTERS = (rewrap_mfa, rewrap_integrations)
 
 
 def rewrap_application_data(db, source_key: bytes, target_key: bytes) -> int:

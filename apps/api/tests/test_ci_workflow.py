@@ -80,7 +80,7 @@ def test_backend_enables_every_optional_database_suite_and_rejects_skips():
     for path in (ROOT / "apps/api/tests").glob("test_*.py"):
         required.update(re.findall(r"ATLAS_TEST_[A-Z0-9_]+URL", path.read_text()))
     assert required - {"ATLAS_TEST_H3_REDIS_URL"} == set(databases)
-    assert len({name for name, _ in databases.values()}) == len(databases) == 13
+    assert len({name for name, _ in databases.values()}) == len(databases) == 14
     assert sum(migrate for _, migrate in databases.values()) == 5
     assert all(not migrate for key, (_, migrate) in databases.items() if "MIGRATION" in key)
     assert "NOSUPERUSER NOCREATEDB NOCREATEROLE" in source

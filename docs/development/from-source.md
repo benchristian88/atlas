@@ -54,6 +54,17 @@ database/cache ports. Keep it out of production. See
 
 Direct development needs Python 3.12+, Node 22+, PostgreSQL and Redis. API
 requirements are in `apps/api/requirements.txt`; use a virtual environment.
+Install the release-pinned canonical SDK from the repository root before the API
+requirements, so development uses the same exact artifact as both production
+packaging methods:
+
+```bash
+python -m pip install --no-index --no-deps --require-hashes --find-links vendor/sdk -r vendor/sdk/requirements.txt
+python -m pip install -r apps/api/requirements.txt
+```
+
+The SDK source and its tests/build live in the separate `atlas-connector-sdk`
+repository. Canonical schemas are package resources, not documentation JSON.
 Source plugin imports use `PYTHONPATH` pointing at `plugins/sdk` and
 `plugins/proxmox`. Configure protected environment values for your disposable
 local database, apply `alembic upgrade head`, run `python -m scripts.seed_system`,

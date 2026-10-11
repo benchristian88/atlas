@@ -85,7 +85,7 @@ def native_upgrade_preflight(values):
     from native import DESTINATION, preflight
     if ROOT == DESTINATION or DESTINATION in ROOT.parents:
         raise ValueError("Extract the new package outside /opt/atlas")
-    for name in ("apps", "infra", "venv", "runtime-venv"):
+    for name in ("apps", "infra", "vendor", "venv", "runtime-venv"):
         if (DESTINATION / name).is_symlink():
             raise ValueError("Managed installation tree must not be a symlink")
     return preflight(fresh=False, values=values)
@@ -103,7 +103,7 @@ def native_upgrade(values, *, prepared=None):
     run(["systemctl", "stop", "atlas-web", "atlas-worker", "atlas-api"])
     # Only managed application/configuration-free trees are replaced. Database,
     # /etc/atlas, /var/lib/atlas and the existing venv identity stay in place.
-    for name in ("apps", "infra"):
+    for name in ("apps", "infra", "vendor"):
         destination = DESTINATION / name
         if destination.is_symlink():
             raise ValueError("Managed installation tree must not be a symlink")

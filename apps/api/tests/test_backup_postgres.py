@@ -290,7 +290,7 @@ def test_failed_rollback_crash_restart_keeps_encrypted_recovery_and_fail_closed(
 
 def test_rewrap_all_adapters_active_pending_atomic_wrong_key_and_corrupt(installations):
     inst = installations
-    assert len(ENCRYPTED_DATA_ADAPTERS) == 1
+    assert len(ENCRYPTED_DATA_ADAPTERS) == 2
     with Session(inst["source"]) as db:
         original = db.get(UserMfa, inst["ids"]["user"]).secret_ciphertext
         with pytest.raises(BackupError):
@@ -370,7 +370,7 @@ def test_h1_schema_restores_and_migrates_forward_without_stale_new_tables(instal
     archive = portable_backup(inst)
     restore(inst, archive)
     with inst["target"].connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261011_0027"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261012_0028"
     with Session(inst["target"]) as db:
         assert db.get(User, inst["ids"]["user"]).mfa_enabled is False
         assert db.get(Asset, inst["ids"]["asset"]).name == "Portable host"

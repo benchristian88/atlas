@@ -18,6 +18,7 @@ hashes, assignments, settings, audit history and installation state.
 | PostgreSQL / Compose `postgres_data` | All authoritative Atlas records; included in full custom-format dump. |
 | Asset icons | Bounded image bytes/cache metadata in `asset_icon_cache`; included even though the cache is disposable. No filesystem image store. |
 | Generated documents / uploads | `documents.content_markdown` is PostgreSQL state. No implemented persistent upload filesystem or external authoritative file store was found. Restore upload staging is transient. |
+| Integration credentials | `integration_secrets.encrypted_fields` stores only per-field AES-GCM ciphertext/nonces. The existing data key and versioned Customer/Site/Integration/field/revision AAD are used. The registered I2 adapter authenticates and rewraps all revisions with fresh nonces in the existing restore transaction. |
 | MFA | `user_mfa.secret_ciphertext` and `pending_ciphertext` use the independent application key, with their nonce/version fields. Both are authenticated and rewrapped. Recovery verifiers are one-way hashes, not encrypted fields. |
 | Other application crypto | Repository search found no other fields using the application data key. Plugin configuration references deployment-owned credentials; vendor secrets are not silently promoted to accepted knowledge. |
 | Redis / Compose `redis_data` | No current application cache/job/session authority or executed queue was found. Not backed up; the target's dedicated logical Redis DB is flushed after restore/rollback. |
@@ -163,7 +164,7 @@ temporary, local-only recovery artifact, never an HTTP download or passphrase-
 free portable backup. All ordinary plaintext work is removed on success/failure.
 
 Migrations and existing non-destructive system-definition reconciliation are
-reused. An explicit adapter registry rewraps active and pending MFA fields
+reused. An explicit adapter registry rewraps active/pending MFA and Integration credential fields
 inside one transaction, authenticating each seed with source key/account-bound
 AAD and re-encrypting with fresh nonce/target key. A bad field aborts every
 adapter. No ad-hoc ciphertext SQL replacement occurs. Pending enrollment is then

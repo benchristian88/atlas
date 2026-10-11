@@ -14,21 +14,20 @@ This is the **single active Integration design**. [v1.2](../../history/integrati
 is historical; its supplied UI mockups remain the implementation baseline.
 The [alignment matrix](integration-alignment-matrix.md) records the inspected
 repository at `90e04a76982c314fff2191e84ca6bd1a8cabcb07`, including material
-legacy-policy differences. The [staged contracts](contracts/README.md) define
+legacy-policy differences. The [canonical contract references](contracts/README.md) define
 normative wire shapes and validation. Accepted architecture does not imply
 runtime, catalogue, ingestion or vendor functionality is implemented.
 
-I0 artifacts live only in documentation. Before I1, move the new schemas verbatim
-into `atlas-connector-sdk`; that separate project becomes the **sole canonical
-schema source** consumed by Atlas and `atlas-connectors`. Do not wire production
-code to these staged copies or create an in-repository duplicate SDK package.
-
-**I1 implementation evidence:** the [completion record](i1-completion-report.md)
-describes the local runtime/catalogue shell and the request's explicitly authorized
-isolated staging-adapter fallback because no separate owned SDK project exists.
-The schemas remain unchanged and are not relicensed. External canonical SDK
-extraction and pinned consumption remain a release hand-off, rather than a second
-SDK architecture. Qualified vendor bundles and remote provenance are not claimed.
+**Implementation evidence through I2 (12 October 2026):** the separate
+Apache-2.0 SDK is now the sole canonical schema source; AIP/Manifest v1 bytes
+are unchanged and Atlas consumes its exact pinned artifact. The documentation
+schema files are references. The [I1 record](i1-completion-report.md) preserves
+its historical staging fallback; the [I2 record](i2-completion-report.md)
+describes its removal, generic configuration, write-only credentials, mappings
+and bounded probes. User-approved Manifest 1.1 adds truthful probe-only capability
+and unqualified/untested source state without weakening verification. Example
+manifests remain non-installable. Proxmox I2 performs no discovery; qualified
+source versions, remote provenance and full deployment acceptance remain separate.
 
 # Executive summary
 

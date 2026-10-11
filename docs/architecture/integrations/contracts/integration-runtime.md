@@ -1,8 +1,9 @@
 # IntegrationRuntime v1 specification
 
-**I0 interface specification only.** This runtime-neutral boundary is owned by
-Atlas; no corresponding service/client exists yet. AnsibleRuntime is the first
-adapter; AIP and domain requests have no playbook/inventory dependency. See
+**I1/I2 implemented subset:** health, capabilities, verify_connector and
+test_connection have a private authenticated client/server. Discovery/job/callback
+operations below are I3 targets and remain unsupported. AnsibleRuntime is the
+first adapter; domain requests have no playbook/inventory dependency. See
 [contract ownership and AIP semantics](README.md).
 
 ## Operations and explicit types
@@ -103,3 +104,21 @@ vendor support before I4–I6.
 I3 proves job dispatch, request replay, callbacks/finalisation/cancellation and
 recovery with existing maintenance/quiescence. I4–I6 prove actual source calls;
 I8 qualifies both deployment methods, failure injection and restore behaviour.
+
+## Exact I2 transport
+
+`POST /v1/connectors/test-connection` accepts exactly `reference` (Connector ID,
+SemVer and unprefixed SHA-256 digest), UUID `request_id`, validated `config` and
+internal `credentials`. The latter are source values transported only under the
+independent runtime-control credential; this is not a browser API. Atlas owns the
+lease and tenancy, and the runtime accepts neither scope nor callback authority.
+The fixed verified entry is `test_connection.yml`; callers cannot select paths,
+commands, repositories, arguments or playbook text. Requests are limited to
+128 KiB, results to 4 KiB, concurrent probes to four and execution to 22 seconds.
+API probe transport has a 28-second deadline; health remains three seconds.
+
+Result fields are bounded enums/booleans and a sanitized source-version string.
+Atlas classifies it using the exact installed Manifest: qualified exact versions
+are supported, known-incompatible versions blocked and unqualified/newer results
+untested. Test Connection writes safe audit/last-test metadata only. It creates
+no DiscoveryRun, evidence, AIP receipt, Asset, Service or Business Function.

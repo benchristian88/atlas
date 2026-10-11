@@ -11,6 +11,7 @@ export function ConnectorCard({ entry, canManage, busy, onAction, className = ""
     <p>{entry.description}</p>
     <dl className="ops-definition"><dt>Publisher</dt><dd>{entry.publisher || "Not specified"} <span className="secondary-text">· {TRUST_LABELS[entry.trust_tier] || "Trust not established"}</span></dd><dt>Version</dt><dd>{entry.version || "Not released"}{entry.installed_version && entry.installed_version !== entry.version && <span className="secondary-text"> · {entry.installed_version} installed</span>}</dd>{entry.licence && <><dt>Licence</dt><dd>{entry.licence}</dd></>}</dl>
     <div className="ops-section-header"><StatusIndicator state={connectorState(entry)} variant="badge" />{actions.length > 0 && <div className="form-actions">{actions.map(action => <Button key={action.action} variant={action.action === "remove" ? "destructive" : "primary"} loading={busy === entry.connector_id} disabled={Boolean(busy)} onClick={() => onAction(entry, action)}>{action.label}</Button>)}</div>}</div>
+    {canManage && entry.package_available && entry.version && <Button href={`/integrations/mappings/${encodeURIComponent(entry.connector_id)}?version=${encodeURIComponent(entry.version)}`}>Resolve mappings</Button>}
     {entry.message && entry.message !== entry.description && entry.verification_status !== "metadata_only" && <p className="secondary-text">{entry.message}</p>}
     {entry.verification_status === "metadata_only" && <small className="secondary-text">Catalogue metadata verified. Executable bundle not released.</small>}
   </Surface>;

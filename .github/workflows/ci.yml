@@ -50,7 +50,9 @@ jobs:
             apps/api/requirements*.txt
             plugins/*/pyproject.toml
       - name: Install regression dependencies
-        run: python -m pip install -r apps/api/requirements.txt pytest==8.4.1 httpx==0.28.1
+        run: |
+          python -m pip install --no-index --no-deps --require-hashes --find-links vendor/sdk -r vendor/sdk/requirements.txt
+          python -m pip install -r apps/api/requirements.txt pytest==8.4.1 httpx==0.28.1
       - name: Install PostgreSQL 17 clients and test nginx
         run: bash infra/ci/install-linux-dependencies.sh
       - name: Start isolated PostgreSQL with generated credentials and prepare all test databases
@@ -149,7 +151,9 @@ jobs:
             apps/api/requirements*.txt
             plugins/*/pyproject.toml
       - name: Install release regression dependencies
-        run: python -m pip install -r apps/api/requirements.txt pytest==8.4.1 httpx==0.28.1
+        run: |
+          python -m pip install --no-index --no-deps --require-hashes --find-links vendor/sdk -r vendor/sdk/requirements.txt
+          python -m pip install -r apps/api/requirements.txt pytest==8.4.1 httpx==0.28.1
       - name: Validate canonical release metadata
         run: python infra/release/release.py metadata
       - name: Shared release-critical regression

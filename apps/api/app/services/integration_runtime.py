@@ -78,13 +78,14 @@ def _endpoint() -> str:
 
 
 async def control_request(operation: str, reference: dict | None = None) -> dict:
-    paths = {"health": "/v1/health", "capabilities": "/v1/capabilities", "verify_connector": "/v1/connectors/verify"}
+    paths = {"health": "/v1/health", "capabilities": "/v1/capabilities", "verify_connector": "/v1/connectors/verify", "test_connection": "/v1/connectors/test-connection"}
     if operation not in paths:
         raise ValueError("Operation is unavailable in this release")
     endpoint, secret = _endpoint(), _control_secret()
-    async with asyncio.timeout(TIMEOUT_SECONDS):
+    timeout = 28 if operation == "test_connection" else TIMEOUT_SECONDS
+    async with asyncio.timeout(timeout):
         async with aiohttp.ClientSession(trust_env=False, auto_decompress=False,
-                cookie_jar=aiohttp.DummyCookieJar(), timeout=aiohttp.ClientTimeout(total=TIMEOUT_SECONDS),
+                cookie_jar=aiohttp.DummyCookieJar(), timeout=aiohttp.ClientTimeout(total=timeout),
                 headers={"Authorization": f"Bearer {secret}", "Accept": "application/json", "Accept-Encoding": "identity"}) as session:
             async with session.request("POST" if reference is not None else "GET", endpoint + paths[operation],
                     json=reference, allow_redirects=False) as response:
@@ -116,7 +117,7 @@ def _safe_health(payload: dict, capabilities: dict, baseline: dict) -> dict:
     if health.state not in {"healthy", "incompatible"} or health.packaging_mode not in {"systemd", "docker_compose", "development"}:
         raise ValueError("Invalid runtime state")
     operations = capabilities.get("operations")
-    if not isinstance(operations, list) or set(operations) != {"health", "capabilities", "verify_connector"}:
+    if not isinstance(operations, list) or set(operations) not in ({"health", "capabilities", "verify_connector"}, {"health", "capabilities", "verify_connector", "test_connection"}):
         raise ValueError("Invalid runtime capabilities")
     aip = capabilities.get("aip_versions")
     dependencies = capabilities.get("dependencies")
@@ -179,8 +180,22 @@ class LocalIntegrationRuntime:
         except (OSError, ValueError, TypeError, UnicodeError, RecursionError, aiohttp.ClientError, TimeoutError):
             return {**reference, "state": "unavailable"}
 
-    async def test_connection(self, *args, **kwargs):
-        raise NotImplementedError("Test Connection belongs to the next integration increment")
+    async def test_connection(self, reference, config, credentials, request_id):
+        try:
+            result = await control_request("test_connection", {"reference": reference, "request_id": str(request_id),
+                "config": config, "credentials": credentials})
+            # Fixed result fields only; never expose runtime/vendor text.
+            categories = {"connected", "authentication_failed", "permission_limited", "tls_trust_required", "timeout", "source_unavailable", "unsafe_endpoint", "redirect_rejected", "response_too_large", "invalid_source_response", "invalid_configuration", "invalid_credentials", "package_unavailable", "runtime_unavailable"}
+            if type(result.get("success")) is not bool or result.get("category") not in categories:
+                raise ValueError
+            source = result.get("source_version")
+            if not isinstance(source, str) or not re.fullmatch(r"[0-9][A-Za-z0-9.+_-]{0,99}", source) or any(value and value in source for value in credentials.values()):
+                source = None
+            return {"success": result["success"], "category": result["category"], "source_version": source,
+                "tls": result.get("tls") if result.get("tls") in {"verify", "fingerprint", "insecure"} else None,
+                "permission_limited": result.get("permission_limited") is True}
+        except (OSError, ValueError, TypeError, aiohttp.ClientError, TimeoutError):
+            return {"success": False, "category": "runtime_unavailable", "source_version": None}
 
     async def start_discovery(self, *args, **kwargs):
         raise NotImplementedError("Discovery is unavailable in this release")

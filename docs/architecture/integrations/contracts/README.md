@@ -1,21 +1,24 @@
-# I0 staged Integration contracts
+# Integration contracts
 
-**Specification artifacts only; no runtime/API installation exists.** These
-new contracts were designed after the [alignment audit](../integration-alignment-matrix.md)
-and implement the accepted [v1.3 target](../Atlas_Integration_Architecture_and_Design_Specification_v1.3.md).
-Before I1 move both JSON schemas **verbatim** into the separate Apache-2.0
-`atlas-connector-sdk` project. That becomes the sole canonical source, consumed
-by Atlas and `atlas-connectors` through released SDK versions. Replace staging
-with references after extraction; never import it into production or create a
-second in-repository SDK. Existing AGPL SDK/plugin code remains unchanged;
-extraction/ownership review must establish rights for new artifacts and any reuse.
+The sole canonical AIP and Manifest schemas now live in the Apache-2.0
+`atlas-connector-sdk` repository, version **1.1.0**. Atlas and `atlas-connectors`
+consume the same hash-pinned wheel in `vendor/sdk`. The JSON files in this directory
+are non-authoritative `$ref` pointers; production never reads them. Contract tests
+import SDK package resources and validators. The original AIP 1.0 and Manifest 1.0
+schema bytes and identities are unchanged. Legacy AGPL plugin code remains intact;
+no application or legacy plugin implementation was moved into Apache projects.
 
-I1 uses the request's explicitly authorized fallback: a narrowly isolated Atlas
-application adapter consumes this exact hash-pinned Manifest schema while the
-separate SDK project/licence boundary is unavailable. No schemas were copied or
-relicensed, and this does not complete canonical SDK extraction. See the
-[I1 record](../i1-completion-report.md) for the operator action and release gate.
-These fixtures remain non-installable specification examples.
+Manifest **1.1** is an operator-approved additive extension: `discover: false`
+permits a real verified Test Connection-only package with no discovery entry point,
+scopes, object/relationship classes or facts. Its qualification may be explicitly
+`unqualified` or `untested`. Discovery-capable packages retain their declarations.
+Atlas continues to reject `example` manifests for executable activation. A verified
+probe package is executable only through its declared fixed Test Connection entry.
+This is a Manifest 1.x evolution, not an AIP change or architecture redesign.
+
+The I0 examples below remain specification fixtures, not executable packages.
+See the historical [I0](../i0-completion-report.md)/[I1](../i1-completion-report.md)
+records and the current [I2 implementation evidence](../i2-completion-report.md).
 
 ## Artifacts and validation
 

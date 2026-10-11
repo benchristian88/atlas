@@ -8,11 +8,11 @@ import re
 from typing import Mapping
 
 from app.release import Version, build_metadata
-from app.services.connector_contracts import (ConnectorPackageError, STAGING_CONTRACT_COMPATIBILITY_VERSION,
-    staging_contract_root, strict_json, validate_manifest, version_in_range)
+from app.services.connector_contracts import (ConnectorPackageError, SDK_VERSION,
+    bootstrap_manifest_root, strict_json, validate_manifest, version_in_range)
 from app.services.connector_verification import BootstrapReleaseVerifier, OfficialBundleVerifier
 
-BOOTSTRAP_DIGEST = "cb325e28b96e0632fe9df1dd3c2163b21fbb545b46f1806197aa4bb5541bc51a"
+BOOTSTRAP_DIGEST = "641361fd2a41ab5f36ff542b9fef7f8b5080cffc3c71b9016bcad8a4acee71ed"
 BOOTSTRAP_PATH = Path(__file__).resolve().parents[1] / "integration_bootstrap/catalogue.json"
 
 
@@ -37,7 +37,7 @@ def compatibility(manifest: dict, runtime: dict | None, *, atlas_version: str | 
     validate_manifest(manifest)
     atlas_version = atlas_version or build_metadata()["version"]
     if (not version_in_range(atlas_version, manifest["compatibility"]["atlas"])
-            or not version_in_range(STAGING_CONTRACT_COMPATIBILITY_VERSION, manifest["compatibility"]["sdk"])):
+            or not version_in_range(SDK_VERSION, manifest["compatibility"]["sdk"])):
         return {"state": "incompatible", "message": "This package requires a different Atlas or protocol SDK version."}
     if not isinstance(runtime, dict) or runtime.get("status", runtime.get("state")) not in ("healthy", "ready"):
         return {"state": "runtime_unavailable", "message": "The local runtime must be healthy before installing this package."}
@@ -115,7 +115,7 @@ class CatalogueService:
                 filename = entry["manifest_ref"]
                 if not re.fullmatch(r"[a-z0-9_-]+\.json", filename):
                     raise CatalogueUnavailable("invalid_bootstrap_catalogue")
-                manifest_raw = (staging_contract_root() / "manifests" / filename).read_bytes()
+                manifest_raw = (bootstrap_manifest_root() / "manifests" / filename).read_bytes()
                 if hashlib.sha256(manifest_raw).hexdigest() != entry["manifest_digest"]:
                     raise CatalogueUnavailable("bootstrap_manifest_changed")
                 manifest = validate_manifest(strict_json(manifest_raw))
@@ -203,14 +203,14 @@ class CatalogueService:
                 "source_versions": package.manifest["source_versions"] if package.package_available else {
                     "qualification": "not_qualified", "qualified_versions": [], "known_incompatible": []},
                 "manifest_version": package.manifest["manifest_version"],
-                "sdk_status": "extraction_pending"})
+                "sdk_status": "canonical", "sdk_version": SDK_VERSION, "capabilities": package.manifest["capabilities"]})
         return entries
 
     def status(self) -> dict:
         index, _ = self._load()
         return {"source": "bootstrap", "catalogue_version": index["catalogue_version"],
                 "verification_status": "metadata_verified", "refresh_supported": False,
-                "message": "Offline release catalogue. Official executable packages are not yet released."}
+                "message": "Offline catalogue with a pinned Proxmox connection probe. Discovery packages and remote installation remain unqualified."}
 
 
 catalogue = CatalogueService()

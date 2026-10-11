@@ -1,8 +1,9 @@
 # SecretProvider v1 specification
 
-**I0 interface specification only.** Reuse the existing Atlas application-key
-lifecycle and maintained `cryptography` implementation. This is an additive
-provider/record/rewrap adapter in I2, not a second master-key architecture.
+**Implemented for I2 Test Connection.** `integration_secrets.py` implements the
+provider and `encrypted_data.py` registers its rewrap adapter using the existing
+Atlas application-key lifecycle and maintained `cryptography` AESGCM. No second
+master key exists. Discovery/job cancellation semantics below remain I3 targets.
 See the [audit](../integration-alignment-matrix.md) and [contract ownership](README.md).
 
 ## Interface and authority
@@ -67,8 +68,8 @@ Register an Integration adapter in
 `rewrap_application_data`. Adapter follows existing keyset batching/fresh nonce/
 version validation and may flush but never commit. Existing caller transaction
 authenticates and rewraps every encrypted field from source key to target key;
-any invalid field rolls back all adapter writes. Add actual Integration
-crypto/backup regressions in I2; I0 claims only current MFA support.
+any invalid field rolls back all adapter writes. I2 includes actual PostgreSQL crypto, bad-context/key, portable encrypted backup
+and destination-key restore regressions.
 
 Existing encrypted backup stores the source key inside the encrypted archive.
 Restore retains the destination `ATLAS_DATA_ENCRYPTION_KEY`, rewraps protected
@@ -93,3 +94,20 @@ retaining run/evidence/Changes/source links/accepted knowledge. Backup archives
 retain their historical ciphertext under normal existing retention; removing a
 live secret cannot erase already-exported backups. Recovered connection state
 must be explicit to the operator, with trust validation before execution.
+
+## I2 implementation boundary
+
+Secrets are separate revisioned `integration_secrets` records; the Integration
+holds only an opaque UUID reference. AES-GCM binds Customer, Site, Integration,
+field and revision through the AAD above. Full replacement encrypts first, swaps
+and deletes the old revision in the same transaction. Clear and retirement destroy
+live credential material and leave provenance intact. API state returns declared
+field names only. No plaintext GET/reveal endpoint exists.
+
+A saved probe holds the Integration row lock through a request-bound 30-second
+in-memory lease, preventing replacement/clear races. The runtime has a 22-second
+process deadline, reads credentials through a private pipe and deletes its 0700
+workspace and 0600 input/result material in `finally`. Startup removes abandoned
+owned probe directories. Lease exit revokes access and clears values; there is no
+claim of physical RAM zeroisation. Unsaved previews use a transient lease and
+persist only safe requested/result audit metadata, never an Integration/DataSource.

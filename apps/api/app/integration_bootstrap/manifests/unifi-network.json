@@ -1,0 +1,226 @@
+{
+  "manifest_version": "1.0",
+  "id": "unifi-network",
+  "version": "0.0.0-i0",
+  "publisher": {
+    "id": "atlas-official",
+    "name": "Atlas Impact"
+  },
+  "display": {
+    "name": "UniFi Network",
+    "description": "I0 specification example; not a qualified executable release.",
+    "category": "networking",
+    "documentation_uri": "https://example.test/connectors/unifi-network"
+  },
+  "compatibility": {
+    "aip": [
+      "1.0"
+    ],
+    "sdk": {
+      "minimum": "1.0.0",
+      "exclusive_maximum": "2.0.0"
+    },
+    "atlas": {
+      "minimum": "0.1.0",
+      "exclusive_maximum": "1.0.0"
+    },
+    "runtime": {
+      "capability": "integration-runtime-v1",
+      "baseline": {
+        "minimum": "1.0.0",
+        "exclusive_maximum": "2.0.0"
+      }
+    }
+  },
+  "source_versions": {
+    "qualification": "example",
+    "qualified_versions": [],
+    "known_incompatible": [],
+    "newer_untested_policy": "allow_with_warning"
+  },
+  "capabilities": {
+    "test_connection": true,
+    "discover": "read_only",
+    "scheduling": true,
+    "complete_snapshot": true
+  },
+  "connection_fields": [
+    {
+      "key": "endpoint",
+      "label": "Endpoint",
+      "type": "url",
+      "required": true,
+      "secret": false
+    },
+    {
+      "key": "auth_mode",
+      "label": "Auth mode",
+      "type": "enum",
+      "required": true,
+      "secret": false,
+      "options": [
+        "local_api_key",
+        "local_readonly_user"
+      ],
+      "default": "local_api_key"
+    },
+    {
+      "key": "api_key",
+      "label": "Api key",
+      "type": "secret",
+      "required": true,
+      "secret": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "local_api_key"
+      }
+    },
+    {
+      "key": "local_user",
+      "label": "Local user",
+      "type": "text",
+      "required": true,
+      "secret": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "local_readonly_user"
+      }
+    },
+    {
+      "key": "local_password",
+      "label": "Local password",
+      "type": "secret",
+      "required": true,
+      "secret": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "local_readonly_user"
+      }
+    },
+    {
+      "key": "verify_tls",
+      "label": "Verify tls",
+      "type": "boolean",
+      "required": true,
+      "secret": false,
+      "default": true
+    }
+  ],
+  "discovery_scopes": [
+    {
+      "key": "inventory",
+      "label": "Infrastructure inventory",
+      "required": true,
+      "default_enabled": true,
+      "domains": [
+        "assets",
+        "networks",
+        "interfaces",
+        "relationships"
+      ],
+      "object_classes": [
+        "unifi.gateway",
+        "unifi.switch",
+        "unifi.access_point",
+        "unifi.network",
+        "unifi.interface"
+      ]
+    }
+  ],
+  "object_classes": [
+    {
+      "key": "unifi.gateway",
+      "kind": "asset",
+      "label": "Gateway",
+      "required": true,
+      "recommended_asset_type_key": "router"
+    },
+    {
+      "key": "unifi.switch",
+      "kind": "asset",
+      "label": "Switch",
+      "required": true,
+      "recommended_asset_type_key": "switch"
+    },
+    {
+      "key": "unifi.access_point",
+      "kind": "asset",
+      "label": "Access point",
+      "required": true,
+      "recommended_asset_type_key": "access_point"
+    },
+    {
+      "key": "unifi.network",
+      "kind": "network",
+      "label": "Network",
+      "required": true
+    },
+    {
+      "key": "unifi.interface",
+      "kind": "interface",
+      "label": "Interface",
+      "required": true
+    }
+  ],
+  "relationship_classes": [
+    {
+      "key": "unifi.uplink",
+      "label": "Uplink",
+      "recommended_relationship_type_key": "connected_to",
+      "required": true,
+      "source_object_classes": [
+        "unifi.switch",
+        "unifi.access_point"
+      ],
+      "target_object_classes": [
+        "unifi.gateway",
+        "unifi.switch"
+      ],
+      "direction": "source_to_target"
+    }
+  ],
+  "facts": [
+    {
+      "key": "unifi.firmware_version",
+      "label": "Firmware version",
+      "value_type": "string",
+      "class": "informational",
+      "cardinality": "single",
+      "object_classes": [
+        "unifi.gateway",
+        "unifi.switch",
+        "unifi.access_point"
+      ]
+    }
+  ],
+  "implementation": {
+    "runtime": "ansible",
+    "entry_points": {
+      "test_connection": "test_connection",
+      "discover": "discover"
+    },
+    "dependencies": []
+  },
+  "licensing": {
+    "licence": "Apache-2.0",
+    "notices": [
+      "NOTICE"
+    ],
+    "sbom": {
+      "format": "SPDX",
+      "path": "sbom.spdx.json"
+    }
+  },
+  "distribution": {
+    "bundle_digest": "sha256:73b675b3ea7cf4ac73b2094f634603a456544e04285ee8d3adf2b7609c05d55f",
+    "asset_uri": "https://example.test/releases/unifi-network/0.0.0-i0/bundle.tar.gz",
+    "provenance": {
+      "method": "github-artifact-attestation-sigstore",
+      "publisher_id": "atlas-official",
+      "repository": "atlas-example/atlas-connectors",
+      "workflow": ".github/workflows/release.yml",
+      "source_commit": "0000000000000000000000000000000000000000",
+      "evidence_uri": "https://example.test/attestations/unifi-network"
+    }
+  }
+}

@@ -6,8 +6,10 @@ documentation and licence changes at that baseline. Integration specification
 status was updated on 11 October 2026 against
 `90e04a76982c314fff2191e84ca6bd1a8cabcb07`; the runtime/catalogue shell was added
 after merged baseline `77eeff71e9a803f0f665ffa150b24537e29b83a6`.
-Implementation and validation boundaries are recorded in the
-[runtime completion report](../architecture/integrations/i1-completion-report.md).
+I2 implementation was updated on 12 October 2026 after merged I1 baseline
+`7e2a8c9ec1e04b27e1f32153347380f05d4d9a59`. Current implementation and validation
+boundaries are recorded in the [I2 report](../architecture/integrations/i2-completion-report.md);
+the [I1 record](../architecture/integrations/i1-completion-report.md) remains historical.
 Code, migrations,
 reachable routes and regression tests determine implementation status. A status
 here does not claim that validation was rerun; current execution results are
@@ -33,7 +35,7 @@ recorded separately.
 | Discovery simulation and reconciliation | Implemented | Simulation/run routes, normalized ingestion and reviewable reconciliation decisions. Live plugin operation is separate. |
 | Knowledge completeness | Implemented | Structured requirements, profiles, idempotent evaluation, summaries and gap lifecycle for Assets and Services. Broader entity coverage is deferred. |
 | Asset icon caching | Implemented | Bounded HTTPS retrieval and authorized local serving with existing fallback chain. |
-| Encrypted application backup/restore | Implemented | `services/backups.py`, backup/setup routes, Backup & Restore UI and CLI. Portable `.atlasbackup`, target-local secrets and MFA rewrap; 2 GiB bound and one API runtime. |
+| Encrypted application backup/restore | Implemented | `services/backups.py`, backup/setup routes, Backup & Restore UI and CLI. Portable `.atlasbackup`, target-local secrets and MFA/Integration credential rewrap; 2 GiB bound and one API runtime. |
 | Docker Compose installation | Implemented | `infra/install/compose.py`, protected configuration, single gateway, private internal services and persistent volumes. |
 | Native/systemd installation | Implemented | `infra/install/native.py`, managed nginx ingress, unprivileged services and read-only preflight on prepared Debian/Ubuntu hosts. |
 | Packaged release distribution | Implemented | `infra/release/`, version/channel policy, package manifest, hashes and isolated publication workflow. Publication is deliberate; no registry or signing/attestation claim. |
@@ -47,9 +49,10 @@ recorded separately.
 | Capability | Status | Boundary |
 | --- | --- | --- |
 | Live first-party integrations/plugins | Partially implemented | `plugins/sdk`, tested `plugins/proxmox` adapter and Data Source/Integration persistence exist. Complete configure/test/Run Now/results/reconcile journey remains upcoming. Worker is a placeholder, not mature job orchestration. |
-| Integration architecture and staged contracts | Implemented | Specification component: alignment matrix, ADRs 0003–0009, unchanged AIP/Manifest schemas, interface specs and contract tests. Separate canonical SDK extraction remains pending; a hash-pinned isolated application adapter consumes staging under the explicitly authorized fallback. No legacy AGPL implementation was relicensed. |
-| Runtime and catalogue shell | Implemented | `apps/runtime/ansible`, authenticated bounded API client, protected package store, offline verified metadata, installed-state migration and global RBAC, real Configured/Catalogue/Runtime UI. Three vendor entries are unreleased metadata only. Docker/native packaging is implemented; live Docker/systemd acceptance and external SDK/provenance follow-ups remain in the validation report. |
-| Generic configured discovery | Planned but not implemented | Follow the [Integration roadmap](../architecture/integrations/integration-roadmap.md). Source credentials, configuration, Test Connection, worker dispatch, scheduling, AIP ingestion and qualified vendor bundles remain later work. Remote packages fail closed until an approved provenance verifier is supplied. |
+| Canonical Integration contracts | Implemented | Separate Apache-2.0 SDK 1.1.0 consumed by exact hash in Atlas and official Connectors. Original AIP/Manifest v1 bytes unchanged; additive Manifest 1.1 probe-only support. Documentation schema files are references; legacy AGPL plugin code unchanged. |
+| Runtime and catalogue shell | Implemented | Authenticated isolated runtime, protected exact-package store, global installed-state/RBAC and Configured/Catalogue/Runtime UI. Pinned Proxmox Test Connection-only bootstrap package; Docker/UniFi are metadata only. Docker/native packaging is implemented; live platform acceptance and remote provenance remain follow-ups. |
+| Generic configuration and Test Connection | Implemented | Scoped Integration/DataSource, manifest-driven create/detail, write-only AES-GCM credentials using existing data key/portable rewrap, global versioned taxonomy mappings, safe update ownership gates and bounded verified private-runtime probes. Proxmox source versions are explicitly unqualified. See [I2 evidence](../architecture/integrations/i2-completion-report.md). |
+| Generic configured discovery | Planned but not implemented | I3 worker dispatch, Run Now, scheduling, AIP ingestion/callbacks and I4–I6 vendor discovery/qualification remain separate. Remote packages fail closed until an approved provenance verifier is qualified. |
 | Generated operational documents | Partially implemented | `services/markdown_docs.py` generates Markdown and Document records store it. Dedicated document browsing/review is not yet an end-to-end feature. |
 | Guided onboarding | Planned but not implemented | Secure first-run administrator creation exists; guided initial knowledge setup is separate upcoming work. |
 | Final screenshots and documentation freeze | Planned but not implemented | Feature descriptions and screenshots will be refreshed after integration/onboarding work. No stale product screenshots are advertised. |

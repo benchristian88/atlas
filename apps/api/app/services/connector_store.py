@@ -212,6 +212,14 @@ class PackageStore:
         if (evidence.get("bundle_digest") != package.bundle_digest
                 or evidence.get("publisher_id") != package.manifest["publisher"]["id"]):
             raise PackageStoreError("verification_identity_mismatch")
+        target = self._path(package.connector_id, package.version, package.bundle_digest)
+        # Native installers stage immutable approved bytes as root. Activation
+        # can verify an existing exact tuple without obtaining filesystem write
+        # authority; this does not install missing or unverified packages.
+        if target.exists():
+            self.verify_connector(package.connector_id, package.version, package.bundle_digest)
+            return StoredPackage(package.connector_id, package.version, package.bundle_digest,
+                                 package.manifest, evidence)
         with self._lock():
             target = self._path(package.connector_id, package.version, package.bundle_digest)
             if target.exists():

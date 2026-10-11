@@ -214,24 +214,22 @@ def ensure_nginx(needs_install):
         raise ValueError("nginx is not ready; check distribution package/service/configuration. No Atlas installation changes made.") from None
 
 
-def install_contracts():
-    # Install the original staged contract files at their canonical repository
-    # locations. The API adapter has no competing schema copy/package.
-    contracts = DESTINATION / "docs/architecture/integrations/contracts"
-    if any(path.is_symlink() for path in (contracts, *contracts.parents)):
-        raise ValueError("Managed contract directory must not be a symlink")
-    contracts.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(ROOT / "docs/architecture/integrations/contracts/connector-manifest-v1.schema.json", contracts / "connector-manifest-v1.schema.json")
-    shutil.copytree(ROOT / "docs/architecture/integrations/contracts/manifests", contracts / "manifests", dirs_exist_ok=True)
+def install_sdk(python):
+    run([python, "-m", "pip", "install", "--no-index", "--no-deps", "--require-hashes", "--find-links", str(DESTINATION / "vendor/sdk"), "-r", str(DESTINATION / "vendor/sdk/requirements.txt")])
 
 
 def build_application(account):
-    install_contracts()
     if not (DESTINATION / "venv").exists():
         run([sys.executable, "-m", "venv", str(DESTINATION / "venv")])
     python = str(DESTINATION / "venv/bin/python")
+    install_sdk(python)
     run([python, "-m", "pip", "install", "-r", "requirements.txt"], cwd=DESTINATION / "apps/api")
     build_runtime()
+    try:
+        # The API remains unable to mutate the native root-owned store.
+        run([python, "-m", "scripts.stage_integration_bootstrap"], cwd=DESTINATION / "apps/api")
+    except (OSError, subprocess.SubprocessError):
+        print("Approved Connector staging was unsuccessful; Atlas knowledge services will continue. Inspect the protected package store before activation.")
     environment = {**os.environ, "PATH": "/usr/bin:" + os.environ.get("PATH", "/bin"), "NEXT_PUBLIC_API_URL": "/api"}
     run(["npm", "ci"], cwd=DESTINATION / "apps/web", env=environment)
     run(["npm", "run", "build"], cwd=DESTINATION / "apps/web", env=environment)
@@ -253,6 +251,7 @@ def build_runtime():
         if not runtime_environment.exists():
             run([sys.executable, "-m", "venv", str(runtime_environment)])
         runtime_python = str(runtime_environment / "bin/python")
+        install_sdk(runtime_python)
         run([runtime_python, "-m", "pip", "install", "--no-deps", "-r", "requirements.lock"], cwd=DESTINATION / "apps/runtime/ansible")
         run([runtime_python, "-m", "pip", "check"])
     except (OSError, subprocess.SubprocessError):
@@ -331,7 +330,7 @@ def install(ingress, needs_nginx, *, runtime_enabled=True):
     os.chmod(CONFIGURATION, 0o640)
     configure_runtime()
     DESTINATION.mkdir(mode=0o755)
-    for name in ("apps", "infra"):
+    for name in ("apps", "infra", "vendor"):
         shutil.copytree(ROOT / name, DESTINATION / name,
                         ignore=shutil.ignore_patterns("node_modules", ".next", ".venv", "__pycache__", ".env", ".env.*"))
     build_application(account)

@@ -421,6 +421,31 @@
           "value": "notices/resolvelib/LICENSE"
         }
       ]
+    },
+    {
+      "type": "library",
+      "name": "atlas-connector-sdk",
+      "version": "1.1.0",
+      "purl": "pkg:pypi/atlas-connector-sdk@1.1.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a01cf35d47ab2f791375586114527fca3ed6335a7611cff14a6e8475c8380e0e"
+        }
+      ],
+      "properties": [
+        {
+          "name": "atlas:upstream-notices",
+          "value": "notices/atlas-connector-sdk/LICENSE,notices/atlas-connector-sdk/NOTICE"
+        }
+      ]
     }
   ]
 }

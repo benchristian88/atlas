@@ -16,9 +16,9 @@ configured separately; this change does not configure branch protection:
 The backend uses `postgres:17-alpine` and matching PGDG PostgreSQL 17 clients.
 It starts PostgreSQL after generating a protected configuration, so passwords
 are random per job rather than checked-in credentials or repository secrets.
-The bootstrap account creates thirteen separate databases owned by a generated
+The bootstrap account creates fourteen separate databases owned by a generated
 non-superuser/non-createdb role. Domain, setup, MFA and both backup test databases are
-migrated; eight migration-test databases remain empty. All existing
+migrated; nine migration-test databases remain empty. All existing
 `ATLAS_TEST_*` database variables are supplied, and JUnit skips fail the job.
 Redis uses the `redis:7.4.6-alpine` Actions service with a `redis-cli ping`
 healthcheck. Both servers publish only on runner loopback. PostgreSQL also has
@@ -63,6 +63,7 @@ Use Python 3.12, Node 22, PostgreSQL **17** server/client tools, Redis 7 and ngi
 (tracked egg-info must remain clean for committed package construction):
 
 ```bash
+python -m pip install --no-index --no-deps --require-hashes --find-links vendor/sdk -r vendor/sdk/requirements.txt
 python -m pip install -r apps/api/requirements.txt pytest==8.4.1 httpx==0.28.1
 export PYTHONPATH="$PWD/plugins/sdk:$PWD/plugins/proxmox"
 export NEXT_TELEMETRY_DISABLED=1
@@ -169,3 +170,21 @@ older EOF blank line; editing those documents requires cleaning their whitespace
 No new document receives an exemption. Plain `git diff --check` omits untracked
 files and cannot replace this check. Hosted CI also runs
 `git diff-tree --check --root -m HEAD` against the committed change.
+
+## I2 cross-repository contract and probe checks
+
+API and runtime install the same SDK 1.1.0 wheel from `vendor/sdk` with a mandatory
+SHA-256. Runtime installs it without validation extras; its config validation is
+runtime-neutral and no Atlas/Ansible domain code enters the SDK. Docker build
+context is repository root; native install/update and both release methods carry
+the artifact and lock. Documentation tests load canonical package resources.
+
+Run SDK tests and deterministic wheel builds in `atlas-connector-sdk`, and
+Connector tests/two deterministic bundle builds in `atlas-connectors`. Their CI
+is independent of Atlas's AGPL legacy plugin tests. Connector tag preparation
+uses pinned Artifact Attestation and a protected environment; no remote successful
+release/provenance is implied by local tests. Atlas's I2 regressions include real
+PostgreSQL tenancy/ownership/crypto, I1-to-I2 migrations, portable credential
+backup/restore, exact runtime verification and cleanup. Browser acceptance uses
+`apps/web/scripts/check-i2-integrations-browser.mjs` against the production build;
+its intercepted APIs prove UI behavior, separately from backend/source acceptance.

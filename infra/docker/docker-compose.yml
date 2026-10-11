@@ -49,7 +49,6 @@ services:
       ATLAS_RUNTIME_URL: http://runtime:8091
       ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
       ATLAS_RUNTIME_BASELINE_FILE: /app/runtime-baseline/baseline.json
-      ATLAS_CONNECTOR_SCHEMA_FILE: /app/contracts/connector-manifest-v1.schema.json
       ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
     volumes:
       - atlas_state:/var/lib/atlas
@@ -117,7 +116,8 @@ services:
   # Only these private volumes are writable; it receives no Atlas credentials.
   runtime-init:
     build:
-      context: ../../apps/runtime/ansible
+      context: ../..
+      dockerfile: apps/runtime/ansible/Dockerfile
     user: "0:0"
     command: ["python", "-m", "atlas_runtime.bootstrap"]
     network_mode: none
@@ -126,9 +126,12 @@ services:
       - connector_store:/var/lib/atlas-connectors
 
   runtime:
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     restart: unless-stopped
     build:
-      context: ../../apps/runtime/ansible
+      context: ../..
+      dockerfile: apps/runtime/ansible/Dockerfile
     environment:
       ATLAS_RUNTIME_PACKAGING_MODE: docker_compose
       ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret

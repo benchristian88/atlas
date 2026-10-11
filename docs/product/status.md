@@ -17,7 +17,9 @@ self-hosted focus. No date is promised for 1.0.0.
 - Development CI and operator documentation for installation, recovery and updates.
 - Isolated authenticated local integration runtime and offline Connector catalogue,
   with global verified-package state and Configured/Catalogue/Runtime views.
-  Proxmox, Docker and UniFi entries have no released executable bundles yet.
+  Generic scoped configuration, write-only encrypted credentials, global taxonomy
+  mappings and bounded Test Connection are implemented. Proxmox is probe-only and
+  unqualified; Docker and UniFi remain metadata only. No discovery is dispatched.
 
 Core platform hardening is substantially complete and sufficient to proceed to
 integration/plugin and onboarding development. This includes secure installation,
@@ -34,13 +36,14 @@ it is not live monitoring or evidence of recovery readiness.
 - Catalogue-driven integrations follow the accepted
   [Integration architecture](../architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
   and [phased roadmap](../architecture/integrations/integration-roadmap.md):
-  architecture/contracts alignment and runtime/catalogue shell, then generic
-  configuration/secrets, orchestration/ingestion, Proxmox, Docker/Compose, local
+  architecture/contracts, runtime/catalogue and generic configuration/secrets are
+  implemented through I2. Next are orchestration/ingestion, Proxmox, Docker/Compose, local
   UniFi infrastructure, onboarding and final integration acceptance. The current
   Proxmox adapter/plugin contracts remain foundations; target design is not live
   configured discovery. Core hardening is retained, with its acceptance gaps.
-  The [runtime validation record](../architecture/integrations/i1-completion-report.md)
-  records SDK extraction, remote provenance and real deployment follow-ups.
+  The [I2 validation record](../architecture/integrations/i2-completion-report.md)
+  records completed SDK extraction and outstanding remote provenance, live source
+  and deployment acceptance.
 - Guided onboarding to help operators establish useful initial knowledge.
 
 ## Before 1.0

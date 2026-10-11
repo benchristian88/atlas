@@ -83,8 +83,10 @@ def test_offline_bootstrap_real_entries_remain_visible_during_runtime_outage(cli
     assert response.status_code == 200
     entries = response.json()["entries"]
     assert {entry["connector_id"] for entry in entries} == {"proxmox", "docker", "unifi-network"}
-    assert all(entry["version"] is None and not entry["package_available"] and not entry["supported_actions"] for entry in entries)
-    assert all(entry["source_versions"]["qualification"] == "not_qualified" for entry in entries)
+    probe = next(entry for entry in entries if entry["connector_id"] == "proxmox")
+    assert probe["package_available"] and not probe["supported_actions"] and probe["state"] == "runtime_unavailable"
+    assert probe["source_versions"]["qualification"] == "unqualified"
+    assert all(not entry["package_available"] for entry in entries if entry["connector_id"] != "proxmox")
     assert "secret" not in response.text.lower()
     assert "/Users/" not in response.text and "/var/lib/" not in response.text
     assert client.get("/api/health").json() == {"status": "ok"}
@@ -215,6 +217,23 @@ def test_control_secret_missing_unsafe_permissions_and_symlink_fail_closed(monke
 
 
 def test_later_runtime_operations_are_explicitly_unsupported():
-    for name in ("test_connection", "start_discovery", "get_job", "cancel_job"):
+    for name in ("start_discovery", "get_job", "cancel_job"):
         with pytest.raises(NotImplementedError):
             asyncio.run(getattr(transport.LocalIntegrationRuntime(), name)())
+
+
+@pytest.mark.parametrize("suffix,method", [("/credentials", "put"), ("/credentials", "delete"), ("/test-connection", "post"), ("", "patch")])
+def test_i2_non_manager_and_non_runner_cannot_reach_credential_or_probe_lookups(client, suffix, method):
+    grant("integrations.view")
+    response = client.request(method.upper(), "/api/integrations/" + str(uuid.uuid4()) + suffix, json={})
+    assert response.status_code == 403
+
+
+def test_i2_invalid_credential_payload_never_echoes_values_or_execution_arguments(client):
+    grant("integrations.manage")
+    value = secrets.token_urlsafe(32)
+    response = client.put("/api/integrations/" + str(uuid.uuid4()) + "/credentials", json={"values": {"token_secret": value}, "playbook": "/tmp/forbidden"})
+    assert response.status_code == 422
+    assert value not in response.text and "/tmp/forbidden" not in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert client.get("/api/integration-secrets/" + str(uuid.uuid4())).status_code == 404

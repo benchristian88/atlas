@@ -50,7 +50,7 @@ def test_dry_run_and_byte_reproducibility(packages, tmp_path):
     assert {path.name: path.read_bytes() for path in output.iterdir()} == {path.name: path.read_bytes() for path in other.iterdir()}
     assert release["version"] == policy.load_metadata()["version"]
     assert release["source_state"] == "working_tree"
-    assert release["current_schema"] == "20261011_0027"
+    assert release["current_schema"] == "20261012_0028"
     assert packager.verify(output) == release
     with pytest.raises(ValueError, match="cannot be published"): packager.verify(output, require_committed=True)
     with pytest.raises(ValueError, match="exactly match"): packager.verify(output, tag="v99.0.0")
@@ -311,7 +311,7 @@ def test_native_upgrade_reuses_install_primitives_and_preserves_state(monkeypatc
     import native
     source, destination = tmp_path / "release", tmp_path / "opt-atlas"
     for root in (source, destination):
-        for name in ("apps", "infra"):
+        for name in ("apps", "infra", "vendor"):
             (root / name).mkdir(parents=True);(root / name / "marker").write_text("new" if root == source else "old")
     (destination / "venv").mkdir();(destination / "venv/identity").write_text("preserve")
     configuration = tmp_path / "etc/atlas/atlas.env"
@@ -351,6 +351,7 @@ def test_native_upgrade_reuses_install_primitives_and_preserves_state(monkeypatc
     assert calls[4:7] == [["build", 10001], ["units"], ["runtime-started"]]
     assert ["ingress", "3000"] in calls
     assert (destination / "apps/marker").read_text() == "new"
+    assert (destination / "vendor/marker").read_text() == "new"
     assert (destination / "venv/identity").read_text() == "preserve"
     assert configuration.read_bytes() == original_configuration
     assert (state / "identity").read_text() == "preserve state"

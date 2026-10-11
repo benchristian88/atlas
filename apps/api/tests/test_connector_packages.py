@@ -12,7 +12,7 @@ import pytest
 
 from app.services.connector_catalogue import (BOOTSTRAP_PATH, CataloguePackage, CatalogueService,
     CatalogueUnavailable, compatibility)
-from app.services.connector_contracts import (ManifestValidationError, staging_contract_root,
+from app.services.connector_contracts import (ManifestValidationError, bootstrap_manifest_root,
     manifest_validator, strict_json, validate_manifest)
 from app.services import connector_store as store_module
 from app.services.connector_store import PackageStore, PackageStoreError
@@ -21,7 +21,7 @@ from app.services.connector_verification import (BootstrapReleaseVerifier, Githu
 
 
 def example():
-    return json.loads((staging_contract_root() / "manifests/proxmox.json").read_text())
+    return json.loads((Path(__file__).resolve().parents[3] / "docs/architecture/integrations/contracts/manifests/proxmox.json").read_text())
 
 
 def manifest():
@@ -74,18 +74,20 @@ def path_for(store, package):
     return store.root / package.connector_id / package.version / package.bundle_digest[7:]
 
 
-def test_offline_bootstrap_has_truthful_non_executable_entries():
+def test_offline_bootstrap_distinguishes_probe_package_from_unreleased_sources():
     service = CatalogueService()
     entries = service.entries(runtime=runtime())
     assert {entry["connector_id"] for entry in entries} == {"proxmox", "docker", "unifi-network"}
     for entry in entries:
-        assert entry["state"] == "unavailable"
-        assert entry["version"] is None and entry["digest"] is None
-        assert entry["verification_status"] == "metadata_only"
-        assert entry["package_available"] is False and entry["supported_actions"] == []
-        assert entry["source_versions"]["qualification"] == "not_qualified"
-    assert service.status()["refresh_supported"] is False
-    assert service.get("proxmox").manifest["source_versions"]["qualification"] == "example"
+        if entry["connector_id"] == "proxmox":
+            assert entry["state"] == "installable"
+            assert entry["package_available"] and entry["verification_status"] == "verified"
+            assert entry["capabilities"]["discover"] is False
+            assert entry["source_versions"]["qualification"] == "unqualified"
+        else:
+            assert entry["state"] == "unavailable"
+            assert entry["version"] is None and entry["package_available"] is False
+            assert entry["verification_status"] == "metadata_only"
     with pytest.raises(CatalogueUnavailable, match="connector_not_in_catalogue"):
         service.get("missing")
 
@@ -101,38 +103,27 @@ def test_catalogue_tampering_and_missing_files_fail_closed(tmp_path):
 
 
 def test_catalogue_installed_state_is_separate_from_source():
-    entries = CatalogueService().entries(installed={"proxmox": {"version": "1.0.0"}})
-    entry = next(row for row in entries if row["connector_id"] == "proxmox")
+    entries = CatalogueService().entries(installed={"docker": {"version": "1.0.0"}})
+    entry = next(row for row in entries if row["connector_id"] == "docker")
     assert entry["state"] == "installed" and entry["installed_version"] == "1.0.0"
     assert entry["package_available"] is False and entry["version"] is None
     assert entry["supported_actions"] == ["remove"]
 
 
-def test_deployed_adapter_consumes_original_pinned_staging_artifacts(tmp_path, monkeypatch):
-    source = staging_contract_root()
-    target = tmp_path / "contracts"
-    target.mkdir()
-    schema = target / "connector-manifest-v1.schema.json"
-    schema.write_bytes((source / schema.name).read_bytes())
-    (target / "manifests").mkdir()
-    for original in (source / "manifests").glob("*.json"):
-        (target / "manifests" / original.name).write_bytes(original.read_bytes())
-    monkeypatch.setenv("ATLAS_CONNECTOR_SCHEMA_FILE", str(schema))
-    manifest_validator.cache_clear()
-    try:
-        assert len(CatalogueService().entries()) == 3
-        schema.write_bytes(schema.read_bytes() + b" ")
-        manifest_validator.cache_clear()
-        with pytest.raises(ManifestValidationError, match="sdk_contract_changed"):
-            validate_manifest(example())
-        schema.write_bytes((source / schema.name).read_bytes())
-        manifest_validator.cache_clear()
-        candidate = target / "manifests/proxmox.json"
-        candidate.write_bytes(candidate.read_bytes() + b" ")
-        with pytest.raises(CatalogueUnavailable, match="bootstrap_manifest_changed"):
-            CatalogueService().entries()
-    finally:
-        manifest_validator.cache_clear()
+def test_deployed_consumer_uses_canonical_sdk_and_pinned_bootstrap(tmp_path, monkeypatch):
+    from atlas_connector_sdk.contracts import schema_bytes, SCHEMA_DIGESTS
+    from app.services.connector_contracts import SDK_VERSION
+    assert SDK_VERSION == "1.1.0"
+    assert hashlib.sha256(schema_bytes("connector-manifest-v1")).hexdigest() == SCHEMA_DIGESTS["connector-manifest-v1"]
+    source = bootstrap_manifest_root()
+    target = tmp_path / "bootstrap"
+    import shutil
+    shutil.copytree(source, target)
+    monkeypatch.setattr("app.services.connector_catalogue.bootstrap_manifest_root", lambda: target)
+    candidate = target / "manifests/proxmox.json"
+    candidate.write_bytes(candidate.read_bytes() + b" ")
+    with pytest.raises(CatalogueUnavailable, match="bootstrap_manifest_changed"):
+        CatalogueService().entries()
 
 
 @pytest.mark.parametrize("raw", ['{"id":1,"id":2}', '{"number":NaN}', '{"number":Infinity}', '{"number":1e999}', "[]" * 10000])
@@ -268,7 +259,7 @@ def test_safe_install_is_atomic_immutable_idempotent_and_verifiable(tmp_path):
 def test_unreleased_catalogue_entry_cannot_install(tmp_path):
     service = CatalogueService()
     with pytest.raises(PackageStoreError, match="package_not_released"):
-        PackageStore(tmp_path / "store").install(service.get("proxmox"), service.verifier())
+        PackageStore(tmp_path / "store").install(service.get("docker"), service.verifier())
 
 
 @pytest.mark.parametrize("name", ["../outside", "/outside", "a/../../outside", "a\\outside", "a//outside", "./outside", "C:outside"])
@@ -513,3 +504,16 @@ def test_committed_connector_cleanup_cannot_remove_new_concurrent_identity(tmp_p
     store.install(package, verifier)
     store.finish_remove(token)
     assert store.verify_connector(package.connector_id, package.version, package.bundle_digest)["state"] == "verified"
+
+
+def test_prepared_immutable_tuple_activation_needs_no_store_write_lock(tmp_path, monkeypatch):
+    from app.services.connector_catalogue import catalogue
+    store = PackageStore(tmp_path / 'store')
+    package = catalogue.get('proxmox', '0.1.0')
+    original = store.install(package, catalogue.verifier())
+    monkeypatch.setattr(store, '_lock', lambda: pytest.fail('prepared activation attempted store mutation'))
+    assert store.install(package, catalogue.verifier()).bundle_digest == original.bundle_digest
+    (store.root / original.connector_id / original.version / original.bundle_digest[7:] / 'contents/NOTICE').chmod(0o644)
+    (store.root / original.connector_id / original.version / original.bundle_digest[7:] / 'contents/NOTICE').write_text('tampered')
+    with pytest.raises(PackageStoreError):
+        store.install(package, catalogue.verifier())

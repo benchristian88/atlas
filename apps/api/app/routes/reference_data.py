@@ -287,6 +287,9 @@ def delete_asset_type(
         raise HTTPException(status_code=404, detail="Asset type not found")
     if item.system_defined:
         raise HTTPException(status_code=409, detail="System asset types cannot be deleted")
+    from app.models import ConnectorMapping
+    if db.scalar(select(ConnectorMapping.id).where(ConnectorMapping.kind == "asset", ConnectorMapping.target_key == item.key).limit(1)):
+        raise HTTPException(409, "Asset type is in use by Connector mappings; deactivate it or change the mappings first")
     requirement_references = requirements_referencing(db, item.id)
     if requirement_references:
         names = ", ".join(requirement.name for requirement in requirement_references[:5])
@@ -495,6 +498,9 @@ def delete_relationship_type(
         raise HTTPException(status_code=404, detail="Relationship type not found")
     if item.system_defined:
         raise HTTPException(status_code=409, detail="System relationship types cannot be deleted")
+    from app.models import ConnectorMapping
+    if db.scalar(select(ConnectorMapping.id).where(ConnectorMapping.kind == "relationship", ConnectorMapping.target_key == item.key).limit(1)):
+        raise HTTPException(409, "Relationship type is in use by Connector mappings; deactivate it or change the mappings first")
     requirement_references = requirements_referencing(db, item.id)
     if requirement_references:
         names = ", ".join(requirement.name for requirement in requirement_references[:5])

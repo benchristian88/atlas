@@ -110,3 +110,14 @@ the package's recorded commit.
 
 Maintainers use the separate [release development guide](../development/releasing.md)
 and [distribution architecture](../architecture/release-distribution.md).
+
+## Integration artifact packaging
+
+Both distributions carry the exact Apache-2.0 SDK 1.1.0 wheel/mandatory hash lock,
+its licence/notice, the isolated runtime baseline/SBOM and the digest-pinned Proxmox
+Test Connection-only archive/catalogue descriptor. SDK version is tooling metadata,
+not the Atlas release version. Native install and upgrade copy the vendor artifact;
+Docker API/runtime install it offline with hash verification. Canonical schemas
+are wheel resources; documentation fixtures are excluded from production runtime
+consumption. Remote Connector Release assets remain disabled pending real
+attestation qualification. See [I2 evidence](../architecture/integrations/i2-completion-report.md).

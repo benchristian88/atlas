@@ -66,6 +66,7 @@ export async function apiRequest(path, options = {}) {
     }
     let detail = `Atlas API request failed with status ${response.status}.`;
     if (typeof body?.detail === "string") detail = body.detail;
+    if (typeof body?.detail?.message === "string") detail = body.detail.message;
     if (Array.isArray(body?.detail)) {
       detail = body.detail.map((item) => item.msg).filter(Boolean).join(", ") || detail;
     }

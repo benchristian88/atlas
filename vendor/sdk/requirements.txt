@@ -1,0 +1,1 @@
+atlas-connector-sdk==1.1.0 --hash=sha256:a01cf35d47ab2f791375586114527fca3ed6335a7611cff14a6e8475c8380e0e
