@@ -11,17 +11,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    AssetInterface,
     AssetRelationship,
     DataSource,
     DiscoveryRun,
     EvidenceRecord,
     ReconciliationItem,
+    Network,
 )
 from app.schemas import SimulatedDiscoveryRequest
 from app.services.entity_resolution import (
     AssetResolution,
     normalized_name,
     resolve_asset_identity,
+    technical_link,
 )
 from app.services.data_sources import manual_inventory_source
 from app.services.knowledge_assertions import accept_assertion, confirm, record_assertion
@@ -100,6 +103,29 @@ def run_simulation(
     db.add(run)
     db.flush()
 
+    return ingest_observations(db, payload=payload, user_id=user_id, source=source,
+        run=run, observed_at=now, finalise=True)
+
+
+def ingest_observations(db, *, payload, user_id, source, run, observed_at,
+        finalise=False, evidence_by_identity=None, memberships=None, namespaced_facts=None, relationship_observations=None):
+    """Shared evidence/assertion/reconciliation owner for validated observations.
+
+    The simulation creates its own run/evidence. AIP supplies an existing durable
+    run and immutable evidence/membership from its receipt transaction. Neither
+    adapter changes accepted records or decides absence before finalisation.
+    """
+    now = observed_at
+    memberships = memberships or {}
+    namespaced_facts = namespaced_facts or {}
+
+    def membership(**values):
+        existing = memberships.get((values["entity_type"], values["external_id"]))
+        if existing is not None:
+            existing.entity_id = values["entity_id"]
+            return existing
+        return record_observed_entity(db, run=run, **values)
+
     evidence_count = 0
     assertions_created = 0
     items: list[ReconciliationItem] = []
@@ -117,24 +143,24 @@ def run_simulation(
             f"simulated:{observation.asset_type}:{observation.name}"
         )
         raw = to_json_value(observation)
-        evidence = EvidenceRecord(
-            discovery_run_id=run.id,
-            data_source_id=source.id,
-            customer_id=payload.customer_id,
-            site_id=payload.site_id,
-            external_id=external_id,
-            entity_kind=observation.entity_kind,
-            payload_json=to_json_value(raw),
-            payload_hash=_payload_hash(raw),
-            observed_at=now,
-        )
-        db.add(evidence)
-        db.flush()
-        evidence_count += 1
+        evidence = evidence_by_identity.get((observation.entity_kind, external_id)) if evidence_by_identity is not None else None
+        if evidence is None:
+            evidence = EvidenceRecord(
+                discovery_run_id=run.id,
+                data_source_id=source.id,
+                customer_id=payload.customer_id,
+                site_id=payload.site_id,
+                external_id=external_id,
+                entity_kind=observation.entity_kind,
+                payload_json=to_json_value(raw),
+                payload_hash=_payload_hash(raw),
+                observed_at=now,
+            )
+            db.add(evidence)
+            db.flush()
+            evidence_count += 1
         if observation.entity_kind != "asset":
-            record_observed_entity(
-                db,
-                run=run,
+            membership(
                 entity_type=observation.entity_kind,
                 external_id=external_id,
                 entity_id=None,
@@ -159,9 +185,7 @@ def run_simulation(
             resolution.status = "pending_asset_acceptance"
         run_map[external_id] = resolution
         asset = resolution.asset
-        record_observed_entity(
-            db,
-            run=run,
+        membership(
             entity_type="asset",
             external_id=external_id,
             entity_id=asset.id if asset else None,
@@ -293,170 +317,195 @@ def run_simulation(
                     )
                 )
         asset_jobs.append((observation, evidence, external_id))
+        for fact in namespaced_facts.get(external_id, []):
+            assertion, created = record_assertion(db, customer_id=run.customer_id, site_id=run.site_id,
+                subject_type="asset", subject_id=asset.id if asset else None, subject_external_id=external_id,
+                predicate=fact["key"], value=fact["value"], data_source_id=source.id, discovery_run_id=run.id,
+                evidence_record_id=evidence.id, observed_at=now,
+                fact_metadata={name: fact[name] for name in ["value_type", "class", "cardinality"]})
+            assertions_created += int(created)
+            # One canonical fact carries a scalar or a complete value set. Its
+            # classification never grants accepted-record mutation authority.
+            if not assertion.is_accepted:
+                remember(create_item(db, assertion=assertion, category="changed", entity_type="asset",
+                    entity_id=asset.id if asset else None, candidate_external_id=external_id,
+                    current_value=None, observed_value={"field": fact["key"], "value": fact["value"]},
+                    recommended_action="Review source fact"))
 
-    # Pass two resolves relationship endpoints from durable links and the run map.
-    for observation, evidence, external_id in asset_jobs:
-        for relationship in observation.relationships:
-            source_resolution = run_map[external_id]
-            target_resolution = resolve_asset_identity(
-                db,
-                data_source_id=source.id,
-                customer_id=payload.customer_id,
-                site_id=payload.site_id,
-                external_id=relationship.target_external_id,
-                run_map=run_map,
-                allow_external_name_hint=True,
-                observed_at=now,
+    # Both adapters share relationship reconciliation, including durable sources
+    # with no new Asset observation in this run.
+    relationship_jobs = [(relationship, evidence, external_id)
+        for observation, evidence, external_id in asset_jobs for relationship in observation.relationships]
+    relationship_jobs.extend(relationship_observations or [])
+    for relationship, evidence, external_id in relationship_jobs:
+        source_resolution = run_map.get(external_id) or resolve_asset_identity(
+            db, data_source_id=source.id, customer_id=payload.customer_id, site_id=payload.site_id,
+            external_id=external_id, run_map=run_map, observed_at=now)
+        target_resolution = resolve_asset_identity(
+            db,
+            data_source_id=source.id,
+            customer_id=payload.customer_id,
+            site_id=payload.site_id,
+            external_id=relationship.target_external_id,
+            run_map=run_map,
+            allow_external_name_hint=True,
+            observed_at=now,
+        )
+        source_asset = source_resolution.asset
+        target_asset = target_resolution.asset
+        assertion, created = record_assertion(
+            db,
+            customer_id=payload.customer_id,
+            site_id=payload.site_id,
+            subject_type="asset",
+            subject_id=source_asset.id if source_asset else None,
+            subject_external_id=external_id,
+            predicate=relationship.relationship_type,
+            object_type="asset",
+            object_id=target_asset.id if target_asset else None,
+            object_external_id=relationship.target_external_id,
+            data_source_id=source.id,
+            discovery_run_id=run.id,
+            evidence_record_id=evidence.id,
+            observed_at=now,
+            truth_classification=relationship.truth_classification,
+            confidence=relationship.confidence,
+        )
+        assertions_created += int(created)
+        existing_relationship = None
+        competing_relationship = None
+        if source_asset is not None and target_asset is not None:
+            existing_relationship = db.scalar(
+                select(AssetRelationship).where(
+                    AssetRelationship.source_asset_id == source_asset.id,
+                    AssetRelationship.target_asset_id == target_asset.id,
+                    AssetRelationship.relationship_type == relationship.relationship_type,
+                )
             )
-            source_asset = source_resolution.asset
-            target_asset = target_resolution.asset
-            assertion, created = record_assertion(
+            if existing_relationship is None:
+                competing = list(
+                    db.scalars(
+                        select(AssetRelationship).where(
+                            AssetRelationship.source_asset_id == source_asset.id,
+                            AssetRelationship.target_asset_id == target_asset.id,
+                        )
+                    )
+                )
+                if len(competing) == 1:
+                    competing_relationship = competing[0]
+        observed_value = {
+            "source_external_id": external_id,
+            "target_external_id": relationship.target_external_id,
+            "relationship_type": relationship.relationship_type,
+            "resolved_source_asset_id": source_asset.id if source_asset else None,
+            "resolved_target_asset_id": target_asset.id if target_asset else None,
+            "resolved_source_name": source_asset.name if source_asset else None,
+            "resolved_target_name": target_asset.name if target_asset else None,
+            "source_resolution_status": source_resolution.status,
+            "target_resolution_status": target_resolution.status,
+            "blocked_reason": None,
+            "current_relationship_id": (
+                existing_relationship.id
+                if existing_relationship
+                else competing_relationship.id
+                if competing_relationship
+                else None
+            ),
+        }
+        unresolved = []
+        if source_asset is None:
+            unresolved.append(f"source {external_id} ({source_resolution.status})")
+        if target_asset is None:
+            unresolved.append(
+                f"target {relationship.target_external_id} ({target_resolution.status})"
+            )
+        if unresolved:
+            observed_value["blocked_reason"] = (
+                f"Unresolved relationship endpoint: {', '.join(unresolved)}"
+            )
+        if existing_relationship is not None:
+            confirm(assertion)
+            if created:
+                record_assertion_change(
+                    db,
+                    assertion=assertion,
+                    change_type="assertion_confirmed",
+                    entity_name=f"{source_asset.name} → {target_asset.name}",
+                    summary=f"Confirmed {source_asset.name} {relationship.relationship_type.replace('_', ' ')} {target_asset.name}",
+                    actor_user_id=user_id,
+                    new_value={
+                        "source_asset_id": source_asset.id,
+                        "target_asset_id": target_asset.id,
+                        "relationship_type": relationship.relationship_type,
+                    },
+                )
+            for stale_item in db.scalars(
+                select(ReconciliationItem).where(
+                    ReconciliationItem.assertion_id == assertion.id,
+                    ReconciliationItem.entity_type == "asset_relationship",
+                    ReconciliationItem.status.in_(("open", "deferred")),
+                )
+            ):
+                stale_item.status = "accepted"
+                stale_item.entity_id = existing_relationship.id
+                stale_item.decision_reason = (
+                    "Existing operational relationship corroborated by discovery"
+                )
+                stale_item.decided_by_user_id = user_id
+                stale_item.decided_at = now
+            manual = manual_inventory_source(
+                db, payload.customer_id, payload.site_id
+            )
+            declared, declared_created = record_assertion(
                 db,
                 customer_id=payload.customer_id,
                 site_id=payload.site_id,
                 subject_type="asset",
-                subject_id=source_asset.id if source_asset else None,
-                subject_external_id=external_id,
+                subject_id=source_asset.id,
                 predicate=relationship.relationship_type,
                 object_type="asset",
-                object_id=target_asset.id if target_asset else None,
-                object_external_id=relationship.target_external_id,
-                data_source_id=source.id,
-                discovery_run_id=run.id,
-                evidence_record_id=evidence.id,
-                observed_at=now,
+                object_id=target_asset.id,
+                truth_classification="declared",
+                data_source_id=manual.id,
+                observed_at=existing_relationship.created_at or now,
             )
-            assertions_created += int(created)
-            existing_relationship = None
-            competing_relationship = None
-            if source_asset is not None and target_asset is not None:
-                existing_relationship = db.scalar(
-                    select(AssetRelationship).where(
-                        AssetRelationship.source_asset_id == source_asset.id,
-                        AssetRelationship.target_asset_id == target_asset.id,
-                        AssetRelationship.relationship_type == relationship.relationship_type,
-                    )
-                )
-                if existing_relationship is None:
-                    competing = list(
-                        db.scalars(
-                            select(AssetRelationship).where(
-                                AssetRelationship.source_asset_id == source_asset.id,
-                                AssetRelationship.target_asset_id == target_asset.id,
-                            )
-                        )
-                    )
-                    if len(competing) == 1:
-                        competing_relationship = competing[0]
-            observed_value = {
-                "source_external_id": external_id,
-                "target_external_id": relationship.target_external_id,
-                "relationship_type": relationship.relationship_type,
-                "resolved_source_asset_id": source_asset.id if source_asset else None,
-                "resolved_target_asset_id": target_asset.id if target_asset else None,
-                "resolved_source_name": source_asset.name if source_asset else None,
-                "resolved_target_name": target_asset.name if target_asset else None,
-                "source_resolution_status": source_resolution.status,
-                "target_resolution_status": target_resolution.status,
-                "blocked_reason": None,
-                "current_relationship_id": (
-                    existing_relationship.id
-                    if existing_relationship
-                    else competing_relationship.id
+            accept_assertion(db, declared, user_id=user_id)
+            assertions_created += int(declared_created)
+            continue
+        remember(
+            create_item(
+                db,
+                assertion=assertion,
+                category=("contradiction" if competing_relationship else "inferred_relationship"),
+                entity_type="asset_relationship",
+                entity_id=None,
+                candidate_external_id=external_id,
+                current_value=(
+                    {
+                        "relationship_id": competing_relationship.id,
+                        "source_asset_id": source_asset.id,
+                        "source_name": source_asset.name,
+                        "relationship_type": competing_relationship.relationship_type,
+                        "target_asset_id": target_asset.id,
+                        "target_name": target_asset.name,
+                    }
                     if competing_relationship
-                    else None
+                    else "No current relationship"
                 ),
-            }
-            unresolved = []
-            if source_asset is None:
-                unresolved.append(f"source {external_id} ({source_resolution.status})")
-            if target_asset is None:
-                unresolved.append(
-                    f"target {relationship.target_external_id} ({target_resolution.status})"
-                )
-            if unresolved:
-                observed_value["blocked_reason"] = (
-                    f"Unresolved relationship endpoint: {', '.join(unresolved)}"
-                )
-            if existing_relationship is not None:
-                confirm(assertion)
-                if created:
-                    record_assertion_change(
-                        db,
-                        assertion=assertion,
-                        change_type="assertion_confirmed",
-                        entity_name=f"{source_asset.name} → {target_asset.name}",
-                        summary=f"Confirmed {source_asset.name} {relationship.relationship_type.replace('_', ' ')} {target_asset.name}",
-                        actor_user_id=user_id,
-                        new_value={
-                            "source_asset_id": source_asset.id,
-                            "target_asset_id": target_asset.id,
-                            "relationship_type": relationship.relationship_type,
-                        },
-                    )
-                for stale_item in db.scalars(
-                    select(ReconciliationItem).where(
-                        ReconciliationItem.assertion_id == assertion.id,
-                        ReconciliationItem.entity_type == "asset_relationship",
-                        ReconciliationItem.status.in_(("open", "deferred")),
-                    )
-                ):
-                    stale_item.status = "accepted"
-                    stale_item.entity_id = existing_relationship.id
-                    stale_item.decision_reason = (
-                        "Existing operational relationship corroborated by discovery"
-                    )
-                    stale_item.decided_by_user_id = user_id
-                    stale_item.decided_at = now
-                manual = manual_inventory_source(
-                    db, payload.customer_id, payload.site_id
-                )
-                declared, declared_created = record_assertion(
-                    db,
-                    customer_id=payload.customer_id,
-                    site_id=payload.site_id,
-                    subject_type="asset",
-                    subject_id=source_asset.id,
-                    predicate=relationship.relationship_type,
-                    object_type="asset",
-                    object_id=target_asset.id,
-                    truth_classification="declared",
-                    data_source_id=manual.id,
-                    observed_at=existing_relationship.created_at or now,
-                )
-                accept_assertion(db, declared, user_id=user_id)
-                assertions_created += int(declared_created)
-                continue
-            remember(
-                create_item(
-                    db,
-                    assertion=assertion,
-                    category=("contradiction" if competing_relationship else "inferred_relationship"),
-                    entity_type="asset_relationship",
-                    entity_id=None,
-                    candidate_external_id=external_id,
-                    current_value=(
-                        {
-                            "relationship_id": competing_relationship.id,
-                            "source_asset_id": source_asset.id,
-                            "source_name": source_asset.name,
-                            "relationship_type": competing_relationship.relationship_type,
-                            "target_asset_id": target_asset.id,
-                            "target_name": target_asset.name,
-                        }
-                        if competing_relationship
-                        else "No current relationship"
-                    ),
-                    observed_value=observed_value,
-                    recommended_action=(
-                        "Resolve relationship endpoints"
-                        if unresolved
-                        else "Update relationship"
-                        if competing_relationship
-                        else "Create relationship"
-                    ),
-                )
+                observed_value=observed_value,
+                recommended_action=(
+                    "Resolve relationship endpoints"
+                    if unresolved
+                    else "Update relationship"
+                    if competing_relationship
+                    else "Create relationship"
+                ),
             )
+        )
+
+    if not finalise:
+        db.flush()
+        return run, evidence_count, assertions_created, items
 
     run.status = "completed"
     run.finished_at = datetime.now(timezone.utc)
@@ -487,3 +536,54 @@ def run_simulation(
     source.last_success_at = run.finished_at
     run.snapshot_reconciliation = snapshot
     return run, evidence_count, assertions_created, items
+
+
+def ingest_technical_observation(db, *, run, source, evidence, observation, entity_type, user_id):
+    """Canonical Network/Interface evidence enters the same review machinery."""
+    link = technical_link(db, data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id,
+        entity_type=entity_type, external_id=observation["external_id"])
+    target_id = (link.network_id if entity_type == "network" else link.interface_id) if link else None
+    target = db.get(Network if entity_type == "network" else AssetInterface, target_id) if target_id else None
+    if link:
+        link.last_observed_at = evidence.observed_at
+    fields = ["name", "network_type", "vlan_id", "cidr", "gateway"] if entity_type == "network" else [
+        "name", "asset_external_id", "network_external_id", "ip_address", "mac_address", "is_primary"]
+    observed = {name: observation.get(name) for name in fields}
+    assertion, created = record_assertion(db, customer_id=run.customer_id, site_id=run.site_id,
+        subject_type=entity_type, subject_id=target_id, subject_external_id=observation["external_id"],
+        predicate="configuration", value=observed, data_source_id=source.id,
+        discovery_run_id=run.id, evidence_record_id=evidence.id, observed_at=evidence.observed_at)
+    item_count = 0
+    current = {name: getattr(target, name, None) for name in fields} if target else None
+    if target is not None and entity_type == "asset_interface":
+        # Source identities resolve through links; canonical interfaces store IDs.
+        owner_link = technical_link(db, data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id,
+            entity_type="asset", external_id=observed["asset_external_id"])
+        network_link = technical_link(db, data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id,
+            entity_type="network", external_id=observed["network_external_id"]) if observed["network_external_id"] else None
+        current["asset_external_id"] = observed["asset_external_id"] if owner_link and owner_link.entity_id == target.asset_id else None
+        current["network_external_id"] = observed["network_external_id"] if network_link and network_link.network_id == target.network_id else None
+    if not assertion.is_accepted or current != observed:
+        item, item_created = create_item(db, assertion=assertion,
+            category="changed" if target else "newly_discovered", entity_type=entity_type, entity_id=target_id,
+            candidate_external_id=observation["external_id"],
+            current_value=current,
+            observed_value=observed, recommended_action="Review technical observation")
+        item_count += int(item_created)
+        if item_created and target is None:
+            record_assertion_change(db, assertion=assertion, item=item, change_type="entity_discovered",
+                entity_name=observation["name"], summary="Discovered " + observation["name"],
+                actor_user_id=user_id, new_value=observed)
+    for fact in observation["facts"]:
+        claim, new = record_assertion(db, customer_id=run.customer_id, site_id=run.site_id,
+            subject_type=entity_type, subject_id=target_id, subject_external_id=observation["external_id"],
+            predicate=fact["key"], value=fact["value"], data_source_id=source.id, discovery_run_id=run.id,
+            evidence_record_id=evidence.id, observed_at=evidence.observed_at,
+            fact_metadata={name: fact[name] for name in ["value_type", "class", "cardinality"]})
+        created += int(new)
+        if not claim.is_accepted:
+            _, new_item = create_item(db, assertion=claim, category="changed", entity_type=entity_type,
+                entity_id=target_id, candidate_external_id=observation["external_id"], current_value=None,
+                observed_value={"field": fact["key"], "value": fact["value"]}, recommended_action="Review source fact")
+            item_count += int(new_item)
+    return int(created), item_count, target_id

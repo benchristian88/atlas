@@ -269,6 +269,31 @@ def configure_runtime():
     configure(CONFIGURATION, STATE.parent / "atlas-connectors")
 
 
+def configure_worker(values, configuration=None):
+    """Root-owned filtered environment; no user/session or publishing secret."""
+    import secrets
+    configuration = configuration or CONFIGURATION
+    path = configuration.parent / "worker.env"
+    if any(parent.is_symlink() for parent in (path, *path.parents)):
+        raise ValueError("Worker configuration must not be a symlink")
+    allowed = {"DATABASE_URL", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD",
+        "REDIS_URL", "ATLAS_DATA_ENCRYPTION_KEY", "ATLAS_INSTALL_METHOD", "ATLAS_RUNTIME_ENABLED", "ATLAS_RUNTIME_URL",
+        "ATLAS_RUNTIME_CONTROL_SECRET_FILE", "ATLAS_CONNECTOR_STORE_PATH", "ATLAS_RUNTIME_BASELINE_FILE"}
+    if any(not isinstance(values[name], str) or any(character in values[name] for character in "\n\r\x00") for name in allowed & values.keys()):
+        raise ValueError("Invalid worker environment value")
+    content = "".join(f"{name}={values[name]}\n" for name in sorted(allowed & values.keys()))
+    temporary = path.parent / ("worker-" + secrets.token_hex(16))
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(descriptor, "w") as target:
+            target.write(content)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def start_runtime(values):
     try:
         if values.get("ATLAS_RUNTIME_ENABLED", "true").lower() in {"false", "0", "no"}:
@@ -337,6 +362,7 @@ def install(ingress, needs_nginx, *, runtime_enabled=True):
     python = str(DESTINATION / "venv/bin/python")
     run(["systemctl", "enable", "--now", "postgresql.service", "redis-server.service"])
     values = dict(line.split("=", 1) for line in CONFIGURATION.read_text().splitlines() if line and not line.startswith("#"))
+    configure_worker(values)
     # Peer-authenticated local provisioning. Password is passed on stdin,
     # never in psql arguments, SQL logs or shell history. Existing DB/role
     # names cause refusal; no existing user data is reinterpreted.

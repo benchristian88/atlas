@@ -8,7 +8,9 @@ status was updated on 11 October 2026 against
 after merged baseline `77eeff71e9a803f0f665ffa150b24537e29b83a6`.
 I2 implementation was updated on 12 October 2026 after merged I1 baseline
 `7e2a8c9ec1e04b27e1f32153347380f05d4d9a59`. Current implementation and validation
-boundaries are recorded in the [I2 report](../architecture/integrations/i2-completion-report.md);
+boundaries are recorded in the [I2 report](../architecture/integrations/i2-completion-report.md).
+I3 generic orchestration/ingestion is implemented on the I2 baseline; current
+validation is recorded in the [I3 report](../architecture/integrations/i3-completion-report.md);
 the [I1 record](../architecture/integrations/i1-completion-report.md) remains historical.
 Code, migrations,
 reachable routes and regression tests determine implementation status. A status
@@ -52,7 +54,8 @@ recorded separately.
 | Canonical Integration contracts | Implemented | Separate Apache-2.0 SDK 1.1.0 consumed by exact hash in Atlas and official Connectors. Original AIP/Manifest v1 bytes unchanged; additive Manifest 1.1 probe-only support. Documentation schema files are references; legacy AGPL plugin code unchanged. |
 | Runtime and catalogue shell | Implemented | Authenticated isolated runtime, protected exact-package store, global installed-state/RBAC and Configured/Catalogue/Runtime UI. Pinned Proxmox Test Connection-only bootstrap package; Docker/UniFi are metadata only. Docker image builds/upgrade, trusted bootstrap staging and UI package installation are operator-confirmed. Native runtime/platform acceptance and remote provenance remain follow-ups. |
 | Generic configuration and Test Connection | Implemented | Scoped Integration/DataSource, manifest-driven create/detail, write-only AES-GCM credentials using existing data key/portable rewrap, global versioned taxonomy mappings, safe update ownership gates and bounded verified private-runtime probes. Live fingerprint-pinned Proxmox 9.2.11 authentication, saved encrypted credentials and probes after runtime restart are operator-confirmed. Source versions remain explicitly unqualified/untested; no discovery is claimed. See [I2 evidence](../architecture/integrations/i2-completion-report.md). |
-| Generic configured discovery | Planned but not implemented | I3 worker dispatch, Run Now, scheduling, AIP ingestion/callbacks and I4–I6 vendor discovery/qualification remain separate. Remote packages fail closed until an approved provenance verifier is qualified. |
+| Generic discovery orchestration and ingestion | Implemented | I3 durable PostgreSQL runs/receipts/provenance, worker/Redis dispatch, fixed schedules, separate run credentials, verified bounded runtime jobs, canonical AIP into existing evidence/reconciliation/absence services, cancellation/recovery and existing UI extensions. Deterministic test-only executable acceptance; no production discovery Connector. Live Docker/native I3 acceptance remains an operator follow-up. See [I3 evidence](../architecture/integrations/i3-completion-report.md). |
+| Production Connector inventory discovery | Planned but not implemented | I4–I6 own vendor discovery and qualification. Official Proxmox 0.1.0 remains discover=false and unqualified. Remote executable packages fail closed until approved provenance is qualified. |
 | Generated operational documents | Partially implemented | `services/markdown_docs.py` generates Markdown and Document records store it. Dedicated document browsing/review is not yet an end-to-end feature. |
 | Guided onboarding | Planned but not implemented | Secure first-run administrator creation exists; guided initial knowledge setup is separate upcoming work. |
 | Final screenshots and documentation freeze | Planned but not implemented | Feature descriptions and screenshots will be refreshed after integration/onboarding work. No stale product screenshots are advertised. |

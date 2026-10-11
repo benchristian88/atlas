@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "integration_secrets",
     "connector_mappings",
     "discovery_runs",
+    "discovery_batch_receipts",
     "data_sources",
     "entity_source_links",
     "evidence_records",
@@ -146,7 +147,7 @@ CRITICAL_COLUMNS = {
         "last_observed_at", "valid_from", "valid_to", "superseded_by_id",
         "is_current", "is_source_current", "is_accepted", "accepted_at",
         "accepted_by_user_id", "retracted_at", "retracted_by_user_id",
-        "retraction_reason", "created_at", "updated_at",
+        "retraction_reason", "fact_metadata", "created_at", "updated_at",
     },
     "knowledge_requirement_definitions": {
         "id", "key", "name", "description", "entity_type", "asset_type_id", "service_type_id",

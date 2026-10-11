@@ -19,7 +19,9 @@ Environment=ATLAS_CONNECTOR_STORE_PATH=/var/lib/atlas-connectors
 ExecStart=/opt/atlas/runtime-venv/bin/python -m atlas_runtime.server
 Restart=on-failure
 RestartSec=15
-TimeoutStopSec=30
+TimeoutStopSec=40
+MemoryMax=1G
+TasksMax=128
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

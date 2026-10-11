@@ -54,7 +54,7 @@ def test_success_failure_timeout_cleanup_no_credentials_in_argv_or_environment(i
             path = self.root / "result.json"
             path.write_text(json.dumps(output))
             path.chmod(0o600)
-        def wait(self): pass
+        def wait(self, timeout=None): pass
     monkeypatch.setattr(probe.subprocess, "Popen", Process)
     result = runtime.test_connection(payload)
     assert result["category"] == outcome

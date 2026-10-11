@@ -50,7 +50,7 @@ def test_dry_run_and_byte_reproducibility(packages, tmp_path):
     assert {path.name: path.read_bytes() for path in output.iterdir()} == {path.name: path.read_bytes() for path in other.iterdir()}
     assert release["version"] == policy.load_metadata()["version"]
     assert release["source_state"] == "working_tree"
-    assert release["current_schema"] == "20261012_0028"
+    assert release["current_schema"] == "20261012_0029"
     assert packager.verify(output) == release
     with pytest.raises(ValueError, match="cannot be published"): packager.verify(output, require_committed=True)
     with pytest.raises(ValueError, match="exactly match"): packager.verify(output, tag="v99.0.0")
@@ -325,6 +325,7 @@ def test_native_upgrade_reuses_install_primitives_and_preserves_state(monkeypatc
     (state / "identity").write_text("preserve state")
     monkeypatch.setattr(module, "ROOT", source)
     monkeypatch.setattr(native, "DESTINATION", destination)
+    monkeypatch.setattr(native, "CONFIGURATION", configuration)
     monkeypatch.setattr(module.os, "geteuid", lambda: 0)
     monkeypatch.setattr(module.pwd, "getpwnam", lambda name: type("Account", (), {"pw_uid": 10001, "pw_gid": 10001})())
     monkeypatch.setattr(module.shutil, "which", lambda name: "/usr/bin/" + name)

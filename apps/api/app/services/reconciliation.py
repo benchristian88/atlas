@@ -16,6 +16,7 @@ from app.models import (
     AssetRelationship,
     AssetType,
     Customer,
+    DataSource,
     KnowledgeAssertion,
     Network,
     ReconciliationItem,
@@ -27,6 +28,8 @@ from app.services.entity_resolution import (
     AssetResolution,
     ensure_asset_link,
     resolve_asset_identity,
+    ensure_technical_link,
+    technical_link,
 )
 from app.services.knowledge_assertions import accept_assertion, confirm, reject
 from app.services.knowledge_changes import record_assertion_change
@@ -250,6 +253,11 @@ def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
         raise HTTPException(status_code=409, detail="The target asset no longer exists")
     value = dict(item.observed_value_json or {})
     field = value.get("field")
+    assertion = _assertion_for_item(db, item)
+    if assertion.fact_metadata is not None and field == assertion.predicate and "." in field:
+        # Accepted namespaced facts live in the existing assertion knowledge
+        # model. They are never aliases for canonical Asset columns.
+        return asset
     if field not in SAFE_ASSET_FIELDS:
         raise HTTPException(status_code=422, detail="This fact cannot be applied automatically")
     if field == "asset_type":
@@ -552,7 +560,9 @@ def accept_item(
         raise HTTPException(status_code=409, detail="This item has already been decided")
     assertion = _assertion_for_item(db, item)
     previous_value = item.current_value_json
-    if item.entity_type == "asset" and item.category in {"newly_discovered", "possible_duplicate"}:
+    if item.entity_type in {"network", "asset_interface"}:
+        result = _accept_technical(db, item, assertion)
+    elif item.entity_type == "asset" and item.category in {"newly_discovered", "possible_duplicate"}:
         result = _accept_new_asset(db, item)
     elif item.entity_type == "asset" and item.category in {"changed", "contradiction"}:
         result = _accept_changed_fact(db, item)
@@ -611,6 +621,95 @@ def accept_item(
             occurred_at=item.decided_at,
         )
     return result
+
+
+def _accept_technical(db, item, assertion):
+    source = db.get(DataSource, assertion.data_source_id) if assertion.data_source_id else None
+    if source is None or source.customer_id != item.customer_id or source.site_id not in {None, item.site_id}:
+        raise HTTPException(409, "The technical source context is unavailable")
+    kind = item.entity_type
+    link = technical_link(db, data_source_id=source.id, customer_id=item.customer_id, site_id=item.site_id,
+        entity_type=kind, external_id=item.candidate_external_id)
+    target_id = (link.network_id if kind == "network" else link.interface_id) if link else None
+    target = db.get(Network if kind == "network" else AssetInterface, target_id) if target_id else None
+    value = assertion.value_json
+    if assertion.fact_metadata is not None:
+        if target is None:
+            raise HTTPException(409, "Accept the technical entity before its source facts")
+    elif kind == "network":
+        fields = {name: value.get(name) for name in ["name", "network_type", "vlan_id", "cidr", "gateway"]}
+        if target is None:
+            existing = db.scalar(select(Network).where(Network.customer_id == item.customer_id,
+                Network.site_id == item.site_id, Network.name == fields["name"]))
+            if existing:
+                raise HTTPException(409, "An existing network has this name; explicitly link the source identity before applying changes")
+            target = Network(customer_id=item.customer_id, site_id=item.site_id, **fields)
+            db.add(target)
+            db.flush()
+        else:
+            for name, field_value in fields.items():
+                setattr(target, name, field_value)
+    else:
+        asset_link = technical_link(db, data_source_id=source.id, customer_id=item.customer_id,
+            site_id=item.site_id, entity_type="asset", external_id=value["asset_external_id"])
+        if asset_link is None:
+            raise HTTPException(409, "Accept or link the source Asset before its interface")
+        network_link = technical_link(db, data_source_id=source.id, customer_id=item.customer_id,
+            site_id=item.site_id, entity_type="network", external_id=value["network_external_id"]) if value.get("network_external_id") else None
+        if value.get("network_external_id") and network_link is None:
+            raise HTTPException(409, "Accept or link the source Network before its interface")
+        fields = {name: value.get(name) for name in ["name", "ip_address", "mac_address", "is_primary"]}
+        fields.update(asset_id=asset_link.entity_id, network_id=network_link.network_id if network_link else None)
+        if target is None:
+            existing = db.scalar(select(AssetInterface).where(AssetInterface.asset_id == fields["asset_id"], AssetInterface.name == fields["name"]))
+            if existing:
+                raise HTTPException(409, "An existing interface has this name; explicitly link its source identity before applying changes")
+            target = AssetInterface(**fields)
+            db.add(target)
+            db.flush()
+        else:
+            if target.asset_id != fields["asset_id"]:
+                raise HTTPException(409, "Interface ownership changes require explicit review")
+            for name, field_value in fields.items():
+                setattr(target, name, field_value)
+    ensure_technical_link(db, source=source, target=target, entity_type=kind,
+        external_id=item.candidate_external_id, observed_at=assertion.last_observed_at)
+    item.entity_id = assertion.subject_id = target.id
+    for claim in db.scalars(select(KnowledgeAssertion).where(KnowledgeAssertion.data_source_id == source.id,
+            KnowledgeAssertion.subject_type == kind, KnowledgeAssertion.subject_external_id == item.candidate_external_id,
+            KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id)):
+        claim.subject_id = target.id
+    return target
+
+
+def link_item_to_technical(db, *, item, target, user, reason=None):
+    """Explicit source association preserves the manually curated configuration."""
+    if item.status not in {"open", "deferred"} or item.category != "newly_discovered":
+        raise HTTPException(409, "This technical identity has already been resolved")
+    assertion = _assertion_for_item(db, item)
+    source = db.get(DataSource, assertion.data_source_id)
+    if source is None or assertion.predicate != "configuration":
+        raise HTTPException(422, "This item cannot link a technical identity")
+    if item.entity_type == "asset_interface":
+        owner = db.get(Asset, target.asset_id)
+        value = assertion.value_json
+        owner_link = technical_link(db, data_source_id=source.id, customer_id=item.customer_id,
+            site_id=item.site_id, entity_type="asset", external_id=value["asset_external_id"])
+        if owner is None or owner_link is None or owner_link.entity_id != owner.id:
+            raise HTTPException(409, "The source and target interface must have the same accepted Asset owner")
+    ensure_technical_link(db, source=source, target=target, entity_type=item.entity_type,
+        external_id=item.candidate_external_id, observed_at=assertion.last_observed_at)
+    item.entity_id = assertion.subject_id = target.id
+    item.status, item.decision_reason = "accepted", reason or "Linked source identity; accepted configuration retained"
+    item.decided_by_user_id, item.decided_at = user.id, datetime.now(timezone.utc)
+    # Identity association is not acceptance of the observed configuration.
+    record_assertion_change(db, assertion=assertion, item=item, change_type="source_linked",
+        entity_name=target.name, summary="Linked technical source identity to " + target.name,
+        actor_user_id=user.id, new_value={"entity_id": target.id}, occurred_at=item.decided_at)
+    create_item(db, assertion=assertion, category="changed", entity_type=item.entity_type, entity_id=target.id,
+        candidate_external_id=item.candidate_external_id, current_value=None,
+        observed_value=assertion.value_json, recommended_action="Review source configuration after linking")
+    return target
 
 
 def link_item_to_asset(

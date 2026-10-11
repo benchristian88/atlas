@@ -173,6 +173,8 @@ def can_delete_discovery_run(db: Session, run: DiscoveryRun) -> DeletionSafety:
         "later_dependencies": later_dependencies,
     }
     reasons = []
+    if run.execution_provenance is not None:
+        reasons.append("Integration discovery execution history must be archived")
     if not explicitly_deletable:
         reasons.append("Only simulated or manual discovery runs can be deleted")
     if confirmed_assertions:
@@ -296,7 +298,9 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
             select(func.count()).select_from(EntitySourceLink).where(
                 EntitySourceLink.data_source_id == assertion.data_source_id,
                 EntitySourceLink.external_id == assertion.subject_external_id,
-                EntitySourceLink.entity_id == assertion.subject_id,
+                EntitySourceLink.entity_type == assertion.subject_type,
+                ({"network": EntitySourceLink.network_id, "asset_interface": EntitySourceLink.interface_id}
+                    .get(assertion.subject_type, EntitySourceLink.entity_id)) == assertion.subject_id,
             ),
         )
     counts = {

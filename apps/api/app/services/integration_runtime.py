@@ -78,7 +78,8 @@ def _endpoint() -> str:
 
 
 async def control_request(operation: str, reference: dict | None = None) -> dict:
-    paths = {"health": "/v1/health", "capabilities": "/v1/capabilities", "verify_connector": "/v1/connectors/verify", "test_connection": "/v1/connectors/test-connection"}
+    paths = {"health": "/v1/health", "capabilities": "/v1/capabilities", "verify_connector": "/v1/connectors/verify", "test_connection": "/v1/connectors/test-connection",
+        "run_discovery": "/v1/discovery/start", "get_job": "/v1/discovery/status", "cancel_job": "/v1/discovery/cancel"}
     if operation not in paths:
         raise ValueError("Operation is unavailable in this release")
     endpoint, secret = _endpoint(), _control_secret()
@@ -89,7 +90,7 @@ async def control_request(operation: str, reference: dict | None = None) -> dict
                 headers={"Authorization": f"Bearer {secret}", "Accept": "application/json", "Accept-Encoding": "identity"}) as session:
             async with session.request("POST" if reference is not None else "GET", endpoint + paths[operation],
                     json=reference, allow_redirects=False) as response:
-                if response.status != 200 or response.content_type != "application/json":
+                if response.content_type != "application/json":
                     raise ValueError("Runtime control unavailable")
                 remaining, chunks = MAX_RESPONSE_BYTES, []
                 async for chunk in response.content.iter_chunked(8192):
@@ -100,7 +101,18 @@ async def control_request(operation: str, reference: dict | None = None) -> dict
                 payload = json.loads(b"".join(chunks))
                 if not isinstance(payload, dict):
                     raise ValueError("Invalid runtime response")
+                if response.status != 200:
+                    code = payload.get("diagnostic_code")
+                    if code in {"runtime_capacity", "conflicting_request", "package_unavailable", "discovery_unavailable"}:
+                        raise RuntimeControlError(code)
+                    raise ValueError("Runtime control unavailable")
                 return payload
+
+
+class RuntimeControlError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
 
 
 def _safe_health(payload: dict, capabilities: dict, baseline: dict) -> dict:
@@ -117,7 +129,8 @@ def _safe_health(payload: dict, capabilities: dict, baseline: dict) -> dict:
     if health.state not in {"healthy", "incompatible"} or health.packaging_mode not in {"systemd", "docker_compose", "development"}:
         raise ValueError("Invalid runtime state")
     operations = capabilities.get("operations")
-    if not isinstance(operations, list) or set(operations) not in ({"health", "capabilities", "verify_connector"}, {"health", "capabilities", "verify_connector", "test_connection"}):
+    if not isinstance(operations, list) or set(operations) not in ({"health", "capabilities", "verify_connector"}, {"health", "capabilities", "verify_connector", "test_connection"},
+            {"health", "capabilities", "verify_connector", "test_connection", "run_discovery", "get_job", "cancel_job"}):
         raise ValueError("Invalid runtime capabilities")
     aip = capabilities.get("aip_versions")
     dependencies = capabilities.get("dependencies")
@@ -143,6 +156,14 @@ def _safe_health(payload: dict, capabilities: dict, baseline: dict) -> dict:
         capabilities={"operations": sorted(operations), "aip_versions": aip,
             "dependencies": baseline["dependencies"] if compatible else {}, "collections": {}},
         baseline_version=baseline.get("baseline_version", "1.0.0"))
+    capacity = capabilities.get("discovery_capacity")
+    if capacity is not None:
+        if (not isinstance(capacity, dict) or set(capacity) != {"maximum", "active", "available"}
+                or any(type(value) is not int for value in capacity.values())
+                or capacity["maximum"] != 4 or not 0 <= capacity["active"] <= 4
+                or capacity["available"] != 4 - capacity["active"]):
+            raise ValueError("Invalid runtime capacity")
+        result["capabilities"]["discovery_capacity"] = capacity
     return result
 
 
@@ -197,14 +218,44 @@ class LocalIntegrationRuntime:
         except (OSError, ValueError, TypeError, aiohttp.ClientError, TimeoutError):
             return {"success": False, "category": "runtime_unavailable", "source_version": None}
 
-    async def start_discovery(self, *args, **kwargs):
-        raise NotImplementedError("Discovery is unavailable in this release")
+    async def _job(self, operation, payload):
+        import uuid
+        try:
+            result = await control_request(operation, payload)
+            if result == {"state": "unavailable", "diagnostic_code": "job_unavailable"}:
+                return result
+            if set(result) != {"request_id", "job_id", "state", "accepted_at", "started_at", "finished_at", "diagnostic_code"}:
+                raise ValueError
+            if result["request_id"] != str(payload["request_id"]) or str(uuid.UUID(result["job_id"])) != result["job_id"]:
+                raise ValueError
+            if payload.get("job_id") and result["job_id"] != payload["job_id"]:
+                raise ValueError
+            if result["state"] not in {"queued", "running", "succeeded", "failed", "cancelled"}:
+                raise ValueError
+            if result["diagnostic_code"] not in {None, "cancelled", "timeout", "invalid_aip", "missing_completion",
+                    "callback_unavailable", "callback_rejected", "source_unavailable", "runtime_unavailable"}:
+                raise ValueError
+            for name in ["accepted_at", "started_at", "finished_at"]:
+                if result[name] is not None:
+                    if not isinstance(result[name], str) or len(result[name]) > 40:
+                        raise ValueError
+                    datetime.fromisoformat(result[name])
+            return result
+        except RuntimeControlError as error:
+            return {"state": "unavailable", "diagnostic_code": error.code}
+        except (OSError, ValueError, TypeError, KeyError, aiohttp.ClientError, TimeoutError):
+            return {"state": "unavailable", "diagnostic_code": "runtime_unavailable"}
 
-    async def get_job(self, *args, **kwargs):
-        raise NotImplementedError("Discovery is unavailable in this release")
+    async def run_discovery(self, request):
+        return await self._job("run_discovery", request)
 
-    async def cancel_job(self, *args, **kwargs):
-        raise NotImplementedError("Discovery is unavailable in this release")
+    start_discovery = run_discovery
+
+    async def get_job(self, request_id, job_id=None):
+        return await self._job("get_job", {"request_id": str(request_id), "job_id": str(job_id) if job_id else None})
+
+    async def cancel_job(self, request_id, job_id=None):
+        return await self._job("cancel_job", {"request_id": str(request_id), "job_id": str(job_id) if job_id else None})
 
 
 runtime = LocalIntegrationRuntime()

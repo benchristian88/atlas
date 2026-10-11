@@ -100,10 +100,7 @@ def execute(runtime, payload):
             return {"success": False, "category": "source_unavailable", "source_version": None}
         finally:
             if process is not None:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                process.wait()
+                from atlas_runtime.jobs import stop_process
+                stop_process(process)
             # TemporaryDirectory removes inputs, Ansible artifacts and output on
             # every outcome. SIGKILL/reboot remnants are removed at startup.

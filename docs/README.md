@@ -18,6 +18,8 @@ Services you operate. See [project status](product/status.md) for the path to 1.
 ## Operations
 
 - [Security policy and reporting](../SECURITY.md).
+- [Integration runtime and catalogue](deployment/integration-runtime.md) and
+  [discovery runs and recovery](deployment/discovery-runs.md).
 - [Local MFA and recovery](deployment/mfa.md).
 - [Single-origin routing](deployment/single-origin.md) and
   [optional reverse proxies](deployment/reverse-proxy-examples.md).
@@ -57,7 +59,8 @@ Services you operate. See [project status](product/status.md) for the path to 1.
   [entity lifecycle](architecture/entity-lifecycle.md).
 - [Integration target architecture](architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
   and [implementation roadmap/contracts](architecture/integrations/integration-roadmap.md) —
-  accepted specification; live configured discovery remains upcoming.
+  accepted specification with generic I3 orchestration/ingestion implemented;
+  production vendor discovery remains upcoming.
 - [Architecture decisions](decisions/README.md) — decision rationale; implementation
   is established by the current code and tests.
 

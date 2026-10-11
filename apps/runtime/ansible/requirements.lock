@@ -1,4 +1,4 @@
-# Approved I1 runtime baseline. All direct and transitive dependencies pinned.
+# Approved I3 runtime baseline. All direct and transitive dependencies pinned.
 ansible-core==2.19.7
 ansible-runner==2.4.3
 cffi==2.1.1
@@ -13,3 +13,10 @@ pycparser==3.11
 python-daemon==3.1.2
 PyYAML==6.0.3
 resolvelib==1.2.1
+attrs==26.1.0
+jsonschema==4.25.1
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==2026.9.1
+typing_extensions==4.15.0
+psutil==7.2.2

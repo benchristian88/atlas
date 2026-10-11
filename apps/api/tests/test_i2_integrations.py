@@ -96,6 +96,17 @@ def test_scoped_creation_is_atomic_retry_safe_and_write_only(db, setup):
     assert all(value not in json.dumps([event.metadata_ for event in events]) for value in values)
 
 
+def test_official_probe_only_connector_cannot_run_or_schedule(db, setup):
+    from app.routes import integration_discovery as discovery
+    result = create(db, setup)
+    before = db.scalar(select(func.count()).select_from(DiscoveryRun))
+    for action in [discovery.run_now(result["id"], request(), setup[0], db),
+            discovery.set_schedule(result["id"], discovery.ScheduleInput(preset="hourly"), request(), setup[0], db)]:
+        with pytest.raises(HTTPException) as error: asyncio.run(action)
+        assert error.value.status_code == 409 and error.value.detail["code"] == "discovery_unavailable"
+    assert db.scalar(select(func.count()).select_from(DiscoveryRun)) == before
+
+
 def test_cross_scope_and_guessed_identity_never_disclose_or_mutate(db, setup):
     result = create(db, setup)
     principal, payload, _ = setup

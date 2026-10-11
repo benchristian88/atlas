@@ -131,6 +131,16 @@ class BackupService:
                 if invalid:
                     raise BackupError("Encrypted application data could not be restored.")
                 rewrap_application_data(db, opened.source_key, target_key)
+                from app.models import DiscoveryRun
+                from app.services.discovery_orchestration import fail_run
+                for run in db.scalars(select(DiscoveryRun).where(DiscoveryRun.execution_provenance.is_not(None),
+                        DiscoveryRun.status.in_(["pending", "running"]))):
+                    run.ingestion_generation = None
+                    if run.status in {"pending", "running"}:
+                        from app.models import Integration
+                        fail_run(run, db.get(Integration, run.integration_id), "restore_interrupted")
+                db.execute(update(DiscoveryRun).where(DiscoveryRun.execution_provenance.is_not(None))
+                    .values(ingestion_generation=None))
                 db.execute(update(User).values(session_version=User.session_version + 1))
                 db.execute(delete(MfaChallenge))
                 # Pending enrollment was rewrapped/authenticated above, then
@@ -175,6 +185,13 @@ class BackupService:
         try:
             request_lock = runtime.lock_file("requests.lock", exclusive=True, blocking=True)
             self.authorize_current(authorization)
+            if not recovery:
+                from app.models import DiscoveryRun
+                with Session(self.engine) as db:
+                    active = db.scalar(select(DiscoveryRun.id).where(DiscoveryRun.execution_provenance.is_not(None),
+                        DiscoveryRun.dispatch_state != "settled").limit(1))
+                    if active:
+                        raise BackupError("Cancel active discovery runs and wait for cleanup before restoring.")
             runtime.update_job(job_id, state="restoring", message="Restoring Atlas data…")
             if not recovery:
                 self.audit("restore.started", actor_email=authorization["actor_email"], metadata={"mode": authorization["mode"]})

@@ -49,8 +49,8 @@ def private_open(path: Path, flags: int):
     return fd
 
 
-def lock_file(name: str, *, exclusive: bool, blocking: bool = False):
-    fd = private_open(state_directory() / name, os.O_CREAT | os.O_RDWR)
+def lock_file(name: str, *, exclusive: bool, blocking: bool = False, read_only: bool = False):
+    fd = private_open(state_directory() / name, os.O_RDONLY if read_only else os.O_CREAT | os.O_RDWR)
     try:
         deadline = time.monotonic() + 60
         while True:
@@ -127,12 +127,12 @@ def clear_maintenance():
 
 
 @contextmanager
-def normal_operation():
+def normal_operation(*, read_only: bool = False):
     # Read the marker both before and after acquiring the shared lock. A
     # restorer writes the marker before waiting for existing requests to drain.
     if maintenance() is not None:
         raise BackupError("Atlas is in maintenance mode. A restore or local recovery is in progress.")
-    fd = lock_file("requests.lock", exclusive=False)
+    fd = lock_file("requests.lock", exclusive=False, read_only=read_only)
     try:
         if maintenance() is not None:
             raise BackupError("Atlas is in maintenance mode. A restore or local recovery is in progress.")

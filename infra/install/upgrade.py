@@ -92,7 +92,7 @@ def native_upgrade_preflight(values):
 
 
 def native_upgrade(values, *, prepared=None):
-    from native import DESTINATION, build_application, configure_runtime, ensure_nginx, install_units, start_runtime, stop_runtime, wait_for_health
+    from native import DESTINATION, build_application, configure_runtime, configure_worker, ensure_nginx, install_units, start_runtime, stop_runtime, wait_for_health
     import native_ingress
     ingress, needs_nginx = prepared if prepared is not None else native_upgrade_preflight(values)
     ensure_nginx(needs_nginx)  # Package failure precedes the maintenance window.
@@ -111,6 +111,7 @@ def native_upgrade(values, *, prepared=None):
             shutil.rmtree(destination)
         shutil.copytree(ROOT / name, destination)
     build_application(account)
+    configure_worker(values)
     install_units()
     start_runtime(values)
     run(["systemctl", "start", "atlas-api", "atlas-web", "atlas-worker"])

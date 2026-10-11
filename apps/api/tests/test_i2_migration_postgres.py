@@ -23,7 +23,7 @@ def test_i1_to_i2_upgrade_preserves_legacy_records_and_single_head(monkeypatch):
         customer = db.scalar(text("INSERT INTO customers (name,workspace_id) VALUES ('I2 migration',:workspace) RETURNING id"), {"workspace": workspace})
         site = db.scalar(text("INSERT INTO sites (name,customer_id) VALUES ('I2 migration',:customer) RETURNING id"), {"customer": customer})
         identifier = db.scalar(text("INSERT INTO integrations (customer_id,site_id,plugin_id,name,base_url,username_or_token_id,secret_reference) VALUES (:customer,:site,'legacy','Legacy','https://example.test','legacy-identity','legacy-reference') RETURNING id"), {"customer": customer, "site": site})
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261012_0028")
     with engine.begin() as db:
         row = db.execute(text("SELECT connector_id,data_source_id,base_url,username_or_token_id,secret_reference,config_json FROM integrations WHERE id=:id"), {"id": identifier}).one()
         assert row == (None, None, "https://example.test", "legacy-identity", "legacy-reference", {})

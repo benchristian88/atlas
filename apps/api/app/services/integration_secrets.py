@@ -99,12 +99,14 @@ class AtlasEncryptedSecretProvider:
             self.db.flush()
 
     @contextmanager
-    def materialize_for_job(self, integration, request_id, required_fields):
-        record = self.record(integration)
-        if record is None:
+    def materialize_for_job(self, integration, request_id, required_fields, *, duration_seconds=30):
+        if type(duration_seconds) is not int or not 1 <= duration_seconds <= 900:
             raise SecretProviderError()
-        lease = JobSecretLease(request_id, datetime.now(timezone.utc) + timedelta(seconds=30),
-            decrypt_fields(record, data_encryption_key(), required_fields))
+        record = self.record(integration)
+        if record is None and required_fields:
+            raise SecretProviderError()
+        lease = JobSecretLease(request_id, datetime.now(timezone.utc) + timedelta(seconds=duration_seconds),
+            decrypt_fields(record, data_encryption_key(), required_fields) if required_fields else {})
         try:
             yield lease
         finally:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select, text, or_, and_
 
-from app.models import InstalledConnectorPackage, Integration
+from app.models import InstalledConnectorPackage, Integration, DiscoveryRun
 
 
 class ConnectorInUse(ValueError):
@@ -18,9 +18,16 @@ def connector_usage_count(db, connector_id: str) -> int:
     All existing Integration rows (including disabled ones) are live references.
     No current legacy status establishes the future audited retirement workflow.
     """
-    return db.scalar(select(func.count()).select_from(Integration)
+    live = db.scalar(select(func.count()).select_from(Integration)
                      .where(or_(and_(Integration.connector_id == connector_id, Integration.retired_at.is_(None)),
                                 and_(Integration.connector_id.is_(None), Integration.plugin_id == connector_id)))) or 0
+    return live + active_connector_runs(db, connector_id)
+
+
+def active_connector_runs(db, connector_id):
+    return db.scalar(select(func.count()).select_from(DiscoveryRun).where(
+        DiscoveryRun.execution_provenance["connector_id"].astext == connector_id,
+        or_(DiscoveryRun.status.in_(["pending", "running"]), DiscoveryRun.dispatch_state != "settled"))) or 0
 
 
 def require_unused(db, connector_id: str, usage_counter=connector_usage_count):
@@ -50,6 +57,8 @@ def activate(db, stored, health: dict):
             or health.get("status") != "healthy"):
         raise ValueError("Only verified packages can become active")
     lock_connector(db, stored.connector_id)
+    if active_connector_runs(db, stored.connector_id):
+        raise ConnectorInUse("Wait for active discovery runs to settle before changing this Connector package")
     from app.services.connector_mappings import require_resolved
     from app.services.integration_connections import validate_dependents
     require_resolved(db, stored.manifest, auto_map=True)

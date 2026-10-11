@@ -60,6 +60,9 @@ def response(integration, provider, *, detail=True):
         "retired_at": integration.retired_at, "last_test_at": integration.last_test_at,
         "last_test_status": integration.last_test_status, "source_version": integration.source_version,
         "source_compatibility": integration.source_compatibility}
+    value.update(schedule_preset=integration.schedule_preset or "manual", next_run_at=integration.next_run_at,
+        last_run_at=integration.last_run_at, last_success_at=integration.last_success_at,
+        last_error_code=integration.last_error_code)
     if detail:
         value.update(connector_version=integration.connector_version, connector_digest=integration.connector_digest,
             data_source_id=integration.data_source_id, config_schema_version=integration.config_schema_version,
