@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Asset, DataSource, EntitySourceLink
+from app.models import Asset, AssetInterface, DataSource, EntitySourceLink, Network
 
 
 @dataclass(slots=True)
@@ -86,6 +86,42 @@ def ensure_asset_link(
     return link
 
 
+def technical_link(db, *, data_source_id, customer_id, site_id, entity_type, external_id):
+    return db.scalar(select(EntitySourceLink).where(EntitySourceLink.data_source_id == data_source_id,
+        EntitySourceLink.customer_id == customer_id, EntitySourceLink.site_id == site_id,
+        EntitySourceLink.entity_type == entity_type, EntitySourceLink.external_id == external_id))
+
+
+def ensure_technical_link(db, *, source, target, entity_type, external_id, observed_at):
+    """Explicit reconciliation acceptance only; no name-based cross-source merge."""
+    if entity_type == "network":
+        customer_id, site_id = target.customer_id, target.site_id
+        owner_id, network_id, interface_id, interface_owner_id = None, target.id, None, None
+    elif entity_type == "asset_interface":
+        owner = db.get(Asset, target.asset_id)
+        if owner is None:
+            raise HTTPException(409, "Interface owner is unavailable")
+        customer_id, site_id = owner.customer_id, owner.site_id
+        owner_id, network_id, interface_id, interface_owner_id = None, None, target.id, owner.id
+    else:
+        raise HTTPException(409, "Unsupported technical source identity")
+    if source.customer_id != customer_id or source.site_id not in {None, site_id} or site_id is None:
+        raise HTTPException(409, "Source and target must share the customer and site")
+    link = technical_link(db, data_source_id=source.id, customer_id=customer_id, site_id=site_id,
+        entity_type=entity_type, external_id=external_id)
+    if link is not None:
+        if (link.entity_id, link.network_id, link.interface_id, link.interface_owner_id) != (owner_id, network_id, interface_id, interface_owner_id):
+            raise HTTPException(409, "The technical source identity already has a target")
+        link.last_observed_at = observed_at
+        return link
+    link = EntitySourceLink(data_source_id=source.id, customer_id=customer_id, site_id=site_id,
+        entity_type=entity_type, external_id=external_id, entity_id=owner_id, network_id=network_id,
+        interface_id=interface_id, interface_owner_id=interface_owner_id, first_observed_at=observed_at, last_observed_at=observed_at)
+    db.add(link)
+    db.flush()
+    return link
+
+
 def resolve_asset_identity(
     db: Session,
     *,
@@ -100,6 +136,7 @@ def resolve_asset_identity(
     allow_external_name_hint: bool = False,
     observed_at: datetime | None = None,
     persist_link: bool = True,
+    allow_existing_match: bool | None = None,
 ) -> AssetResolution:
     if site_id is None:
         return AssetResolution("unresolved")
@@ -122,6 +159,9 @@ def resolve_asset_identity(
             link.last_observed_at = observed_at or datetime.now(timezone.utc)
         return AssetResolution("resolved_link", asset)
 
+    if allow_existing_match is None:
+        source = db.get(DataSource, data_source_id)
+        allow_existing_match = source is None or source.source_type != "connector"
     direct = list(
         db.scalars(
             select(Asset).where(
@@ -132,6 +172,8 @@ def resolve_asset_identity(
         )
     )
     if len(direct) == 1:
+        if not allow_existing_match:
+            return AssetResolution("possible_duplicate", candidates=direct)
         if persist_link:
             ensure_asset_link(
                 db,
@@ -181,6 +223,8 @@ def resolve_asset_identity(
             continue
         strong.append(candidate)
     if len(strong) == 1:
+        if not allow_existing_match:
+            return AssetResolution("possible_duplicate", candidates=strong)
         if persist_link:
             ensure_asset_link(
                 db,

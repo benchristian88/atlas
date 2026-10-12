@@ -216,10 +216,13 @@ def test_control_secret_missing_unsafe_permissions_and_symlink_fail_closed(monke
         transport._control_secret()
 
 
-def test_later_runtime_operations_are_explicitly_unsupported():
-    for name in ("start_discovery", "get_job", "cancel_job"):
-        with pytest.raises(NotImplementedError):
-            asyncio.run(getattr(transport.LocalIntegrationRuntime(), name)())
+def test_discovery_control_unavailability_is_sanitized(monkeypatch):
+    async def unavailable(*args): raise OSError("private internal diagnostic")
+    monkeypatch.setattr(transport, "control_request", unavailable)
+    runtime = transport.LocalIntegrationRuntime()
+    calls = [runtime.start_discovery({"request_id": str(uuid.uuid4())}), runtime.get_job(uuid.uuid4()), runtime.cancel_job(uuid.uuid4())]
+    for call in calls:
+        assert asyncio.run(call) == {"state": "unavailable", "diagnostic_code": "runtime_unavailable"}
 
 
 @pytest.mark.parametrize("suffix,method", [("/credentials", "put"), ("/credentials", "delete"), ("/test-connection", "post"), ("", "patch")])

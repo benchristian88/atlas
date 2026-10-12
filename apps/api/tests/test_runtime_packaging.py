@@ -35,7 +35,7 @@ def test_docker_runtime_is_private_isolated_read_only_and_failure_independent():
     assert {
         name for name, service in compose["services"].items()
         if "runtime_private" in service.get("networks", [])
-    } == {"api", "runtime"}
+    } == {"api", "worker", "runtime"}
     assert runtime["read_only"] is True
     assert runtime["cap_drop"] == ["ALL"]
     assert runtime["security_opt"] == ["no-new-privileges:true"]
@@ -240,3 +240,31 @@ def test_native_bootstrap_staging_has_fixed_identity_and_no_database_activation(
     assert 'store.install(package, catalogue.verifier())' in source
     assert 'lifecycle.activate' not in source and 'argparse' not in source
     assert '[python, "-m", "scripts.stage_integration_bootstrap"]' in native
+
+
+def test_i3_worker_access_is_intentional_and_runtime_still_isolated():
+    compose = yaml.safe_load((ROOT / "infra/docker/docker-compose.yml").read_text())
+    worker = compose["services"]["worker"]
+    assert "AUTH_SECRET_KEY" not in worker["environment"]
+    assert "ATLAS_DATA_ENCRYPTION_KEY" in worker["environment"]
+    assert worker["volumes"] == ["atlas_state:/var/lib/atlas:ro", "runtime_control:/run/atlas-runtime-control:ro", "connector_store:/var/lib/atlas-connectors:ro"]
+    assert "runtime_source" not in worker["networks"] and "ports" not in worker
+    assert worker["build"]["context"] == "../.." and "USER atlas" in (ROOT/"apps/worker/Dockerfile").read_text()
+    runtime = compose["services"]["runtime"]
+    assert runtime["init"] is True and runtime["pids_limit"] == 128 and runtime["mem_limit"] == "1g"
+    assert "InaccessiblePaths=/var/lib/atlas" in (ROOT/"infra/systemd/atlas-web.service").read_text()
+
+
+def test_native_worker_filtered_environment_preserves_installation_secrets(tmp_path):
+    native = importlib.import_module("native")
+    configuration = tmp_path/"atlas.env"; configuration.write_text("retain operator configuration")
+    values = {key: secrets.token_hex(32) for key in ["AUTH_SECRET_KEY", "ATLAS_DATA_ENCRYPTION_KEY", "POSTGRES_PASSWORD"]}
+    values.update(REDIS_URL="redis://127.0.0.1:6379/0", ATLAS_INSTALL_METHOD="systemd")
+    native.configure_worker(values, configuration)
+    content = (tmp_path/"worker.env").read_text()
+    assert values["AUTH_SECRET_KEY"] not in content and "AUTH_SECRET_KEY" not in content
+    assert values["ATLAS_DATA_ENCRYPTION_KEY"] in content and values["POSTGRES_PASSWORD"] in content
+    assert (tmp_path/"worker.env").stat().st_mode & 0o777 == 0o600
+    assert configuration.read_text() == "retain operator configuration"
+    native.configure_worker(values, configuration)
+    assert (tmp_path/"worker.env").read_text() == content

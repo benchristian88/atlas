@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "../../components/data-table";
 import { Button } from "../../components/button";
 
 import Link from "next/link";
@@ -35,7 +36,8 @@ export default function DiscoveryRunsPage() {
     setLoading(true);
     setError("");
     try {
-      setRuns(await apiRequest(`/discovery-runs?include_archived=${includeArchived}`));
+      const integration = new URLSearchParams(window.location.search).get("integration_id");
+      setRuns(await apiRequest(`/discovery-runs?include_archived=${includeArchived}${integration ? `&integration_id=${encodeURIComponent(integration)}` : ""}`));
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -96,10 +98,16 @@ export default function DiscoveryRunsPage() {
       <label className="field checkbox-field"><input checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} type="checkbox" /><span>Include archived</span></label>
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}
-    {loading ? <div className="status-banner" role="status">Loading discovery runs…</div> : <section className="table-card">
-      <div className="table-meta"><span>{runs.length} runs</span><button className="text-button" onClick={load} type="button">Refresh</button></div>
-      {runs.length === 0 ? <p className="empty-state">No discovery runs yet.</p> : <div className="responsive-table"><table><thead><tr><th>Source</th><th>Status</th><th>Coverage</th><th>Started</th><th>Finished</th><th>Summary</th><th>Actions</th></tr></thead><tbody>{runs.map((run) => <tr key={run.id}><td><span className="primary-cell">{run.source_name || "Unknown source"}</span><span className="secondary-text mono">{run.id}</span></td><td><div className="badge-stack"><StatusBadge status={run.status} /><StatusBadge status={run.completeness_status} />{run.archived_at && <StatusBadge status="Archived" />}</div></td><td><span className="primary-cell">{run.is_complete_snapshot ? "Complete snapshot" : "Partial"}</span><span className="secondary-text">{run.coverage_key || "Unspecified"}</span></td><td>{dateTime(run.started_at)}</td><td>{dateTime(run.finished_at)}</td><td className="secondary-text discovery-summary" title={run.summary ? JSON.stringify(run.summary) : ""}>{run.summary ? Object.entries(run.summary).map(([key, value]) => `${key}: ${value}`).join(" · ") : "—"}</td><td><div className="table-actions"><Link className="text-button" href={`/discovery-runs/${run.id}`}>View</Link>{canArchive && (run.archived_at ? <button className="text-button" onClick={() => openDialog("restore", run)} type="button">Restore</button> : ["completed", "failed", "cancelled"].includes(run.status) ? <button className="text-button" onClick={() => openDialog("archive", run)} type="button">Archive</button> : null)}{canDelete && run.deletion_safety?.allowed && <button className="text-button text-danger" onClick={() => openDialog("delete", run)} type="button">Delete</button>}</div></td></tr>)}</tbody></table></div>}
-    </section>}
+    <DataTable label="Discovery runs" rows={runs} loading={loading} error={error} onRefresh={load} empty="No discovery runs yet." columns={[
+      { key: "source", label: "Source / Integration", render: run => <><span className="primary-cell">{run.source_name || "Unknown source"}</span>{run.integration_id && <Link className="secondary-text" href={`/integrations/${run.integration_id}`}>Integration</Link>}<span className="secondary-text mono">{run.id}</span></> },
+      { key: "connector", label: "Connector / trigger", render: run => run.execution_provenance ? <>{run.execution_provenance.connector_id} · {run.execution_provenance.connector_version}<span className="secondary-text">{run.execution_provenance.trigger}</span></> : "Legacy / manual" },
+      { key: "status", label: "Status", render: run => <div className="badge-stack"><StatusBadge status={run.status} /><StatusBadge status={run.completeness_status} />{run.archived_at && <StatusBadge status="Archived" />}</div> },
+      { key: "coverage", label: "Coverage", render: run => <>{run.is_complete_snapshot ? "Full scope" : "Partial scope"}<span className="secondary-text">{run.coverage_key || "Unspecified"}</span></> },
+      { key: "started_at", label: "Started", render: run => dateTime(run.started_at) },
+      { key: "finished_at", label: "Finished", render: run => dateTime(run.finished_at) },
+      { key: "counts", label: "Observations / batches", render: run => `${run.observation_count ?? run.summary?.observations ?? 0} / ${run.batch_count ?? 0}` },
+      { key: "warnings", label: "Warnings / error", render: run => <>{run.warning_count ?? 0}<span className="secondary-text">{run.error_message || ""}</span></> },
+    ]} actions={run => <div className="table-actions"><Link className="text-button" href={`/discovery-runs/${run.id}`}>View</Link>{canArchive && (run.archived_at ? <Button variant="quiet" onClick={() => openDialog("restore", run)}>Restore</Button> : ["completed", "failed", "cancelled"].includes(run.status) ? <Button variant="quiet" onClick={() => openDialog("archive", run)}>Archive</Button> : null)}{canDelete && run.deletion_safety?.allowed && <Button variant="destructive" onClick={() => openDialog("delete", run)}>Delete</Button>}</div>} />
 
     {dialog && <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
       <section aria-labelledby="run-dialog-title" aria-modal="true" className="dialog-card" role="dialog">

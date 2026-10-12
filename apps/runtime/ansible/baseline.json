@@ -2,28 +2,35 @@
   "aip_versions": [
     "1.0"
   ],
-  "baseline_id": "atlas-ansible-i1-v1",
-  "baseline_version": "1.0.0",
+  "baseline_id": "atlas-ansible-i3-v1",
+  "baseline_version": "1.1.0",
   "collections": {},
   "dependencies": {
     "ansible-core": "2.19.7",
     "ansible-runner": "2.4.3",
+    "attrs": "26.1.0",
     "cffi": "2.1.1",
     "cryptography": "50.0.2",
     "jinja2": "3.1.6",
+    "jsonschema": "4.25.1",
+    "jsonschema-specifications": "2025.9.1",
     "lockfile": "0.12.2",
     "markupsafe": "3.0.4",
     "packaging": "26.3",
     "pexpect": "4.9.0",
+    "psutil": "7.2.2",
     "ptyprocess": "0.7.0",
     "pycparser": "3.11",
     "python-daemon": "3.1.2",
     "pyyaml": "6.0.3",
-    "resolvelib": "1.2.1"
+    "referencing": "0.37.0",
+    "resolvelib": "1.2.1",
+    "rpds-py": "2026.9.1",
+    "typing-extensions": "4.15.0"
   },
-  "dependency_lock_digest": "437f84305958af89ed0864ca5d72c6fbfe740a3f422d1bdd5b0d610a6ab70a59",
+  "dependency_lock_digest": "c019c56dde01d0774f791e05a13df6ef0abd6fbca41f20fd78e04f09b7d5a9bf",
   "protocol_version": "integration-runtime-v1",
-  "runtime_version": "0.1.0",
+  "runtime_version": "0.3.0",
   "sdk_package_digest": "a01cf35d47ab2f791375586114527fca3ed6335a7611cff14a6e8475c8380e0e",
   "sdk_version": "1.1.0"
 }

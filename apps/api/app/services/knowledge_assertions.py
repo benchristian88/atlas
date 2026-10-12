@@ -94,6 +94,7 @@ def record_assertion(
     evidence_record_id: uuid.UUID | None = None,
     confidence: float = 1.0,
     observed_at: datetime | None = None,
+    fact_metadata: dict | None = None,
 ) -> tuple[KnowledgeAssertion, bool]:
     """Record a current assertion, coalescing identical observations from one source."""
 
@@ -115,7 +116,7 @@ def record_assertion(
         )
     )
     for assertion in current:
-        if _same_claim(assertion, value, object_external_id):
+        if _same_claim(assertion, value, object_external_id) and assertion.fact_metadata == fact_metadata:
             assertion.last_observed_at = observed_at
             assertion.discovery_run_id = discovery_run_id
             assertion.evidence_record_id = evidence_record_id
@@ -130,6 +131,7 @@ def record_assertion(
         subject_external_id=subject_external_id,
         predicate=predicate,
         value_json=value,
+        fact_metadata=fact_metadata,
         object_type=object_type,
         object_id=object_id,
         object_external_id=object_external_id,

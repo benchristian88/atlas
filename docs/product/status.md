@@ -21,7 +21,12 @@ self-hosted focus. No date is promised for 1.0.0.
   mappings and bounded Test Connection are implemented. Proxmox is probe-only and
   unqualified. Live Docker upgrade and fingerprint-pinned Proxmox 9.2.11 connection
   acceptance are operator-confirmed, including saved probes after runtime restart.
-  Docker/Compose and UniFi source Connectors remain metadata only. No discovery is dispatched.
+  Docker/Compose and UniFi source Connectors remain metadata only. I3 implements generic
+  asynchronous discovery orchestration, fixed schedules, canonical AIP ingestion and
+  run history with deterministic test-only execution; no production discovery
+  Connector is shipped. Actual I3 Docker/LXC build/deployment, migration, saved I2
+  probes, signing-state restart preservation and isolation/hardening are
+  operator-confirmed. Native Debian/systemd I3 LIVE acceptance remains outstanding.
 
 Core platform hardening is substantially complete and sufficient to proceed to
 integration/plugin and onboarding development. This includes secure installation,
@@ -39,13 +44,16 @@ it is not live monitoring or evidence of recovery readiness.
   [Integration architecture](../architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
   and [phased roadmap](../architecture/integrations/integration-roadmap.md):
   architecture/contracts, runtime/catalogue and generic configuration/secrets are
-  implemented through I2. Next are orchestration/ingestion, Proxmox, Docker/Compose, local
+  implemented through I3. Next are Proxmox, Docker/Compose, local
   UniFi infrastructure, onboarding and final integration acceptance. The current
-  Proxmox adapter/plugin contracts remain foundations; target design is not live
-  configured discovery. Core hardening is retained, with its acceptance gaps.
+  Proxmox Connector remains probe-only; vendor discovery is not implemented. Core hardening is retained, with its acceptance gaps.
   The [I2 validation record](../architecture/integrations/i2-completion-report.md)
   records completed SDK extraction, live Docker/Proxmox connection acceptance and
   the remaining native/systemd, remote provenance and I4 qualification boundaries.
+  The [I3 record](../architecture/integrations/i3-completion-report.md) documents generic
+  orchestration, test-only execution and subsequent actual Docker/LXC operator
+  acceptance. Native live acceptance, remote GitHub/Sigstore qualification and I4
+  Proxmox discovery/9.2.11 qualification remain outstanding.
 - Guided onboarding to help operators establish useful initial knowledge.
 
 ## Before 1.0

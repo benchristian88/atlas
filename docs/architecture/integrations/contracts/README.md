@@ -18,7 +18,7 @@ This is a Manifest 1.x evolution, not an AIP change or architecture redesign.
 
 The I0 examples below remain specification fixtures, not executable packages.
 See the historical [I0](../i0-completion-report.md)/[I1](../i1-completion-report.md)
-records and the current [I2 implementation evidence](../i2-completion-report.md).
+records and the current [I3 implementation evidence](../i3-completion-report.md).
 
 ## Artifacts and validation
 
@@ -70,7 +70,8 @@ classes change the selected scope and thus the coverage key; they cannot count
 as complete coverage over the previous wider scope. In v1 use one aggregate key
 per run; it changes deterministically with meaningful scope/filter/class-selection
 changes, never with display labels, run IDs, secrets or per-run ordering.
-I3 must define a canonical sorted scope encoding, not hash arbitrary UI JSON.
+I3 uses a versioned sorted scope/class/domain/filter encoding; see
+[implementation](../i3-implementation.md).
 
 ## Batches, replay and finalisation
 
@@ -103,8 +104,8 @@ IDs or missing receipts prevent a complete seal. A failed/cancelled run may reta
 validated partial evidence but performs no absence reconciliation. Retry creates
 a new run identity and leaves prior run/evidence history intact.
 
-I3 must record bounded redacted diagnostics, derive final status conservatively,
-and call existing snapshot reconciliation only after a successful complete seal.
+I3 records bounded diagnostic codes, derives final status conservatively, and
+calls existing snapshot reconciliation only after a successful complete seal.
 The runtime cannot raise completion authority beyond Atlas-validated coverage.
 
 ## Existing lifecycle mapping
@@ -201,7 +202,8 @@ source strings can contain sensitive data and JSON Schema cannot prove secrecy.
 
 Specification ceilings: 1000 observations per kind per batch, 128 facts per
 entity, 64 values per multi-fact, 64 diagnostics, 10000 sequences. I3 additionally
-caps decoded body size at 1 MiB and each run at 100000 total observations;
+caps decoded body size at 1 MiB and each run at 5,000 total observations, 256
+batches, 20,000 facts and 32 MiB of canonical JSON;
 apply whichever bound is smaller. Limits may be tightened after homelab evidence,
 never silently bypassed. Set explicit job/API timeout, concurrency, retry and
 retention limits before I3 acceptance; the schema ceilings are not performance

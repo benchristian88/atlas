@@ -95,7 +95,8 @@ services:
   worker:
     restart: unless-stopped
     build:
-      context: ../../apps/worker
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL:-}
       POSTGRES_HOST: postgres
@@ -104,12 +105,26 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the production bootstrap helper or set a development credential}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       ATLAS_STATE_DIR: /var/lib/atlas
+      ATLAS_DATA_ENCRYPTION_KEY: ${ATLAS_DATA_ENCRYPTION_KEY:?ATLAS_DATA_ENCRYPTION_KEY must be set}
+      ATLAS_RUNTIME_ENABLED: ${ATLAS_RUNTIME_ENABLED:-true}
+      ATLAS_RUNTIME_URL: http://runtime:8091
+      ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
+      ATLAS_RUNTIME_BASELINE_FILE: /app/runtime-baseline/baseline.json
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
+      ATLAS_INSTALL_METHOD: docker_compose
     volumes:
       - atlas_state:/var/lib/atlas:ro
+      - runtime_control:/run/atlas-runtime-control:ro
+      - connector_store:/var/lib/atlas-connectors:ro
+    networks:
+      - default
+      - runtime_private
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      api:
         condition: service_healthy
 
   # The provisioner has no listener and exits after durable secret creation.
@@ -149,8 +164,12 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   runtime:
+    init: true
+    stop_grace_period: 40s
+    mem_limit: 1g
+    pids_limit: 128
     tmpfs:
-      - /tmp:size=64m,mode=1777
+      - /tmp:size=256m,mode=1777
     restart: unless-stopped
     build:
       context: ../..

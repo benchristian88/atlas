@@ -1,8 +1,9 @@
 # IntegrationRuntime v1 specification
 
-**I1/I2 implemented subset:** health, capabilities, verify_connector and
-test_connection have a private authenticated client/server. Discovery/job/callback
-operations below are I3 targets and remain unsupported. AnsibleRuntime is the
+**I3 implemented operations:** health, capabilities, verify_connector,
+test_connection, run_discovery/start_discovery, get_job and cancel_job have a
+private authenticated client/server. Fixed callbacks use run-scoped ingestion
+authority. See [implementation](../i3-implementation.md). AnsibleRuntime is the
 first adapter; domain requests have no playbook/inventory dependency. See
 [contract ownership and AIP semantics](README.md).
 
@@ -51,7 +52,7 @@ must be implemented before I1 acceptance. Requests cannot treat loopback/private
 addressing as authentication. Service-secret failure returns sanitized
 unauthorized/unavailable states without disclosing expected values.
 
-Docker exposes no host/public runtime port. API and runtime use the dedicated
+Docker exposes no host/public runtime port. API, worker and runtime use the dedicated
 `runtime_private` bridge with `internal: true` for authenticated control traffic.
 Runtime also joins `runtime_source`, a dedicated non-internal bridge with normal
 outbound routing to source infrastructure. No other Atlas service joins

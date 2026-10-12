@@ -941,6 +941,15 @@ class DiscoveryRunResponse(ORMResponse):
     is_complete_snapshot: bool
     completeness_status: str
     source_name: str | None = None
+    execution_provenance: dict[str, Any] | None = None
+    runtime_job_id: uuid.UUID | None = None
+    dispatch_state: str | None = None
+    dispatch_attempts: int | None = 0
+    batch_count: int | None = 0
+    observation_count: int | None = 0
+    warning_count: int | None = 0
+    source_version: str | None = None
+    cancellation_requested_at: datetime | None = None
     deletion_safety: "DeletionSafetyResponse | None" = None
     created_at: datetime
     updated_at: datetime
@@ -983,6 +992,8 @@ class SimulationInterface(BaseModel):
 class SimulationRelationship(BaseModel):
     relationship_type: str = Field(min_length=1, max_length=100)
     target_external_id: str = Field(min_length=1, max_length=1024)
+    truth_classification: Literal["observed", "inferred"] = "observed"
+    confidence: float = Field(default=1.0, ge=0, le=1)
 
     _relationship_type = field_validator("relationship_type")(_trim_nonempty)
     _target = field_validator("target_external_id")(_trim_nonempty)
@@ -1033,6 +1044,7 @@ class KnowledgeAssertionResponse(ORMResponse):
     subject_id: uuid.UUID | None
     subject_external_id: str | None
     predicate: str
+    fact_metadata: dict[str, Any] | None = None
     value_json: Any | None
     object_type: str | None
     object_id: uuid.UUID | None
@@ -1121,6 +1133,12 @@ class ReconciliationSummaryResponse(BaseModel):
 
 class ReconciliationLinkAssetRequest(BaseModel):
     asset_id: uuid.UUID
+    reason: str | None = Field(default=None, max_length=10000)
+
+
+class ReconciliationLinkTechnicalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entity_id: uuid.UUID
     reason: str | None = Field(default=None, max_length=10000)
 
 

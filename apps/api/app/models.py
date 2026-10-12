@@ -869,6 +869,7 @@ class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ["data_sources.id", "data_sources.customer_id", "data_sources.site_id"],
             name="fk_integrations_data_source_scope", ondelete="RESTRICT"),
         CheckConstraint("connector_id IS NULL OR (data_source_id IS NOT NULL AND connector_version IS NOT NULL AND connector_digest IS NOT NULL AND config_schema_version IS NOT NULL)", name="generic_identity"),
+        CheckConstraint("schedule_preset IN ('manual','hourly','6_hours','12_hours','daily','weekly')", name="schedule_preset"),
         ForeignKeyConstraint(
             ["customer_id", "site_id"],
             ["sites.customer_id", "sites.id"],
@@ -907,6 +908,11 @@ class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_test_status: Mapped[str | None] = mapped_column(String(50))
     source_version: Mapped[str | None] = mapped_column(String(100))
     source_compatibility: Mapped[str | None] = mapped_column(String(32))
+    schedule_preset: Mapped[str] = mapped_column(String(16), nullable=False, server_default="manual")
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
 
 
 class IntegrationSecret(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -1007,7 +1013,15 @@ class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "entity_source_links"
     __table_args__ = (
-        CheckConstraint("entity_type IN ('asset')", name="valid_entity_type"),
+        CheckConstraint("entity_type IN ('asset','network','asset_interface')", name="valid_entity_type"),
+        CheckConstraint("(entity_type = 'asset' AND entity_id IS NOT NULL AND network_id IS NULL AND interface_id IS NULL AND interface_owner_id IS NULL) OR (entity_type = 'network' AND entity_id IS NULL AND network_id IS NOT NULL AND interface_id IS NULL AND interface_owner_id IS NULL) OR (entity_type = 'asset_interface' AND entity_id IS NULL AND network_id IS NULL AND interface_id IS NOT NULL AND interface_owner_id IS NOT NULL)", name="target_identity"),
+        ForeignKeyConstraint(["network_id", "customer_id", "site_id"],
+            ["networks.id", "networks.customer_id", "networks.site_id"],
+            name="fk_entity_source_links_network_context", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["interface_id", "interface_owner_id"], ["asset_interfaces.id", "asset_interfaces.asset_id"],
+            name="fk_entity_source_links_interface_owner", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["interface_owner_id", "customer_id", "site_id"], ["assets.id", "assets.customer_id", "assets.site_id"],
+            name="fk_entity_source_links_interface_context", ondelete="RESTRICT"),
         UniqueConstraint(
             "data_source_id",
             "entity_type",
@@ -1036,7 +1050,10 @@ class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False, index=True
     )
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    network_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    interface_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    interface_owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     external_id: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
     external_type: Mapped[str | None] = mapped_column(String(100), index=True)
     first_observed_at: Mapped[datetime] = mapped_column(
@@ -1050,6 +1067,13 @@ class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "discovery_runs"
     __table_args__ = (
+        Index("uq_discovery_runs_active_integration", "integration_id", unique=True,
+            postgresql_where=text("execution_provenance IS NOT NULL AND (status IN ('pending', 'running') OR dispatch_state != 'settled')")),
+        CheckConstraint("dispatch_attempts >= 0 AND dispatch_attempts <= 3", name="dispatch_attempts"),
+        CheckConstraint("dispatch_state IN ('pending', 'dispatching', 'running', 'settled')", name="dispatch_state"),
+        ForeignKeyConstraint(["integration_id", "customer_id", "site_id"],
+            ["integrations.id", "integrations.customer_id", "integrations.site_id"],
+            name="fk_discovery_runs_integration_scope", ondelete="RESTRICT"),
         CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
             name="valid_status",
@@ -1105,6 +1129,34 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completeness_status: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="unknown", index=True
     )
+    # Immutable execution identity is separate from mutable progress. Never put
+    # credential values, ingestion tokens or private store paths in this JSON.
+    execution_provenance: Mapped[dict | None] = mapped_column(JSONB)
+    dispatch_state: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    dispatch_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    dispatch_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    runtime_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    ingestion_generation: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finalisation_hash: Mapped[str | None] = mapped_column(String(64))
+    batch_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    observation_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    warning_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    source_version: Mapped[str | None] = mapped_column(String(100))
+
+
+class DiscoveryBatchReceipt(Base):
+    """Canonical AIP receipt identity. Body and hash are immutable after acceptance."""
+
+    __tablename__ = "discovery_batch_receipts"
+    __table_args__ = (CheckConstraint("sequence BETWEEN 1 AND 10000", name="sequence"),)
+    discovery_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="RESTRICT"), primary_key=True)
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True)
+    body_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class RunObservedEntity(UUIDPrimaryKeyMixin, Base):
@@ -1226,6 +1278,7 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     subject_external_id: Mapped[str | None] = mapped_column(String(1024), index=True)
     predicate: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     value_json: Mapped[Any | None] = mapped_column(JSONB)
+    fact_metadata: Mapped[dict | None] = mapped_column(JSONB)
     object_type: Mapped[str | None] = mapped_column(String(100), index=True)
     object_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
     object_external_id: Mapped[str | None] = mapped_column(String(1024), index=True)
@@ -1684,6 +1737,7 @@ class AssetRelationship(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class Network(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "networks"
     __table_args__ = (
+        UniqueConstraint("id", "customer_id", "site_id", name="uq_networks_identity_scope"),
         UniqueConstraint("customer_id", "site_id", "name", name="uq_networks_customer_site_name"),
         ForeignKeyConstraint(
             ["customer_id", "site_id"],
@@ -1712,6 +1766,7 @@ class Network(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class AssetInterface(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asset_interfaces"
     __table_args__ = (
+        UniqueConstraint("id", "asset_id", name="uq_asset_interfaces_identity_owner"),
         UniqueConstraint("asset_id", "name", name="uq_asset_interfaces_asset_name"),
     )
 

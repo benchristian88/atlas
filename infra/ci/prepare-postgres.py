@@ -1,6 +1,6 @@
 """Provision the complete H4 regression on a disposable loopback CI cluster.
 
-Creates fourteen isolated databases with a generated non-superuser owner. Nine
+Creates fifteen isolated databases with a generated non-superuser owner. Ten
 migration databases stay empty; five domain/H1/H2/H3 databases are migrated.
 Refuses existing CI roles/databases; never drops or overwrites a database.
 """
@@ -38,6 +38,7 @@ DATABASES = {
     "ATLAS_TEST_H2_MIGRATION_URL": ("atlas_ci_h2_migration", False),
     "ATLAS_TEST_I1_MIGRATION_URL": ("atlas_ci_i1_migration", False),
     "ATLAS_TEST_I2_MIGRATION_URL": ("atlas_ci_i2_migration", False),
+    "ATLAS_TEST_I3_MIGRATION_URL": ("atlas_ci_i3_migration", False),
 }
 
 
@@ -109,7 +110,7 @@ def main():
                 stream.write("".join(f"{key}={shlex.quote(value)}\n" for key, value in environment.items()))
     except (OSError, ValueError, psycopg.Error, subprocess.CalledProcessError):
         raise SystemExit("CI database preparation failed; check the disposable cluster, configuration and migration output. Credentials are not displayed.") from None
-    print("Prepared all fourteen isolated PostgreSQL test databases; credentials are not displayed.")
+    print("Prepared all fifteen isolated PostgreSQL test databases; credentials are not displayed.")
 
 
 if __name__ == "__main__":

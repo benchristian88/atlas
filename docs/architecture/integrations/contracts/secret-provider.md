@@ -1,9 +1,10 @@
 # SecretProvider v1 specification
 
-**Implemented for I2 Test Connection.** `integration_secrets.py` implements the
+**Implemented for I2 Test Connection and I3 discovery.** `integration_secrets.py` implements the
 provider and `encrypted_data.py` registers its rewrap adapter using the existing
 Atlas application-key lifecycle and maintained `cryptography` AESGCM. No second
-master key exists. Discovery/job cancellation semantics below remain I3 targets.
+master key exists. Discovery uses the same required-field lease, private transport
+and workspace cleanup with bounded runtime cancellation. See [implementation](../i3-implementation.md).
 See the [audit](../integration-alignment-matrix.md) and [contract ownership](README.md).
 
 ## Interface and authority

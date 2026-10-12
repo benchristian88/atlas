@@ -32,7 +32,9 @@ An unsaved preview also requires manage permission and stores only safe audit
 metadata. A saved test persists a sanitized result/version; it creates no inventory,
 evidence, DiscoveryRun or AIP state. Supported/untested/incompatible derives from
 the exact Manifest; Proxmox I2 results remain untested until I4 qualification.
-There are no Run Now, scheduling or discovery controls.
+Probe-only versions have no Run Now or scheduling controls. Generic discovery-capable
+versions use the [discovery operator workflow](discovery-runs.md); no production
+discovery-capable Connector is currently shipped.
 
 TLS verifies certificates by default. For a self-signed deployment, choose
 fingerprint and obtain the SHA-256 certificate fingerprint through a trusted
@@ -64,7 +66,7 @@ source keys never appear in normal responses.
 Docker attaches `runtime` to two dedicated bridge networks:
 
 - `runtime_private` has `internal: true` and carries authenticated API-to-runtime
-  control traffic. Only API and runtime join this network.
+  control and runtime-to-API callback traffic. API, worker and runtime join it.
 - `runtime_source` is a normal outbound-routing bridge (`internal: false`) for
   reaching source infrastructure. Only runtime joins it; PostgreSQL, Redis,
   gateway, web, worker and API do not join it.
@@ -78,10 +80,10 @@ capabilities and uses `no-new-privileges`. It has no host networking, privileged
 mode, `NET_ADMIN`, Docker socket or broad host mount.
 
 The runtime receives no PostgreSQL, Redis or user/session credentials. Source
-credentials arrive only for a bounded probe through authenticated private control
-transport and are removed after execution. A networkless one-shot provisioner creates a random 384-bit control
+credentials arrive only for a bounded probe or discovery job through authenticated
+private control transport and are removed after execution. A networkless one-shot provisioner creates a random 384-bit control
 credential in the durable `runtime_control` volume. API and runtime mount that
-volume read-only. Existing valid material is preserved and invalid existing
+volume read-only; worker also has a read-only mount for private dispatch. Existing valid material is preserved and invalid existing
 material is refused.
 
 Native installs create a separate `/opt/atlas/runtime-venv` with pinned Python
@@ -89,14 +91,15 @@ dependencies, and `atlas-runtime.service` under the dedicated `atlas-runtime`
 account. The listener is fixed to `127.0.0.1:8091`; Docker or Podman is not required.
 The separate control credential is `/etc/atlas-runtime/control.secret`, owned by
 root, group `atlas-runtime-control`, mode `0640`, inside a `0750` directory. API
-and runtime have that supplementary reader group. The runtime never receives
+worker and runtime have that supplementary reader group. The runtime never receives
 `/etc/atlas/atlas.env` or database authentication material.
 
 Every health, capability and package-inspection request authenticates with this
 independent control credential. It is never shown by normal UI/API responses or
 logs. Protect and retain it across upgrade/reinstall; neither installer silently
-rotates an existing valid value. Source credentials have separate scoped ownership. Run-scoped callback
-credentials remain I3 work.
+rotates an existing valid value. Source credentials have separate scoped ownership. API provisions a separate
+installation-local run-ingestion signing file; API/worker read it, while runtime
+receives only the expiring run token. See [I3 implementation](../architecture/integrations/i3-implementation.md).
 
 ## Failure and manual-only operation
 
@@ -108,8 +111,10 @@ failure and timeout remove it, and startup cleans abandoned owned probe director
 An outage produces **Unavailable**; a changed protocol/dependency baseline produces
 **Incompatible**. Accepted Atlas knowledge remains usable in either state.
 Runtime startup/readiness failures are reported without preventing core API/web
-installation health and setup hand-off. The runtime does not execute discovery
-jobs in this shell.
+installation health and setup hand-off. Discovery jobs use private start/status/cancel
+control, a ten-minute deadline, four concurrent slots and fixed API callbacks.
+Ansible descendant sessions are frozen/terminated before root cleanup; Docker init
+reaps orphaned descendants. Runtime memory/tasks and temporary output are bounded.
 
 Both fresh installers support explicit opt-out:
 
@@ -177,7 +182,7 @@ PY
 
 Expect both runtime networks, `Ports={}`, `ReadonlyRootfs=true`, `CapDrop=["ALL"]`
 and `no-new-privileges:true`. The private network must report `internal=true`
-with API and runtime; the source network must report `internal=false` with only
+with API, worker and runtime; the source network must report `internal=false` with only
 runtime. Check **Integrations → Runtime** is healthy after recreation. The socket
 probe proves outbound TCP reachability only; it uses no source credentials and
 does not test TLS, Proxmox authentication or discovery. Record live connectivity
@@ -233,9 +238,9 @@ The current offline catalogue needs no Internet connection and ships one exact
 Proxmox probe archive produced in `atlas-connectors`. Its bootstrap digest is bound
 to the Atlas release; this is local qualification, not remote attestation proof.
 
-The approved environment identifies runtime `0.1.0`, protocol
-`integration-runtime-v1`, baseline `atlas-ansible-i1-v1` version `1.0.0`,
-ansible-core `2.19.7` and ansible-runner `2.4.3`. All fourteen runtime dependencies and the separate Apache-2.0 SDK 1.1.0 artifact
+The approved environment identifies runtime `0.3.0`, protocol
+`integration-runtime-v1`, baseline `atlas-ansible-i3-v1` version `1.1.0`,
+ansible-core `2.19.7` and ansible-runner `2.4.3`. All twenty-one runtime dependencies and the separate Apache-2.0 SDK 1.1.0 artifact
 are pinned; no vendor Collections are prequalified and no dependencies install
 dynamically. Missing declared dependencies require a runtime update. The initial
 CycloneDX inventory and upstream notices are included in both release packages;

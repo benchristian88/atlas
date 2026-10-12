@@ -122,7 +122,7 @@ def validate_tree(files, method, metadata, commit, manifest):
                 sources = [part for part in parts[1:-1] if not part.startswith("--")]
                 import fnmatch
                 for source in sources:
-                    prefix = ("" if app in {"api", "runtime/ansible"} else f"apps/{app}/") + source.rstrip("/")
+                    prefix = ("" if app in {"api", "worker", "runtime/ansible"} else f"apps/{app}/") + source.rstrip("/")
                     if source != "." and not any(fnmatch.fnmatch(name, prefix) or name.startswith(prefix + "/") for name in files):
                         raise ValueError("Docker COPY source missing from package")
     # Local JS/CSS imports are runtime dependencies even if accidentally placed

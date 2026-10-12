@@ -45,12 +45,13 @@ def request(url, secret=None, body=None, *, headers=None):
         return json.loads(response.read())
 
 
-@pytest.mark.parametrize("path", ["/v1/health", "/v1/capabilities", "/v1/connectors/verify", "/v1/connectors/test-connection"])
+@pytest.mark.parametrize("path", ["/v1/health", "/v1/capabilities", "/v1/connectors/verify", "/v1/connectors/test-connection",
+    "/v1/discovery/start", "/v1/discovery/status", "/v1/discovery/cancel"])
 @pytest.mark.parametrize("credential", [None, "incorrect"])
 def test_every_control_operation_requires_independent_credential(private_http, path, credential):
     runtime, address = private_http
     with pytest.raises(urllib.error.HTTPError) as error:
-        request(address + path, credential, b"{}" if "/connectors/" in path else None)
+        request(address + path, credential, b"{}" if "/connectors/" in path or "/discovery/" in path else None)
     assert error.value.code == 401
     assert error.value.read() == b'{"diagnostic_code":"unauthorized"}'
 
@@ -60,7 +61,7 @@ def test_real_http_health_and_capabilities_do_not_disclose_secret_or_store(priva
     health = request(address + "/v1/health", runtime._secret)
     capabilities = request(address + "/v1/capabilities", runtime._secret)
     assert health["state"] == "healthy"
-    assert capabilities["operations"] == ["health", "capabilities", "verify_connector", "test_connection"]
+    assert capabilities["operations"] == ["health", "capabilities", "verify_connector", "test_connection", "run_discovery", "get_job", "cancel_job"]
     assert capabilities["aip_versions"] == ["1.0"]
     output = json.dumps([health, capabilities]) + str(capsys.readouterr())
     assert runtime._secret not in output and str(runtime.store) not in output

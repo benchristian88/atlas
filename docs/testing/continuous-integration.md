@@ -16,12 +16,15 @@ configured separately; this change does not configure branch protection:
 The backend uses `postgres:17-alpine` and matching PGDG PostgreSQL 17 clients.
 It starts PostgreSQL after generating a protected configuration, so passwords
 are random per job rather than checked-in credentials or repository secrets.
-The bootstrap account creates fourteen separate databases owned by a generated
+The bootstrap account creates fifteen separate databases owned by a generated
 non-superuser/non-createdb role. Domain, setup, MFA and both backup test databases are
-migrated; nine migration-test databases remain empty. All existing
+migrated; ten migration-test databases remain empty. All existing
 `ATLAS_TEST_*` database variables are supplied, and JUnit skips fail the job.
 Redis uses the `redis:7.4.6-alpine` Actions service with a `redis-cli ping`
-healthcheck. Both servers publish only on runner loopback. PostgreSQL also has
+healthcheck. The backend also installs the exact isolated Ansible runtime baseline and passes
+`ATLAS_TEST_RUNTIME_PYTHON` for real test-only discovery/callback/cancellation.
+The API test harness installs psutil for runtime-module tests; API production
+requirements remain independent of runtime dependencies. Both servers publish only on runner loopback. PostgreSQL also has
 a `pg_isready` healthcheck and a bounded authenticated readiness check.
 
 Ubuntu 24.04's nginx 1.24 cannot validate the gateway's upstream `resolve`
@@ -68,6 +71,13 @@ python -m pip install -r apps/api/requirements.txt pytest==8.4.1 httpx==0.28.1
 export PYTHONPATH="$PWD/plugins/sdk:$PWD/plugins/proxmox"
 export NEXT_TELEMETRY_DISABLED=1
 ```
+
+I3 discovery acceptance uses a separate fresh runtime venv with only the vendored
+canonical SDK and `apps/runtime/ansible/requirements.lock`. Runtime setup and
+`pip check` use Python's `-I` mode so the backend's legacy plugin `PYTHONPATH` and
+checked-in `.egg-info` metadata do not enter runtime dependency checks. The real
+Ansible acceptance children use that venv's Python through `ATLAS_TEST_RUNTIME_PYTHON`.
+Legacy plugin dependencies remain part of backend regression, separate from runtime.
 
 For Docker-assisted local backend validation, use fresh disposable containers
 and a protected directory. Never point these destructive PostgreSQL test suites

@@ -1,6 +1,6 @@
-"""Private authenticated I1 health and package-inspection service.
+"""Private authenticated verified-package probes and bounded discovery jobs.
 
-There is deliberately no job, command, playbook, URL or installation operation.
+No arbitrary command, playbook, URL or installation operation is exposed.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ MAX_METADATA = 256 * 1024
 MAX_FILES = 256
 MAX_FILE = 10 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
-OPERATIONS = ["health", "capabilities", "verify_connector", "test_connection"]
+OPERATIONS = ["health", "capabilities", "verify_connector", "test_connection", "run_discovery", "get_job", "cancel_job"]
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DIGEST = re.compile(r"^[a-f0-9]{64}$")
@@ -86,6 +86,8 @@ class Runtime:
         self._secret = secret
         self.store = store
         self._probe_slots = threading.BoundedSemaphore(4)
+        from atlas_runtime.jobs import Jobs
+        self.jobs = Jobs(self)
         if packaging_mode not in {"docker_compose", "systemd", "development"}:
             raise ValueError("invalid_packaging_mode")
         self.packaging_mode = packaging_mode
@@ -138,7 +140,16 @@ class Runtime:
         }
 
     def capabilities(self):
-        return {**self.health(), "operations": OPERATIONS, "aip_versions": ["1.0"]}
+        return {**self.health(), "operations": OPERATIONS, "aip_versions": ["1.0"], "discovery_capacity": self.jobs.capacity()}
+
+    def run_discovery(self, payload):
+        return self.jobs.start(payload)
+
+    def get_job(self, payload):
+        return self.jobs.get(payload)
+
+    def cancel_job(self, payload):
+        return self.jobs.get(payload, cancel=True)
 
     def verify_connector(self, reference):
         if not isinstance(reference, dict) or set(reference) != {"connector_id", "version", "digest"}:
@@ -277,12 +288,22 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get("Content-Type") != "application/json":
                     raise ValueError("invalid_request")
                 payload = runtime.test_connection(strict_json(self.rfile.read(size), maximum=MAX_BODY))
+            elif method == "POST" and self.path in {"/v1/discovery/start", "/v1/discovery/status", "/v1/discovery/cancel"}:
+                from atlas_connector_sdk.contracts import strict_json
+                if self.headers.get("Content-Type") != "application/json":
+                    raise ValueError("invalid_request")
+                operation = {"/v1/discovery/start": runtime.run_discovery,
+                    "/v1/discovery/status": runtime.get_job, "/v1/discovery/cancel": runtime.cancel_job}[self.path]
+                payload = operation(strict_json(self.rfile.read(size), maximum=MAX_BODY))
             else:
                 self.respond(404, {"diagnostic_code": "unsupported_operation"})
                 return
             self.respond(200, payload)
-        except (ValueError, TypeError, UnicodeError):
-            self.respond(400, {"diagnostic_code": "invalid_request"})
+        except (ValueError, TypeError, UnicodeError) as error:
+            codes = {"runtime_capacity": 503, "runtime_unavailable": 503, "conflicting_request": 409,
+                "package_unavailable": 409, "discovery_unavailable": 409}
+            code = str(error) if str(error) in codes else "invalid_request"
+            self.respond(codes.get(code, 400), {"diagnostic_code": code})
         except OSError:
             self.respond(503, {"diagnostic_code": "runtime_unavailable"})
 
@@ -326,9 +347,20 @@ def main():
     try:
         from atlas_runtime.probe import cleanup_stale
         cleanup_stale()
+        from atlas_runtime.jobs import cleanup_stale as cleanup_jobs
+        cleanup_jobs()
         secret = load_secret(Path(os.environ["ATLAS_RUNTIME_CONTROL_SECRET_FILE"]))
         runtime = Runtime(secret, Path(os.environ.get("ATLAS_CONNECTOR_STORE_PATH", "/var/lib/atlas-connectors")), mode)
-        Server((host, 8091), runtime).serve_forever()
+        import signal
+        previous = signal.getsignal(signal.SIGTERM)
+        def terminate(*_args):
+            raise SystemExit(0)
+        signal.signal(signal.SIGTERM, terminate)
+        try:
+            Server((host, 8091), runtime).serve_forever()
+        finally:
+            runtime.jobs.shutdown()
+            signal.signal(signal.SIGTERM, previous)
     except (OSError, ValueError, KeyError):
         raise SystemExit("Runtime control configuration is unavailable or invalid") from None
 

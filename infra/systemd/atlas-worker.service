@@ -10,8 +10,10 @@ StartLimitBurst=10
 Type=simple
 User=atlas
 Group=atlas
+SupplementaryGroups=atlas-runtime-control
 WorkingDirectory=/opt/atlas/apps/worker
-EnvironmentFile=/etc/atlas/atlas.env
+EnvironmentFile=/etc/atlas/worker.env
+Environment=PYTHONPATH=/opt/atlas/apps/api
 Environment=ATLAS_STATE_DIR=/var/lib/atlas
 ExecStart=/opt/atlas/venv/bin/python -m worker.main
 Restart=on-failure

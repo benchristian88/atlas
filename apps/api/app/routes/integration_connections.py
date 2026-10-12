@@ -133,6 +133,20 @@ def integration_detail(integration_id: uuid.UUID, principal: Principal = Depends
     value = response(row, AtlasEncryptedSecretProvider(db))
     site = db.get(Site, row.site_id)
     value["site_name"] = site.name
+    from app.services.discovery_orchestration import active_run
+    current = active_run(db, row.id)
+    value.update(current_run_id=current.id if current else None, current_run_status=current.status if current else None)
+    value.update(discovery_capable=False, scheduling_capable=False, discovery_configured=False)
+    try:
+        record, manifest = installed_manifest(db, row.connector_id) if row.connector_id else (None, None)
+        if manifest and (record.version, record.bundle_digest) == (row.connector_version, row.connector_digest):
+            value.update(discovery_capable=manifest["capabilities"]["discover"] == "read_only",
+                scheduling_capable=manifest["capabilities"]["scheduling"])
+            validate_configuration(manifest, row.config_json, configured_fields=AtlasEncryptedSecretProvider(db).state(row))
+            validate_scopes(manifest, row.selected_scopes)
+            value["discovery_configured"] = True
+    except (ValueError, OSError):
+        pass
     return value
 
 
@@ -171,10 +185,24 @@ async def create_integration(payload: ConnectionCreate, request: Request,
         if values:
             provider.create(row, values)
         values.clear()
+        from app.services import discovery_orchestration as discovery
+        initial = None
+        can_run = db.scalar(select(Integration.id).where(Integration.id == row.id,
+            scope_condition(principal, "integrations.run", Integration.customer_id, Integration.site_id))) is not None
+        if manifest["capabilities"]["discover"] == "read_only" and row.enabled and can_run:
+            if manifest["capabilities"]["scheduling"]:
+                row.schedule_preset = "hourly"
+                row.next_run_at = discovery.next_run("hourly", datetime.now(timezone.utc))
+            try:
+                initial = await discovery.create_run(db, row, trigger="onboarding", user_id=principal.user.id)
+            except (ValueError, OSError, RuntimeError):
+                row.last_error_code = "initial_discovery_unavailable"
         audit(db, row, principal, request, "created")
         audit(db, row, principal, request, "credential_configured", metadata={"fields": provider.state(row)})
         result = response(row, provider)
         db.commit()
+        if initial:
+            discovery.enqueue(initial.id)
         return result
     except HTTPException:
         db.rollback()
@@ -192,6 +220,9 @@ def update_integration(integration_id: uuid.UUID, payload: ConnectionUpdate, req
     try:
         record, manifest = installed_manifest(db, row.connector_id)
         provider = AtlasEncryptedSecretProvider(db)
+        if payload.config is not None or payload.selected_scopes is not None or payload.enabled is False:
+            from app.services.discovery_orchestration import cancel_integration_runs
+            cancel_integration_runs(db, row.id)
         if payload.config is not None:
             # Clearing credentials remains a legitimate unconfigured state.
             names = provider.state(row) or [field["key"] for field in manifest["connection_fields"] if field["secret"]]
@@ -203,9 +234,12 @@ def update_integration(integration_id: uuid.UUID, payload: ConnectionUpdate, req
             row.name = payload.name
         if payload.enabled is not None and payload.enabled != row.enabled:
             row.enabled = payload.enabled
+            from app.services.discovery_orchestration import next_run
+            row.next_run_at = next_run(row.schedule_preset, datetime.now(timezone.utc)) if row.enabled else None
             audit(db, row, principal, request, "enabled" if row.enabled else "disabled")
         if payload.config is not None or payload.selected_scopes is not None:
             row.last_test_at = row.last_test_status = row.source_version = row.source_compatibility = None
+            row.last_error_code = None
         audit(db, row, principal, request, "configuration_changed")
         result = response(row, provider)
         db.commit()
@@ -224,10 +258,13 @@ def replace_credentials(integration_id: uuid.UUID, payload: Credentials, request
         values = {key: value.get_secret_value() for key, value in payload.values.items()}
         validate_configuration(manifest, row.config_json, values)
         provider = AtlasEncryptedSecretProvider(db)
+        from app.services.discovery_orchestration import cancel_integration_runs
+        cancel_integration_runs(db, row.id)
         action = "credential_replaced" if provider.state(row) else "credential_configured"
         provider.replace(row, values)
         values.clear()
         row.last_test_at = row.last_test_status = row.source_version = row.source_compatibility = None
+        row.last_error_code = None
         audit(db, row, principal, request, action, metadata={"fields": provider.state(row)})
         result = response(row, provider)
         db.commit()
@@ -244,8 +281,11 @@ def clear_credentials(integration_id: uuid.UUID, payload: Confirm, request: Requ
     if not payload.confirmed:
         raise HTTPException(422, "Explicit credential removal confirmation is required")
     provider = AtlasEncryptedSecretProvider(db)
+    from app.services.discovery_orchestration import cancel_integration_runs
+    cancel_integration_runs(db, row.id)
     provider.delete(row)
     row.last_test_at = row.last_test_status = row.source_version = row.source_compatibility = None
+    row.last_error_code = None
     audit(db, row, principal, request, "credential_cleared")
     result = response(row, provider)
     db.commit()
@@ -260,8 +300,11 @@ def retire_integration(integration_id: uuid.UUID, payload: Confirm, request: Req
         raise HTTPException(409, "Confirm removal of a generic connection")
     lifecycle.lock_connector(db, row.connector_id)
     provider = AtlasEncryptedSecretProvider(db)
+    from app.services.discovery_orchestration import cancel_integration_runs
+    cancel_integration_runs(db, row.id)
     provider.delete(row)
     row.enabled = False
+    row.next_run_at = None
     row.retired_at = row.retired_at or datetime.now(timezone.utc)
     audit(db, row, principal, request, "retired")
     result = response(row, provider)
@@ -327,6 +370,8 @@ async def test_connection(integration_id: uuid.UUID, request: Request,
                 result = await invoke(record, manifest, row.config_json, lease.values, lease.request_id)
         row.last_test_at = datetime.now(timezone.utc)
         row.last_test_status = result["category"]
+        if result["success"]:
+            row.last_error_code = None
         row.source_version = result.get("source_version")
         row.source_compatibility = result["compatibility"]
         audit(db, row, principal, request, "test_result", metadata={"category": result["category"]}, success=result["success"])
@@ -357,6 +402,8 @@ def resolve_mapping(connector_id: str, payload: MappingInput, request: Request,
     require_global(principal, "integration_runtime.manage")
     from app.services.connector_catalogue import catalogue
     lifecycle.lock_connector(db, connector_id)
+    if lifecycle.active_connector_runs(db, connector_id):
+        raise HTTPException(409, "Wait for active discovery runs to settle before changing mappings")
     try:
         manifest = catalogue.get(connector_id, payload.version).manifest
         declared = next((row for kind, row, _ in mappings.declarations(manifest) if kind == payload.kind and row["key"] == payload.source_key), None)

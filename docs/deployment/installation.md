@@ -157,7 +157,9 @@ HTTPS through an allowlisted external proxy keeps Secure cookies. Native Uvicorn
 trusts only loopback; nginx ignores external forwarding unless the peer appears
 in the empty-by-default `ATLAS_TRUSTED_PROXIES` list. See
 [reverse-proxy configuration](reverse-proxy-examples.md#nativesystemd).
-The worker remains the existing limited worker boundary, not new orchestration.
+The existing worker owns bounded generic discovery dispatch/recovery and fixed
+schedules, with PostgreSQL authoritative and Redis as disposable hints. Its
+filtered native environment excludes user/session authentication secrets.
 Only the web cache is writable by its hardened service.
 
 Local lost-code reset:
@@ -208,7 +210,8 @@ does not create a new administrator.
 
 Compose derives the database connection safely using SQLAlchemy URL encoding;
 operators need not construct a URL. The supported native Redis service is local;
-its worker is currently a placeholder and does not require runtime Redis access.
+the worker uses Redis dispatch hints and scans durable PostgreSQL intent when
+Redis is unavailable.
 The web service receives browser-public configuration only. Signing secrets stay
 outside PostgreSQL and are not a future TOTP/data-encryption key.
 

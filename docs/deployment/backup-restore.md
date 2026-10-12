@@ -216,6 +216,11 @@ Integration credential field with fresh nonces and unchanged ownership/revision
 AAD; any invalid field aborts the restore/rewrap transaction. DataSource and
 Integration IDs remain stable. Protected executable store contents and the runtime
 control credential are deployment-local, so verify the exact installed package
-and runtime health before Test Connection. There are no persistent probe leases
-or discovery tokens in I2. Credential removal cannot erase historical encrypted
+and runtime health before Test Connection or discovery. Run tokens never persist;
+receipts, immutable run provenance and evidence are database history. The separate
+`discovery-ingestion.secret` signing file is deployment-local and excluded from the
+database archive. Ordinary restart/upgrade preserves it; another installation
+provisions its own file. Restore revokes all imported generations and fails active
+runs without absence evaluation. Cancel destination discovery runs and wait for
+runtime cleanup before restoring; active executable ownership blocks replacement. Credential removal cannot erase historical encrypted
 archives already downloaded under your retention policy.

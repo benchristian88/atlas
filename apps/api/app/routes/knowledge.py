@@ -16,6 +16,8 @@ from app.models import (
     Customer,
     Asset,
     AssetRelationship,
+    AssetInterface,
+    Network,
     DataSource,
     DiscoveryRun,
     Integration,
@@ -33,6 +35,7 @@ from app.schemas import (
     LifecycleReasonRequest,
     ReconciliationDecisionRequest,
     ReconciliationLinkAssetRequest,
+    ReconciliationLinkTechnicalRequest,
     ReconciliationItemResponse,
     ReconciliationSummaryResponse,
     SimulatedDiscoveryRequest,
@@ -43,6 +46,7 @@ from app.services.reconciliation import (
     accept_item,
     defer_item,
     link_item_to_asset,
+    link_item_to_technical,
     relationship_resolution,
     reject_item,
 )
@@ -121,6 +125,18 @@ def run_response(
         ),
         "created_at": run.created_at,
         "updated_at": run.updated_at,
+        "execution_provenance": ({name: run.execution_provenance.get(name) for name in [
+            "connector_id", "connector_version", "connector_digest", "manifest_version", "aip_version", "sdk_version",
+            "sdk_digest", "runtime_type", "runtime_version", "protocol_version", "baseline_id", "baseline_version",
+            "baseline_digest", "dependency_lock_digest", "packaging_mode", "trigger"]} if run.execution_provenance else None),
+        "runtime_job_id": run.runtime_job_id,
+        "dispatch_state": run.dispatch_state if run.execution_provenance else None,
+        "dispatch_attempts": run.dispatch_attempts,
+        "batch_count": run.batch_count,
+        "observation_count": run.observation_count,
+        "warning_count": run.warning_count,
+        "source_version": run.source_version,
+        "cancellation_requested_at": run.cancellation_requested_at,
     }
 
 
@@ -245,6 +261,7 @@ def list_discovery_runs(
     principal: Principal = Depends(require_permission("integrations.view")),
     limit: int = Query(default=100, ge=1, le=500),
     include_archived: bool = False,
+    integration_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
 ):
     query = select(DiscoveryRun).where(
@@ -256,6 +273,8 @@ def list_discovery_runs(
         query = query.where(DiscoveryRun.site_id == context.site_id)
     if not include_archived:
         query = query.where(DiscoveryRun.archived_at.is_(None))
+    if integration_id is not None:
+        query = query.where(DiscoveryRun.integration_id == integration_id)
     runs = db.scalars(query.order_by(DiscoveryRun.started_at.desc()).limit(limit))
     return [run_response(db, run, include_deletion_safety=True) for run in runs]
 
@@ -786,6 +805,9 @@ def accept_reconciliation_item(
     item = _decision_item(db, principal, item_id)
     if item.entity_type == "asset_relationship":
         require_scope(principal, "relationships.create", item.customer_id, item.site_id)
+    elif item.entity_type in {"network", "asset_interface"}:
+        require_scope(principal, "networks.create" if item.category == "newly_discovered" and item.entity_id is None else "networks.edit",
+            item.customer_id, item.site_id, hide_existence=True)
     try:
         accepted = accept_item(
             db,
@@ -848,6 +870,23 @@ def link_reconciliation_asset(
     _audit_decision(db, request=request, principal=principal, item=item, action="linked")
     commit(db, "Asset identity link")
     db.refresh(item)
+    return reconciliation_response(db, item)
+
+
+@router.post("/reconciliation-items/{item_id}/link-technical", response_model=ReconciliationItemResponse)
+def link_reconciliation_technical(item_id: uuid.UUID, payload: ReconciliationLinkTechnicalRequest, request: Request,
+        principal: Principal = Depends(require_permission("reconciliation.decide")), db: Session = Depends(get_db)):
+    item = _decision_item(db, principal, item_id)
+    if item.entity_type not in {"network", "asset_interface"}:
+        raise HTTPException(422, "This item is not a technical source identity")
+    require_scope(principal, "networks.edit", item.customer_id, item.site_id, hide_existence=True)
+    target = db.get(Network if item.entity_type == "network" else AssetInterface, payload.entity_id)
+    owner = db.get(Asset, target.asset_id) if target is not None and item.entity_type == "asset_interface" else target
+    if owner is None or (owner.customer_id, owner.site_id) != (item.customer_id, item.site_id):
+        raise not_found("Technical entity")
+    link_item_to_technical(db, item=item, target=target, user=principal.user, reason=payload.reason)
+    _audit_decision(db, request=request, principal=principal, item=item, action="linked")
+    commit(db, "Technical source identity link")
     return reconciliation_response(db, item)
 
 
