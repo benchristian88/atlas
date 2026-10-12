@@ -22,6 +22,26 @@ _DIGEST = re.compile(r"[a-f0-9]{64}")
 _COLLECTION = re.compile(r"[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}")
 
 
+def safe_capability_diagnostics(value, credentials=()):
+    """Generic bounded identifiers only; no source paths, payloads or free text."""
+    import re
+    if not isinstance(value, list) or len(value) > 16:
+        return []
+    result = []
+    for row in value:
+        if (not isinstance(row, dict) or set(row) - {"capability", "state", "privilege", "path_category"}
+                or not {"capability", "state", "path_category"} <= set(row)
+                or any(not isinstance(item, str) for item in row.values())
+                or row["state"] not in {"ready", "permission_limited", "unproven", "source_unavailable"}
+                or row["path_category"] not in {"root", "inventory", "topology", "authorization"}
+                or any(not isinstance(row[key], str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", row[key])
+                       for key in {"capability", "privilege"} & row.keys())
+                or any(secret and secret in value for value in row.values() if isinstance(value, str) for secret in credentials)):
+            return []
+        result.append(dict(row))
+    return result
+
+
 class CollectionIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     version: str | None
@@ -231,9 +251,12 @@ class LocalIntegrationRuntime:
             source = result.get("source_version")
             if not isinstance(source, str) or not re.fullmatch(r"[0-9][A-Za-z0-9.+_-]{0,99}", source) or any(value and value in source for value in credentials.values()):
                 source = None
-            return {"success": result["success"], "category": result["category"], "source_version": source,
+            safe = {"success": result["success"], "category": result["category"], "source_version": source,
                 "tls": result.get("tls") if result.get("tls") in {"verify", "fingerprint", "insecure"} else None,
                 "permission_limited": result.get("permission_limited") is True}
+            if "capability_diagnostics" in result:
+                safe["capability_diagnostics"] = safe_capability_diagnostics(result["capability_diagnostics"], credentials.values())
+            return safe
         except (OSError, ValueError, TypeError, aiohttp.ClientError, TimeoutError):
             return {"success": False, "category": "runtime_unavailable", "source_version": None}
 

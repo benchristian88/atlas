@@ -18,6 +18,26 @@ CATEGORIES = {"connected", "authentication_failed", "permission_limited", "tls_t
     "invalid_configuration", "invalid_credentials", "package_unavailable", "runtime_unavailable"}
 
 
+def safe_capability_diagnostics(value, credentials=()):
+    """Generic bounded identifiers only; no source paths, payloads or free text."""
+    import re
+    if not isinstance(value, list) or len(value) > 16:
+        return []
+    result = []
+    for row in value:
+        if (not isinstance(row, dict) or set(row) - {"capability", "state", "privilege", "path_category"}
+                or not {"capability", "state", "path_category"} <= set(row)
+                or any(not isinstance(item, str) for item in row.values())
+                or row["state"] not in {"ready", "permission_limited", "unproven", "source_unavailable"}
+                or row["path_category"] not in {"root", "inventory", "topology", "authorization"}
+                or any(not isinstance(row[key], str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", row[key])
+                       for key in {"capability", "privilege"} & row.keys())
+                or any(secret and secret in value for value in row.values() if isinstance(value, str) for secret in credentials)):
+            return []
+        result.append(dict(row))
+    return result
+
+
 def safe_result(value, credentials=()):
     if not isinstance(value, dict) or type(value.get("success")) is not bool or value.get("category") not in CATEGORIES:
         return {"success": False, "category": "source_unavailable", "source_version": None}
@@ -31,6 +51,8 @@ def safe_result(value, credentials=()):
         result["tls"] = value["tls"]
     if type(value.get("permission_limited")) is bool:
         result["permission_limited"] = value["permission_limited"]
+    if "capability_diagnostics" in value:
+        result["capability_diagnostics"] = safe_capability_diagnostics(value["capability_diagnostics"], credentials)
     return result
 
 
@@ -94,7 +116,7 @@ def execute(runtime, payload):
                 stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 env=environment, start_new_session=True)
             process.communicate(json.dumps({"config": config, "credentials": values}).encode(), timeout=TIMEOUT)
-            result = json.loads(read_regular(root / "result.json", 4096))
+            result = json.loads(read_regular(root / "result.json", 8192))
             return safe_result(result, values.values())
         except subprocess.TimeoutExpired:
             return {"success": False, "category": "timeout", "source_version": None}

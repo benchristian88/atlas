@@ -115,7 +115,7 @@ independent runtime-control credential; this is not a browser API. Atlas owns th
 lease and tenancy, and the runtime accepts neither scope nor callback authority.
 The fixed verified entry is `test_connection.yml`; callers cannot select paths,
 commands, repositories, arguments or playbook text. Requests are limited to
-128 KiB, results to 4 KiB, concurrent probes to four and execution to 22 seconds.
+128 KiB, results to 8 KiB, concurrent probes to four and execution to 22 seconds.
 API probe transport has a 28-second deadline; health remains three seconds.
 
 Result fields are bounded enums/booleans and a sanitized source-version string.
@@ -142,3 +142,25 @@ the canonical compatible identities; declarations cannot trigger installation.
 Python version maps remain insufficient to satisfy a Python artefact digest.
 This is an additive private health implementation change, not an SDK/AIP schema
 change or a new execution operation. See the [baseline review](../i4a-runtime-baseline.md).
+
+## Bounded capability diagnostics and retained source endpoints
+
+Test Connection may add `capability_diagnostics`, at most 16 objects with
+`capability`, `state`, `path_category` and optional `privilege`. Capability and
+privilege are identifier strings matching `[A-Za-z][A-Za-z0-9_.-]{0,63}`.
+State is `ready`, `permission_limited`, `unproven` or `source_unavailable`;
+path category is `root`, `inventory`, `topology` or `authorization`.
+Both runtime and API validate the whole list and reject unknown fields, unsafe
+types/characters, excess bounds and known credential echoes. There are no raw
+source paths, messages, ACLs or payloads. Missing diagnostics preserve prior
+response behavior; malformed diagnostic lists are replaced with an empty list.
+This generic additive probe field does not change AIP or SDK contracts.
+
+Generic Integration updates retain source identity: after any completed
+source-backed discovery, including PARTIAL, non-secret URL connection fields
+are fixed. Changing one returns HTTP 409 `source_identity_locked` and directs
+the operator to create a new Integration. Earlier configuration edits, display
+name, scopes, TLS trust and credential rotation retain existing behavior.
+The existing scoped manage permission and Integration row lock apply before the
+history check; concurrent ingestion finalisation uses that same lock.
+No new schema, permission or vendor-specific endpoint contract is introduced.
