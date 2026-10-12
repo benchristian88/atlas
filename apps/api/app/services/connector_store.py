@@ -84,6 +84,8 @@ def _safe_member(name: str) -> PurePosixPath:
     pieces = name.rstrip("/").split("/")
     if name.startswith("/") or any(piece in ("", ".", "..") for piece in pieces):
         raise PackageStoreError("unsafe_archive_path")
+    if pieces[0] in {"collections", "ansible_collections"}:
+        raise PackageStoreError("runtime_owned_collection_path")
     return PurePosixPath(*pieces)
 
 

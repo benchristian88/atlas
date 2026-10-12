@@ -14,6 +14,9 @@ WorkingDirectory=/opt/atlas/apps/runtime/ansible
 Environment=ATLAS_RUNTIME_PACKAGING_MODE=systemd
 Environment=ATLAS_RUNTIME_CONTROL_SECRET_FILE=/etc/atlas-runtime/control.secret
 Environment=ATLAS_CONNECTOR_STORE_PATH=/var/lib/atlas-connectors
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=ANSIBLE_COLLECTIONS_PATH=/opt/atlas/apps/runtime/ansible/collections
+Environment=ANSIBLE_COLLECTIONS_SCAN_SYS_PATH=False
 # The runtime receives no database/auth/user environment file. Native server
 # binding is fixed to 127.0.0.1 in code, regardless of inherited host variables.
 ExecStart=/opt/atlas/runtime-venv/bin/python -m atlas_runtime.server

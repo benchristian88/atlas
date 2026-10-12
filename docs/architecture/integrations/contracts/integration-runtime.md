@@ -123,3 +123,22 @@ Atlas classifies it using the exact installed Manifest: qualified exact versions
 are supported, known-incompatible versions blocked and unqualified/newer results
 untested. Test Connection writes safe audit/last-test metadata only. It creates
 no DiscoveryRun, evidence, AIP receipt, Asset, Service or Business Function.
+
+## I4A installed collection health
+
+Health/capabilities retain the existing `dependencies` Python-version map and
+add real records to the previously empty `collections` map. It is keyed by
+bounded `namespace.name`, with at most 32 identities. Each record has exactly
+`version` (installed version or null), `digest` (verified `sha256:` archive
+identity or null), and `state` (`compatible` or `incompatible`). Runtime reports
+an owned archive identity only after matching the immutable reviewed MANIFEST,
+FILES manifest and every installed file. Missing, changed, extra or linked code,
+unexpected collections and collection-lock mismatch fail closed.
+
+Atlas API validates those fields and requires health, capabilities and its
+approved baseline to agree. It exposes no filesystem path or command output.
+Catalogue matching compares required collection kind/name/version/digest to
+the canonical compatible identities; declarations cannot trigger installation.
+Python version maps remain insufficient to satisfy a Python artefact digest.
+This is an additive private health implementation change, not an SDK/AIP schema
+change or a new execution operation. See the [baseline review](../i4a-runtime-baseline.md).

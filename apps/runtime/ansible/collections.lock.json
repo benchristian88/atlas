@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-10-12",
+  "collections": [
+    {
+      "name": "community.proxmox",
+      "version": "2.0.0",
+      "archive": "community-proxmox-2.0.0.tar.gz",
+      "sha256": "77e02e0d1e341c6b064900fe58484ad8880cee4832f5fd65d09834ed068216f6",
+      "manifest_sha256": "818c21db7b4b72ebf75bfe990eefb4c8499d02e6e599ede09a1dec99cdac88db",
+      "files_sha256": "b35b0110b5477a729d27763b2eacf3a862a3045e8c4e664614e44048d28389f2",
+      "source_url": "https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-proxmox-2.0.0.tar.gz",
+      "repository": "https://github.com/ansible-collections/community.proxmox",
+      "source_commit": "988661033eaba978379f1b47f5324200e262f974",
+      "release_tag": "2.0.0",
+      "requires_ansible": ">=2.17.0",
+      "python_requirements": {
+        "proxmoxer": ">=2.3",
+        "requests": "unconstrained"
+      },
+      "collection_dependencies": {},
+      "licences": [
+        "GPL-3.0-or-later",
+        "BSD-2-Clause"
+      ]
+    }
+  ]
+}

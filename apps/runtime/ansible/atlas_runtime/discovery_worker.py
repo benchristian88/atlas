@@ -5,6 +5,8 @@ from pathlib import Path
 import resource
 import sys
 
+from .collections import execution_environment
+
 
 def main():
     import ansible_runner
@@ -19,7 +21,7 @@ def main():
     result = ansible_runner.interface.init_runner(private_data_dir=str(root), playbook="discover.yml", inventory="localhost,", quiet=True,
         extravars={"atlas_input_file": str(root / "input.json"), "atlas_aip_file": str(root / "aip.ndjson"),
             "ansible_python_interpreter": sys.executable},
-        envvars={"ANSIBLE_LOCAL_TEMP": str(root / "local-tmp"), "ANSIBLE_REMOTE_TEMP": str(root / "remote-tmp"),
+        envvars={**execution_environment(), "ANSIBLE_LOCAL_TEMP": str(root / "local-tmp"), "ANSIBLE_REMOTE_TEMP": str(root / "remote-tmp"),
             "ANSIBLE_RETRY_FILES_ENABLED": "False", "ANSIBLE_NOCOLOR": "True"},
         settings={"job_timeout": timeout, "idle_timeout": timeout, "suppress_output_file": True,
             "suppress_ansible_output": True, "omit_event_data": True}, event_handler=lambda _event: False)

@@ -21,6 +21,16 @@ are retained verbatim. The inventory covers reference Python wheels, not a final
 image/OS or every native platform licence audit. Ansible and its GPL dependencies
 remain in the isolated runtime environment; Atlas API does not import Ansible.
 
+I4A distributes the exact community.proxmox 2.0.0 source archive under
+[vendor/collections](vendor/collections), pinned by the
+[collection lock](apps/runtime/ansible/collections.lock.json). Its original
+GPL-3.0-or-later and BSD-2-Clause licence material is retained in the archive
+and runtime notices. Added HTTPS dependencies are proxmoxer 2.3.0 (MIT),
+requests 2.34.2 (Apache-2.0), charset-normalizer 3.5.2 (MIT), idna 3.20
+(BSD-3-Clause), urllib3 2.8.0 (MIT) and certifi 2026.7.22 (MPL-2.0).
+Exact artefact hashes and original notices are in the runtime SBOM/notices.
+No third-party implementation is relicensed as Atlas-authored Connector code.
+
 External Asset icon sources are operator-selected. Confirm permission to use
 their artwork; Atlas does not grant rights to third-party logos.
 

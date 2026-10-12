@@ -2,15 +2,25 @@
   "aip_versions": [
     "1.0"
   ],
-  "baseline_id": "atlas-ansible-i3-v1",
-  "baseline_version": "1.1.0",
-  "collections": {},
+  "baseline_id": "atlas-ansible-i4a-v1",
+  "baseline_version": "1.2.0",
+  "collection_lock_digest": "b1957ea9a94c5caa05d3f6105eb98b6b9bd6460c623d8729130bc9febdaed883",
+  "collections": {
+    "community.proxmox": {
+      "digest": "sha256:77e02e0d1e341c6b064900fe58484ad8880cee4832f5fd65d09834ed068216f6",
+      "state": "compatible",
+      "version": "2.0.0"
+    }
+  },
   "dependencies": {
     "ansible-core": "2.19.7",
     "ansible-runner": "2.4.3",
     "attrs": "26.1.0",
+    "certifi": "2026.7.22",
     "cffi": "2.1.1",
+    "charset-normalizer": "3.5.2",
     "cryptography": "50.0.2",
+    "idna": "3.20",
     "jinja2": "3.1.6",
     "jsonschema": "4.25.1",
     "jsonschema-specifications": "2025.9.1",
@@ -18,19 +28,22 @@
     "markupsafe": "3.0.4",
     "packaging": "26.3",
     "pexpect": "4.9.0",
+    "proxmoxer": "2.3.0",
     "psutil": "7.2.2",
     "ptyprocess": "0.7.0",
     "pycparser": "3.11",
     "python-daemon": "3.1.2",
     "pyyaml": "6.0.3",
     "referencing": "0.37.0",
+    "requests": "2.34.2",
     "resolvelib": "1.2.1",
     "rpds-py": "2026.9.1",
-    "typing-extensions": "4.15.0"
+    "typing-extensions": "4.15.0",
+    "urllib3": "2.8.0"
   },
-  "dependency_lock_digest": "c019c56dde01d0774f791e05a13df6ef0abd6fbca41f20fd78e04f09b7d5a9bf",
+  "dependency_lock_digest": "31993a863d6faf8887925b36626002efc327f0f2ce38bb9dbb3f3eac4974e326",
   "protocol_version": "integration-runtime-v1",
-  "runtime_version": "0.3.0",
+  "runtime_version": "0.3.1",
   "sdk_package_digest": "a01cf35d47ab2f791375586114527fca3ed6335a7611cff14a6e8475c8380e0e",
   "sdk_version": "1.1.0"
 }

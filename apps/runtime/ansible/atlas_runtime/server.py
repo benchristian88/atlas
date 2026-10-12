@@ -18,6 +18,8 @@ import stat
 import tarfile
 import threading
 
+from .collections import health as collection_health
+
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BODY = 128 * 1024
 MAX_BUNDLE = 20 * 1024 * 1024
@@ -123,6 +125,9 @@ class Runtime:
         except PackageNotFoundError:
             matches = False
         matches = matches and hashlib.sha256(read_regular(ROOT / "requirements.lock", MAX_METADATA)).hexdigest() == baseline["dependency_lock_digest"]
+        collection_digest, collections = collection_health()
+        matches = (matches and collection_digest == baseline["collection_lock_digest"]
+                   and collections == baseline["collections"])
         return {
             "state": "healthy" if matches else "incompatible",
             "runtime_version": baseline["runtime_version"],
@@ -136,7 +141,7 @@ class Runtime:
             "ansible_runner_version": dependencies.get("ansible-runner"),
             "diagnostic_code": None if matches else "baseline_dependency_mismatch",
             "dependencies": dependencies,
-            "collections": baseline["collections"],
+            "collections": collections,
         }
 
     def capabilities(self):
@@ -188,6 +193,7 @@ class Runtime:
                     name = member.name.rstrip("/") if member.isdir() else member.name
                     if (not (member.isfile() or member.isdir()) or parts.is_absolute() or "\\" in name
                             or any(part in {"", ".", ".."} for part in name.split("/"))
+                            or parts.parts[0] in {"collections", "ansible_collections"}
                             or name in embedded or members > MAX_FILES
                             or (member.isdir() and member.size != 0)
                             or not 0 <= member.size <= MAX_FILE):

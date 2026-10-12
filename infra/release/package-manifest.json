@@ -30,11 +30,16 @@
     "docs/architecture/authentication-and-access-control.md",
     "apps/runtime/ansible/atlas_runtime/",
     "apps/runtime/ansible/requirements.lock",
+    "apps/runtime/ansible/README.md",
     "apps/runtime/ansible/baseline.json",
+    "apps/runtime/ansible/collections.lock.json",
     "apps/runtime/ansible/sbom.cdx.json",
     "apps/runtime/ansible/notices/",
+    "docs/architecture/integrations/i4a-runtime-baseline.md",
+    "docs/architecture/integrations/i4a-completion-report.md",
     "infra/install/runtime.py",
-    "vendor/sdk/"
+    "vendor/sdk/",
+    "vendor/collections/"
   ],
   "docker_compose": [
     "infra/docker/docker-compose.yml",
@@ -82,6 +87,9 @@
     "apps/runtime/ansible/atlas_runtime/server.py",
     "apps/runtime/ansible/requirements.lock",
     "apps/runtime/ansible/baseline.json",
+    "apps/runtime/ansible/collections.lock.json",
+    "apps/runtime/ansible/atlas_runtime/collections.py",
+    "vendor/collections/community-proxmox-2.0.0.tar.gz",
     "apps/runtime/ansible/sbom.cdx.json",
     "infra/install/runtime.py",
     "vendor/sdk/requirements.txt",

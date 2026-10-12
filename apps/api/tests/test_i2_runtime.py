@@ -34,6 +34,8 @@ def installed(tmp_path, monkeypatch):
 @pytest.mark.parametrize("outcome", ["connected", "authentication_failed", "timeout"])
 def test_success_failure_timeout_cleanup_no_credentials_in_argv_or_environment(installed, tmp_path, monkeypatch, outcome, capsys):
     runtime, payload = installed
+    monkeypatch.setenv("PYTHONPATH", "/legacy/atlas-proxmox")
+    monkeypatch.setenv("ANSIBLE_COLLECTIONS_PATH", "/unreviewed/collections")
     values = list(payload["credentials"].values())
     killed = []
     monkeypatch.setattr(probe.os, "killpg", lambda pid, signal: killed.append(pid))
@@ -43,6 +45,11 @@ def test_success_failure_timeout_cleanup_no_credentials_in_argv_or_environment(i
             self.root = Path(args[-1])
             assert args[1:3] == ["-m", "atlas_runtime.probe_worker"]
             assert all(value not in json.dumps(args) + json.dumps(kwargs["env"]) for value in values)
+            assert kwargs["env"]["PYTHONPATH"] == str(ROOT / "apps/runtime/ansible")
+            assert kwargs["env"]["ANSIBLE_COLLECTIONS_PATH"] == str(ROOT / "apps/runtime/ansible/collections")
+            assert kwargs["env"]["ANSIBLE_COLLECTIONS_SCAN_SYS_PATH"] == "False"
+            assert "/legacy/atlas-proxmox" not in json.dumps(kwargs["env"])
+            assert "/unreviewed/collections" not in json.dumps(kwargs["env"])
             assert stat.S_IMODE(self.root.stat().st_mode) == 0o700
         def communicate(self, data, timeout):
             assert timeout == 22

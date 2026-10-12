@@ -19,6 +19,14 @@ MAX_RESPONSE_BYTES = 65536
 PROTOCOL = "integration-runtime-v1"
 _IDENTITY = re.compile(r"[A-Za-z0-9._+-]{1,128}")
 _DIGEST = re.compile(r"[a-f0-9]{64}")
+_COLLECTION = re.compile(r"[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}")
+
+
+class CollectionIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    version: str | None
+    digest: str | None
+    state: str
 
 
 class RuntimeHealth(BaseModel):
@@ -35,7 +43,7 @@ class RuntimeHealth(BaseModel):
     ansible_runner_version: str | None
     diagnostic_code: str | None = None
     dependencies: dict[str, str | None]
-    collections: dict
+    collections: dict[str, CollectionIdentity]
 
 
 def _approved_baseline() -> dict:
@@ -135,7 +143,16 @@ def _safe_health(payload: dict, capabilities: dict, baseline: dict) -> dict:
     aip = capabilities.get("aip_versions")
     dependencies = capabilities.get("dependencies")
     collections = capabilities.get("collections")
-    if aip != ["1.0"] or not isinstance(dependencies, dict) or collections != {}:
+    installed = {name: identity.model_dump() for name, identity in health.collections.items()}
+    if len(installed) > 32:
+        raise ValueError("Invalid collection identities")
+    for name, identity in installed.items():
+        if (not _COLLECTION.fullmatch(name) or identity["state"] not in {"compatible", "incompatible"}
+                or (identity["version"] is not None and not _IDENTITY.fullmatch(identity["version"]))
+                or (identity["digest"] is not None and not re.fullmatch(r"sha256:[a-f0-9]{64}", identity["digest"]))
+                or (identity["state"] == "compatible" and (identity["version"] is None or identity["digest"] is None))):
+            raise ValueError("Invalid collection identity")
+    if aip != ["1.0"] or not isinstance(dependencies, dict) or not isinstance(collections, dict):
         raise ValueError("Invalid runtime capabilities")
     compatible = (health.protocol_version == PROTOCOL
         and health.baseline_id == baseline["baseline_id"]
@@ -147,14 +164,16 @@ def _safe_health(payload: dict, capabilities: dict, baseline: dict) -> dict:
         and health.ansible_core_version == baseline["dependencies"]["ansible-core"]
         and health.ansible_runner_version == baseline["dependencies"]["ansible-runner"]
         and dependencies == health.dependencies
-        and health.collections == baseline["collections"])
+        and installed == baseline["collections"]
+        and collections == installed)
     # The runtime also checks its actual installed distributions against its lock.
     # Allow-listed return fields prevent arbitrary private response data leaking.
     result = health.model_dump(exclude={"state", "diagnostic_code", "dependencies", "collections"})
     result.update(status="healthy" if compatible and health.state == "healthy" else "incompatible",
         last_error=None if compatible and health.state == "healthy" else "runtime_baseline_mismatch",
         capabilities={"operations": sorted(operations), "aip_versions": aip,
-            "dependencies": baseline["dependencies"] if compatible else {}, "collections": {}},
+            "dependencies": baseline["dependencies"] if compatible else {},
+            "collections": {name: identity for name, identity in installed.items() if name in baseline["collections"]}},
         baseline_version=baseline.get("baseline_version", "1.0.0"))
     capacity = capabilities.get("discovery_capacity")
     if capacity is not None:

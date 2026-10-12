@@ -109,6 +109,23 @@ def validate_tree(files, method, metadata, commit, manifest):
     packaged = parse_metadata(files["apps/api/app/release.json"][0])
     if packaged != {**metadata, "build_id": commit, "install_method": method}:
         raise ValueError("Artifact identity does not match release")
+    # Validate the same reviewed offline bytes for both distribution paths.
+    runtime_root = "apps/runtime/ansible/"
+    baseline = json.loads(files[runtime_root + "baseline.json"][0])
+    collection_lock = files[runtime_root + "collections.lock.json"][0]
+    if hashlib.sha256(collection_lock).hexdigest() != baseline["collection_lock_digest"]:
+        raise ValueError("Runtime collection lock mismatch")
+    sys.path.insert(0, str(ROOT / runtime_root))
+    from atlas_runtime.collections import reviewed_archive
+    identities = {}
+    for row in json.loads(collection_lock)["collections"]:
+        archive_path = "vendor/collections/" + row["archive"]
+        if not safe_path(archive_path) or archive_path not in files:
+            raise ValueError("Reviewed collection archive missing")
+        reviewed_archive(row, files[archive_path][0])
+        identities[row["name"]] = {"version": row["version"], "digest": "sha256:" + row["sha256"], "state": "compatible"}
+    if identities != baseline["collections"]:
+        raise ValueError("Runtime collection baseline mismatch")
     if method == "docker_compose":
         script = "infra/docker/gateway/15-atlas-trusted-proxies.sh"
         if files[script][1] != 0o755:

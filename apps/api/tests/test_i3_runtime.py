@@ -81,6 +81,8 @@ def test_capacity_idempotent_request_and_cancellation(installed, monkeypatch):
 @pytest.mark.parametrize("outcome", ["complete", "partial", "failed", "missing", "timeout", "cancelled", "secret"])
 def test_terminal_workspace_cleanup_pipe_only_secrets(installed, tmp_path, monkeypatch, outcome, capsys):
     runtime, payload = installed
+    monkeypatch.setenv("PYTHONPATH", "/legacy/atlas-proxmox")
+    monkeypatch.setenv("ANSIBLE_COLLECTIONS_PATH", "/unreviewed/collections")
     secrets_used = [*payload["credentials"].values(), payload["ingestion_token"]]
     killed, callbacks = [], []
     monkeypatch.setattr(jobs.os, "killpg", lambda pid, number: killed.append(pid))
@@ -91,6 +93,10 @@ def test_terminal_workspace_cleanup_pipe_only_secrets(installed, tmp_path, monke
             self.root = Path(args[-1])
             assert args[1:3] == ["-m", "atlas_runtime.discovery_worker"]
             assert all(secret not in json.dumps(args) + json.dumps(kwargs["env"]) for secret in secrets_used)
+            assert kwargs["env"]["PYTHONPATH"] == str(ROOT / "apps/runtime/ansible")
+            assert kwargs["env"]["ANSIBLE_COLLECTIONS_PATH"] == str(ROOT / "apps/runtime/ansible/collections")
+            assert kwargs["env"]["ANSIBLE_COLLECTIONS_SCAN_SYS_PATH"] == "False"
+            assert "/legacy/atlas-proxmox" not in json.dumps(kwargs["env"])
             assert self.root.stat().st_mode & 0o777 == 0o700
         def communicate(self, raw, timeout):
             inputs = json.loads(raw)

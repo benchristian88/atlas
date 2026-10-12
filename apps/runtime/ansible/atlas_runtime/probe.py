@@ -10,6 +10,8 @@ import tempfile
 
 from atlas_connector_sdk.configuration import validate_configuration
 
+from .collections import execution_environment
+
 TIMEOUT = 22
 CATEGORIES = {"connected", "authentication_failed", "permission_limited", "tls_trust_required", "timeout",
     "source_unavailable", "unsafe_endpoint", "redirect_rejected", "response_too_large", "invalid_source_response",
@@ -84,7 +86,7 @@ def execute(runtime, payload):
                 target.chmod(0o600)
         if not (project / "test_connection.yml").is_file():
             return {"success": False, "category": "package_unavailable", "source_version": None}
-        environment = {"PATH": str(Path(sys.executable).parent) + ":/usr/bin:/bin", "HOME": temporary,
+        environment = {**execution_environment(), "PATH": str(Path(sys.executable).parent) + ":/usr/bin:/bin", "HOME": temporary,
             "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
         process = None
         try:
