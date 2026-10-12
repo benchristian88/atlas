@@ -24,7 +24,9 @@ self-hosted focus. No date is promised for 1.0.0.
   Docker/Compose and UniFi source Connectors remain metadata only. I3 implements generic
   asynchronous discovery orchestration, fixed schedules, canonical AIP ingestion and
   run history with deterministic test-only execution; no production discovery
-  Connector is shipped. I3 live Docker/native acceptance remains pending.
+  Connector is shipped. Actual I3 Docker/LXC build/deployment, migration, saved I2
+  probes, signing-state restart preservation and isolation/hardening are
+  operator-confirmed. Native Debian/systemd I3 LIVE acceptance remains outstanding.
 
 Core platform hardening is substantially complete and sufficient to proceed to
 integration/plugin and onboarding development. This includes secure installation,
@@ -49,7 +51,9 @@ it is not live monitoring or evidence of recovery readiness.
   records completed SDK extraction, live Docker/Proxmox connection acceptance and
   the remaining native/systemd, remote provenance and I4 qualification boundaries.
   The [I3 record](../architecture/integrations/i3-completion-report.md) documents generic
-  orchestration and test-only execution without claiming I4 acceptance.
+  orchestration, test-only execution and subsequent actual Docker/LXC operator
+  acceptance. Native live acceptance, remote GitHub/Sigstore qualification and I4
+  Proxmox discovery/9.2.11 qualification remain outstanding.
 - Guided onboarding to help operators establish useful initial knowledge.
 
 ## Before 1.0

@@ -2,9 +2,14 @@
 
 12 October 2026. **Acceptance: PASS WITH DOCUMENTED FOLLOW-UPS.**
 
-Generic I3 execution/ingestion is implemented and locally validated. Live I3
-Docker and native/systemd acceptance requires the supported Linux operator
-environment. No production discovery Connector or I4 qualification is claimed.
+Generic I3 execution/ingestion is implemented and locally validated. Actual live
+Docker/LXC operator acceptance was completed after the original report and is
+recorded below. Native Debian/systemd LIVE acceptance has not been performed and
+remains outstanding. No production discovery Connector or I4 qualification is claimed.
+
+The Git metadata, implementation file inventory and repository-state snapshot
+below describe the original implementation report. The subsequent operator
+acceptance is recorded separately from the original local validation.
 
 Starting branch: `feature/integrations-i3-orchestration-aip-ingestion`.
 Starting HEAD: `78d1c0e4592eaee0310b2bfad63b6e5c4ed53c47`.
@@ -204,7 +209,7 @@ surface, exact persisted binding/generation and no-store responses. Payload scop
 counts, reference metadata and private source material do not authorize access.
 Package/mapping lifecycle guards protect active exact executable ownership.
 
-## Validation actually executed
+## Original local validation actually executed
 
 Host: macOS/Darwin; API/runtime acceptance interpreter Python 3.14, PostgreSQL
 17.11, isolated Redis 7.4.6 and test nginx 1.28.3. CI installs Python 3.12 and the
@@ -242,15 +247,39 @@ all real runtime scenarios passed there. No production dependency pin was weaken
 No unavailable checks are presented as successful. Existing dependency/deprecation
 warnings remain; final JUnit contains no failures/errors/skips.
 
+## Actual live Docker/LXC operator acceptance (post-report)
+
+The operator performed the following acceptance on the real existing Atlas Docker
+test LXC using the I3 feature branch, after the original report. These are actual
+live deployment observations supplied by the operator, separate from the local
+deterministic tests above and the historical I1/I2 acceptance.
+
+| Acceptance check | Actual live result |
+| --- | --- |
+| Clean branch checkout | The I3 feature branch, `feature/integrations-i3-orchestration-aip-ingestion`, was checked out cleanly on the existing Docker test LXC. |
+| Build, deployment and service health | `docker compose up -d --build` successfully rebuilt and deployed `api`, `web`, `worker`, `runtime`, `runtime-init` and `connector-bootstrap`. PostgreSQL and Redis were healthy; API and web were healthy; runtime and worker started successfully. `runtime-init` and `connector-bootstrap` exited **0**, as expected. |
+| Live PostgreSQL migration | Both `current` and `heads` reported **`20261012_0029 (head)`**. The API startup log showed the successful upgrade **`20261012_0028 -> 20261012_0029`**. |
+| Existing I2 Proxmox Integration regression | The saved Integration remained present and its encrypted credentials remained usable. Test Connection succeeded without re-entering credentials. Detected Proxmox **9.2.11** remained explicitly **unqualified/untested**, and Connector **0.1.0** remained **probe-only**. The UI correctly showed inventory discovery unavailable and exposed no fake Run Now or schedule controls. |
+| Inspected deployment logs and responses | Worker logged `Atlas worker is ready`; API startup completed normally. Health endpoints and the saved Proxmox Test Connection returned **200**. No runtime error was observed in the inspected runtime/worker/API logs. |
+| Ingestion signing state and restart preservation | API and worker both saw `/var/lib/atlas/discovery-ingestion.secret`; their SHA-256 hashes matched. After restarting `api`, `worker` and `runtime`, the hash remained unchanged and the saved Proxmox Test Connection still succeeded. In the API container, file mode/ownership was `600 atlas:atlas /var/lib/atlas/discovery-ingestion.secret`. The actual hash value is intentionally omitted. |
+| Runtime Docker isolation | No published host ports: `Ports={}`. `/run/atlas-runtime-control` and `/var/lib/atlas-connectors` were mounted read-only. Runtime joined `atlas_runtime_private` and `atlas_runtime_source`; the source network contained only `atlas-runtime-1`. |
+| Worker Docker isolation | Worker joined `atlas_default` and `atlas_runtime_private`, and was **not** attached to `atlas_runtime_source`. Runtime-control state, Atlas state/signing state and Connector store mounts were all read-only. No Docker socket or host-root mount was present. |
+| Runtime hardening | Live inspection reported `User=atlas-runtime`, `ReadonlyRootfs=true`, `CapDrop=["ALL"]`, `SecurityOpt=["no-new-privileges:true"]`, `PidsLimit=128` and `Memory=1073741824` (1 GiB). |
+
+Docker/LXC live acceptance for the deployment, migration, retained I2 probes,
+signing-state restart preservation and inspected isolation/hardening is complete.
+This does not establish production Proxmox inventory discovery, source-version
+qualification or native/systemd live acceptance. Overall acceptance remains
+**PASS WITH DOCUMENTED FOLLOW-UPS**.
+
 ## Documented follow-ups and I4 hand-off
 
-- Docker CLI is unavailable on this macOS host. No I3 live Docker image build,
-  LXC upgrade/restart or native Debian/systemd installation was performed. Static
-  topology/security, package build/verification and native install/upgrade tests
-  passed; CI defines Linux image builds. Operator should validate API/worker/runtime
-  health, I3 migrations, retained I2 encrypted probes, signing-state preservation,
-  restart recovery and private/read-only networking on the Docker test LXC and
-  native host. I2's historical live evidence is not relabeled as I3 acceptance.
+- Native Debian/systemd **LIVE acceptance remains outstanding** and has not been
+  performed. Static topology/security, package build/verification and native
+  install/upgrade tests passed, but do not substitute for native operator evidence.
+  Validate API/worker/runtime health, I3 migrations, retained I2 encrypted probes,
+  signing-state preservation, restart/recovery and native service isolation on the
+  supported host. Docker/LXC live acceptance is complete as recorded above.
 - Remote GitHub/Sigstore provenance qualification remains the inherited closed
   boundary. No remote executable was installed or claimed qualified.
 - I4 must implement and qualify actual Proxmox inventory, source API/ACL/capability

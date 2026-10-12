@@ -120,8 +120,10 @@ the existing shared Atlas UID remains for API/worker maintenance locks. The web
 unit masks installation state. This reduces service exposure but does not claim
 complete host-user separation from the pre-existing shared Atlas account.
 The runtime has its own account/environment and fixed loopback listener/callback.
-Both methods bound runtime memory/tasks; native live systemd and Docker image
-acceptance require operator validation on the supported Linux deployment.
+Both methods bound runtime memory/tasks. Actual Docker/LXC build/deployment,
+migration, retained I2 probes, signing-state restart preservation and inspected
+isolation/hardening are operator-confirmed in the [completion report](i3-completion-report.md).
+Native Debian/systemd LIVE acceptance has not been performed and remains outstanding.
 
 Restore refuses replacement while the destination has unsettled generic runs.
 Cancel those runs and wait for cleanup first. Imported active runs fail as

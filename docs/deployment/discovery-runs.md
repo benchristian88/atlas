@@ -86,6 +86,8 @@ and [runtime deployment](integration-runtime.md).
 
 Local acceptance uses real PostgreSQL/Redis, real Ansible children/private HTTP
 callbacks and the production browser build with intercepted deterministic API
-state. Live I3 Docker image/upgrade/restart and native systemd acceptance must be
-performed on the supported Linux operator environment; this work does not claim
-Proxmox inventory discovery or source qualification. See [validation](../architecture/integrations/i3-completion-report.md).
+state. Actual I3 Docker/LXC build/deployment, migration, retained I2 probes,
+signing-state restart preservation and inspected isolation/hardening are
+operator-confirmed. Native Debian/systemd LIVE acceptance has not been performed
+and remains outstanding. Proxmox inventory discovery, 9.2.11 qualification and
+remote GitHub/Sigstore qualification remain future boundaries. See [validation](../architecture/integrations/i3-completion-report.md).
