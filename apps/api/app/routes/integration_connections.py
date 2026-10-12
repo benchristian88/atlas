@@ -16,7 +16,7 @@ from app.database import get_db
 from app.models import Integration, DataSource, Site, InstalledConnectorPackage, ConnectorMapping
 from app.services import connector_lifecycle as lifecycle
 from app.services import connector_mappings as mappings
-from app.services.integration_connections import installed_manifest, response, validate_scopes
+from app.services.integration_connections import installed_manifest, response, validate_scopes, protect_source_identity, SourceIdentityLocked
 from app.services.integration_secrets import AtlasEncryptedSecretProvider, JobSecretLease, SecretProviderError
 from app.services.integration_runtime import runtime
 
@@ -220,6 +220,8 @@ def update_integration(integration_id: uuid.UUID, payload: ConnectionUpdate, req
     try:
         record, manifest = installed_manifest(db, row.connector_id)
         provider = AtlasEncryptedSecretProvider(db)
+        if payload.config is not None:
+            protect_source_identity(db, row, manifest, payload.config)
         if payload.config is not None or payload.selected_scopes is not None or payload.enabled is False:
             from app.services.discovery_orchestration import cancel_integration_runs
             cancel_integration_runs(db, row.id)
@@ -244,6 +246,9 @@ def update_integration(integration_id: uuid.UUID, payload: ConnectionUpdate, req
         result = response(row, provider)
         db.commit()
         return result
+    except SourceIdentityLocked as error:
+        db.rollback()
+        raise HTTPException(409, {"code": "source_identity_locked", "message": str(error)}) from None
     except (ValueError, OSError, SQLAlchemyError) as error:
         invalid(db, error)
 

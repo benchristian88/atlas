@@ -7,6 +7,9 @@ packages its HTTPS dependencies and supplies generic installed-collection health
 and catalogue compatibility. See the [dated baseline review](i4a-runtime-baseline.md).
 I4 remains incomplete: production Proxmox 0.1.0 is probe-only and Proxmox 9.2.11
 remains unqualified. No source discovery or fallback is introduced by I4A.
+The separate [I4B candidate](i4b-completion-report.md) now implements secured
+discovery with deterministic collection/Ansible/AIP/I3 fixture acceptance. It
+remains unqualified, unpublished and rejected by normal production activation.
 The original alignment on 11 October 2026 used
 `90e04a76982c314fff2191e84ca6bd1a8cabcb07`.
 The [v1.3 design](Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
@@ -26,7 +29,7 @@ Manual knowledge and explicit manual-only deployment remain supported.
 | I1 | Runtime and catalogue shell | Implemented shell with documented follow-ups. Authenticated isolated local health/control, pinned baseline, protected verified-package store, global installed state/RBAC, offline metadata and real UI, both installer/package definitions. External SDK extraction uses the explicitly authorized isolated staging adapter fallback; remote provenance fails closed. I1 originally deferred live Docker/systemd acceptance; I2 now records operator-confirmed Docker acceptance, while native/systemd remains pending. See [completion/validation](i1-completion-report.md). No live discovery, source credentials or scheduling/AIP callbacks. |
 | I2 | Generic Integration, SecretProvider, mappings and bounded Test Connection | Implemented with documented external acceptance follow-ups. Canonical SDK 1.1.0, scoped config/DataSource, write-only encrypted credentials/portable rewrap, global versioned mappings/update gates, manifest forms and exact verified runtime probes. Live Docker image build/upgrade, offline bootstrap staging, UI configuration and fingerprint-pinned Proxmox 9.2.11 probes (including after runtime restart) are operator-confirmed. Proxmox 0.1.0 remains unqualified and Test Connection-only; native/systemd and remote provenance acceptance remain follow-ups. See [I2 evidence](i2-completion-report.md). |
 | I3 | Worker orchestration and AIP ingestion | Implemented generic execution path with documented deployment follow-ups. Durable PostgreSQL runs/receipts/provenance, existing worker/Redis, fixed schedules, immediate authorized onboarding/Run Now, database overlap protection, run-scoped tokens, verified async runtime start/status/cancel, bounded recovery and canonical adapters into existing evidence/reconciliation/lifecycle. Production UI capability-gates probe-only Proxmox. Deterministic test-only execution acceptance and actual Docker/LXC build/deployment, migration, retained I2 probes, signing-state restart preservation and isolation/hardening are confirmed; native Debian/systemd LIVE acceptance remains outstanding. No production discovery Connector or I4 qualification. See [implementation](i3-implementation.md) and [validation](i3-completion-report.md). |
-| I4 | Proxmox | Planned but not implemented through AIP. Preserve existing plugin/client/normalization regressions. Mandatory dated external review, exact least-privilege API-call/ACL matrix, dedicated token/Privilege Separation setup, capability/TLS/permission probe, stable infrastructure identity and coverage edge-case fixtures/live tests. |
+| I4 | Proxmox | Partially implemented: 0.2.0-i4b.1 candidate in atlas-connectors, secured collection reuse, bounded normalization/topology/facts, source-local identities, ACL/coverage proof and real runtime fixture acceptance. Production remains 0.1.0 probe-only. Exact live API/ACL/identity/transport qualification and native Debian/systemd live acceptance remain outstanding. |
 | I5 | Docker/Compose | Planned but not implemented. SSH key only, documented Docker daemon/group root-equivalent access, stable Engine/project/service/ordinal workloads, container ID as observed provenance. Prove standalone rename/recreate/scale/one-off identity, Networks/Interfaces, host correlation and bounded source failures. |
 | I6 | UniFi Network | Planned but not implemented. Local controller/console infrastructure only; prove documented local API-key provisioning has no unwanted cloud dependency or qualify dedicated local least-privilege read-only fallback. Gateway/switch/AP, site context, canonical Networks/Interfaces, reliable source-backed uplinks; no clients. |
 | I7 | Onboarding and operations | Planned but not implemented. Resumable setup, grouped explicit Accept all new, duplicate/conflict review, manual-only path, fixed schedule UX, run health and source-permission documentation; preserve v1.2 page/mockup baseline and canonical UI primitives. |
@@ -63,8 +66,9 @@ acceptance or permission to substitute unverified packages.
 
 ## I4 mandatory external-reference gate
 
-**Current review date: pending I4.** I0 records this requirement on 11 October
-2026; no current upstream permission/version/community findings are claimed.
+**Current source review: 12 October 2026**, recorded by I4A and extended by I4B's
+ACL proof review. These findings remain source-derived and unqualified on the
+actual live server. I0 originally recorded the gate on 11 October 2026.
 Before I4 implementation/acceptance, date the review and repeat at qualification:
 
 1. [Official Proxmox VE Administration/API documentation](https://pve.proxmox.com/pve-docs/pve-admin-guide.pdf)
@@ -88,8 +92,10 @@ sufficient backing-user permissions, without root/admin/password fallback.
 
 ## Seeded I4 edge-case register
 
-All items are **pending I4 evidence and regressions**, not current implemented
-capabilities. Add materially relevant current release/issue lessons at review.
+I4B fixtures now cover node outage, migration/rename, shared/local storage,
+permission filtering, optional-agent exclusion, transport protections and limits.
+Every row still requires **live I4 qualification**; physical disk discovery and
+automatic endpoint failover remain excluded from this candidate.
 
 | Case | Required qualification consequence |
 | --- | --- |
@@ -114,8 +120,8 @@ Protected store, exact bootstrap verification, pinned baseline and both deployme
 definitions are implemented; Docker operator evidence is recorded in I2 and I3.
 I3: native Debian/systemd LIVE acceptance remains outstanding; actual Docker/LXC
 deployment, migration and signing-state restart preservation are operator-confirmed.
-I4: dated source
-review, Collection/API coverage and final call/ACL matrix. I5: Collection/SSH
+I4: live revalidation of dated source review, Collection/API coverage and final
+call/ACL matrix. I5: Collection/SSH
 implementation and workload ordinal/standalone identity proof. I6: supported
 local API capabilities and API-key/local fallback authentication. I8: exact
 licence/SBOM inventory and empirical resource/performance/package acceptance.

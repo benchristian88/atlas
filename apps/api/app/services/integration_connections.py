@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import select
 
 from atlas_connector_sdk.configuration import validate_configuration
-from app.models import InstalledConnectorPackage, Integration
+from app.models import InstalledConnectorPackage, Integration, DiscoveryRun
 from app.services import connector_lifecycle as lifecycle
 from app.services.connector_contracts import strict_json, validate_manifest
 from app.services.connector_store import _read_regular
@@ -34,6 +34,30 @@ def validate_scopes(manifest, selection):
 
 class UpdateRequiresConfiguration(ValueError):
     pass
+
+
+class SourceIdentityLocked(ValueError):
+    pass
+
+
+def protect_source_identity(db, integration, manifest, config):
+    """A retained DataSource cannot acquire another source's observations.
+
+    URL fields are the existing generic contract for source endpoints. Keep all
+    of them fixed once any successful source-backed discovery exists, including
+    PARTIAL history. Display, scopes, TLS policy and credential rotation remain
+    editable. Locking the Integration serializes this against run finalisation.
+    """
+    endpoints = [field["key"] for field in manifest["connection_fields"]
+                 if field["type"] == "url" and not field["secret"]]
+    if not any(integration.config_json.get(key) != config.get(key) for key in endpoints):
+        return
+    history = db.scalar(select(DiscoveryRun.id).where(
+        DiscoveryRun.integration_id == integration.id,
+        DiscoveryRun.data_source_id == integration.data_source_id,
+        DiscoveryRun.status == "completed").limit(1))
+    if history is not None:
+        raise SourceIdentityLocked("Source endpoints are fixed after successful discovery. Create a new Integration for a different endpoint.")
 
 
 def validate_dependents(db, manifest, *, lock=True):
