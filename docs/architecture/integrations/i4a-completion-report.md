@@ -8,9 +8,17 @@ baseline is `atlas-ansible-i4a-v1` / **1.2.0**, runtime **0.3.1**. Ansible core
 Production Proxmox **0.1.0 remains probe-only**: discovery, scheduling and
 complete snapshots disabled, no discovery entry point, no production collection
 requirements. **Proxmox 9.2.11 remains UNQUALIFIED. I4 is not complete.**
-No fallback client, production inventory implementation, migration, commit,
-push, merge or published release was created. Package tests constructed only
-non-publishable working-tree dry runs; Docker images are local validation images.
+
+**LIVE Docker/LXC acceptance for I4A is now COMPLETE. Native Debian/systemd
+LIVE acceptance remains OUTSTANDING.** The post-merge operator evidence is
+recorded separately below; I4A remains runtime/dependency groundwork only.
+
+The original implementation created no fallback client, production inventory
+implementation, migration, commit, push, merge or published release. Its package
+tests constructed only non-publishable working-tree dry runs; its Docker images
+were local validation images. The implementation file inventory and repository
+state snapshots below describe that original work, not the subsequent live
+deployment or this documentation update.
 
 ## Exact artefact and dependencies
 
@@ -161,12 +169,74 @@ Migration tests were rerun only with fresh empty databases after their explicit
 safety preconditions were identified. The final results above have no failures.
 Existing Python deprecation and temporary-store cleanup warnings remain.
 
+## Post-merge LIVE Docker/LXC operator acceptance
+
+Operator-confirmed acceptance was completed on the existing Atlas Docker test
+LXC running merged `dev`. The deployed merged commit included the I4A runtime
+baseline; the working tree was clean and matched `origin/dev`.
+
+Deployment with `docker compose ... up -d --build` completed successfully:
+
+| Service | Live deployment result |
+| --- | --- |
+| api | healthy |
+| runtime | healthy |
+| web | healthy |
+| worker | running |
+| postgres | healthy |
+| redis | healthy |
+| runtime-init | exited 0 |
+| connector-bootstrap | exited 0 |
+
+An initial ad-hoc `ansible-galaxy` invocation could not create
+`/home/atlas-runtime/.ansible/tmp` in the hardened read-only runtime container.
+This was an inspection-command failure, not a product failure. Re-running the
+inspection with temporary Ansible state redirected to `/tmp` and
+`ANSIBLE_COLLECTIONS_PATH=/app/collections` showed **community.proxmox 2.0.0**
+from `/app/collections/ansible_collections`. The only other collection entry was
+Ansible's expected internal `ansible._protomatter` pseudo-collection.
+
+The canonical protected runtime endpoint `GET /v1/health` was called using the
+existing runtime-control authentication mechanism without exposing the secret.
+The live response reported:
+
+| Field | Live value |
+| --- | --- |
+| state | `healthy` |
+| runtime_version | `0.3.1` |
+| protocol_version | `integration-runtime-v1` |
+| baseline_id | `atlas-ansible-i4a-v1` |
+| baseline_version | `1.2.0` |
+| packaging_mode | `docker_compose` |
+| ansible_core_version | `2.19.7` |
+| ansible_runner_version | `2.4.3` |
+| proxmoxer | `2.3.0` |
+| requests | `2.34.2` |
+| community.proxmox version | `2.0.0` |
+| community.proxmox state | `compatible` |
+| community.proxmox digest | `sha256:77e02e0d1e341c6b064900fe58484ad8880cee4832f5fd65d09834ed068216f6` |
+
+The live digest matched the reviewed/pinned I4A collection identity.
+
+Regression acceptance confirmed:
+
+- The existing saved Proxmox Integration remained intact.
+- Saved encrypted credentials remained usable.
+- Test Connection succeeded without re-entering credentials.
+- Production Proxmox discovery remained disabled as intended.
+- **Proxmox 9.2.11 remains UNQUALIFIED.**
+
+These checks record no Proxmox inventory discovery or source qualification.
+**I4 is not complete.** Production discovery, scheduling and complete snapshots
+remain disabled; I4A remains runtime/dependency groundwork only.
+
 ## Remaining qualification and limits
 
 - No Proxmox source discovery or Proxmox 9.2.11 qualification; no COMPLETE
   visibility claim. Actual transport/ACL/source behavior remains future I4 work.
 - Native Debian/systemd LIVE acceptance remains outstanding. Local package,
-  macOS venv and Python 3.12 Docker results do not replace that gate.
+  macOS venv, Python 3.12 Docker validation and the completed live Docker/LXC
+  acceptance do not replace that gate.
 - The 68 nginx integration tests were skipped because the required local nginx
   binary was unavailable; no frontend build was run because no UI changed.
 - The Python lock retains the existing exact-version convention. Reference

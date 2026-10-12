@@ -249,13 +249,18 @@ The current offline catalogue needs no Internet connection and ships one exact
 Proxmox probe archive produced in `atlas-connectors`. Its bootstrap digest is bound
 to the Atlas release; this is local qualification, not remote attestation proof.
 
-The approved environment identifies runtime `0.3.0`, protocol
-`integration-runtime-v1`, baseline `atlas-ansible-i3-v1` version `1.1.0`,
-ansible-core `2.19.7` and ansible-runner `2.4.3`. All twenty-one runtime dependencies and the separate Apache-2.0 SDK 1.1.0 artifact
-are pinned; no vendor Collections are prequalified and no dependencies install
-dynamically. Missing declared dependencies require a runtime update. The initial
-CycloneDX inventory and upstream notices are included in both release packages;
-final image/OS and native platform redistribution qualification remains separate.
+The approved environment identifies runtime `0.3.1`, protocol
+`integration-runtime-v1`, baseline `atlas-ansible-i4a-v1` version `1.2.0`,
+ansible-core `2.19.7` and ansible-runner `2.4.3`. All twenty-seven runtime Python
+dependencies and the separate Apache-2.0 SDK 1.1.0 artifact are pinned; reviewed
+community.proxmox `2.0.0` is installed offline from its digest-verified archive.
+No dependencies install dynamically. Missing declared dependencies require a
+runtime update. The CycloneDX inventory and upstream notices are included in
+both release packages; final image/OS and native platform redistribution
+qualification remains separate. The [I4A operator acceptance record](../architecture/integrations/i4a-completion-report.md)
+confirms LIVE Docker/LXC acceptance is complete; native Debian/systemd LIVE
+acceptance remains outstanding. Proxmox 9.2.11 remains unqualified and production
+discovery, scheduling and complete snapshots remain disabled.
 
 See [installation](installation.md), [upgrades](upgrades.md) and
 [release verification](releases.md) for the supported operator workflows.
