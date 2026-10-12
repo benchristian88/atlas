@@ -72,6 +72,13 @@ export PYTHONPATH="$PWD/plugins/sdk:$PWD/plugins/proxmox"
 export NEXT_TELEMETRY_DISABLED=1
 ```
 
+I3 discovery acceptance uses a separate fresh runtime venv with only the vendored
+canonical SDK and `apps/runtime/ansible/requirements.lock`. Runtime setup and
+`pip check` use Python's `-I` mode so the backend's legacy plugin `PYTHONPATH` and
+checked-in `.egg-info` metadata do not enter runtime dependency checks. The real
+Ansible acceptance children use that venv's Python through `ATLAS_TEST_RUNTIME_PYTHON`.
+Legacy plugin dependencies remain part of backend regression, separate from runtime.
+
 For Docker-assisted local backend validation, use fresh disposable containers
 and a protected directory. Never point these destructive PostgreSQL test suites
 at an Atlas installation. If ports 5432/6379 or these container names are in

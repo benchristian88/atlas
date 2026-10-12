@@ -1,7 +1,12 @@
 """Protect the routine CI boundary and its complete regression configuration."""
 import ast
+import json
+import os
 from pathlib import Path
 import re
+import shlex
+import subprocess
+import sys
 
 import yaml
 
@@ -120,6 +125,78 @@ def test_release_integrity_reuses_h4_and_builds_without_publication():
     for configured_job in (job, workflow("release")["jobs"]["build"]):
         assert "build api web worker runtime runtime-init connector-bootstrap" in runs(configured_job)
         assert "python -m pytest docs/architecture/integrations/contracts/tests" in runs(configured_job)
+
+
+def test_discovery_runtime_installs_only_canonical_sdk_and_exact_lock():
+    job = workflow()["jobs"]["backend"]
+    step = next(step for step in job["steps"]
+                if step.get("name") == "Install isolated pinned Ansible runtime for discovery acceptance")
+    commands = step["run"].splitlines()
+    runtime_python = '"$RUNNER_TEMP/atlas-ci-runtime/bin/python"'
+    assert commands[0] == 'python -I -m venv --clear "$RUNNER_TEMP/atlas-ci-runtime"'
+    installs = [command for command in commands if "pip install" in command]
+    assert installs == [
+        f"{runtime_python} -I -m pip install --no-index --no-deps --require-hashes --find-links vendor/sdk -r vendor/sdk/requirements.txt",
+        f"{runtime_python} -I -m pip install --no-deps -r apps/runtime/ansible/requirements.lock",
+    ]
+    assert f"{runtime_python} -I -m pip check" in commands
+    assert 'echo "ATLAS_TEST_RUNTIME_PYTHON=$RUNNER_TEMP/atlas-ci-runtime/bin/python" >> "$GITHUB_ENV"' in commands
+    live_test = (ROOT / "apps/api/tests/test_i3_live_runtime.py").read_text()
+    assert 'monkeypatch.setattr(jobs.sys, "executable", os.environ["ATLAS_TEST_RUNTIME_PYTHON"])' in live_test
+
+
+def test_discovery_runtime_rejects_inherited_plugin_metadata_and_stale_packages(tmp_path):
+    job = workflow()["jobs"]["backend"]
+    step = next(step for step in job["steps"]
+                if step.get("name") == "Install isolated pinned Ansible runtime for discovery acceptance")
+    commands = step["run"].splitlines()
+    environment = {
+        **os.environ,
+        "RUNNER_TEMP": str(tmp_path),
+        "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""),
+        "PYTHONPATH": job["env"]["PYTHONPATH"].replace("${{ github.workspace }}", str(ROOT)),
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PIP_NO_CACHE_DIR": "1",
+    }
+
+    def run(command):
+        return subprocess.run(["bash", "-c", command], cwd=ROOT, env=environment,
+                              capture_output=True, text=True, timeout=30)
+
+    created = run(commands[0])
+    assert created.returncode == 0, created.stdout + created.stderr
+    check_command = next(command for command in commands if command.endswith(" -m pip check"))
+    check_args = [argument.replace("$RUNNER_TEMP", str(tmp_path)) for argument in shlex.split(check_command)]
+    isolated_python = check_args[:check_args.index("-m")]
+    inspect = subprocess.run(isolated_python + ["-c", (
+        "import json, site, sys, sysconfig; "
+        "print(json.dumps({'prefix': sys.prefix, 'base_prefix': sys.base_prefix, "
+        "'user_site': site.ENABLE_USER_SITE, 'path': sys.path, "
+        "'purelib': sysconfig.get_path('purelib')}))"
+    )], cwd=ROOT, env=environment, capture_output=True, text=True, check=True, timeout=30)
+    state = json.loads(inspect.stdout)
+    assert state["prefix"] != state["base_prefix"] and state["user_site"] is False
+    assert not set(environment["PYTHONPATH"].split(os.pathsep)) & set(state["path"])
+    assert "include-system-site-packages = false" in (tmp_path / "atlas-ci-runtime/pyvenv.cfg").read_text()
+
+    # A reused directory must not retain packages outside the approved lock.
+    stale = Path(state["purelib"]) / "atlas_ci_stale_runtime-0.1.dist-info"
+    stale.mkdir()
+    (stale / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: atlas-ci-stale-runtime\nVersion: 0.1\n"
+        "Requires-Dist: atlas-ci-missing-dependency\n")
+    assert run(check_command).returncode == 1
+    recreated = run(commands[0])
+    assert recreated.returncode == 0, recreated.stdout + recreated.stderr
+    assert not stale.exists()
+
+    # Reproduce the observed CI failure in the same fresh venv without -I.
+    contaminated = run('"$RUNNER_TEMP/atlas-ci-runtime/bin/python" -m pip check')
+    assert contaminated.returncode == 1
+    assert "atlas-proxmox 0.1.0 requires httpx, which is not installed." in contaminated.stdout
+    clean = run(check_command)
+    assert clean.returncode == 0, clean.stdout + clean.stderr
+    assert "No broken requirements found." in clean.stdout
 
 
 def test_frontend_uses_node22_lockfile_tests_and_build():
