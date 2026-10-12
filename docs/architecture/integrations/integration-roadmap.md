@@ -1,6 +1,12 @@
 # Integrations I0–I8 roadmap
 
 **Active target programme**, I3 implementation evidence updated 12 October 2026.
+
+I4A dependency/runtime groundwork now pins reviewed community.proxmox 2.0.0,
+packages its HTTPS dependencies and supplies generic installed-collection health
+and catalogue compatibility. See the [dated baseline review](i4a-runtime-baseline.md).
+I4 remains incomplete: production Proxmox 0.1.0 is probe-only and Proxmox 9.2.11
+remains unqualified. No source discovery or fallback is introduced by I4A.
 The original alignment on 11 October 2026 used
 `90e04a76982c314fff2191e84ca6bd1a8cabcb07`.
 The [v1.3 design](Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)

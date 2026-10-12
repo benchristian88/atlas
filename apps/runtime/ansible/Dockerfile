@@ -12,7 +12,10 @@ COPY apps/runtime/ansible/requirements.lock .
 RUN pip install --no-cache-dir --no-deps -r requirements.lock && pip check \
     && useradd --system --uid 10001 atlas-runtime
 COPY apps/runtime/ansible/atlas_runtime ./atlas_runtime
-COPY apps/runtime/ansible/baseline.json apps/runtime/ansible/sbom.cdx.json ./
+COPY apps/runtime/ansible/baseline.json apps/runtime/ansible/sbom.cdx.json apps/runtime/ansible/collections.lock.json ./
 COPY apps/runtime/ansible/notices ./notices
+COPY vendor/collections /vendor/collections
+RUN python -m atlas_runtime.collections /vendor/collections
+ENV ANSIBLE_COLLECTIONS_PATH=/app/collections ANSIBLE_COLLECTIONS_SCAN_SYS_PATH=False
 USER atlas-runtime
 CMD ["python", "-m", "atlas_runtime.server"]

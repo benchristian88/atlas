@@ -220,7 +220,9 @@ def test_dependency_baseline_sbom_and_notices_are_exact_and_core_boundary_preser
     assert {name.lower().replace("_", "-"): value for name, value in pins.items()} == baseline["dependencies"]
     assert hashlib.sha256((root / "requirements.lock").read_bytes()).hexdigest() == baseline["dependency_lock_digest"]
     sbom = json.loads((root / "sbom.cdx.json").read_text())
-    assert {entry["name"]: entry["version"] for entry in sbom["components"]} == {**pins, "atlas-connector-sdk": baseline["sdk_version"]}
+    assert {entry["name"]: entry["version"] for entry in sbom["components"]} == {
+        **pins, "atlas-connector-sdk": baseline["sdk_version"],
+        **{name: identity["version"] for name, identity in baseline["collections"].items()}}
     for entry in sbom["components"]:
         assert entry["licenses"] and entry["hashes"][0]["alg"] == "SHA-256"
         notices = next(prop["value"] for prop in entry["properties"] if prop["name"] == "atlas:upstream-notices")

@@ -18,6 +18,8 @@ from atlas_connector_sdk.aip import body_hash, validate_batch
 from atlas_connector_sdk.configuration import validate_configuration
 from atlas_connector_sdk.contracts import strict_json
 
+from .collections import execution_environment
+
 MAX_JOB_SECONDS = 600
 MAX_BATCH_BYTES = 1024 * 1024
 MAX_OUTPUT_BYTES = 32 * 1024 * 1024
@@ -257,7 +259,7 @@ class Jobs:
                         target.chmod(0o600)
                 if job.cancel.is_set():
                     raise ValueError("cancelled")
-                environment = {"PATH": str(Path(sys.executable).parent) + ":/usr/bin:/bin", "HOME": temporary,
+                environment = {**execution_environment(), "PATH": str(Path(sys.executable).parent) + ":/usr/bin:/bin", "HOME": temporary,
                     "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
                 with self.lock:
                     job.started_at, job.state = now(), "running"

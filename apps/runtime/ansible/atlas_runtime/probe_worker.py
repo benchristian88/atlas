@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import sys
 
+from .collections import execution_environment
+
 
 def main():
     import ansible_runner
@@ -19,7 +21,7 @@ def main():
         inventory="localhost,", quiet=True,
         extravars={"atlas_input_file": str(root / "input.json"),
             "atlas_result_file": str(root / "result.json"), "ansible_python_interpreter": sys.executable},
-        envvars={"ANSIBLE_LOCAL_TEMP": str(root / "local-tmp"), "ANSIBLE_REMOTE_TEMP": str(root / "remote-tmp"),
+        envvars={**execution_environment(), "ANSIBLE_LOCAL_TEMP": str(root / "local-tmp"), "ANSIBLE_REMOTE_TEMP": str(root / "remote-tmp"),
             "ANSIBLE_RETRY_FILES_ENABLED": "False", "ANSIBLE_NOCOLOR": "True"},
         settings={"job_timeout": 20, "idle_timeout": 20, "suppress_output_file": True,
             "suppress_ansible_output": True, "omit_event_data": True},

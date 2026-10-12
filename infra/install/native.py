@@ -254,6 +254,8 @@ def build_runtime():
         install_sdk(runtime_python)
         run([runtime_python, "-m", "pip", "install", "--no-deps", "-r", "requirements.lock"], cwd=DESTINATION / "apps/runtime/ansible")
         run([runtime_python, "-m", "pip", "check"])
+        run([runtime_python, "-m", "atlas_runtime.collections", str(DESTINATION / "vendor/collections")],
+            cwd=DESTINATION / "apps/runtime/ansible")
     except (OSError, subprocess.SubprocessError):
         print("Local runtime dependencies could not be prepared; Atlas knowledge services will continue. Inspect runtime-venv and the Runtime page.")
 

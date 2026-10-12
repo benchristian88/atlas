@@ -68,10 +68,20 @@ def compatibility(manifest: dict, runtime: dict | None, *, atlas_version: str | 
     if manifest["implementation"]["runtime"] != capabilities.get("runtime_kind", runtime.get("runtime_kind", "ansible")):
         return {"state": "incompatible", "message": "This package requires a different runtime implementation."}
     actual = capabilities.get("dependencies", runtime.get("dependencies", []))
-    if isinstance(actual, dict) and not manifest["implementation"]["dependencies"]:
-        # Runtime health also publishes pinned Python versions as a map. No
-        # dependency is satisfied without its manifest-required digest identity.
+    if isinstance(actual, dict):
+        # Python version maps carry no verified artefact digest. Collections
+        # have canonical installed-content identities from validated health.
         actual = []
+        collections = capabilities.get("collections", {})
+        if not isinstance(collections, dict) or len(collections) > 32:
+            return {"state": "runtime_update_required", "message": "The approved dependency baseline could not be confirmed."}
+        for name, identity in collections.items():
+            if (isinstance(name, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}", name)
+                    and isinstance(identity, dict) and identity.get("state") == "compatible"
+                    and isinstance(identity.get("version"), str)
+                    and isinstance(identity.get("digest"), str)
+                    and re.fullmatch(r"sha256:[a-f0-9]{64}", identity["digest"])):
+                actual.append({"kind": "collection", "name": name, "version": identity["version"], "digest": identity["digest"]})
     if not isinstance(actual, list):
         return {"state": "runtime_update_required", "message": "The approved dependency baseline could not be confirmed."}
     identities = {(row.get("kind"), row.get("name"), row.get("version"), row.get("digest"))

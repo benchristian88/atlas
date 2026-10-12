@@ -15,12 +15,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "apps/runtime/ansible"))
 from atlas_runtime import server
+from atlas_runtime import collections
 
 
 @pytest.fixture
 def runtime(monkeypatch, tmp_path):
     baseline = json.loads((ROOT / "apps/runtime/ansible/baseline.json").read_text())
     monkeypatch.setattr(server, "version", lambda name: baseline["sdk_version"] if name == "atlas-connector-sdk" else baseline["dependencies"][name])
+    path = tmp_path / "collections"
+    collections.install(ROOT / "vendor/collections", path=path)
+    monkeypatch.setattr(server, "collection_health", lambda: collections.health(path=path))
     return server.Runtime(secrets.token_hex(48), tmp_path / "store", "development")
 
 

@@ -6,6 +6,17 @@ catalogue, or **Runtime** with a global runtime-view grant to inspect health,
 versions and the approved dependency baseline. The browser calls Atlas API;
 it never connects directly to the runtime.
 
+I4A runtime baseline 1.2.0 packages the reviewed **community.proxmox 2.0.0**
+archive and exact proxmoxer/requests dependencies. They belong to Atlas runtime
+packaging; Connector installation cannot install dependencies. The fixed
+collection path is `/app/collections` (Docker) or
+`/opt/atlas/apps/runtime/ansible/collections` (native), independent of job HOME
+and Python-path collection scanning. Health verifies actual installed file
+identity against the collection lock and reports sanitized version/digest/state.
+See the [dated baseline review](../architecture/integrations/i4a-runtime-baseline.md)
+for all pins, search-path rules and source/licence evidence. **Production
+discovery stays disabled and Proxmox 9.2.11 stays unqualified.**
+
 I2 includes a hash-pinned local Proxmox VE 0.1.0 **Test Connection-only**
 package. Its source-version qualification is explicitly unqualified; no inventory
 or AIP is produced. Docker + Compose and UniFi Network remain metadata only.
