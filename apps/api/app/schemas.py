@@ -1092,6 +1092,9 @@ class ReconciliationItemResponse(ORMResponse):
     decided_by_user_id: uuid.UUID | None
     decided_at: datetime | None
     source_name: str | None = None
+    data_source_id: uuid.UUID | None = None
+    assertion_predicate: str | None = None
+    initial_entity_item_id: uuid.UUID | None = None
     source_external_id: str | None = None
     target_external_id: str | None = None
     resolved_source_asset_id: uuid.UUID | None = None
@@ -1110,6 +1113,14 @@ class ReconciliationItemResponse(ORMResponse):
     missing_since_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ReconciliationItemPageResponse(BaseModel):
+    items: list[ReconciliationItemResponse]
+    total: int
+    limit: int
+    next_cursor: str | None
+    related_new_entities: list[ReconciliationItemResponse]
 
 
 class ReconciliationDecisionRequest(BaseModel):

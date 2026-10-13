@@ -14,3 +14,17 @@ export function discoveryDuration(run) {
   const seconds = Math.max(0, Math.round((new Date(run.finished_at) - new Date(run.started_at)) / 1000));
   return Number.isFinite(seconds) ? `${seconds}s` : "Unavailable";
 }
+
+export function discoveryRunPresentation(run) {
+  const provenance = run?.execution_provenance;
+  const connector = provenance?.connector_id;
+  const connectorName = typeof connector === "string" && /^[a-z][a-z0-9_-]{0,99}$/.test(connector)
+    ? connector.replace(/[-_]/g, " ").replace(/\b[a-z]/g, letter => letter.toUpperCase()) : "Unknown connector";
+  const triggers = { manual: "Manual", schedule: "Scheduled", onboarding: "Onboarding", retry: "Retry" };
+  return {
+    source: run?.source_name || "Unknown source",
+    connector: provenance ? [connectorName, provenance.connector_version].filter(Boolean).join(" · ") : "Legacy",
+    trigger: provenance ? (Object.hasOwn(triggers, provenance.trigger) ? triggers[provenance.trigger] : "Unknown trigger") : "Manual",
+    coverage: run?.is_complete_snapshot === true ? "Full scope" : run?.is_complete_snapshot === false ? "Partial scope" : "Unspecified",
+  };
+}

@@ -1,7 +1,7 @@
 # Atlas Impact UI Architecture and Design System
 
-**Status:** Canonical frontend UI architecture guidance  
-**Applies to:** `apps/web` and all future Atlas Impact web UI work  
+**Status:** Canonical frontend UI architecture guidance
+**Applies to:** `apps/web` and all future Atlas Impact web UI work
 **Purpose:** Preserve a coherent Atlas visual language and reusable implementation architecture as the product grows.
 
 ---
@@ -632,3 +632,18 @@ The goal is not uniformity. It is a coherent product whose shared standards are 
 - The dated [September review](../history/product-reviews/atlas-ui-system-review-2026-09.md) records rationale, not implementation status or new requirements. This guide is the canonical future standard.
 
 The acceptance matrix covers 1440, 1024, 800 and 390 px; light/dark themes; default, blue and purple action accents; keyboard focus, long content, table overflow, errors and fallback identity. See [historical validation](../history/validation/ui-system.md), `apps/web/scripts/check-ui-system-browser.mjs` and the existing entity, Asset icon, operations and topology scripts. Record actual validation results separately from this stable standard.
+
+Capability readiness uses the central status registry (`ready` → Ready/success,
+`permission_limited` → Limited/warning, `unproven` → Unproven/warning,
+`source_unavailable` → Unavailable/danger). Integration results render only the
+existing bounded generic diagnostic schema. Reconciliation uses the existing
+Assets pagination footer grammar and shared secondary Buttons; cursor mechanics
+remain an API concern. Initial facts reuse native assertion-group details and
+retain a separate decision for each item.
+
+Discovery summary rows use friendly source names and structured scope labels;
+internal UUIDs/coverage identities remain in detail/provenance contexts. Connector
+and trigger, and run status and completeness, use separate lines with the existing
+`.table-cell-identity` gap. Run status and completeness retain independent meanings;
+Partial uses the central warning presentation. Reconciliation candidate headings
+use bounded observed Asset names while source IDs remain stable technical identity.

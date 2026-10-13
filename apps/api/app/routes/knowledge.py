@@ -37,6 +37,7 @@ from app.schemas import (
     ReconciliationLinkAssetRequest,
     ReconciliationLinkTechnicalRequest,
     ReconciliationItemResponse,
+    ReconciliationItemPageResponse,
     ReconciliationSummaryResponse,
     SimulatedDiscoveryRequest,
     SimulatedDiscoveryResponse,
@@ -65,6 +66,7 @@ from app.services.knowledge_lifecycle import (
 from app.services.simulated_discovery import run_simulation
 from app.services.knowledge_changes import record_assertion_change
 from app.utils.json_values import to_json_value
+from app.services.reconciliation_listing import filtered_items, initial_fact_context, page_rows
 
 router = APIRouter(tags=["knowledge"])
 
@@ -173,11 +175,16 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
     run = db.get(DiscoveryRun, assertion.discovery_run_id) if assertion and assertion.discovery_run_id else None
     asset = db.get(Asset, item.entity_id) if item.entity_type == "asset" and item.entity_id else None
     observed = item.observed_value_json if isinstance(item.observed_value_json, dict) else {}
+    observed_name = observed.get("name") if item.entity_type == "asset" else None
+    if not isinstance(observed_name, str) or not 0 < len(observed_name.strip()) <= 255:
+        observed_name = None
     result.update(
         {
             "discovery_run_id": assertion.discovery_run_id if assertion else None,
+            "data_source_id": assertion.data_source_id if assertion else None,
+            "assertion_predicate": assertion.predicate if assertion else None,
             "discovery_run_status": run.status if run else None,
-            "entity_name": asset.name if asset else item.candidate_external_id,
+            "entity_name": asset.name if asset else (observed_name.strip() if observed_name else item.candidate_external_id),
             "last_observed_at": observed.get("last_observed_at"),
             "missing_since_run_id": observed.get("missing_since_run_id"),
             "missing_since_at": assertion.first_observed_at if assertion and item.category == "no_longer_observed" else None,
@@ -699,27 +706,32 @@ def list_reconciliation_items(
     limit: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
-    query = select(ReconciliationItem).where(
-        scope_condition(principal, "reconciliation.view", ReconciliationItem.customer_id, ReconciliationItem.site_id)
-    )
-    if context.customer_id is not None:
-        query = query.where(ReconciliationItem.customer_id == context.customer_id)
-    if context.site_id is not None:
-        query = query.where(ReconciliationItem.site_id == context.site_id)
-    if item_status:
-        query = query.where(ReconciliationItem.status == item_status)
-    if category:
-        query = query.where(ReconciliationItem.category == category)
-    if entity_type:
-        query = query.where(ReconciliationItem.entity_type == entity_type)
-    if source_id or run_id:
-        query = query.join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id)
-        if source_id:
-            query = query.where(KnowledgeAssertion.data_source_id == source_id)
-        if run_id:
-            query = query.where(KnowledgeAssertion.discovery_run_id == run_id)
-    items = db.scalars(query.order_by(ReconciliationItem.created_at.desc()).limit(limit))
+    query = filtered_items(context, principal, item_status=item_status, category=category,
+                           source_id=source_id, run_id=run_id, entity_type=entity_type)
+    items = db.scalars(query.order_by(ReconciliationItem.created_at.desc(), ReconciliationItem.id.desc()).limit(limit))
     return [reconciliation_response(db, item) for item in items]
+
+
+@router.get("/reconciliation-items/page", response_model=ReconciliationItemPageResponse)
+def list_reconciliation_item_page(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("reconciliation.view")),
+    item_status: str | None = Query(default="open", alias="status"),
+    category: str | None = None,
+    source_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None, max_length=512),
+    db: Session = Depends(get_db),
+):
+    query = filtered_items(context, principal, item_status=item_status, category=category,
+                           source_id=source_id, run_id=run_id, entity_type=entity_type)
+    items, total, next_cursor = page_rows(db, query, limit=limit, cursor=cursor)
+    grouping, related = initial_fact_context(db, context, principal, items)
+    return {"items": [{**reconciliation_response(db, item), "initial_entity_item_id": grouping.get(item.id)}
+                      for item in items], "total": total, "limit": limit, "next_cursor": next_cursor,
+            "related_new_entities": [reconciliation_response(db, item) for item in related]}
 
 
 @router.get("/reconciliation-items/summary", response_model=ReconciliationSummaryResponse)

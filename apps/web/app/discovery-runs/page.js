@@ -1,6 +1,6 @@
 "use client";
 
-import { DataTable } from "../../components/data-table";
+import { DiscoveryRunsTable } from "../../components/discovery-runs-table";
 import { Button } from "../../components/button";
 
 import Link from "next/link";
@@ -8,13 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
 import { PageHeader } from "../../components/page-header";
-import { StatusBadge } from "../../components/status-badge";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
-
-function dateTime(value) {
-  return value ? new Date(value).toLocaleString() : "—";
-}
 
 export default function DiscoveryRunsPage() {
   const { hasPermission } = useAuth();
@@ -98,16 +93,7 @@ export default function DiscoveryRunsPage() {
       <label className="field checkbox-field"><input checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} type="checkbox" /><span>Include archived</span></label>
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}
-    <DataTable label="Discovery runs" rows={runs} loading={loading} error={error} onRefresh={load} empty="No discovery runs yet." columns={[
-      { key: "source", label: "Source / Integration", render: run => <><span className="primary-cell">{run.source_name || "Unknown source"}</span>{run.integration_id && <Link className="secondary-text" href={`/integrations/${run.integration_id}`}>Integration</Link>}<span className="secondary-text mono">{run.id}</span></> },
-      { key: "connector", label: "Connector / trigger", render: run => run.execution_provenance ? <>{run.execution_provenance.connector_id} · {run.execution_provenance.connector_version}<span className="secondary-text">{run.execution_provenance.trigger}</span></> : "Legacy / manual" },
-      { key: "status", label: "Status", render: run => <div className="badge-stack"><StatusBadge status={run.status} /><StatusBadge status={run.completeness_status} />{run.archived_at && <StatusBadge status="Archived" />}</div> },
-      { key: "coverage", label: "Coverage", render: run => <>{run.is_complete_snapshot ? "Full scope" : "Partial scope"}<span className="secondary-text">{run.coverage_key || "Unspecified"}</span></> },
-      { key: "started_at", label: "Started", render: run => dateTime(run.started_at) },
-      { key: "finished_at", label: "Finished", render: run => dateTime(run.finished_at) },
-      { key: "counts", label: "Observations / batches", render: run => `${run.observation_count ?? run.summary?.observations ?? 0} / ${run.batch_count ?? 0}` },
-      { key: "warnings", label: "Warnings / error", render: run => <>{run.warning_count ?? 0}<span className="secondary-text">{run.error_message || ""}</span></> },
-    ]} actions={run => <div className="table-actions"><Link className="text-button" href={`/discovery-runs/${run.id}`}>View</Link>{canArchive && (run.archived_at ? <Button variant="quiet" onClick={() => openDialog("restore", run)}>Restore</Button> : ["completed", "failed", "cancelled"].includes(run.status) ? <Button variant="quiet" onClick={() => openDialog("archive", run)}>Archive</Button> : null)}{canDelete && run.deletion_safety?.allowed && <Button variant="destructive" onClick={() => openDialog("delete", run)}>Delete</Button>}</div>} />
+    <DiscoveryRunsTable runs={runs} loading={loading} error={error} onRefresh={load} actions={run => <div className="table-actions"><Link className="text-button" href={`/discovery-runs/${run.id}`}>View</Link>{canArchive && (run.archived_at ? <Button variant="quiet" onClick={() => openDialog("restore", run)}>Restore</Button> : ["completed", "failed", "cancelled"].includes(run.status) ? <Button variant="quiet" onClick={() => openDialog("archive", run)}>Archive</Button> : null)}{canDelete && run.deletion_safety?.allowed && <Button variant="destructive" onClick={() => openDialog("delete", run)}>Delete</Button>}</div>} />
 
     {dialog && <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
       <section aria-labelledby="run-dialog-title" aria-modal="true" className="dialog-card" role="dialog">

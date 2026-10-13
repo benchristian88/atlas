@@ -1,0 +1,28 @@
+.list {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.list :global(.reconciliation-heading),
+.list :global(.reconciliation-link),
+.list :global(.form-actions) {
+  flex-wrap: wrap;
+}
+
+.list :global(.detail-card) {
+  min-width: 0;
+}
+
+.list :global(.reconciliation-heading) > div {
+  min-width: 0;
+}
+
+.list :global(.reconciliation-card) h2 {
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.list :global(.reconciliation-link) select {
+  max-width: 100%;
+  min-width: 0;
+}

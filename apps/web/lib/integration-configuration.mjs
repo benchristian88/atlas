@@ -35,3 +35,18 @@ export const TEST_MESSAGES = Object.freeze({
 export function testMessage(result) {
   return TEST_MESSAGES[result?.category] || "The connection probe could not complete. Check the endpoint and configuration.";
 }
+
+// Same bounded generic schema as the API: reject an entire malformed list.
+export function capabilityDiagnostics(value) {
+  const fields = new Set(["capability", "state", "privilege", "path_category"]);
+  const states = new Set(["ready", "permission_limited", "unproven", "source_unavailable"]);
+  const paths = new Set(["root", "inventory", "topology", "authorization"]);
+  const identifier = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+  if (!Array.isArray(value) || value.length > 16) return [];
+  if (value.some(row => !row || Array.isArray(row) || typeof row !== "object"
+    || Object.keys(row).some(key => !fields.has(key))
+    || Object.values(row).some(item => typeof item !== "string")
+    || !identifier.test(row.capability || "") || !states.has(row.state) || !paths.has(row.path_category)
+    || (Object.hasOwn(row, "privilege") && !identifier.test(row.privilege)))) return [];
+  return value;
+}

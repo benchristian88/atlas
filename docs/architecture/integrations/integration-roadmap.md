@@ -12,8 +12,12 @@ discovery with deterministic collection/Ansible/AIP/I3 fixture acceptance. It
 remains unqualified, unpublished and rejected by normal production activation.
 [I4C-A preparation](i4c-a-preparation.md) adds an exact expiring local operator
 staging path in an isolated test store and a committed-source live runbook. It
-provides no live evidence or production activation; I4C-B remains gated on
-operator qualification and separate release approval.
+remains preparation evidence. The first operator-reported live 9.2.11 run was
+PARTIAL (140 observations; a legitimate VLAN `exists: null` rejected the network
+response). The [qualification fix record](i4c-live-qualification-fixes.md) tracks
+the new unqualified 0.2.0-i4b.2 candidate and reconciliation/UI fixes. Production
+activation is unchanged; I4C-B remains gated on complete reviewed live evidence
+and separate release approval.
 The original alignment on 11 October 2026 used
 `90e04a76982c314fff2191e84ca6bd1a8cabcb07`.
 The [v1.3 design](Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)
