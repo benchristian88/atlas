@@ -47,6 +47,11 @@ Probe-only versions have no Run Now or scheduling controls. Generic discovery-ca
 versions use the [discovery operator workflow](discovery-runs.md); no production
 discovery-capable Connector is currently shipped.
 
+An explicit [local operator qualification procedure](connector-qualification.md)
+can stage one exact unqualified prerelease in a separate test instance/store.
+It is unavailable through catalogue/customer installation APIs and does not change
+production bootstrap, source qualification or the ordinary rejection policy.
+
 TLS verifies certificates by default. For a self-signed deployment, choose
 fingerprint and obtain the SHA-256 certificate fingerprint through a trusted
 channel; it is checked before token transmission. An explicit insecure exception

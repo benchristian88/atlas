@@ -22,6 +22,7 @@ class VerificationEvidence:
     workflow: str | None = None
     source_commit: str | None = None
     release_identity: str | None = None
+    qualification_digest: str | None = None
 
     def safe_metadata(self) -> dict:
         return {key: value for key, value in self.__dict__.items() if value is not None}

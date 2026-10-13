@@ -10,6 +10,10 @@ remains unqualified. No source discovery or fallback is introduced by I4A.
 The separate [I4B candidate](i4b-completion-report.md) now implements secured
 discovery with deterministic collection/Ansible/AIP/I3 fixture acceptance. It
 remains unqualified, unpublished and rejected by normal production activation.
+[I4C-A preparation](i4c-a-preparation.md) adds an exact expiring local operator
+staging path in an isolated test store and a committed-source live runbook. It
+provides no live evidence or production activation; I4C-B remains gated on
+operator qualification and separate release approval.
 The original alignment on 11 October 2026 used
 `90e04a76982c314fff2191e84ca6bd1a8cabcb07`.
 The [v1.3 design](Atlas_Integration_Architecture_and_Design_Specification_v1.3.md)

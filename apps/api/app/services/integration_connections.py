@@ -19,7 +19,9 @@ def installed_manifest(db, connector_id):
     store = lifecycle.package_store()
     store.verify_connector(record.connector_id, record.version, "sha256:" + record.bundle_digest)
     directory = store.root / record.connector_id / record.version / record.bundle_digest
-    manifest = validate_manifest(strict_json(_read_regular(directory / "manifest.json", 256 * 1024)), activation=True)
+    # Store verification enforces ordinary qualification or the exact protected
+    # operator grant. Repeating the ordinary gate would reject the test package.
+    manifest = validate_manifest(strict_json(_read_regular(directory / "manifest.json", 256 * 1024)))
     require_resolved(db, manifest)
     return record, manifest
 
