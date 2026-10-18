@@ -120,4 +120,3 @@ def purge_expired(db, *, now=None):
     result = db.execute(delete(DiscoveryRunDebugTrace).where(
         DiscoveryRunDebugTrace.expires_at <= (now or datetime.now(timezone.utc))))
     return result.rowcount
-

@@ -40,4 +40,3 @@ export function DiagnosticsView({ run, canDebug, trace, expanded, onExpand, onDe
     </details>}
   </Section>;
 }
-
