@@ -12,6 +12,7 @@ from app.models import Integration, DiscoveryRun
 from app.services.backup_runtime import normal_operation
 from app.services.backup_archive import BackupError
 from app.services import discovery_orchestration as discovery
+from app.services.discovery_diagnostics import purge_expired
 
 logger = logging.getLogger("atlas.worker")
 PAUSED_ERRORS = {"authentication_failed", "tls_trust_required", "source_incompatible", "configuration_unavailable",
@@ -27,6 +28,8 @@ async def tick(session_factory=SessionLocal):
         logger.warning("category=dispatch_hints_unavailable")
     # Missed schedules coalesce to one current run, never a backlog of ticks.
     with normal_operation(read_only=True), session_factory() as db:
+        purge_expired(db)
+        db.commit()
         identifiers = list(db.scalars(select(Integration.id).where(Integration.enabled.is_(True),
             Integration.retired_at.is_(None), Integration.connector_id.is_not(None), Integration.schedule_preset != "manual",
             Integration.next_run_at <= discovery.utcnow(),
@@ -41,7 +44,8 @@ async def tick(session_factory=SessionLocal):
                 continue
             from app.services.connector_lifecycle import lock_connector
             lock_connector(db, identity.connector_id)
-            row = db.scalar(select(Integration).where(Integration.id == identifier).with_for_update(skip_locked=True))
+            row = db.scalar(select(Integration).where(Integration.id == identifier).with_for_update(skip_locked=True)
+                .execution_options(populate_existing=True))
             if row is None or not row.enabled or row.retired_at or row.next_run_at is None or row.next_run_at > discovery.utcnow():
                 continue
             row.next_run_at = discovery.next_run(row.schedule_preset, discovery.utcnow())

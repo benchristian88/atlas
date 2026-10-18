@@ -117,6 +117,7 @@ class PostgresBackup:
                 supported_revision(revision)
                 snapshot = connection.scalar(text("SELECT pg_export_snapshot()"))
                 self.run(["pg_dump", "--format=custom", "--compress=0", "--no-owner",
+                          "--exclude-table-data=public.discovery_run_debug_traces",
                           "--no-privileges", "--snapshot", snapshot, "--file", str(destination)], watched=destination)
         destination.chmod(0o600)
         metadata = build_metadata()

@@ -1,5 +1,11 @@
 # I3 orchestration and AIP implementation
 
+The additive [Discovery diagnostics facility](discovery-diagnostics.md) adds
+permanent bounded normal provenance and administrator-only, next-run debug traces.
+It uses the existing private workspace/control channel, without changing AIP/SDK
+or source/completeness semantics. Debug expires within 48 hours and is excluded
+from portable backups. Migration: `20261018_0030`.
+
 I3 extends the existing Integration, worker, DiscoveryRun and knowledge lifecycle.
 The canonical SDK remains 1.1.0; Manifest discovery capability is `read_only`
 (or `false`), and AIP remains 1.0. Official Proxmox 0.1.0 remains probe-only.

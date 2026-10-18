@@ -20,6 +20,7 @@ def main():
     payload.clear()
     result = ansible_runner.interface.init_runner(private_data_dir=str(root), playbook="discover.yml", inventory="localhost,", quiet=True,
         extravars={"atlas_input_file": str(root / "input.json"), "atlas_aip_file": str(root / "aip.ndjson"),
+            "atlas_diagnostics_file": str(root / "diagnostics.ndjson"),
             "ansible_python_interpreter": sys.executable},
         envvars={**execution_environment(), "ANSIBLE_LOCAL_TEMP": str(root / "local-tmp"), "ANSIBLE_REMOTE_TEMP": str(root / "remote-tmp"),
             "ANSIBLE_RETRY_FILES_ENABLED": "False", "ANSIBLE_NOCOLOR": "True"},

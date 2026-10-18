@@ -3,20 +3,82 @@ import uuid
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, StrictBool
+from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from atlas_connector_sdk.contracts import ContractError, strict_json
 from app.audit import add_audit_event
-from app.authorization import Principal, require_permission, require_scope, scope_condition
+from app.authorization import Principal, require_permission, require_scope, require_global, scope_condition
 from app.database import get_db
-from app.models import DiscoveryRun, Integration, DataSource
+from app.models import DiscoveryRun, DiscoveryRunDebugTrace, Integration, DataSource
 from app.routes.integration_connections import scoped, require_live
 from app.routes.knowledge import run_response
 from app.services import discovery_orchestration as orchestration, discovery_tokens, aip_ingestion
 
 router = APIRouter(tags=["integration-discovery"])
+
+
+class DebugNextRunInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    enabled: StrictBool
+
+
+@router.put("/integrations/{integration_id}/debug-next-run")
+def set_debug_next_run(integration_id: uuid.UUID, payload: DebugNextRunInput, request: Request,
+        principal: Principal = Depends(require_permission("integration_runtime.manage")), db: Session = Depends(get_db)):
+    require_global(principal, "integration_runtime.manage")
+    row = scoped(db, principal, "integrations.view", integration_id, lock=True)
+    require_live(row)
+    row.debug_next_run = payload.enabled
+    add_audit_event(db, action="integration.debug_next_run_changed", target_type="integration", target_id=row.id,
+        customer_id=row.customer_id, site_id=row.site_id, actor=principal.user, request=request,
+        summary="Discovery debug next run changed", metadata={"enabled": payload.enabled})
+    db.commit()
+    return {"debug_next_run": row.debug_next_run}
+
+
+def debug_run(db, principal, run_id):
+    require_global(principal, "integration_runtime.manage")
+    row = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id,
+        scope_condition(principal, "integrations.view", DiscoveryRun.customer_id, DiscoveryRun.site_id)).with_for_update())
+    if row is None:
+        raise HTTPException(404, "Discovery run not found")
+    return row
+
+
+@router.get("/discovery-runs/{run_id}/debug-trace")
+def get_debug_trace(run_id: uuid.UUID,
+        principal: Principal = Depends(require_permission("integration_runtime.manage")), db: Session = Depends(get_db)):
+    run = debug_run(db, principal, run_id)
+    now = orchestration.utcnow()
+    expired = run.debug_expires_at is not None and run.debug_expires_at <= now
+    if expired:
+        db.execute(delete(DiscoveryRunDebugTrace).where(DiscoveryRunDebugTrace.discovery_run_id == run.id))
+    trace = None if expired or run.debug_deleted_at else db.get(DiscoveryRunDebugTrace, run.id)
+    value = {"debug_enabled": run.debug_enabled, "expires_at": run.debug_expires_at,
+        "state": "deleted" if run.debug_deleted_at else "expired" if expired else "available" if trace else
+            "pending" if run.debug_enabled and run.status in {"pending", "running"} else "unavailable",
+        "events": trace.events if trace else []}
+    db.commit()  # Expiry also purges stored data on read, independent of worker health.
+    from fastapi.responses import JSONResponse
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(jsonable_encoder(value), headers={"Cache-Control": "no-store"})
+
+
+@router.delete("/discovery-runs/{run_id}/debug-trace")
+async def delete_debug_trace(run_id: uuid.UUID, request: Request,
+        principal: Principal = Depends(require_permission("integration_runtime.manage")), db: Session = Depends(get_db)):
+    run = debug_run(db, principal, run_id)
+    db.execute(delete(DiscoveryRunDebugTrace).where(DiscoveryRunDebugTrace.discovery_run_id == run.id))
+    run.debug_deleted_at = orchestration.utcnow()
+    add_audit_event(db, action="integration.discovery_debug_deleted", target_type="discovery_run", target_id=run.id,
+        customer_id=run.customer_id, site_id=run.site_id, actor=principal.user, request=request,
+        summary="Discovery debug data deleted")
+    db.commit()
+    if run.runtime_job_id:
+        await orchestration.runtime.get_job(run.id, run.runtime_job_id, delete_debug=True)
+    return {"deleted": True}
 
 
 def eligibility_error(error):

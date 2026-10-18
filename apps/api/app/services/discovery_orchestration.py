@@ -15,7 +15,7 @@ from app.services.connector_mappings import require_resolved
 from app.services.integration_connections import installed_manifest, validate_scopes
 from app.services.integration_runtime import runtime, _approved_baseline
 from app.services.integration_secrets import AtlasEncryptedSecretProvider
-from app.services import discovery_tokens
+from app.services import discovery_tokens, discovery_diagnostics
 
 logger = logging.getLogger("atlas.discovery")
 SCHEDULES = {"manual": None, "hourly": 3600, "6_hours": 21600, "12_hours": 43200, "daily": 86400, "weekly": 604800}
@@ -108,14 +108,19 @@ async def create_run(db, row, *, trigger="manual", user_id=None):
             "baseline_digest", "dependency_lock_digest", "packaging_mode"]},
         "manifest": manifest, "mappings": mappings, "config": row.config_json,
         "credential_revision": str(row.credential_reference) if row.credential_reference else None,
-        "selected_scopes": sorted(row.selected_scopes), "object_classes": classes, "coverage": coverage}
+        "selected_scopes": sorted(row.selected_scopes), "object_classes": classes, "coverage": coverage,
+        "debug_enabled": bool(row.debug_next_run)}
+    created = utcnow()
     run = DiscoveryRun(id=uuid.uuid4(), integration_id=row.id, data_source_id=row.data_source_id,
-        customer_id=row.customer_id, site_id=row.site_id, status="pending", started_at=utcnow(),
+        customer_id=row.customer_id, site_id=row.site_id, status="pending", started_at=created, created_at=created,
         created_by_user_id=user_id, coverage_key=coverage["key"], is_complete_snapshot=coverage["snapshot_mode"] == "full",
         completeness_status="unknown", execution_provenance=provenance, dispatch_state="pending",
-        dispatch_attempts=0, dispatch_after=utcnow(), batch_count=0, observation_count=0, warning_count=0, summary={})
+        dispatch_attempts=0, dispatch_after=utcnow(), batch_count=0, observation_count=0, warning_count=0, summary={},
+        debug_enabled=provenance["debug_enabled"], debug_expires_at=created + timedelta(hours=48) if row.debug_next_run else None)
     db.add(run)
     db.flush()
+    # Same transaction as the successfully inserted run; rollback restores arming.
+    row.debug_next_run = False
     row.last_run_at = run.started_at
     logger.info("discovery run=%s integration=%s state=pending", run.id, row.id)
     return run
@@ -215,7 +220,8 @@ async def dispatch(db, run_id):
                 "reference": {"connector_id": provenance["connector_id"], "version": provenance["connector_version"],
                     "digest": provenance["connector_digest"]}, "config": provenance["config"],
                 "credentials": lease.values, "selected_scopes": provenance["selected_scopes"], "object_classes": provenance["object_classes"],
-                "coverage": provenance["coverage"], "ingestion_token": token, "timeout_seconds": JOB_SECONDS}
+                "coverage": provenance["coverage"], "ingestion_token": token, "timeout_seconds": JOB_SECONDS,
+                "debug_enabled": run.debug_enabled}
             # Persist generation and attempt before the runtime can callback.
             db.commit()
             try:
@@ -224,6 +230,8 @@ async def dispatch(db, run_id):
                 request.clear()
         row = db.scalar(select(Integration).where(Integration.id == row.id).with_for_update().execution_options(populate_existing=True))
         run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+        if result.get("diagnostics") is not None:
+            discovery_diagnostics.persist(db, run, result["diagnostics"])
         if result.get("job_id"):
             run.runtime_job_id = uuid.UUID(result["job_id"])
             if run.status == "pending":
@@ -270,6 +278,8 @@ async def reconcile(db, run_id):
         run.runtime_job_id = uuid.UUID(result["job_id"])
     state = result.get("state")
     if state in {"succeeded", "failed", "cancelled"}:
+        if result.get("diagnostics") is not None:
+            discovery_diagnostics.persist(db, run, result["diagnostics"])
         if run.status in {"pending", "running"}:
             fail_run(run, row, "missing_completion" if state == "succeeded" else result.get("diagnostic_code") or "runtime_failed")
         run.dispatch_state = "settled"

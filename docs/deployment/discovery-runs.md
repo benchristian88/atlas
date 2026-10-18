@@ -14,6 +14,27 @@ Enabled configured versions expose **Run Now**, current run, last run/success,
 next run, safe latest error and history. Successful authorized creation queues an
 initial run and chooses hourly scheduling only when the Manifest permits it.
 
+## Diagnostics and debug next run
+
+Run detail includes permanent safe counts, reasons, stages and object context for
+diagnostic-capable Connectors, including PARTIAL/failed runs. Older runs/Connectors
+display diagnostics as unavailable. Counts describe inventory rows/subrecords,
+separately from AIP observations.
+
+An administrator with global `integration_runtime.manage` and scoped Integration
+view can select **Enable debug for next discovery run**. The Integration shows
+**Debug next run: Armed**, then **Off** when its next run is created. Transactional
+creation failure preserves arming; a created run consumes it regardless of outcome,
+including scheduled runs. Debug does not change source calls, scope or completeness.
+
+Only those administrators can expand **Debug trace** or **Delete debug data**.
+Expiry is shown, at most 48 hours from creation. Expired data is immediately
+unavailable and purged through the existing worker/read lifecycle. Portable backups
+exclude debug trace rows. Normal diagnostics, knowledge, evidence, reconciliation
+and audit/history survive debug deletion. Neither mode logs raw source data or
+config values. Keep the worker running for automatic retention cleanup. See the
+[diagnostic contract](../architecture/integrations/discovery-diagnostics.md).
+
 ## Schedules and overlap
 
 Schedule changes require both scoped manage and run permission. Choose Manual,

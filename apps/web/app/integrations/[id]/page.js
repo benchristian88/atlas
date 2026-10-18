@@ -10,6 +10,7 @@ import { apiRequest } from "../../../lib/api";
 import { initialConfig, configurationPayload } from "../../../lib/integration-configuration.mjs";
 import { formatIntegrationTime } from "../../../lib/integrations.mjs";
 import { DISCOVERY_SCHEDULES, discoveryControls } from "../../../lib/discovery.mjs";
+import { DebugNextRunControl } from "../../../components/discovery-diagnostics";
 
 export default function IntegrationDetail({ params }) {
   const { id } = use(params), auth = useAuth();
@@ -22,11 +23,11 @@ export default function IntegrationDetail({ params }) {
   const run = record && !record.retired_at && record.generic && auth.hasPermissionInContext("integrations.run", record.customer_id, record.site_id);
   const discovery = discoveryControls(record, run, manage);
   useEffect(() => {
-    if (!record?.current_run_id) return;
+    if (!record?.current_run_id && !record?.debug_next_run) return;
     let active = true;
     const timer = setInterval(() => apiRequest(`/integrations/${id}`).then(value => { if (active) setRecord(value); }).catch(reason => { if (active) setError(reason.message); }), 3000);
     return () => { active = false; clearInterval(timer); };
-  }, [id, record?.current_run_id]);
+  }, [id, record?.current_run_id, record?.debug_next_run]);
   async function discoveryAction(path, method, body) {
     setBusy(true); setError("");
     try { await apiRequest(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }); setRecord(await apiRequest(`/integrations/${id}`)); }
@@ -42,6 +43,7 @@ export default function IntegrationDetail({ params }) {
         {record.last_error_code && <p className="warning-banner" role="status">Discovery: {record.last_error_code.replaceAll("_", " ")}</p>}
         <div className="form-actions">{discovery.run && <Button variant="primary" loading={busy} disabled={!discovery.eligible || discovery.active} onClick={() => discoveryAction(`/integrations/${id}/run`, "POST")}>Run Now</Button>}{record.current_run_id && <Button href={`/discovery-runs/${record.current_run_id}`}>View current run</Button>}{discovery.run && discovery.active && <Button disabled={busy} onClick={() => discoveryAction(`/discovery-runs/${record.current_run_id}/cancel`, "POST")}>Cancel run</Button>}<Button href={`/discovery-runs?integration_id=${id}`}>Run history</Button></div>
         {discovery.schedule && <label className="field"><span>Discovery schedule</span><select disabled={busy} value={record.schedule_preset || "manual"} onChange={event => discoveryAction(`/integrations/${id}/schedule`, "PUT", { preset: event.target.value })}>{DISCOVERY_SCHEDULES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+        <DebugNextRunControl armed={record.debug_next_run} allowed={!record.retired_at && auth.hasGlobalPermission("integration_runtime.manage")} busy={busy} onChange={enabled => discoveryAction(`/integrations/${id}/debug-next-run`, "PUT", { enabled })} />
       </>}
     </Section>}
     {record.generic && !form && !record.retired_at && <p className="warning-banner">The verified configuration form is unavailable. Ask a global administrator to check the package and required mappings.</p>}

@@ -69,7 +69,7 @@ def scoped(db, principal, permission, identifier, *, lock=False):
         visible_row = db.scalar(query)
         if visible_row is not None and visible_row.connector_id:
             lifecycle.lock_connector(db, visible_row.connector_id)
-        query = query.with_for_update()
+        query = query.with_for_update().execution_options(populate_existing=True)
     row = db.scalar(query)
     if row is None:
         raise HTTPException(404, "Integration not found")
@@ -131,6 +131,8 @@ def connection_forms(principal: Principal = Depends(require_permission("integrat
 def integration_detail(integration_id: uuid.UUID, principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db)):
     row = scoped(db, principal, "integrations.view", integration_id)
     value = response(row, AtlasEncryptedSecretProvider(db))
+    if principal.can("integration_runtime.manage", None, None):
+        value["debug_next_run"] = bool(row.debug_next_run)
     site = db.get(Site, row.site_id)
     value["site_name"] = site.name
     from app.services.discovery_orchestration import active_run

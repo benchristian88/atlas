@@ -1,5 +1,25 @@
 # I4C live qualification findings and local fixes
 
+## 18 October 2026 — diagnostic successor
+
+Operator evidence for `.2`, digest
+`sha256:3dcf374e487a65a4398fe3ec2b3c0158c9fbdeaa5c8f885b85d8c3361904ffb5`:
+COMPLETED/PARTIAL, 179 observations, 48 reconciliation items created, outward
+`invalid_source_record`. The increase from `.1`'s 140 observations supports the
+`exists:null` fix; `.2` still failed live qualification. Source booleans and guest
+references to active bridges/storage were already checked by the operator. No
+further validator is relaxed or source privilege changed in this pass.
+
+The next candidate is **0.2.0-i4b.3**, a diagnostic successor, still **UNQUALIFIED**
+with no qualified source versions. Generic normal diagnostics explain stage,
+object and rule; administrators can arm debug for one next run, retained at most
+48 hours. No raw source logging, SDK/AIP change, source call, live acceptance or
+automatic reconciliation decision occurs here. `.1`/`.2` remain immutable failed
+qualification evidence and production bootstrap stays `0.1.0`. See the
+[contract](discovery-diagnostics.md) and [validation report](i4c-diagnostics-report.md).
+
+The remainder preserves the earlier fix-pass evidence.
+
 Updated 13 October 2026. This fix pass starts at Connector checkpoint
 `76af2507bd29934192d1d89428a618d081e4f4a0` and Atlas checkpoint
 `efde1d7b7a6bbb4f9098b1f7d228e4b834d096b4`, on their existing I4C feature

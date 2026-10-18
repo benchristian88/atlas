@@ -139,6 +139,9 @@ def run_response(
         "warning_count": run.warning_count,
         "source_version": run.source_version,
         "cancellation_requested_at": run.cancellation_requested_at,
+        "debug_enabled": bool(run.debug_enabled),
+        "diagnostics_summary": run.diagnostics_summary,
+        "diagnostics_events": run.diagnostics_events or [],
     }
 
 

@@ -950,6 +950,9 @@ class DiscoveryRunResponse(ORMResponse):
     warning_count: int | None = 0
     source_version: str | None = None
     cancellation_requested_at: datetime | None = None
+    debug_enabled: bool = False
+    diagnostics_summary: dict[str, Any] | None = None
+    diagnostics_events: list[dict[str, Any]] = Field(default_factory=list)
     deletion_safety: "DeletionSafetyResponse | None" = None
     created_at: datetime
     updated_at: datetime

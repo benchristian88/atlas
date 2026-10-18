@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import DataSource, DiscoveryRun, Integration, Site
+from app.models import DataSource, DiscoveryRun, DiscoveryRunDebugTrace, Integration, Site
 from tests.test_backup_postgres import installations, portable_backup, restore
 
 pytestmark = pytest.mark.skipif(not (os.getenv("ATLAS_TEST_H3_SOURCE_URL") and os.getenv("ATLAS_TEST_H3_TARGET_URL")), reason="requires disposable source and restore PostgreSQL databases")
@@ -22,10 +22,19 @@ def test_restore_fails_active_source_run_and_revokes_generation(installations):
             connector_id="i3-fixture", connector_version="1.0.0", connector_digest="a"*64, config_schema_version="1.0",
             base_url="", username_or_token_id="", secret_reference="", data_source_id=source.id)
         db.add(row); db.flush()
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
         run = DiscoveryRun(integration_id=row.id, data_source_id=source.id, customer_id=site.customer_id, site_id=site.id,
             status="pending", dispatch_state="pending", started_at=datetime.now(timezone.utc), execution_provenance={"connector_id": "i3-fixture"}, ingestion_generation=uuid.uuid4())
-        db.add(run); db.flush(); identity = run.id; db.commit()
+        db.add(run); db.flush(); identity = run.id
+        created = datetime.now(timezone.utc)
+        debug = DiscoveryRun(integration_id=row.id, data_source_id=source.id, customer_id=site.customer_id, site_id=site.id,
+            status="completed", dispatch_state="settled", started_at=created, created_at=created,
+            execution_provenance={"connector_id": "i3-fixture", "debug_enabled": True}, debug_enabled=True,
+            debug_expires_at=created + timedelta(hours=48), diagnostics_summary={"available": True}, diagnostics_events=[])
+        db.add(debug); db.flush(); debug_id = debug.id
+        db.add(DiscoveryRunDebugTrace(discovery_run_id=debug.id, expires_at=debug.debug_expires_at,
+            events=[{"sequence": 1, "stage": "discovery", "result": "accepted", "reason_code": "discovery_finished"}]))
+        db.commit()
     archive = portable_backup(inst)
     restore(inst, archive)
     with Session(inst["target"]) as db:
@@ -33,6 +42,8 @@ def test_restore_fails_active_source_run_and_revokes_generation(installations):
         assert restored.status == "failed" and restored.error_message == "restore_interrupted"
         assert restored.ingestion_generation is None and restored.dispatch_state == "settled"
         assert restored.execution_provenance == {"connector_id": "i3-fixture"}
+        assert db.get(DiscoveryRun, debug_id).diagnostics_summary == {"available": True}
+        assert db.get(DiscoveryRunDebugTrace, debug_id) is None
 
 
 def test_restore_refuses_unsettled_destination_execution_before_replacement(installations):

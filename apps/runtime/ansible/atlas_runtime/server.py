@@ -326,6 +326,9 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
 
+    def service_actions(self):
+        self.runtime.jobs.prune()
+
     def __init__(self, address, runtime):
         self.runtime = runtime
         self._slots = threading.BoundedSemaphore(32)

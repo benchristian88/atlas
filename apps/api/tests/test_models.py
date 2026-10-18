@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "integration_secrets",
     "connector_mappings",
     "discovery_runs",
+    "discovery_run_debug_traces",
     "discovery_batch_receipts",
     "data_sources",
     "entity_source_links",

@@ -1,5 +1,15 @@
 # Local integration runtime and Connector catalogue
 
+Discovery diagnostics use a runtime-created private sidecar, parsed on terminal
+paths before workspace cleanup and returned through authenticated job status.
+No user-selected trace destination or raw log stream is accepted. Debug is armed
+for one Integration's next run only, with administrator-only access and 48-hour
+expiry. The existing worker purges stored debug rows; portable backups exclude
+them. Deploy API/worker migration `20261018_0030` and the matching runtime together.
+Older Connectors remain compatible and report diagnostics unavailable. See
+[discovery operations](discovery-runs.md) and the
+[diagnostic contract](../architecture/integrations/discovery-diagnostics.md).
+
 Normal Docker Compose and native/systemd installations include an isolated Atlas
 Ansible Runtime. Open **Integrations → Catalogue** to inspect the bundled offline
 catalogue, or **Runtime** with a global runtime-view grant to inspect health,
