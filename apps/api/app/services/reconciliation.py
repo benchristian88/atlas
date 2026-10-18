@@ -241,19 +241,29 @@ def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
             ReconciliationItem.entity_type == "asset",
             ReconciliationItem.candidate_external_id == item.candidate_external_id,
             ReconciliationItem.entity_id.is_(None),
-        )
+        ).join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id).where(
+            KnowledgeAssertion.data_source_id == assertion.data_source_id)
     ):
         related.entity_id = asset.id
     return asset
 
 
 def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
-    asset = db.get(Asset, item.entity_id) if item.entity_id else None
+    assertion = _assertion_for_item(db, item)
+    identifier = item.entity_id or assertion.subject_id
+    if identifier is None and assertion.data_source_id:
+        link = technical_link(db, data_source_id=assertion.data_source_id,
+            customer_id=item.customer_id, site_id=item.site_id, entity_type="asset",
+            external_id=assertion.subject_external_id or item.candidate_external_id)
+        identifier = link.entity_id if link else None
+    asset = db.get(Asset, identifier) if identifier else None
     if asset is None:
         raise HTTPException(status_code=409, detail="The target asset no longer exists")
+    if (asset.customer_id, asset.site_id) != (item.customer_id, item.site_id):
+        raise HTTPException(409, "The target asset is outside this reconciliation context")
+    item.entity_id = assertion.subject_id = asset.id
     value = dict(item.observed_value_json or {})
     field = value.get("field")
-    assertion = _assertion_for_item(db, item)
     if assertion.fact_metadata is not None and field == assertion.predicate and "." in field:
         # Accepted namespaced facts live in the existing assertion knowledge
         # model. They are never aliases for canonical Asset columns.
@@ -286,6 +296,9 @@ def _accept_matching_asset_assertions(
             KnowledgeAssertion.predicate.in_(ASSET_FIELD_PREDICATES),
         )
     ):
+        # An independent reconciliation proposal always needs its own decision.
+        if db.scalar(select(ReconciliationItem).where(ReconciliationItem.assertion_id == candidate.id)) is not None:
+            continue
         if getattr(asset, candidate.predicate, None) == candidate.value_json:
             accept_assertion(
                 db,
@@ -559,6 +572,10 @@ def accept_item(
     if item.status not in {"open", "deferred"}:
         raise HTTPException(status_code=409, detail="This item has already been decided")
     assertion = _assertion_for_item(db, item)
+    if (assertion.customer_id, assertion.site_id) != (item.customer_id, item.site_id):
+        raise HTTPException(409, "The source assertion context does not match")
+    if assertion.retracted_at or assertion.superseded_by_id or assertion.is_source_current is False:
+        raise HTTPException(409, "This proposal is stale; review the latest observation")
     previous_value = item.current_value_json
     if item.entity_type in {"network", "asset_interface"}:
         result = _accept_technical(db, item, assertion)

@@ -20,6 +20,38 @@ export function reconciliationPagePath(queue, cursor = null) {
   return `/reconciliation-items/page?${params}`;
 }
 
+export function reconciliationEntityPagePath(queue, { cursor = null, search = "", section = "" } = {}) {
+  const params = new URLSearchParams({ status: queue.status, limit: "50" });
+  if (queue.category) params.set("category", queue.category);
+  if (cursor) params.set("cursor", cursor);
+  if (search) params.set("search", search);
+  if (section) params.set("section", section);
+  return `/reconciliation-entities?${params}`;
+}
+
+// Review navigation survives refresh and browser Back. The return destination
+// contains only this route's query, never an arbitrary external URL.
+export function reconciliationReviewHref(params, entityId, returnEntityId = null) {
+  const next = new URLSearchParams(params);
+  if (returnEntityId) {
+    const back = new URLSearchParams(params);
+    back.set("entity", returnEntityId);
+    back.delete("return");
+    next.set("return", back.toString());
+  }
+  next.set("entity", entityId);
+  return `/reconciliation?${next}`;
+}
+
+export function reconciliationReturnHref(value) {
+  if (!value) return null;
+  const params = new URLSearchParams(value);
+  for (const key of [...params.keys()]) {
+    if (!["queue", "search", "section", "cursor", "page", "entity"].includes(key)) params.delete(key);
+  }
+  return `/reconciliation?${params}`;
+}
+
 export function reconciliationGroups(items, relatedNewEntities = []) {
   const entities = new Map([...relatedNewEntities, ...items].map(item => [item.id, item]));
   const groups = new Map();

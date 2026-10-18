@@ -101,7 +101,7 @@ class KnowledgeSession:
     def rollback(self):
         self.rollbacks += 1
 
-    def get(self, model, record_id):
+    def get(self, model, record_id, **kwargs):
         return next(
             (
                 record

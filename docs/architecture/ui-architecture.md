@@ -638,8 +638,11 @@ Capability readiness uses the central status registry (`ready` → Ready/success
 `source_unavailable` → Unavailable/danger). Integration results render only the
 existing bounded generic diagnostic schema. Reconciliation uses the existing
 Assets pagination footer grammar and shared secondary Buttons; cursor mechanics
-remain an API concern. Initial facts reuse native assertion-group details and
-retain a separate decision for each item.
+remain an API concern. Entity review uses native disclosures for new and existing entities, independently
+expandable Facts/Relationships/Network sections and the shared identity/status
+components. The [backend presentation contract](reconciliation-entity-review.md)
+owns grouping, eligibility and prerequisite display; each record retains its own
+decision. Accept all reports unresolved work explicitly.
 
 Discovery summary rows use friendly source names and structured scope labels;
 internal UUIDs/coverage identities remain in detail/provenance contexts. Connector
