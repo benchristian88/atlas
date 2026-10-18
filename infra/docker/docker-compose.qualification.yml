@@ -1,0 +1,30 @@
+# Explicit operator-only override for an isolated test instance. Never used by
+# installers or production defaults. Existing credentials stay in Atlas.
+services:
+  api:
+    environment:
+      ATLAS_CONNECTOR_QUALIFICATION_ENABLED: '1'
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-qualification-connectors
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    volumes:
+      - qualification_store:/var/lib/atlas-qualification-connectors
+  worker:
+    environment:
+      ATLAS_CONNECTOR_QUALIFICATION_ENABLED: '1'
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-qualification-connectors
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    volumes:
+      - qualification_store:/var/lib/atlas-qualification-connectors:ro
+  runtime-init:
+    command: ["python", "-c", "from pathlib import Path; from atlas_runtime.bootstrap import provision; provision(Path('/run/atlas-runtime-control'), Path('/var/lib/atlas-qualification-connectors'))"]
+    volumes:
+      - qualification_store:/var/lib/atlas-qualification-connectors
+  runtime:
+    environment:
+      ATLAS_CONNECTOR_QUALIFICATION_ENABLED: '1'
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-qualification-connectors
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    volumes:
+      - qualification_store:/var/lib/atlas-qualification-connectors:ro
+volumes:
+  qualification_store:

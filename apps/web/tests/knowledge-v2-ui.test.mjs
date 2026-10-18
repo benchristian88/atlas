@@ -29,7 +29,7 @@ test("reconciliation exposes stable queues and absence dispositions", async () =
   }
   assert.doesNotMatch(queues, /Knowledge Gaps|Missing knowledge|Exceptions/);
   for (const disposition of ["mark_missing", "mark_inactive", "retire", "keep_active", "exception"]) {
-    assert.match(reconciliation, new RegExp(disposition));
+    assert.match(await readFile(new URL("../components/reconciliation-cards.js", import.meta.url), "utf8"), new RegExp(disposition));
   }
 });
 

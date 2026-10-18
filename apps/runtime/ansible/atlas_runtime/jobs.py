@@ -19,6 +19,7 @@ from atlas_connector_sdk.configuration import validate_configuration
 from atlas_connector_sdk.contracts import strict_json
 
 from .collections import execution_environment
+from .diagnostics import read_trace
 
 MAX_JOB_SECONDS = 600
 MAX_BATCH_BYTES = 1024 * 1024
@@ -57,14 +58,19 @@ class Job:
     started_at: str | None = None
     finished_at: str | None = None
     diagnostic_code: str | None = None
+    diagnostics: dict | None = field(default=None, repr=False)
+    debug_deleted: bool = False
     cancel: threading.Event = field(default_factory=threading.Event)
     process: object = None
     thread: object = None
     deadline: float = 0
 
     def response(self):
-        return {name: getattr(self, name) for name in ["request_id", "job_id", "state", "accepted_at",
+        value = {name: getattr(self, name) for name in ["request_id", "job_id", "state", "accepted_at",
             "started_at", "finished_at", "diagnostic_code"]}
+        if self.state in TERMINAL and self.diagnostics is not None:
+            value["diagnostics"] = self.diagnostics
+        return value
 
 
 def stop_process(process):
@@ -151,8 +157,10 @@ class Jobs:
         from atlas_runtime.server import read_regular
         values = payload.get("credentials") if isinstance(payload, dict) else None
         try:
-            if (not isinstance(payload, dict) or set(payload) != {"request_id", "run_id", "integration_id",
+            if (not isinstance(payload, dict) or set(payload) - {"debug_enabled"} != {"request_id", "run_id", "integration_id",
                     "reference", "config", "credentials", "selected_scopes", "object_classes", "coverage", "ingestion_token", "timeout_seconds"}):
+                raise ValueError("invalid_request")
+            if type(payload.get("debug_enabled", False)) is not bool:
                 raise ValueError("invalid_request")
             for name in ["request_id", "run_id", "integration_id"]:
                 if str(uuid.UUID(payload[name])) != payload[name]:
@@ -201,9 +209,7 @@ class Jobs:
                         raise ValueError("conflicting_request")
                     return existing.response()
                 # Retain replay authority until well beyond the longest token.
-                for key, previous in list(self.by_request.items()):
-                    if previous.finished_at and time.time() - datetime.fromisoformat(previous.finished_at).timestamp() > 1800:
-                        del self.by_request[key]
+                self.prune()
                 if len(self.by_request) >= 128 or not self.slots.acquire(blocking=False):
                     raise ValueError("runtime_capacity")
                 job = Job(payload["request_id"], digest, deadline=time.monotonic() + payload["timeout_seconds"])
@@ -224,7 +230,8 @@ class Jobs:
                 values.clear()
 
     def get(self, payload, *, cancel=False):
-        if not isinstance(payload, dict) or set(payload) != {"request_id", "job_id"}:
+        if (not isinstance(payload, dict) or set(payload) - {"delete_debug"} != {"request_id", "job_id"}
+                or type(payload.get("delete_debug", False)) is not bool):
             raise ValueError("invalid_request")
         str(uuid.UUID(payload["request_id"]))
         if payload["job_id"] is not None:
@@ -233,6 +240,10 @@ class Jobs:
             job = self.by_request.get(payload["request_id"])
             if job is None or payload["job_id"] is not None and job.job_id != payload["job_id"]:
                 return {"state": "unavailable", "diagnostic_code": "job_unavailable"}
+            if payload.get("delete_debug"):
+                job.debug_deleted = True
+                if job.diagnostics is not None:
+                    job.diagnostics = {**job.diagnostics, "debug_events": []}
             if cancel and job.state not in TERMINAL:
                 job.cancel.set()
                 # Connector child is killed immediately; execution thread owns
@@ -244,9 +255,20 @@ class Jobs:
     def execute(self, job, payload, directory, manifest):
         from atlas_runtime.server import read_regular, MAX_FILE
         code, state = "source_unavailable", "failed"
+        trace_fd = None
         try:
             with tempfile.TemporaryDirectory(prefix="job-", dir=workspace_root()) as temporary:
                 root = Path(temporary)
+                trace_path = root / "diagnostics.ndjson"
+                trace_fd = os.open(trace_path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+                info = os.fstat(trace_fd)
+                trace_identity = (info.st_dev, info.st_ino)
+                def collect_trace():
+                    value = read_trace(trace_fd, trace_path, trace_identity,
+                        debug=payload.get("debug_enabled", False),
+                        secrets=[*payload["credentials"].values(), payload["ingestion_token"], self.runtime._secret])
+                    with self.lock:
+                        job.diagnostics = {**value, "debug_events": []} if job.debug_deleted else value
                 project = root / "project"
                 project.mkdir(mode=0o700)
                 for path in (directory / "contents").rglob("*"):
@@ -277,6 +299,9 @@ class Jobs:
                         raise ValueError("source_unavailable")
                     stop_process(job.process)
                     job.process = None
+                    collect_trace()
+                    if job.diagnostics["processing_errors"]:
+                        raise ValueError("invalid_diagnostics")
                     raw = read_regular(root / "aip.ndjson", MAX_OUTPUT_BYTES)
                     lines = raw.splitlines()
                     if not 1 <= len(lines) <= MAX_BATCHES + 1:
@@ -314,6 +339,9 @@ class Jobs:
                             self.callback(job, payload, "batches", message, environment)
                     if completion is None:
                         raise ValueError("missing_completion")
+                    if (completion.get("completeness") == "complete" and
+                            (job.diagnostics["counts"]["warning"] or job.diagnostics["counts"]["error"])):
+                        raise ValueError("invalid_diagnostics")
                     operation = "completion" if completion["status"] == "completed" else "failure"
                     self.callback(job, payload, operation, completion, environment)
                     state, code = ("succeeded", None) if completion["status"] == "completed" else ("failed", "source_unavailable")
@@ -321,13 +349,18 @@ class Jobs:
                     raise ValueError("timeout") from None
                 finally:
                     stop_process(job.process)
+                    collect_trace()
+                    os.close(trace_fd)
+                    trace_fd = None
         except ValueError as error:
-            allowed = {"cancelled", "timeout", "invalid_aip", "missing_completion", "callback_unavailable", "callback_rejected", "source_unavailable"}
+            allowed = {"cancelled", "timeout", "invalid_aip", "invalid_diagnostics", "missing_completion", "callback_unavailable", "callback_rejected", "source_unavailable"}
             code = str(error) if str(error) in allowed else "invalid_aip"
             state = "cancelled" if job.cancel.is_set() else "failed"
         except (OSError, TypeError, KeyError, subprocess.SubprocessError):
             code, state = "runtime_unavailable", "failed"
         finally:
+            if trace_fd is not None:
+                os.close(trace_fd)
             payload["credentials"].clear()
             payload.clear()
             with self.lock:
@@ -366,6 +399,14 @@ class Jobs:
         with self.lock:
             active = sum(job.state not in TERMINAL for job in self.by_request.values())
         return {"maximum": 4, "active": active, "available": 4 - active}
+
+    def prune(self):
+        # The existing server lifecycle calls this even when no new run arrives.
+        # Transient control results (including debug data) never become a store.
+        with self.lock:
+            for key, previous in list(self.by_request.items()):
+                if previous.finished_at and time.time() - datetime.fromisoformat(previous.finished_at).timestamp() > 1800:
+                    del self.by_request[key]
 
     def shutdown(self):
         with self.lock:

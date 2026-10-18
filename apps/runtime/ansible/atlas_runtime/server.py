@@ -171,6 +171,8 @@ class Runtime:
             bundle = read_regular(directory / "bundle.tar.gz", MAX_BUNDLE)
             manifest = json.loads(read_regular(directory / "manifest.json", MAX_METADATA))
             receipt = json.loads(read_regular(directory / "verification.json", MAX_METADATA))
+            from .qualification import check
+            check(self.store, manifest, receipt.get("verification", {}), read_regular)
             if (hashlib.sha256(bundle).hexdigest() != reference["digest"]
                     or manifest.get("id") != reference["connector_id"]
                     or manifest.get("version") != reference["version"]
@@ -323,6 +325,9 @@ class Handler(BaseHTTPRequestHandler):
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
+
+    def service_actions(self):
+        self.runtime.jobs.prune()
 
     def __init__(self, address, runtime):
         self.runtime = runtime

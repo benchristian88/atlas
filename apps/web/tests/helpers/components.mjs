@@ -8,11 +8,15 @@ import * as assetIcon from '../../lib/asset-icon.mjs';
 import * as operations from '../../lib/operations-experience.mjs';
 import * as integrations from '../../lib/integrations.mjs';
 import * as integrationConfiguration from '../../lib/integration-configuration.mjs';
+import * as reconciliationQueues from '../../lib/reconciliation-queues.mjs';
+import * as discovery from '../../lib/discovery.mjs';
 import * as navigationIcon from '../../components/navigation-icon.mjs';
 import * as presentationIdentity from '../../components/presentation-identity.mjs';
 const require = createRequire(import.meta.url);
 const { transformSync } = require('next/dist/compiled/babel/core');
 const namespaces = { 'integration-configuration.mjs': integrationConfiguration, 'status.mjs': status, 'entity-identity.mjs': identity, 'presentation.mjs': presentation, 'asset-icon.mjs': assetIcon, 'operations-experience.mjs': operations, 'integrations.mjs': integrations, 'navigation-icon.mjs': navigationIcon, 'presentation-identity.mjs': presentationIdentity };
+namespaces['reconciliation-queues.mjs'] = reconciliationQueues;
+namespaces['discovery.mjs'] = discovery;
 const cache = new Map();
 export function loadComponent(url) {
   if (!url.pathname.endsWith('.js')) url = new URL(`${url.href}.js`);

@@ -913,6 +913,7 @@ class Integration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error_code: Mapped[str | None] = mapped_column(String(64))
+    debug_next_run: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
 
 class IntegrationSecret(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -1067,6 +1068,7 @@ class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "discovery_runs"
     __table_args__ = (
+        CheckConstraint("(debug_enabled AND execution_provenance IS NOT NULL AND debug_expires_at IS NOT NULL AND debug_expires_at <= created_at + interval '48 hours') OR (NOT debug_enabled AND debug_expires_at IS NULL)", name="debug_intent"),
         Index("uq_discovery_runs_active_integration", "integration_id", unique=True,
             postgresql_where=text("execution_provenance IS NOT NULL AND (status IN ('pending', 'running') OR dispatch_state != 'settled')")),
         CheckConstraint("dispatch_attempts >= 0 AND dispatch_attempts <= 3", name="dispatch_attempts"),
@@ -1144,6 +1146,21 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     observation_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     warning_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     source_version: Mapped[str | None] = mapped_column(String(100))
+
+    debug_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    debug_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    debug_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    diagnostics_summary: Mapped[dict | None] = mapped_column(JSONB)
+    diagnostics_events: Mapped[list | None] = mapped_column(JSONB)
+
+
+class DiscoveryRunDebugTrace(Base):
+    __tablename__ = "discovery_run_debug_traces"
+    __table_args__ = (CheckConstraint("jsonb_typeof(events) = 'array' AND jsonb_array_length(events) <= 8192 AND octet_length(events::text) <= 7340032", name="bounded_events"),)
+    discovery_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("discovery_runs.id", ondelete="CASCADE"), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    events: Mapped[list] = mapped_column(JSONB, nullable=False)
 
 
 class DiscoveryBatchReceipt(Base):

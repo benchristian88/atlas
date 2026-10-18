@@ -203,7 +203,11 @@ class PackageStore:
         if not package.package_available or package.archive_path is None:
             raise PackageStoreError("package_not_released")
         _identity(package.connector_id, package.version, package.bundle_digest)
-        validate_manifest(package.manifest, activation=True)
+        if package.source == "operator-qualification":
+            from app.services.connector_qualification import authorize
+            authorize(self.root, package.manifest)
+        else:
+            validate_manifest(package.manifest, activation=True)
         if (package.manifest["id"] != package.connector_id or package.manifest["version"] != package.version
                 or package.manifest["distribution"]["bundle_digest"] != package.bundle_digest):
             raise PackageStoreError("package_identity_mismatch")
@@ -211,6 +215,8 @@ class PackageStore:
         # Independently compute the digest even when a verifier is supplied.
         verify_digest(raw, package.bundle_digest)
         evidence = verifier.verify(raw, package).safe_metadata() | {"status": "verified"}
+        if package.source == "operator-qualification":
+            authorize(self.root, package.manifest, evidence)
         if (evidence.get("bundle_digest") != package.bundle_digest
                 or evidence.get("publisher_id") != package.manifest["publisher"]["id"]):
             raise PackageStoreError("verification_identity_mismatch")
@@ -332,9 +338,14 @@ class PackageStore:
         raw = _read_regular(path / "bundle.tar.gz", MAX_ARCHIVE_BYTES)
         verify_digest(raw, bundle_digest)
         metadata = strict_json(_read_regular(path / "verification.json", 512 * 1024), maximum=512 * 1024)
-        manifest = validate_manifest(strict_json(_read_regular(path / "manifest.json", 256 * 1024)), activation=True)
+        manifest = validate_manifest(strict_json(_read_regular(path / "manifest.json", 256 * 1024)))
         if not isinstance(metadata, dict) or not isinstance(metadata.get("verification"), dict):
             raise PackageStoreError("invalid_installed_metadata")
+        if metadata["verification"].get("method") == "operator-qualification":
+            from app.services.connector_qualification import authorize
+            authorize(self.root, manifest, metadata["verification"])
+        else:
+            validate_manifest(manifest, activation=True)
         identity = {"connector_id": connector_id, "version": version, "bundle_digest": bundle_digest}
         if (any(metadata.get(key) != value for key, value in identity.items())
                 or metadata.get("status") != "verified"

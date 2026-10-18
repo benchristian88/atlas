@@ -46,9 +46,14 @@ def lock_connector(db, connector_id: str):
     db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": "atlas-connector:" + connector_id})
 
 
-def activate(db, stored, health: dict):
+def activate(db, stored, health: dict, *, operator_qualification=False):
     from app.services.connector_contracts import validate_manifest
-    validate_manifest(stored.manifest, activation=True)
+    if operator_qualification:
+        from app.services.connector_qualification import authorize
+        authorize(package_store().root, stored.manifest, stored.verification)
+        package_store().verify_connector(stored.connector_id, stored.version, stored.bundle_digest)
+    else:
+        validate_manifest(stored.manifest, activation=True)
     if (stored.verification.get("status") != "verified"
             or stored.verification.get("bundle_digest") != stored.bundle_digest
             or stored.manifest["id"] != stored.connector_id

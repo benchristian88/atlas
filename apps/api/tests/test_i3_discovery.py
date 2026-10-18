@@ -27,6 +27,7 @@ from app.services.connector_store import PackageStore
 from app.services.integration_runtime import _approved_baseline
 from app.services.integration_secrets import AtlasEncryptedSecretProvider
 from app.services.reconciliation import accept_item, link_item_to_technical
+from app.services.knowledge_lifecycle import archive_discovery_run
 from app.routes import integration_discovery as routes
 from tests.i3_fixtures import fixture_bundle, message, ROOT
 from tests.test_administration import make_principal, request
@@ -199,6 +200,44 @@ def test_source_identity_review_complete_absence_and_reobservation(db, configure
     aip.finalise(db, observed, configured[0], message(observed, completion="complete"))
     assert set(db.scalars(select(Asset.id).where(Asset.customer_id == observed.customer_id))) == asset_ids
     assert observed.summary["reobserved_count"] == 2
+
+
+@pytest.mark.parametrize("archived", ["first", "latest"])
+def test_archive_provenance_audit_for_coalesced_claims(db, configured, archived):
+    """Retained receipts do not provide per-assertion contributing-run links."""
+    first = new_run(db, configured)
+    aip.accept_batch(db, first, message(first))
+    aip.finalise(db, first, configured[0], message(first, completion="partial"))
+    claim = db.scalar(select(KnowledgeAssertion).where(KnowledgeAssertion.discovery_run_id == first.id,
+        KnowledgeAssertion.subject_external_id == "vm/1", KnowledgeAssertion.predicate == "name"))
+    item = db.scalar(select(ReconciliationItem).where(ReconciliationItem.assertion_id == claim.id))
+    claim_id, item_id, first_observed = claim.id, item.id, claim.first_observed_at
+    first_evidence_id = claim.evidence_record_id
+    first.dispatch_state = "settled"; db.commit()
+
+    latest = new_run(db, configured)
+    observation = message(latest)
+    observation["assets"][1]["status"] = "inactive"
+    aip.accept_batch(db, latest, observation)
+    aip.finalise(db, latest, configured[0], message(latest, completion="partial"))
+    latest.dispatch_state = "settled"; db.commit()
+    db.refresh(claim); db.refresh(item)
+    assert (claim.id, item.id, claim.first_observed_at) == (claim_id, item_id, first_observed)
+    assert claim.discovery_run_id == latest.id and claim.evidence_record_id != first_evidence_id
+    assert db.get(EvidenceRecord, first_evidence_id).payload_hash != db.get(EvidenceRecord, claim.evidence_record_id).payload_hash
+
+    archive_discovery_run(first if archived == "first" else latest, user=configured[1].user, reason="Defective test run")
+    db.flush()
+    assert item.status == "open" and claim.confirmation_status == "unreviewed" and not claim.is_accepted
+    unarchived = first if archived == "latest" else latest
+    assert unarchived.archived_at is None
+    for run in (first, latest):
+        assert db.get(DiscoveryRun, run.id) is not None
+        assert db.get(DiscoveryBatchReceipt, (run.id, 1)) is not None
+        assert db.scalar(select(func.count()).select_from(EvidenceRecord).where(EvidenceRecord.discovery_run_id == run.id)) == 2
+        assert db.scalar(select(func.count()).select_from(RunObservedEntity).where(RunObservedEntity.discovery_run_id == run.id)) == 2
+    # A latest-run-only archive filter would hide this claim in the latest case,
+    # despite the same name also being observed by the unarchived first run.
 
 
 def test_out_of_order_missing_batch_and_declared_mapping_checks(db, configured, monkeypatch):

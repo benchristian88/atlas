@@ -50,7 +50,7 @@ def test_dry_run_and_byte_reproducibility(packages, tmp_path):
     assert {path.name: path.read_bytes() for path in output.iterdir()} == {path.name: path.read_bytes() for path in other.iterdir()}
     assert release["version"] == policy.load_metadata()["version"]
     assert release["source_state"] == "working_tree"
-    assert release["current_schema"] == "20261012_0029"
+    assert release["current_schema"] == "20261018_0030"
     assert packager.verify(output) == release
     with pytest.raises(ValueError, match="cannot be published"): packager.verify(output, require_committed=True)
     with pytest.raises(ValueError, match="exactly match"): packager.verify(output, tag="v99.0.0")

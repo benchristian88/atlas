@@ -10,6 +10,7 @@ import { apiRequest } from "../../../lib/api";
 import { Button } from "../../../components/button";
 import { Section } from "../../../components/section";
 import { discoveryDuration } from "../../../lib/discovery.mjs";
+import { RunDiagnostics } from "../../../components/run-diagnostics";
 
 function dateTime(value) {
   return value ? new Date(value).toLocaleString() : "—";
@@ -17,7 +18,7 @@ function dateTime(value) {
 
 export default function DiscoveryRunDetailPage() {
   const { id } = useParams();
-  const { hasPermission, hasPermissionInContext } = useAuth();
+  const { hasPermission, hasPermissionInContext, hasGlobalPermission } = useAuth();
   const [run, setRun] = useState(null);
   const [error, setError] = useState("");
   const canView = hasPermission("integrations.view");
@@ -53,6 +54,7 @@ export default function DiscoveryRunDetailPage() {
       <div className="detail-span"><span>Error</span><strong>{run.error_message || "—"}</strong></div>
     </div></section>
     {run.execution_provenance && <Section title="Execution"><dl className="ops-definition"><dt>Connector</dt><dd>{run.execution_provenance.connector_id} · {run.execution_provenance.connector_version}</dd><dt>Trigger</dt><dd>{run.execution_provenance.trigger}</dd><dt>Source version</dt><dd>{run.source_version || "Not detected"}</dd><dt>Dispatch</dt><dd>{run.dispatch_state} · {run.dispatch_attempts} attempts</dd><dt>Runtime</dt><dd>{run.execution_provenance.runtime_type} · {run.execution_provenance.runtime_version}</dd><dt>Baseline</dt><dd>{run.execution_provenance.baseline_id} · {run.execution_provenance.baseline_version}</dd><dt>AIP / SDK</dt><dd>{run.execution_provenance.aip_version} / {run.execution_provenance.sdk_version}</dd></dl><details><summary>Technical identity</summary><dl className="ops-definition"><dt>Runtime job</dt><dd className="mono">{run.runtime_job_id || "Not dispatched"}</dd><dt>Bundle digest</dt><dd className="mono">{run.execution_provenance.connector_digest}</dd><dt>Environment digest</dt><dd className="mono">{run.execution_provenance.baseline_digest}</dd></dl></details><div className="form-actions"><Button href="/reconciliation">Reconciliation</Button><Button href="/changes">Changes</Button></div></Section>}
+    {run.execution_provenance && <RunDiagnostics run={run} canDebug={hasGlobalPermission("integration_runtime.manage")} />}
     <section className="detail-card"><h2>Summary</h2><pre className="json-details">{JSON.stringify(run.summary || {}, null, 2)}</pre></section>
   </>;
 }

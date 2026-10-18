@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
@@ -37,7 +38,13 @@ from app.schemas import (
     ReconciliationLinkAssetRequest,
     ReconciliationLinkTechnicalRequest,
     ReconciliationItemResponse,
+    ReconciliationItemPageResponse,
     ReconciliationSummaryResponse,
+    ReconciliationEntityResponse,
+    ReconciliationEntityPageResponse,
+    ReconciliationReviewSection,
+    ReconciliationGroupAcceptRequest,
+    ReconciliationGroupAcceptResponse,
     SimulatedDiscoveryRequest,
     SimulatedDiscoveryResponse,
 )
@@ -65,6 +72,8 @@ from app.services.knowledge_lifecycle import (
 from app.services.simulated_discovery import run_simulation
 from app.services.knowledge_changes import record_assertion_change
 from app.utils.json_values import to_json_value
+from app.services.reconciliation_listing import filtered_items, initial_fact_context, page_rows
+from app.services.reconciliation_entities import EntityReview, entity_page, item_version, SECTION_LIMIT
 
 router = APIRouter(tags=["knowledge"])
 
@@ -137,6 +146,9 @@ def run_response(
         "warning_count": run.warning_count,
         "source_version": run.source_version,
         "cancellation_requested_at": run.cancellation_requested_at,
+        "debug_enabled": bool(run.debug_enabled),
+        "diagnostics_summary": run.diagnostics_summary,
+        "diagnostics_events": run.diagnostics_events or [],
     }
 
 
@@ -173,11 +185,16 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
     run = db.get(DiscoveryRun, assertion.discovery_run_id) if assertion and assertion.discovery_run_id else None
     asset = db.get(Asset, item.entity_id) if item.entity_type == "asset" and item.entity_id else None
     observed = item.observed_value_json if isinstance(item.observed_value_json, dict) else {}
+    observed_name = observed.get("name") if item.entity_type == "asset" else None
+    if not isinstance(observed_name, str) or not 0 < len(observed_name.strip()) <= 255:
+        observed_name = None
     result.update(
         {
             "discovery_run_id": assertion.discovery_run_id if assertion else None,
+            "data_source_id": assertion.data_source_id if assertion else None,
+            "assertion_predicate": assertion.predicate if assertion else None,
             "discovery_run_status": run.status if run else None,
-            "entity_name": asset.name if asset else item.candidate_external_id,
+            "entity_name": asset.name if asset else (observed_name.strip() if observed_name else item.candidate_external_id),
             "last_observed_at": observed.get("last_observed_at"),
             "missing_since_run_id": observed.get("missing_since_run_id"),
             "missing_since_at": assertion.first_observed_at if assertion and item.category == "no_longer_observed" else None,
@@ -699,27 +716,32 @@ def list_reconciliation_items(
     limit: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
-    query = select(ReconciliationItem).where(
-        scope_condition(principal, "reconciliation.view", ReconciliationItem.customer_id, ReconciliationItem.site_id)
-    )
-    if context.customer_id is not None:
-        query = query.where(ReconciliationItem.customer_id == context.customer_id)
-    if context.site_id is not None:
-        query = query.where(ReconciliationItem.site_id == context.site_id)
-    if item_status:
-        query = query.where(ReconciliationItem.status == item_status)
-    if category:
-        query = query.where(ReconciliationItem.category == category)
-    if entity_type:
-        query = query.where(ReconciliationItem.entity_type == entity_type)
-    if source_id or run_id:
-        query = query.join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id)
-        if source_id:
-            query = query.where(KnowledgeAssertion.data_source_id == source_id)
-        if run_id:
-            query = query.where(KnowledgeAssertion.discovery_run_id == run_id)
-    items = db.scalars(query.order_by(ReconciliationItem.created_at.desc()).limit(limit))
+    query = filtered_items(context, principal, item_status=item_status, category=category,
+                           source_id=source_id, run_id=run_id, entity_type=entity_type)
+    items = db.scalars(query.order_by(ReconciliationItem.created_at.desc(), ReconciliationItem.id.desc()).limit(limit))
     return [reconciliation_response(db, item) for item in items]
+
+
+@router.get("/reconciliation-items/page", response_model=ReconciliationItemPageResponse)
+def list_reconciliation_item_page(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("reconciliation.view")),
+    item_status: str | None = Query(default="open", alias="status"),
+    category: str | None = None,
+    source_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None, max_length=512),
+    db: Session = Depends(get_db),
+):
+    query = filtered_items(context, principal, item_status=item_status, category=category,
+                           source_id=source_id, run_id=run_id, entity_type=entity_type)
+    items, total, next_cursor = page_rows(db, query, limit=limit, cursor=cursor)
+    grouping, related = initial_fact_context(db, context, principal, items)
+    return {"items": [{**reconciliation_response(db, item), "initial_entity_item_id": grouping.get(item.id)}
+                      for item in items], "total": total, "limit": limit, "next_cursor": next_cursor,
+            "related_new_entities": [reconciliation_response(db, item) for item in related]}
 
 
 @router.get("/reconciliation-items/summary", response_model=ReconciliationSummaryResponse)
@@ -753,8 +775,8 @@ def reconciliation_summary(
     }
 
 
-def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID) -> ReconciliationItem:
-    item = db.get(ReconciliationItem, item_id)
+def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID, expected_version=None) -> ReconciliationItem:
+    item = db.get(ReconciliationItem, item_id, with_for_update=True, populate_existing=True)
     if item is None:
         raise not_found("Reconciliation item")
     permission = (
@@ -763,6 +785,10 @@ def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID) -> Rec
         else "assets.edit"
     )
     require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
+    if expected_version:
+        claim = db.get(KnowledgeAssertion, item.assertion_id, with_for_update=True, populate_existing=True)
+        if claim is None or item_version(item, claim) != expected_version:
+            raise HTTPException(409, "This proposal changed; refresh before deciding")
     return item
 
 
@@ -794,22 +820,14 @@ def _audit_decision(
     )
 
 
-@router.post("/reconciliation-items/{item_id}/accept", response_model=ReconciliationItemResponse)
-def accept_reconciliation_item(
-    item_id: uuid.UUID,
-    request: Request,
-    payload: ReconciliationDecisionRequest | None = None,
-    principal: Principal = Depends(require_permission("reconciliation.decide")),
-    db: Session = Depends(get_db),
-):
-    item = _decision_item(db, principal, item_id)
+def _apply_acceptance(db, item, request, principal, payload):
+    """One authorization, decision, Changes/completeness and audit path."""
     if item.entity_type == "asset_relationship":
         require_scope(principal, "relationships.create", item.customer_id, item.site_id)
     elif item.entity_type in {"network", "asset_interface"}:
         require_scope(principal, "networks.create" if item.category == "newly_discovered" and item.entity_id is None else "networks.edit",
             item.customer_id, item.site_id, hide_existence=True)
-    try:
-        accepted = accept_item(
+    accepted = accept_item(
             db,
             item,
             principal.user,
@@ -817,9 +835,6 @@ def accept_reconciliation_item(
             reason=payload.reason if payload else None,
             exception_review_at=payload.exception_review_at if payload else None,
         )
-    except RelationshipResolutionError as exc:
-        db.rollback()
-        return JSONResponse(status_code=409, content=exc.payload)
     if payload and payload.reason is not None:
         item.decision_reason = payload.reason
     from app.services.knowledge_completeness import evaluate_asset_safely
@@ -831,6 +846,22 @@ def accept_reconciliation_item(
             if endpoint:
                 evaluate_asset_safely(db, endpoint, trigger_context="reconciliation_relationship_accepted", actor_user_id=principal.user.id)
     _audit_decision(db, request=request, principal=principal, item=item, action="accepted")
+
+
+@router.post("/reconciliation-items/{item_id}/accept", response_model=ReconciliationItemResponse)
+def accept_reconciliation_item(
+    item_id: uuid.UUID,
+    request: Request,
+    payload: ReconciliationDecisionRequest | None = None,
+    principal: Principal = Depends(require_permission("reconciliation.decide")),
+    db: Session = Depends(get_db),
+):
+    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None)
+    try:
+        _apply_acceptance(db, item, request, principal, payload)
+    except RelationshipResolutionError as exc:
+        db.rollback()
+        return JSONResponse(status_code=409, content=exc.payload)
     commit(db, "Reconciliation decision")
     db.refresh(item)
     return reconciliation_response(db, item)
@@ -898,7 +929,7 @@ def reject_reconciliation_item(
     principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
 ):
-    item = _decision_item(db, principal, item_id)
+    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None)
     reject_item(db, item, principal.user, payload.reason if payload else None)
     _audit_decision(db, request=request, principal=principal, item=item, action="rejected")
     commit(db, "Reconciliation decision")
@@ -914,9 +945,136 @@ def defer_reconciliation_item(
     principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
 ):
-    item = _decision_item(db, principal, item_id)
+    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None)
     defer_item(db, item, principal.user, payload.reason if payload else None)
     _audit_decision(db, request=request, principal=principal, item=item, action="deferred")
     commit(db, "Reconciliation decision")
     db.refresh(item)
     return reconciliation_response(db, item)
+
+
+@router.get("/reconciliation-entities", response_model=ReconciliationEntityPageResponse)
+def list_reconciliation_entities(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("reconciliation.view")),
+    item_status: str = Query(default="open", alias="status", pattern="^(open|deferred|resolved|accepted|rejected|exception)$"),
+    category: str | None = None,
+    section: str | None = Query(default=None, pattern="^(facts|relationships|network)$"),
+    search: str = Query(default="", max_length=255),
+    source_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+    entity_type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None, max_length=1024),
+    db: Session = Depends(get_db),
+):
+    return entity_page(db, context, principal, limit=limit, cursor=cursor, item_status=item_status,
+                       category=category, section=section, search=search, source_id=source_id,
+                       run_id=run_id, entity_type=entity_type)
+
+
+@router.get("/reconciliation-entities/{entity_id}", response_model=ReconciliationEntityResponse)
+def get_reconciliation_entity(
+    entity_id: uuid.UUID, context: RequestContext,
+    principal: Principal = Depends(require_permission("reconciliation.view")),
+    db: Session = Depends(get_db),
+):
+    review = EntityReview(db, context, principal)
+    key = review.key_for(entity_id)
+    # A focused prerequisite includes its unresolved work, including deferred
+    # work, plus the parent as context. It never resurrects resolved children.
+    return review.present_group(key, [row for row in review.groups[key] if row.status in {"open", "deferred"}])
+
+
+@router.get("/reconciliation-entities/{entity_id}/section", response_model=ReconciliationReviewSection)
+def get_reconciliation_entity_section(
+    entity_id: uuid.UUID, context: RequestContext,
+    section: str = Query(pattern="^(facts|relationships|network)$"),
+    offset: int = Query(default=0, ge=0),
+    item_status: str = Query(default="open", alias="status", pattern="^(open|deferred|resolved|accepted|rejected|exception|active)$"),
+    category: str | None = None,
+    principal: Principal = Depends(require_permission("reconciliation.view")),
+    db: Session = Depends(get_db),
+):
+    review = EntityReview(db, context, principal)
+    key = review.key_for(entity_id)
+    parent = review.parents_by_key.get(key)
+    rows = [row for row in review.groups[key] if (not parent or row.id != parent.id)
+            and review.section(row) == section
+            and (row.status in {"open", "deferred"} if item_status == "active" else review.matches(row, {"item_status": item_status, "category": category}))]
+    from app.services.reconciliation_entities import SECTION_LABELS
+    return {"key": section, "label": SECTION_LABELS[section], "total": len(rows),
+            "blocked_count": sum(row.status in {"open", "deferred"} and not review.eligibility(row)["can_accept"] for row in rows),
+            "warnings": sorted(set(review.eligibility(row)["blocked_reason"] for row in rows if row.status in {"open", "deferred"} and not review.eligibility(row)["can_accept"])),
+            "items": [review.present_item(row) for row in rows[offset:offset + SECTION_LIMIT]],
+            "next_offset": offset + SECTION_LIMIT if len(rows) > offset + SECTION_LIMIT else None}
+
+
+@router.post("/reconciliation-entities/{entity_id}/accept", response_model=ReconciliationGroupAcceptResponse)
+def accept_reconciliation_entity(
+    entity_id: uuid.UUID, payload: ReconciliationGroupAcceptRequest, request: Request, context: RequestContext,
+    principal: Principal = Depends(require_permission("reconciliation.decide")),
+    db: Session = Depends(get_db),
+):
+    review = EntityReview(db, context, principal)
+    key = review.key_for(entity_id)
+    requested = {entry.id: entry.version for entry in payload.items}
+    if len(requested) != len(payload.items):
+        raise HTTPException(422, "Each reconciliation item may be requested only once")
+    if any(review.group_for_item.get(identifier) != key for identifier in requested):
+        raise HTTPException(404, "Reconciliation items not found in this entity")
+    # Lock in deterministic order and refresh the identity map. Individual
+    # decisions use these same row locks, so concurrent requests cannot both win.
+    locked = list(db.scalars(select(ReconciliationItem).where(ReconciliationItem.id.in_(requested)).order_by(
+        ReconciliationItem.id).with_for_update().execution_options(populate_existing=True)))
+    list(db.scalars(select(KnowledgeAssertion).where(KnowledgeAssertion.id.in_(
+        [row.assertion_id for row in locked])).order_by(KnowledgeAssertion.id).with_for_update().execution_options(populate_existing=True)))
+    review = EntityReview(db, context, principal)
+    key = review.key_for(entity_id)
+    if len(locked) != len(requested) or any(review.group_for_item.get(identifier) != key for identifier in requested):
+        raise HTTPException(409, "Entity membership changed; refresh before deciding")
+    result = {name: [] for name in ("accepted", "already_resolved", "blocked", "failed")}
+    pending = []
+    for identifier, version in requested.items():
+        item = review.items[identifier]
+        entry = {"id": item.id, "label": review.present_item(item)["label"]}
+        if item.status not in {"open", "deferred"}:
+            result["already_resolved"].append({**entry, "reason": f"Already {item.status}"})
+        elif item_version(item, review.claims[item.id]) != version:
+            result["failed"].append({**entry, "reason": "This proposal changed; refresh before deciding"})
+        else:
+            pending.append(item.id)
+
+    def phase(identifier):
+        item, claim = review.items[identifier], review.claims[identifier]
+        if item.entity_type == "asset" and item.category in {"newly_discovered", "possible_duplicate"}:
+            return 0
+        if item.entity_type in {"network", "asset_interface"} and claim.fact_metadata is None:
+            return 1
+        return 3 if item.entity_type == "asset_relationship" else 2
+
+    phases = {number: [identifier for identifier in pending if phase(identifier) == number] for number in range(4)}
+    for identifiers in phases.values():
+        if not identifiers:
+            continue
+        review = EntityReview(db, context, principal)
+        for identifier in identifiers:
+            item = review.items[identifier]
+            entry = {"id": item.id, "label": review.present_item(item)["label"]}
+            eligibility = review.eligibility(item)
+            if not eligibility["can_accept"]:
+                result["blocked"].append({**entry, "reason": eligibility["blocked_reason"]})
+                continue
+            try:
+                with db.begin_nested():
+                    _apply_acceptance(db, item, request, principal, ReconciliationDecisionRequest(reason=payload.reason))
+                    db.flush()
+                result["accepted"].append(entry)
+            except RelationshipResolutionError:
+                result["blocked"].append({**entry, "reason": "Relationship endpoints are unresolved; refresh to review prerequisites"})
+            except HTTPException as exc:
+                result["failed"].append({**entry, "reason": exc.detail if isinstance(exc.detail, str) else "This item could not be accepted"})
+            except DBAPIError:
+                result["failed"].append({**entry, "reason": "A concurrent change prevented acceptance; refresh and review this item"})
+    commit(db, "Entity reconciliation decisions")
+    return result

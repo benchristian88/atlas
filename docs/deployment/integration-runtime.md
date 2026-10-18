@@ -1,5 +1,15 @@
 # Local integration runtime and Connector catalogue
 
+Discovery diagnostics use a runtime-created private sidecar, parsed on terminal
+paths before workspace cleanup and returned through authenticated job status.
+No user-selected trace destination or raw log stream is accepted. Debug is armed
+for one Integration's next run only, with administrator-only access and 48-hour
+expiry. The existing worker purges stored debug rows; portable backups exclude
+them. Deploy API/worker migration `20261018_0030` and the matching runtime together.
+Older Connectors remain compatible and report diagnostics unavailable. See
+[discovery operations](discovery-runs.md) and the
+[diagnostic contract](../architecture/integrations/discovery-diagnostics.md).
+
 Normal Docker Compose and native/systemd installations include an isolated Atlas
 Ansible Runtime. Open **Integrations → Catalogue** to inspect the bundled offline
 catalogue, or **Runtime** with a global runtime-view grant to inspect health,
@@ -46,6 +56,11 @@ the exact Manifest; Proxmox I2 results remain untested until I4 qualification.
 Probe-only versions have no Run Now or scheduling controls. Generic discovery-capable
 versions use the [discovery operator workflow](discovery-runs.md); no production
 discovery-capable Connector is currently shipped.
+
+An explicit [local operator qualification procedure](connector-qualification.md)
+can stage one exact unqualified prerelease in a separate test instance/store.
+It is unavailable through catalogue/customer installation APIs and does not change
+production bootstrap, source qualification or the ordinary rejection policy.
 
 TLS verifies certificates by default. For a self-signed deployment, choose
 fingerprint and obtain the SHA-256 certificate fingerprint through a trusted

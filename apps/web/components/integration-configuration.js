@@ -1,5 +1,5 @@
 "use client";
-import { visibleField, testMessage } from "../lib/integration-configuration.mjs";
+import { visibleField, testMessage, capabilityDiagnostics } from "../lib/integration-configuration.mjs";
 import { StatusIndicator } from "./status-indicator";
 
 export function ConnectionFields({ form, config, credentials = {}, onConfig, onCredentials, secretMode = "enter", configuredFields = [], onlySecrets = false }) {
@@ -20,5 +20,13 @@ export function ConnectionFields({ form, config, credentials = {}, onConfig, onC
 
 export function ConnectionResult({ result }) {
   if (!result) return null;
-  return <div className={result.success ? "success-banner" : "error-banner"} role="status"><p>{testMessage(result)}</p>{result.source_version && <p>Detected source version: {result.source_version}</p>}{result.compatibility === "untested" && <p>This source version has not been qualified by the Connector. The connection result carries a compatibility warning.</p>}{result.permission_limited && <p>The token exposes limited permission information. Inventory capabilities have not been tested.</p>}</div>;
+  const diagnostics = capabilityDiagnostics(result.capability_diagnostics);
+  return <><div className={result.success ? "success-banner" : "error-banner"} role="status"><p>{testMessage(result)}</p>{result.source_version && <p>Detected source version: {result.source_version}</p>}{result.compatibility === "untested" && <p>This source version has not been qualified by the Connector. The connection result carries a compatibility warning.</p>}{result.permission_limited && <p>The token exposes limited permission information. Review capability readiness below when available.</p>}</div>
+    {diagnostics.length > 0 && <section aria-label="Capability diagnostics"><h3>Capability readiness</h3>{diagnostics.map((row, index) => <dl className="ops-definition" key={index}>
+      <dt>Capability</dt><dd>{row.capability}</dd>
+      <dt>State</dt><dd><StatusIndicator state={row.state} variant="badge" /></dd>
+      <dt>Path category</dt><dd>{row.path_category}</dd>
+      {row.privilege && <><dt>Privilege</dt><dd>{row.privilege}</dd></>}
+    </dl>)}</section>}
+  </>;
 }

@@ -105,3 +105,20 @@ lifecycle changes, and assertion rejection/retraction. Identical corroborating
 observations only update assertion observation time and do not create noisy
 `fact_changed` events. All list and summary APIs apply the normal customer/site
 authorization scope.
+
+## Entity review and explicit group acceptance
+
+The Reconciliation page presents independent records through a generic
+[entity review projection](reconciliation-entity-review.md). Assets retain their
+facts, relationships and owned Interface proposals in one review, including
+children whose prerequisites are unresolved. An accepted parent stays visible
+while matching child work remains. Read-only presentation never resolves source
+identities or mutates accepted knowledge.
+
+Accept asset decides only the parent record. Accept all is an explicit operator
+request over reviewed record IDs/versions within the same authorized group. It
+uses the individual acceptance, Changes, completeness and security-audit path,
+checks dependencies again, and reports blocked/failed/already-resolved records.
+It never accepts another entity as an implicit prerequisite. Legacy initial
+Asset configuration remains part of its parent proposal; independently reviewed
+assertions are excluded from implicit matching-assertion acceptance.

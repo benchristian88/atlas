@@ -1,0 +1,223 @@
+.list {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.list :global(.reconciliation-heading),
+.list :global(.reconciliation-link),
+.list :global(.form-actions) {
+  flex-wrap: wrap;
+}
+
+.list :global(.detail-card) {
+  min-width: 0;
+}
+
+.list :global(.reconciliation-heading) > div {
+  min-width: 0;
+}
+
+.list :global(.reconciliation-card) h2 {
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.list :global(.reconciliation-link) select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.list :global(.review-entity) {
+  padding: 0;
+  scroll-margin-block: var(--space-6);
+}
+
+.list :global(.review-entity-focused) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.list :global(.review-entity-heading) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  cursor: pointer;
+}
+
+.list :global(.review-chevron) {
+  display: inline-flex;
+  color: var(--muted);
+  transform: rotate(-90deg);
+}
+
+.list :global(details[open] > summary > .review-chevron) {
+  transform: none;
+}
+
+.list :global(.review-identity) {
+  display: grid;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 140px;
+  overflow-wrap: anywhere;
+}
+
+.list :global(.review-entity-name) {
+  font-size: var(--type-title);
+  font-weight: 600;
+}
+
+.list :global(.review-entity-body) {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.list :global(.review-parent),
+.list :global(.review-section),
+.list :global(.review-bulk) {
+  border-top: 1px solid var(--border);
+  padding-block: var(--space-3);
+}
+
+.list :global(.review-row) {
+  padding: var(--space-3) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+}
+
+.list :global(.review-row > :not(.form-actions)) {
+  grid-column: 1;
+  margin-block: 0;
+}
+
+.list :global(.review-row > .review-provenance) {
+  grid-column: 1 / -1;
+}
+
+.list :global(.review-row > .form-actions) {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  margin: 0;
+}
+
+.list :global(.review-parent > .form-actions) {
+  justify-content: flex-start;
+  margin-block: var(--space-3);
+}
+
+.list :global(.review-section[data-loaded-complete="true"] > details[open] + .review-section-warnings) {
+  display: none;
+}
+
+.list :global(.review-row + .review-row) {
+  border-top: 1px solid var(--border);
+}
+
+.list :global(.review-row h4),
+.list :global(.review-parent h3) {
+  font-size: var(--type-body);
+  font-weight: 600;
+  margin: 0;
+}
+
+.list :global(.review-row-heading),
+.list :global(.review-section summary),
+.list :global(.review-bulk) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.list :global(.review-row > .review-row-heading),
+.list :global(.review-bulk) {
+  justify-content: flex-start;
+}
+
+.list :global(.review-section summary) {
+  cursor: pointer;
+  padding-block: var(--space-2);
+  font-weight: 600;
+}
+
+.list :global(.review-fields) {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+}
+
+.list :global(.review-fields > div) {
+  min-width: 0;
+}
+
+.list :global(.review-fields dt),
+.list :global(.review-provenance) {
+  font-size: var(--type-label);
+  color: var(--muted);
+}
+
+.list :global(.review-fields dd) {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.list :global(.review-value),
+.list :global(.review-row-heading h4) {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.list :global(.review-blocked),
+.list :global(.review-warning),
+.list :global(.review-section-warnings) {
+  color: var(--warning);
+  font-size: var(--type-compact);
+}
+
+.list :global(.review-blocked) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.list :global(.review-section-warnings p) {
+  margin-block: var(--space-1);
+}
+
+.list :global(.review-provenance summary) {
+  cursor: pointer;
+  margin-block: var(--space-2);
+}
+
+.outcome {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .list :global(.review-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .list :global(.review-row > .form-actions) {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+
+  .list :global(.review-entity-heading) {
+    gap: var(--space-2);
+  }
+
+  .list :global(.reconciliation-values) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .list :global(.review-bulk) {
+    align-items: flex-start;
+  }
+}

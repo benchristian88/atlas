@@ -950,6 +950,9 @@ class DiscoveryRunResponse(ORMResponse):
     warning_count: int | None = 0
     source_version: str | None = None
     cancellation_requested_at: datetime | None = None
+    debug_enabled: bool = False
+    diagnostics_summary: dict[str, Any] | None = None
+    diagnostics_events: list[dict[str, Any]] = Field(default_factory=list)
     deletion_safety: "DeletionSafetyResponse | None" = None
     created_at: datetime
     updated_at: datetime
@@ -1092,6 +1095,9 @@ class ReconciliationItemResponse(ORMResponse):
     decided_by_user_id: uuid.UUID | None
     decided_at: datetime | None
     source_name: str | None = None
+    data_source_id: uuid.UUID | None = None
+    assertion_predicate: str | None = None
+    initial_entity_item_id: uuid.UUID | None = None
     source_external_id: str | None = None
     target_external_id: str | None = None
     resolved_source_asset_id: uuid.UUID | None = None
@@ -1112,8 +1118,105 @@ class ReconciliationItemResponse(ORMResponse):
     updated_at: datetime
 
 
+class ReconciliationItemPageResponse(BaseModel):
+    items: list[ReconciliationItemResponse]
+    total: int
+    limit: int
+    next_cursor: str | None
+    related_new_entities: list[ReconciliationItemResponse]
+
+
+class ReconciliationBlocker(BaseModel):
+    item_id: uuid.UUID | None
+    entity_id: uuid.UUID | None
+    name: str
+    reason: str
+
+
+class ReconciliationReviewItem(ReconciliationItemResponse):
+    label: str
+    proposed: Any | None
+    current: Any | None
+    version: str
+    warning: str | None
+    can_accept: bool
+    can_reject: bool
+    can_defer: bool
+    blockers: list[ReconciliationBlocker]
+
+
+class ReconciliationReviewSection(BaseModel):
+    key: str
+    label: str
+    total: int
+    blocked_count: int
+    warnings: list[str]
+    items: list[ReconciliationReviewItem]
+    next_offset: int | None
+
+
+class ReconciliationReviewVersion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: uuid.UUID
+    version: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class ReconciliationEntityResponse(BaseModel):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    site_id: uuid.UUID | None
+    name: str
+    entity_type: str
+    entity_id: uuid.UUID | None
+    asset_type: str | None
+    type_label: str
+    icon_key: str | None
+    accent_key: str | None
+    cached_icon_url: str | None = None
+    default_icon_url: str | None = None
+    parent: ReconciliationReviewItem | None
+    default_expanded: bool
+    matching_record_count: int
+    status_counts: dict[str, int]
+    sections: list[ReconciliationReviewSection]
+    accept_all_available: bool
+    decision_items: list[ReconciliationReviewVersion]
+    bulk_limit: int
+
+
+class ReconciliationEntityPageResponse(BaseModel):
+    entities: list[ReconciliationEntityResponse]
+    entity_total: int
+    record_total: int
+    limit: int
+    next_cursor: str | None
+    previous_cursor: str | None
+    by_status: dict[str, int]
+    by_category: dict[str, int]
+
+
+class ReconciliationGroupAcceptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[ReconciliationReviewVersion] = Field(min_length=1, max_length=1000)
+    reason: str | None = Field(default=None, max_length=10000)
+
+
+class ReconciliationGroupOutcome(BaseModel):
+    id: uuid.UUID
+    label: str
+    reason: str | None = None
+
+
+class ReconciliationGroupAcceptResponse(BaseModel):
+    accepted: list[ReconciliationGroupOutcome]
+    already_resolved: list[ReconciliationGroupOutcome]
+    blocked: list[ReconciliationGroupOutcome]
+    failed: list[ReconciliationGroupOutcome]
+
+
 class ReconciliationDecisionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=10000)
+    expected_version: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     disposition: Literal[
         "mark_missing",
         "mark_inactive",

@@ -120,7 +120,7 @@ async def control_request(operation: str, reference: dict | None = None) -> dict
                     json=reference, allow_redirects=False) as response:
                 if response.content_type != "application/json":
                     raise ValueError("Runtime control unavailable")
-                remaining, chunks = MAX_RESPONSE_BYTES, []
+                remaining, chunks = (7 * 1024 * 1024 if operation in {"run_discovery", "get_job", "cancel_job"} else MAX_RESPONSE_BYTES), []
                 async for chunk in response.content.iter_chunked(8192):
                     remaining -= len(chunk)
                     if remaining < 0:
@@ -266,7 +266,7 @@ class LocalIntegrationRuntime:
             result = await control_request(operation, payload)
             if result == {"state": "unavailable", "diagnostic_code": "job_unavailable"}:
                 return result
-            if set(result) != {"request_id", "job_id", "state", "accepted_at", "started_at", "finished_at", "diagnostic_code"}:
+            if set(result) - {"diagnostics"} != {"request_id", "job_id", "state", "accepted_at", "started_at", "finished_at", "diagnostic_code"}:
                 raise ValueError
             if result["request_id"] != str(payload["request_id"]) or str(uuid.UUID(result["job_id"])) != result["job_id"]:
                 raise ValueError
@@ -275,13 +275,18 @@ class LocalIntegrationRuntime:
             if result["state"] not in {"queued", "running", "succeeded", "failed", "cancelled"}:
                 raise ValueError
             if result["diagnostic_code"] not in {None, "cancelled", "timeout", "invalid_aip", "missing_completion",
-                    "callback_unavailable", "callback_rejected", "source_unavailable", "runtime_unavailable"}:
+                    "callback_unavailable", "callback_rejected", "source_unavailable", "runtime_unavailable", "invalid_diagnostics"}:
                 raise ValueError
             for name in ["accepted_at", "started_at", "finished_at"]:
                 if result[name] is not None:
                     if not isinstance(result[name], str) or len(result[name]) > 40:
                         raise ValueError
                     datetime.fromisoformat(result[name])
+            if "diagnostics" in result:
+                from app.services.discovery_diagnostics import validate_report
+                # Keep debug fields private; persistence checks the immutable run flag.
+                result["diagnostics"] = validate_report(result["diagnostics"], debug=True,
+                    secrets=[_control_secret(), payload.get("ingestion_token", ""), *payload.get("credentials", {}).values()])
             return result
         except RuntimeControlError as error:
             return {"state": "unavailable", "diagnostic_code": error.code}
@@ -293,8 +298,9 @@ class LocalIntegrationRuntime:
 
     start_discovery = run_discovery
 
-    async def get_job(self, request_id, job_id=None):
-        return await self._job("get_job", {"request_id": str(request_id), "job_id": str(job_id) if job_id else None})
+    async def get_job(self, request_id, job_id=None, *, delete_debug=False):
+        return await self._job("get_job", {"request_id": str(request_id), "job_id": str(job_id) if job_id else None,
+            **({"delete_debug": True} if delete_debug else {})})
 
     async def cancel_job(self, request_id, job_id=None):
         return await self._job("cancel_job", {"request_id": str(request_id), "job_id": str(job_id) if job_id else None})
