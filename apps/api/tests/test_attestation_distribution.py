@@ -135,4 +135,3 @@ def test_packaging_services_and_ci_use_one_fixed_distribution():
     required = json.loads((ROOT / "infra/release/package-manifest.json").read_text())["required_common"]
     assert "apps/api/app/attestation/trusted-root.jsonl" in required
     assert "apps/api/app/attestation/distribution.json" in required
-

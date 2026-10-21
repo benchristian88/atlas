@@ -343,4 +343,3 @@ def test_untrusted_root_fails_actual_cryptographic_verifier(tmp_path):
         provenance._run([str(distribution.checked_binary(lock)), "attestation", "verify", str(tmp_path / "artifact"),
             "--bundle", str(tmp_path / "bundle.json"), "--custom-trusted-root", str(tmp_path / "roots.jsonl"),
             "--repo", provenance.REPOSITORY, "--format", "json"], tmp_path, time.monotonic() + 10)
-
