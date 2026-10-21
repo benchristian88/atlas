@@ -99,6 +99,31 @@ async def catalogue_list(principal: Principal = Depends(require_permission("inte
         raise HTTPException(503, "The packaged Connector catalogue could not be verified") from None
 
 
+@router.get("/integration-catalogue/status")
+def official_catalogue_status(principal: Principal = Depends(require_permission("integration_runtime.view")),
+        db: Session = Depends(get_db)):
+    from app.services.trusted_catalogue import status
+    from app.services.connector_catalogue import accepted_official_metadata
+    require_global(principal, "integration_runtime.view")
+    return {**status(db), "entries": accepted_official_metadata(db)}
+
+
+class CatalogueRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+
+
+@router.post("/integration-catalogue/refresh")
+def refresh_official_catalogue(request: Request, payload: CatalogueRefreshRequest | None = None,
+        principal: Principal = Depends(require_permission("integration_runtime.manage")),
+        db: Session = Depends(get_db)):
+    from app.services.trusted_catalogue import refresh
+    require_global(principal, "integration_runtime.manage")
+    # No selection parameters, including query strings, are admitted.
+    if request.query_params:
+        raise HTTPException(422, "Catalogue refresh accepts no query parameters")
+    return refresh(db, actor=principal.user, request=request)
+
+
 @router.get("/integration-catalogue/{connector_id}")
 async def catalogue_detail(connector_id: str, principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db)):
     from app.services.connector_catalogue import catalogue

@@ -17,7 +17,7 @@ def test_additive_upgrade_legacy_history_receipts_and_single_head(monkeypatch):
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
     monkeypatch.setenv("DATABASE_URL", engine.url.render_as_string(hide_password=False))
-    assert ScriptDirectory.from_config(config).get_heads() == ["20261018_0030"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["20261021_0031"]
     command.upgrade(config, "20261012_0028")
     with engine.begin() as db:
         workspace = db.scalar(text("INSERT INTO workspaces(name,slug) VALUES ('I3 migration','i3-migration') RETURNING id"))
@@ -28,7 +28,7 @@ def test_additive_upgrade_legacy_history_receipts_and_single_head(monkeypatch):
     command.upgrade(config, "20261012_0029")
     command.upgrade(config, "head")
     with engine.begin() as db:
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20261018_0030"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20261021_0031"
         assert db.execute(text("SELECT status,coverage_key,execution_provenance FROM discovery_runs WHERE id=:id"), {"id": run}).one() == ("completed", "legacy", None)
         assert db.scalar(text("SELECT schedule_preset FROM integrations WHERE id=:id"), {"id": identifier}) == "manual"
         assert db.scalar(text("SELECT debug_next_run FROM integrations WHERE id=:id"), {"id": identifier}) is False

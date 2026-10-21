@@ -370,7 +370,7 @@ def test_h1_schema_restores_and_migrates_forward_without_stale_new_tables(instal
     archive = portable_backup(inst)
     restore(inst, archive)
     with inst["target"].connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261018_0030"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261021_0031"
     with Session(inst["target"]) as db:
         assert db.get(User, inst["ids"]["user"]).mfa_enabled is False
         assert db.get(Asset, inst["ids"]["asset"]).name == "Portable host"

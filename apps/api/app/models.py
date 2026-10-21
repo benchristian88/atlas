@@ -948,6 +948,54 @@ class ConnectorMapping(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ignored: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
 
+class ConnectorCatalogueRevision(Base):
+    """Append-only authenticated remote metadata; never an installed package."""
+    __tablename__ = "connector_catalogue_revisions"
+    __table_args__ = (
+        UniqueConstraint("sequence", "content_digest", name="uq_catalogue_revision_identity"),
+        CheckConstraint("sequence BETWEEN 1 AND 9007199254740991", name="sequence_range"),
+        CheckConstraint("length(content_digest) = 64", name="digest_length"),
+        CheckConstraint("octet_length(original_bytes) BETWEEN 1 AND 4194304", name="bounded_bytes"),
+        CheckConstraint("octet_length(verification_evidence::text) <= 65536", name="bounded_evidence"),
+    )
+    sequence: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    verification_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    publication_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ConnectorCatalogueState(Base):
+    """Singleton source checkpoint and expiring refresh ownership."""
+    __tablename__ = "connector_catalogue_state"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+        CheckConstraint("(highest_sequence IS NULL) = (highest_digest IS NULL)", name="checkpoint_pair"),
+        CheckConstraint("(operation_id IS NULL) = (lease_until IS NULL)", name="lease_pair"),
+        CheckConstraint("octet_length(identity_history::text) <= 2097152", name="bounded_history"),
+        ForeignKeyConstraint(["highest_sequence", "highest_digest"],
+            ["connector_catalogue_revisions.sequence", "connector_catalogue_revisions.content_digest"],
+            name="fk_catalogue_checkpoint"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    highest_sequence: Mapped[int | None] = mapped_column(BigInteger)
+    highest_digest: Mapped[str | None] = mapped_column(String(64))
+    identity_history: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_download_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_authenticity_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_confirmed_current_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    operation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(100))
+    source_conflict: Mapped[str | None] = mapped_column(String(100))
+
+
 class InstalledConnectorPackage(TimestampMixin, Base):
     """Instance-global active identity; immutable catalogue content stays packaged.
 

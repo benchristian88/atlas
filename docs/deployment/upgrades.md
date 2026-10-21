@@ -1,5 +1,13 @@
 # Atlas package installation and upgrades
 
+The B1.3 additive migration `20261021_0031` creates instance-global official
+catalogue revisions/state without network access or changes to integrations,
+credentials or installed packages. Existing package inclusion covers the new
+API sources, migration and opt-in acceptance script in Docker and native releases.
+Downgrade refuses to discard accepted catalogue history. See the
+[consumer/operator contract](official-catalogue.md) for publication prerequisites,
+safe diagnostics and restore limitations; no startup refresh is introduced.
+
 Obtain the matching artifact, manifest and `SHA256SUMS` from the
 [official release page](https://github.com/benchristian88/atlas/releases).
 [Verify checksums](releases.md#assets-and-validation) before extraction.

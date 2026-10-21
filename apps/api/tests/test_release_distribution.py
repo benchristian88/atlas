@@ -50,7 +50,7 @@ def test_dry_run_and_byte_reproducibility(packages, tmp_path):
     assert {path.name: path.read_bytes() for path in output.iterdir()} == {path.name: path.read_bytes() for path in other.iterdir()}
     assert release["version"] == policy.load_metadata()["version"]
     assert release["source_state"] == "working_tree"
-    assert release["current_schema"] == "20261018_0030"
+    assert release["current_schema"] == "20261021_0031"
     assert packager.verify(output) == release
     with pytest.raises(ValueError, match="cannot be published"): packager.verify(output, require_committed=True)
     with pytest.raises(ValueError, match="exactly match"): packager.verify(output, tag="v99.0.0")
@@ -76,6 +76,10 @@ def test_package_contents_identity_modes_and_installer_paths(packages, tmp_path)
                      "docs/deployment/backup-restore.md", "docs/deployment/releases.md", "docs/deployment/upgrades.md"):
             assert (tree / name).is_file(), name
         assert (tree / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes()
+        for name in ("apps/api/app/services/catalogue_source.py", "apps/api/app/services/trusted_catalogue.py",
+                     "apps/api/migrations/versions/20261021_0031_official_catalogue.py",
+                     "apps/api/scripts/accept_official_catalogue.py", "docs/deployment/official-catalogue.md"):
+            assert (tree / name).is_file(), name
         assert not (tree / "docs/history").exists()
         assert not (tree / "docs/product").exists()
         metadata = policy.load_metadata(tree / "apps/api/app/release.json")
