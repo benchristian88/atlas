@@ -1,0 +1,16 @@
+{
+  "assets": {
+    "catalogue-000001.json": {
+      "asset_id": 653915743,
+      "bytes": 10585,
+      "sha256": "55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd"
+    },
+    "catalogue.json": {
+      "asset_id": 653915685,
+      "bytes": 10585,
+      "sha256": "55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd"
+    }
+  },
+  "release_url": "https://github.com/benchristian88/atlas-connectors/releases/tag/catalogue-v1",
+  "source_commit": "91dfd86f18d0b59ff977bb1e8a5fef42c5329943"
+}
