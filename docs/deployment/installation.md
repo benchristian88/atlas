@@ -175,6 +175,15 @@ initialized refusal applies. Inspect lifecycle failures with
 An interrupted fresh native install needs operator diagnosis of retained paths;
 the helper will not overwrite or remove them automatically.
 
+## Official artifact verifier dependency
+
+The API image and native installation/upgrade helper prepare the pinned GitHub
+attestation verifier at build/install time. No host GitHub CLI, login or startup
+download is needed. [Verifier deployment and rotation](attestation-verification.md)
+describes fixed paths, platform hashes, offline build inputs and fail-closed
+behavior. The execution runtime and discovery worker do not need the binary.
+This does not enable remote Connector installation.
+
 ## First-run browser experience
 
 Open `/setup`, enter the terminal code, choose **Set up a new Atlas**, and enter

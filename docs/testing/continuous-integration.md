@@ -198,3 +198,13 @@ PostgreSQL tenancy/ownership/crypto, I1-to-I2 migrations, portable credential
 backup/restore, exact runtime verification and cleanup. Browser acceptance uses
 `apps/web/scripts/check-i2-integrations-browser.mjs` against the production build;
 its intercepted APIs prove UI behavior, separately from backend/source acceptance.
+
+## B1.2 genuine offline provenance regression
+
+Backend and release validation prepare the locked verifier with
+`PYTHONPATH=apps/api python -m scripts.prepare_attestation_verifier` before tests.
+`test_official_provenance.py` and `test_attestation_distribution.py` require the
+real CLI and frozen roots/bundle; absence is a failure, never a skip. Provisioning
+may download only the pinned verifier archive; ordinary tests require no network.
+The release-critical selector includes both suites. See
+[offline acceptance and rotation](../deployment/attestation-verification.md).

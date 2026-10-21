@@ -7,6 +7,7 @@ import re
 from typing import Protocol
 
 from app.services.connector_contracts import ConnectorPackageError
+from app.services.official_provenance import GithubAttestationVerifier, ProvenanceFailure
 
 
 class VerificationError(ConnectorPackageError):
@@ -41,19 +42,18 @@ def verify_digest(archive: bytes, expected: str) -> str:
     return digest
 
 
-class GithubSigstoreVerifier:
-    """Fail closed until a reviewed verifier and official identity are packaged.
+class GithubSigstoreVerifier(GithubAttestationVerifier):
+    """B1.2 provenance methods are separate from the legacy install interface.
 
-    A manifest claim is never authenticated provenance. The future adapter must
-    enforce the configured repository AND signer workflow, source commit, SLSA
-    predicate and issuer against authenticated certificate claims, and validate
-    the Sigstore chain/transparency timestamps with a reviewed pinned trust root.
-    No shell/gh lookup, network fallback, or skip-verification switch exists.
+    verify_catalogue/verify_package require local bundles and return distinct
+    VerifiedProvenance evidence. No catalogue promotion or package eligibility
+    adapter exists yet. B3 must supply those gates before invoking the store.
+    Self-asserted package metadata cannot provide a bundle or install authority.
     """
 
     def verify(self, archive: bytes, package) -> VerificationEvidence:
         verify_digest(archive, package.bundle_digest)
-        raise VerificationError("official_provenance_verifier_unavailable")
+        raise VerificationError(ProvenanceFailure.MISSING_ATTESTATION.value)
 
 
 class BootstrapReleaseVerifier:

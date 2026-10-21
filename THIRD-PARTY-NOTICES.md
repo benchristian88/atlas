@@ -42,3 +42,12 @@ remain AGPL-3.0-only. The exact SDK 1.1.0 wheel and hash lock are in
 Proxmox archive includes its Apache licence, NOTICE and SPDX inventory. No legacy
 AGPL implementation was copied into these Apache projects. These engineering
 ownership records do not replace upstream redistribution/licence review.
+
+B1.2 packages GitHub CLI 2.102.1 at the API/installation boundary, separately
+from the execution runtime. Its upstream [MIT licence](apps/api/app/attestation/LICENSE.gh),
+[pinned distribution](apps/api/app/attestation/distribution.json) and
+[public verification evidence](vendor/attestation/README.md) accompany Atlas.
+Upstream Go dependencies retain their own licences; this is not an exhaustive
+transitive licence audit. Sigstore public trust metadata is used only for
+verification and is not secret key material. No Python Sigstore runtime
+dependency is added.

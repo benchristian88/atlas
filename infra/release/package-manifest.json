@@ -39,7 +39,8 @@
     "docs/architecture/integrations/i4a-completion-report.md",
     "infra/install/runtime.py",
     "vendor/sdk/",
-    "vendor/collections/"
+    "vendor/collections/",
+    "vendor/attestation/"
   ],
   "docker_compose": [
     "infra/docker/docker-compose.yml",
@@ -93,7 +94,14 @@
     "apps/runtime/ansible/sbom.cdx.json",
     "infra/install/runtime.py",
     "vendor/sdk/requirements.txt",
-    "vendor/sdk/atlas_connector_sdk-1.1.0-py3-none-any.whl"
+    "vendor/sdk/atlas_connector_sdk-1.1.0-py3-none-any.whl",
+    "apps/api/app/attestation_distribution.py",
+    "apps/api/app/attestation/distribution.json",
+    "apps/api/app/attestation/trusted-root.jsonl",
+    "apps/api/app/attestation/LICENSE.gh",
+    "apps/api/scripts/prepare_attestation_verifier.py",
+    "vendor/attestation/gh-2.102.1.sigstore.json",
+    "vendor/attestation/gh-2.102.1-checksums.txt"
   ],
   "required_docker_compose": [
     "infra/install/compose.py",

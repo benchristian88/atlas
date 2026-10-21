@@ -122,8 +122,10 @@ automatic endpoint failover remain excluded from this candidate.
 
 ## Remaining implementation research
 
-I1: external SDK publishing/rights, reviewed GitHub/Sigstore verifier/trust roots,
-and native/systemd live lifecycle acceptance remain documented follow-ups.
+I1: external SDK publishing/rights and native/systemd live lifecycle acceptance
+remain documented follow-ups. [B1.2](../../deployment/attestation-verification.md)
+now implements the reviewed offline GitHub/Sigstore verifier and packaged roots;
+remote retrieval, durable acceptance and package installation remain separate.
 Protected store, exact bootstrap verification, pinned baseline and both deployment
 definitions are implemented; Docker operator evidence is recorded in I2 and I3.
 I3: native Debian/systemd LIVE acceptance remains outstanding; actual Docker/LXC

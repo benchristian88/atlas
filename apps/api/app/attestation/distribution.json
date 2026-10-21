@@ -1,0 +1,28 @@
+{
+  "platforms": {
+    "darwin-amd64": {
+      "archive": "gh_2.102.1_macOS_amd64.zip",
+      "archive_sha256": "91c5fbd493274b545b03ef32a89c2a21238393c0c0b1108210967199b3230d9d",
+      "binary_sha256": "d9825cb94889c72939419ac3b890e853d3daf0cd7681009d8d51fd4b96224398"
+    },
+    "darwin-arm64": {
+      "archive": "gh_2.102.1_macOS_arm64.zip",
+      "archive_sha256": "08bfef98b50c553df122bb34ee8dcf415cae7d3b108891488964a0df07aa2aeb",
+      "binary_sha256": "b547134b94ff3139051f4cf96cf7081b368ce323450829c6e65d1f7c02833a92"
+    },
+    "linux-amd64": {
+      "archive": "gh_2.102.1_linux_amd64.tar.gz",
+      "archive_sha256": "77b9e297e94c50336823d0f84de7ef1be60cba704601fa0d98f129f47a94987b",
+      "binary_sha256": "d7e919c19ad89502313325c2690bf8a8556234ec734b7a4593e39244ab3e4a87"
+    },
+    "linux-arm64": {
+      "archive": "gh_2.102.1_linux_arm64.tar.gz",
+      "archive_sha256": "5019b3cc6e8a03bb4d88600f8dbda2add8e6407705c159b0c63151036e77a1af",
+      "binary_sha256": "2a94934af93acc2161e165841559b532cce266c805a600b71392761941bed264"
+    }
+  },
+  "release": "https://github.com/cli/cli/releases/tag/v2.102.1",
+  "root_id": "sigstore-public-good-2026-10-21",
+  "root_sha256": "3c2cc7f357dc064ec527fdcd78da6e9245c21a381e1abaa0f2b62b186bcac1a1",
+  "version": "2.102.1"
+}

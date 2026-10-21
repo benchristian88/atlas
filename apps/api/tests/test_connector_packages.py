@@ -222,11 +222,11 @@ def test_digest_and_bootstrap_allowlist_are_both_required(tmp_path):
 
 def test_remote_official_verifier_fails_closed_without_cli_or_network(tmp_path):
     package, _, payload = bundle(tmp_path)
-    with pytest.raises(VerificationError, match="official_provenance_verifier_unavailable"):
+    with pytest.raises(VerificationError, match="missing_attestation"):
         GithubSigstoreVerifier().verify(payload, package)
     remote = CataloguePackage(package.connector_id, package.version, package.bundle_digest,
                               package.manifest, "official", True, package.archive_path)
-    with pytest.raises(VerificationError, match="official_provenance_verifier_unavailable"):
+    with pytest.raises(VerificationError, match="missing_attestation"):
         OfficialBundleVerifier().verify(payload, remote)
     with pytest.raises(VerificationError, match="bundle_digest_mismatch"):
         GithubSigstoreVerifier().verify(payload + b"changed", package)

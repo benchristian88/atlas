@@ -115,7 +115,8 @@ def active_identity(db):
     return (row.version, row.bundle_digest) if row is not None else None
 
 
-def test_structural_catalogue_does_not_authorize_api_install_or_change_active_state(db, harness):
+@pytest.mark.parametrize("authenticate", [False, True])
+def test_catalogue_validation_does_not_authorize_api_install_or_change_active_state(db, harness, authenticate):
     from app.services.official_catalogue import parse_official_catalogue
     from tests.test_official_catalogue import FIXTURE
 
@@ -125,11 +126,16 @@ def test_structural_catalogue_does_not_authorize_api_install_or_change_active_st
     before_files = {str(path.relative_to(harness.store.root)): path.read_bytes()
                     for path in harness.store.root.rglob("*") if path.is_file()}
     parsed = parse_official_catalogue(FIXTURE.read_bytes())
+    if authenticate:
+        from app.services.connector_verification import GithubSigstoreVerifier
+        evidence = GithubSigstoreVerifier().verify_catalogue(
+            parsed.source_bytes, FIXTURE.with_name("catalogue.sigstore.json").read_bytes())
+        assert evidence.artifact_sha256 == "55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd"
     manifest = parsed.document["entries"][0]["manifest"]
     selection = routes.PackageSelection(version=manifest["version"],
         digest=manifest["distribution"]["bundle_digest"][7:])
-    # The existing API still resolves only its approved provider; B1.1 does not
-    # register parsed entries or confer installation/activation authority.
+    # The API still resolves only its approved provider. Neither B1.1 structure
+    # nor genuine B1.2 provenance registers entries or authorizes installation.
     with pytest.raises(HTTPException) as caught:
         asyncio.run(routes._install(manifest["id"], selection, request(), harness.principal, db))
     assert caught.value.status_code == 409

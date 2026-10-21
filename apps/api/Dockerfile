@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends postgresql-clie
 
 COPY apps/api/app ./app
 COPY apps/api/scripts ./scripts
+# Build-time only: download the platform archive and verify BOTH locked digests.
+# Local development binaries are excluded from the Docker context.
+RUN python -m scripts.prepare_attestation_verifier
 COPY apps/api/alembic.ini .
 COPY apps/api/migrations ./migrations
 COPY apps/runtime/ansible/baseline.json apps/runtime/ansible/requirements.lock ./runtime-baseline/
