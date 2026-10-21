@@ -115,6 +115,31 @@ def active_identity(db):
     return (row.version, row.bundle_digest) if row is not None else None
 
 
+def test_structural_catalogue_does_not_authorize_api_install_or_change_active_state(db, harness):
+    from app.services.official_catalogue import parse_official_catalogue
+    from tests.test_official_catalogue import FIXTURE
+
+    install(db, harness)
+    before = active_identity(db)
+    existing_audits = len(audits(db, harness))
+    before_files = {str(path.relative_to(harness.store.root)): path.read_bytes()
+                    for path in harness.store.root.rglob("*") if path.is_file()}
+    parsed = parse_official_catalogue(FIXTURE.read_bytes())
+    manifest = parsed.document["entries"][0]["manifest"]
+    selection = routes.PackageSelection(version=manifest["version"],
+        digest=manifest["distribution"]["bundle_digest"][7:])
+    # The existing API still resolves only its approved provider; B1.1 does not
+    # register parsed entries or confer installation/activation authority.
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(routes._install(manifest["id"], selection, request(), harness.principal, db))
+    assert caught.value.status_code == 409
+    assert caught.value.detail["code"] == "connector_not_in_catalogue"
+    assert active_identity(db) == before
+    assert len(audits(db, harness)) == existing_audits
+    assert {str(path.relative_to(harness.store.root)): path.read_bytes()
+            for path in harness.store.root.rglob("*") if path.is_file()} == before_files
+
+
 def audits(db, harness):
     return list(db.scalars(select(AuditEvent).where(AuditEvent.user_id == harness.principal.user.id,
                                                   AuditEvent.target_type == "connector_package")))
