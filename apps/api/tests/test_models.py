@@ -17,6 +17,8 @@ EXPECTED_TABLES = {
     "customers",
     "sites",
     "integrations",
+    "connector_catalogue_revisions",
+    "connector_catalogue_state",
     "installed_connector_packages",
     "integration_secrets",
     "connector_mappings",
