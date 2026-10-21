@@ -61,6 +61,13 @@ Routine CI never requires a tag.
 
 ## Equivalent local checks
 
+B1.3 adds `test_catalogue_source.py` (controlled HTTP plus real provenance) and
+`test_trusted_catalogue.py` (generic lifecycle, PostgreSQL atomicity/leases and
+global API authorization). The latter uses the existing disposable
+`ATLAS_TEST_DATABASE_URL`; no additional CI database variable is required.
+Live GitHub acceptance is an explicit operator script, excluded from ordinary CI:
+see [official catalogue validation](../deployment/official-catalogue.md#validation-and-next-increments).
+
 Use Python 3.12, Node 22, PostgreSQL **17** server/client tools, Redis 7 and nginx
 1.28 or newer. Install regression dependencies without editable plugin installs
 (tracked egg-info must remain clean for committed package construction):

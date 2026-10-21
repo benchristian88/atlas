@@ -93,6 +93,24 @@ def compatibility(manifest: dict, runtime: dict | None, *, atlas_version: str | 
     return {"state": "compatible", "message": "Compatible with the approved local runtime baseline."}
 
 
+def accepted_official_metadata(db):
+    """Read-only global metadata; deliberately never returned by get/install.
+
+    B2 may project lifecycle/compatibility later. An accepted catalogue alone
+    cannot make executable packages available to the existing bootstrap facade.
+    """
+    from app.models import ConnectorCatalogueRevision, ConnectorCatalogueState
+    from app.services.official_catalogue import parse_official_catalogue
+    state = db.get(ConnectorCatalogueState, 1)
+    if state is None or state.highest_sequence is None:
+        return []
+    revision = db.get(ConnectorCatalogueRevision, state.highest_sequence)
+    return [{"connector_id": entry["manifest"]["id"], "version": entry["manifest"]["version"],
+             "status": entry["status"], "manifest": entry["manifest"], "source": "official",
+             "package_available": False, "supported_actions": []}
+            for entry in parse_official_catalogue(revision.original_bytes).document["entries"]]
+
+
 class CatalogueService:
     def __init__(self, index_path: Path | None = None, *, expected_digest: str = BOOTSTRAP_DIGEST):
         self.index_path = index_path or BOOTSTRAP_PATH

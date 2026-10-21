@@ -38,6 +38,13 @@ prerequisite, not an already demonstrated guarantee.
 
 # Executive summary
 
+**B1.3 evidence (21 October 2026):** the [official catalogue consumer](../../deployment/official-catalogue.md)
+adds bounded fixed-source retrieval, genuine provenance integration, durable
+sequence/history storage, leases and globally authorized status/manual refresh.
+The [publication prerequisite](b1-3-publication-plan.md) remains unsatisfied;
+live verified bytes are deliberately not promoted. No B2 scheduling/freshness
+enforcement, B3 remote installation or frontend change is included.
+
 Atlas already contains most of the difficult knowledge-management
 foundation required for an integration platform: scoped Customers and
 Sites, Assets, Networks and Interfaces, managed relationship types,

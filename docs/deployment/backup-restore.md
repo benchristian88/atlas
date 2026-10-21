@@ -211,6 +211,19 @@ test recovery on disposable data before relying on it for a real incident.
 
 ## Integration credentials after restore
 
+Official catalogue revisions and the instance-global highest-sequence checkpoint
+are included in PostgreSQL backups. The [B1.3 refresh service](official-catalogue.md)
+holds the existing normal-operation lock throughout retrieval and finalization;
+restore drains this operation and cannot replace the database underneath it.
+Finalization checks maintenance and lease ownership again. Expired imported
+leases recover on a later manual request. Reconstructing a missing/older checkpoint
+from retained revisions never establishes fresh current-channel confirmation.
+
+Restoring the **entire database** may restore an older catalogue high-water mark.
+Absolute rollback resistance requires a checkpoint outside the restored trust
+database; B1.3 adds no external witness. Preserve independent incident/acceptance
+records and review restored trust history before future remote installation.
+
 The destination retains its data key. The existing rewrap registry handles every
 Integration credential field with fresh nonces and unchanged ownership/revision
 AAD; any invalid field aborts the restore/rewrap transaction. DataSource and

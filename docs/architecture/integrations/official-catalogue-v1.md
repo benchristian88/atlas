@@ -1,5 +1,12 @@
 # Official Connector Catalogue v1: B1.1 structural boundary
 
+**B1.3 integration:** the unchanged parser now feeds the separate
+[bounded consumer and durable trust service](../../deployment/official-catalogue.md).
+That service adds global status/refresh APIs and migration `20261021_0031`.
+Genuine live verification succeeds, but promotion remains closed pending the
+[publication prerequisites](b1-3-publication-plan.md). Statements below about no
+I/O, migration or API authority describe this B1.1 parser itself.
+
 B1.1 implements the offline `parse_official_catalogue(bytes)` service in
 `apps/api/app/services/official_catalogue.py`. It accepts untrusted aggregate
 catalogue bytes and returns `StructurallyValidCatalogue` or a typed

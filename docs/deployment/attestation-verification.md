@@ -238,6 +238,13 @@ current revocation awareness. Unhandled process/host termination can leave a
 
 ## Publication boundary and prerequisites for B1.3/B3
 
+B1.3 now calls this unchanged verifier from its [bounded official consumer](official-catalogue.md).
+Live retrieval and cryptographic verification were exercised on 21 October 2026;
+promotion failed closed with `publication_not_immutable`. Durable trust foundations
+and global manual-refresh/status APIs are present, but no live remote catalogue
+is accepted. The [separate publication plan](../architecture/integrations/b1-3-publication-plan.md)
+is required before that gate can be implemented for an advancing current channel.
+
 On 21 October 2026, GitHub's release API reported catalogue-v1
 (release 416561696) and proxmox-v0.2.0 (416290807) as immutable: false.
 The checked-in connector workflows attest builds in connector-release and upload

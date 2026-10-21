@@ -122,10 +122,19 @@ automatic endpoint failover remain excluded from this candidate.
 
 ## Remaining implementation research
 
+B1.3 now provides [secure retrieval and durable trust foundations](../../deployment/official-catalogue.md),
+including global manual-refresh/status APIs. Full acceptance remains blocked by
+the [publication-side prerequisite](b1-3-publication-plan.md): the established
+mutable alias/snapshot release cannot provide both immutable history and an
+advancing authoritative channel. Live genuine verification passed; no live
+revision was promoted. B2 scheduling/freshness/lifecycle projection and B3 remote
+package eligibility/installation remain separate unimplemented increments.
+
 I1: external SDK publishing/rights and native/systemd live lifecycle acceptance
 remain documented follow-ups. [B1.2](../../deployment/attestation-verification.md)
 now implements the reviewed offline GitHub/Sigstore verifier and packaged roots;
-remote retrieval, durable acceptance and package installation remain separate.
+B1.3 adds retrieval/persistence foundations but publication authority and remote
+package installation remain incomplete.
 Protected store, exact bootstrap verification, pinned baseline and both deployment
 definitions are implemented; Docker operator evidence is recorded in I2 and I3.
 I3: native Debian/systemd LIVE acceptance remains outstanding; actual Docker/LXC
