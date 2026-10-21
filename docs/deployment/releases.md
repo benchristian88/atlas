@@ -119,5 +119,8 @@ Test Connection-only archive/catalogue descriptor. SDK version is tooling metada
 not the Atlas release version. Native install and upgrade copy the vendor artifact;
 Docker API/runtime install it offline with hash verification. Canonical schemas
 are wheel resources; documentation fixtures are excluded from production runtime
-consumption. Remote Connector Release assets remain disabled pending real
-attestation qualification. See [I2 evidence](../architecture/integrations/i2-completion-report.md).
+consumption. [B1.2](attestation-verification.md) now packages a pinned verifier
+and roots for genuine offline provenance checks. Remote Connector installation
+remains disabled pending catalogue acceptance, publication hardening and package
+eligibility work. See [I2 evidence](../architecture/integrations/i2-completion-report.md)
+for the historical bootstrap boundary.

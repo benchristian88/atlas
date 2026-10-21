@@ -33,3 +33,4 @@ redis_data
 *.db
 *.sqlite
 *.sqlite3
+apps/api/app/attestation/bin

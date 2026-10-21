@@ -29,6 +29,13 @@ and unqualified/untested source state without weakening verification. Example
 manifests remain non-installable. Proxmox I2 performs no discovery; qualified
 source versions, remote provenance and full deployment acceptance remain separate.
 
+**B1.2 evidence (21 October 2026):** [offline provenance verification](../../deployment/attestation-verification.md)
+now authenticates supplied catalogue and package bytes with separate signing
+profiles and packaged verifier/roots. This is not remote catalogue consumption
+or package installation. The existing catalogue and package GitHub releases
+currently report `immutable: false`; target immutability below is a publication
+prerequisite, not an already demonstrated guarantee.
+
 # Executive summary
 
 Atlas already contains most of the difficult knowledge-management

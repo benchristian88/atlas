@@ -358,7 +358,7 @@ def test_structural_success_cannot_bypass_real_package_verifier(document, tmp_pa
     package = CataloguePackage(manifest["id"], manifest["version"],
         manifest["distribution"]["bundle_digest"], manifest, "official", True, archive)
     store = PackageStore(tmp_path / "store")
-    with pytest.raises(VerificationError, match="official_provenance_verifier_unavailable"):
+    with pytest.raises(VerificationError, match="missing_attestation"):
         store.install(package, OfficialBundleVerifier())
     assert not store.root.exists()
     # Parsing never inserts the published version into the bootstrap provider.

@@ -224,6 +224,8 @@ def build_application(account):
     python = str(DESTINATION / "venv/bin/python")
     install_sdk(python)
     run([python, "-m", "pip", "install", "-r", "requirements.txt"], cwd=DESTINATION / "apps/api")
+    # Root-owned API/installation dependency; never installed into runtime-venv.
+    run([python, "-m", "scripts.prepare_attestation_verifier"], cwd=DESTINATION / "apps/api")
     build_runtime()
     try:
         # The API remains unable to mutate the native root-owned store.

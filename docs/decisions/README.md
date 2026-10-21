@@ -29,6 +29,8 @@ remain understandable after the original implementation discussion is gone.
 - [0008 — Exact global taxonomy mapping and declared namespaced facts](0008-connector-taxonomy-and-facts.md).
 - [0009 — Read-only technical discovery for official v1 Connectors](0009-read-only-official-connectors.md).
 
+- [0011 — Pinned offline official provenance verification](0011-offline-official-provenance.md).
+
 ## ADR maintenance
 
 Create or supersede an ADR when a change affects any of the following:

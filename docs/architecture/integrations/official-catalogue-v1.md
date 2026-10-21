@@ -48,8 +48,8 @@ Official distribution additionally requires:
 - Evidence URI `https://github.com/benchristian88/atlas-connectors/attestations`.
 
 These are declarations only. The catalogue signer workflow is separately
-`.github/workflows/catalogue.yml`; B1.2 must authenticate both identities against
-their respective attestations. `publisher_id` and provenance metadata are never
+`.github/workflows/catalogue.yml`; [B1.2 provenance verification](../../deployment/attestation-verification.md)
+authenticates each identity against its respective attestation. `publisher_id` and provenance metadata are never
 proof of identity.
 
 ## Strict parsing and resource limits
@@ -98,9 +98,10 @@ trusted results to the original received bytes, not reserialized JSON.
 The existing bootstrap catalogue has exactly `catalogue_version`,
 `release_identity` and `entries`. Its release-packaged digest and bundle allowlist
 remain separate. B1.1 does not replace its schema, register remote entries in its
-provider, or connect structural results to an API/installer. The default remote
-`GithubSigstoreVerifier` still fails closed with
-`official_provenance_verifier_unavailable`. Existing global-admin authorization,
+provider, or connect structural results to an API/installer. B1.2 adds separate `verify_catalogue` and `verify_package` methods returning
+`VerifiedProvenance`. The legacy remote installation adapter still fails closed
+with `missing_attestation`; no remote install eligibility adapter exists.
+Missing/corrupt verification dependencies fail closed. Existing global-admin authorization,
 customer/site scope, installed-package records, credentials, mappings and runtime
 execution are unchanged. No migrations or frontend/API changes are required.
 
@@ -122,5 +123,7 @@ It contains one active Proxmox 0.2.0 entry and passes the new standalone entry
 limit. Both assets were independently downloaded and compared during fixture
 capture; normal tests are offline. Each repository carries one frozen copy plus
 the two expected asset identities for independent CI. Byte equality demonstrates
-compatibility, not authenticated publication. Sequence 1 was not rebuilt or
+compatibility; the separate B1.2 tests now cryptographically authenticate the
+original bytes with the frozen genuine bundle. Build provenance does not prove
+GitHub release immutability. Sequence 1 was not rebuilt or
 republished, and no Proxmox package was installed or executed.

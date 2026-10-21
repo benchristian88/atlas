@@ -111,4 +111,7 @@ state. Actual I3 Docker/LXC build/deployment, migration, retained I2 probes,
 signing-state restart preservation and inspected isolation/hardening are
 operator-confirmed. Native Debian/systemd LIVE acceptance has not been performed
 and remains outstanding. Proxmox inventory discovery, 9.2.11 qualification and
-remote GitHub/Sigstore qualification remain future boundaries. See [validation](../architecture/integrations/i3-completion-report.md).
+remote package consumption remained future boundaries at that I3 checkpoint.
+[B1.2](attestation-verification.md) now verifies supplied GitHub/Sigstore evidence
+offline; it does not enable remote installation or alter discovery. See
+[validation](../architecture/integrations/i3-completion-report.md).

@@ -12,3 +12,5 @@ npm-debug.log*
 .atlas-state/
 *.atlasbackup
 dist/
+apps/api/app/attestation/bin/
+apps/api/app/attestation/archives/
