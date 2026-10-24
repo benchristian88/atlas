@@ -2,7 +2,7 @@
 
 The caller supplies genuine Phase 1 provenance and an explicit Atlas approval.
 Phase 2A performs all public reads/checks unchanged. Only missing bypass arrays
-for this exact original publication may be tolerated. No active approval exists.
+for this exact original publication may be tolerated under ADR 0013.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from app.services import catalogue_publication_evidence as public, catalogue_sou
 from app.services.catalogue_trust import (
     AtlasApprovedBootstrapPolicy, BOOTSTRAP_EXCEPTION_MODE, BOOTSTRAP_POLICY_PROPOSAL,
     BootstrapPublicationIdentity, BootstrapTrustPolicyProposal,
+    BOOTSTRAP_APPROVAL_REFERENCE,
 )
 from app.services.official_catalogue_selection import StructurallyValidSelection, parse_official_catalogue_selection
 from app.services.official_provenance import REPOSITORY_URI, VerifiedProvenance
@@ -23,7 +24,8 @@ class BootstrapExceptionAuthorization:
 
     Root identity is compared with the policy here, NOT authenticated transport.
     Catalogue build source is retained as a required acceptance pin, NOT verified
-    by this selection-only authorization decision. No acceptance consumer exists.
+    by this selection-only authorization decision. The Phase 3 adapter must
+    independently complete those checks before using the B1.3 trust store.
     """
     policy_version: str
     approval_reference: str
@@ -57,6 +59,7 @@ def _approved_expectations(policy):
     _require(type(policy.approval_reference) is str and 0 < len(policy.approval_reference) <= 256
              and policy.approval_reference.strip() == policy.approval_reference
              and all(32 <= ord(c) < 127 for c in policy.approval_reference), "approval_reference_required")
+    _require(policy.approval_reference == BOOTSTRAP_APPROVAL_REFERENCE, "consumer_decision_mismatch")
     proposal = policy.proposal
     _require(type(proposal) is BootstrapTrustPolicyProposal, "consumer_policy_required")
     _require(type(proposal.exception_mode) is str and proposal.exception_mode == BOOTSTRAP_EXCEPTION_MODE,

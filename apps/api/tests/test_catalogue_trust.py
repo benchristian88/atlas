@@ -177,7 +177,7 @@ def test_valid_candidate_creates_no_publication_authority(review_document):
     # Even a correctly named policy and immutable publication cannot open B1.3.
     with pytest.raises(catalogue_source.SourceError, match="current_channel_policy_unavailable"):
         catalogue_source.require_publication(SimpleNamespace(publication={"immutable": True, "policy": candidate.policy_id}))
-    assert catalogue_source.POLICY == "atlas-catalogue-channel-v1-blocked"
+    assert catalogue_source.POLICY == "atlas-bootstrap-consumer-policy-proposal-v1"
 
 
 def test_missing_independent_release_pins_fail_closed(review_document, monkeypatch):

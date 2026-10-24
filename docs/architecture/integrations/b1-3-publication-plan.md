@@ -1,12 +1,14 @@
 # B1.3 publication prerequisite: separate implementation plan
 
-Status: **Historical producer prerequisite plan; Atlas authorization and acceptance remain outstanding.**
+Status: **Historical producer prerequisite plan; sequence-one consumer acceptance delivered in Phase 3.**
 Original inspection: 21 October 2026.
 
 The producer subsequently implemented separate immutable publication and advancing
-selection. Atlas has delivered internal [selection Phases 1/2A](official-catalogue-selection.md),
-but its B1.3 adapter remains blocked. [Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md)
-records the remaining hidden-ruleset evidence and consumer-approval decisions.
+selection. Atlas now implements [sequence-one ingestion](official-catalogue-selection.md)
+under [Accepted ADR 0013](../../decisions/0013-sequence-one-consumer-bootstrap-approval.md).
+The first genuine live refresh accepted the immutable release; the next live
+unchanged attempt was rate limited. Future sequences remain blocked by the
+stronger evidence contract in [Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md).
 The original sequence below is retained as historical design context, not a claim
 that those producer steps remain unimplemented.
 
@@ -19,7 +21,8 @@ inside it cannot supply immutable history. Build attestations do not establish
 publication approval; environment names do not prove reviewer configuration.
 
 No connector repository, workflow, release, tag or setting was modified in B1.3.
-No alternate current URL has been invented or enabled. This plan refines the
+The current consumer now uses the established reviewed `catalogue-current` ref.
+This plan records the
 existing accepted immutable-publication boundary without rewriting ADR history.
 
 A separate operator-authorized publication task should:

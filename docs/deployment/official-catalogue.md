@@ -1,258 +1,203 @@
-# Official catalogue retrieval and durable trust (B1.3)
+# Official catalogue retrieval and durable trust
 
-B1.3 provides bounded retrieval, genuine B1.2 verification, PostgreSQL trust
-storage, sequence/history checks and global manual-refresh APIs. **Production
-promotion remains blocked:** the legacy adapter still targets `catalogue-v1`,
-and has no approved adapter for the producer's separate immutable publication
-and advancing selection. Complete consumer pin approval and immutable-catalogue
-acceptance remain pending, including the limited bootstrap policy. This is a delivered foundation,
-not full milestone acceptance. No remote package download, installation, activation, automatic update
-or new UI is enabled. Bundled and installed connectors remain independent.
+The existing global refresh API now retrieves and accepts the genuine immutable
+**sequence-one** catalogue under the complete owner-approved policy in
+[Accepted ADR 0013](../decisions/0013-sequence-one-consumer-bootstrap-approval.md).
+Future sequences fail closed pending the stronger publication evidence contract
+in [Proposed ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md).
+Remote package installation and automatic refresh remain disabled.
 
-[Selection Phases 1/2A/2B](../architecture/integrations/official-catalogue-selection.md)
-components now strictly parse and genuinely verify the published historical selection
-offline, using a distinct signature profile, and evaluate independent public run,
-actor, workflow, source CI, environment, App and visible ruleset observations.
-The separate restricted bootstrap evaluator requires an explicit Atlas approval
-input; the supplied versioned consumer proposal remains inactive. This internal work
-does not change this B1.3 adapter, its endpoints, publication gates or trusted
-PostgreSQL state.
+## Source and trust policy
 
-Anonymous ruleset reads withhold `bypass_actors`; omission is unavailable evidence,
-never an empty bypass list. Public observation results always retain authorization
-blockers. [Proposed ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md)
-records the owner's 25 October 2026 approval of a narrowly pinned historical
-exception for those missing arrays only. It does not approve the complete consumer
-pin set. Phase 2B implements that evaluator with a distinct immutable result;
-there is no production approval instance or refresh integration. Any other public
-failure or contradictory returned array still rejects. The future signed-evidence
-archive amendment needs separate review and producer work: preflight artifacts
-have one-day retention and are absent from the four-asset immutable sequence-one
-release. Future sequences cannot use the bootstrap exception.
+Atlas-owned version-controlled code exclusively selects the source and trust
+pins. `approved_bootstrap_policy()` verifies the exact unchanged proposal's
+fingerprint and returns `AtlasApprovedBootstrapPolicy` with fixed decision
+`atlas-owner-2026-10-25-adr-0013`. Operators cannot configure trust through tokens,
+environment settings, downloaded policies, URLs, approval strings or refresh flags.
 
-Operators cannot enable this with credentials, environment variables or a refresh
-flag. Final Atlas approval of the complete proposal and the separate acceptance
-implementation/review are still required. That phase must independently verify
-immutable release/asset identity, original bytes and both signing profiles,
-authenticated root/ref transport, original build source, live currentness and
-trusted history. No catalogue promotion or remote package becomes eligible from
-this evaluator. Historical Proxmox 0.2.0 metadata retains its signed identity;
-its mutable package remains non-installable. No runtime or bundled connector changes.
+The adapter uses fixed anonymous GitHub API endpoints in
+`benchristian88/atlas-connectors`:
 
-## Fixed source and publication boundary
+- `git/ref/heads/catalogue-current` and corroborating
+  `git/ref/tags/catalogue-bootstrap-root`, both pinned to parentless commit
+  `a1597730687be993d766ddb465a0d3362aef2d02`.
+- Exact-SHA Git commit/tree and Contents reads for the two original selection
+  files. Strict UTF-8/unambiguous JSON, base64, path, size and Git blob/tree identity
+  checks precede genuine verification. Returned download URLs are never followed.
+- The original selection signing run **39896288128**, attempt **1**, plus all
+  independently checked public identity/workflow/CI/protection evidence.
+- Selected release **421426993**, tag `catalogue-000001`, actual `immutable: true`,
+  non-draft/non-prerelease, catalogue asset **667867351**, and its three retained
+  signature/selection assets. Exact original catalogue digest is
+  `55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd`.
 
-The consumer's release-owned policy is in `catalogue_source.py`; no browser or
-environment setting selects a URL, repository, signer, root, tag or file path.
-It reads only public resources, without a GitHub token:
+The [selection contract](../architecture/integrations/official-catalogue-selection.md)
+describes the full checked identity/transport pipeline. The original catalogue
+signature is independently verified under B1.2, including build source
+`91dfd86f18d0b59ff977bb1e8a5fef42c5329943` and release-tag/source binding. It is
+separate from selection provenance and the activation dispatch. v1 structure,
+SDK Manifests and producer-compatible canonical original bytes are required.
+Retained release selection/signature bytes must equal the ref-selected originals.
 
-- `GET https://api.github.com/repos/benchristian88/atlas-connectors` verifies
-  numeric repository **1414494920**, owner **93822871** and exact repository name.
-- `GET .../releases/tags/catalogue-v1` resolves the established channel, pinned to
-  release **416561696**, exact API/HTML URLs, non-draft/non-prerelease state.
-- `GET .../releases/assets/{id}` with `Accept: application/octet-stream` retrieves
-  `catalogue.json` and its matching `catalogue-{sequence:06d}.json`. Asset IDs come
-  from that release's metadata; name, URL, size, state and digest must agree.
-- `GET .../attestations/sha256:{original-byte-digest}?per_page=4` retrieves embedded
-  bundles; neither returned bundle URLs nor pagination links are followed.
-- Repository and channel metadata are reread after verification. Release identity,
-  publication/update metadata and both asset identities must remain unchanged.
-  Volatile download counts do not participate in equality.
+Only missing historical `bypass_actors` for the five approved rulesets may use
+`atlas-bootstrap-sequence1-exception-v1`. Every other missing, inaccessible or
+contradictory observation rejects. Public arrays are never inferred empty;
+Phase 2A retains its partial-authorization blockers. No hidden historical evidence
+was recovered and no uninterrupted protection is claimed. Single-maintainer
+approval supplies no independent second-person veto.
 
-The repository-wide latest-release endpoint is never used. Connector and
-catalogue releases coexist. Catalogue sequences and connector identities remain
-data-driven. The frozen first sequence/digest is a bootstrap floor and exact
-sequence-1 identity, not a permanent current-version pin. Higher first sequences
-must pass the same complete trust pipeline, including the future publication gate.
+The legacy `catalogue-v1` adapter is retained for rejection regressions. Mutable
+legacy publication still fails `publication_not_immutable`; even an immutable
+legacy alias fails `current_channel_policy_unavailable`. It supplies no authority
+through a publication dictionary or partial proof.
 
-These operations follow GitHub's [release API](https://docs.github.com/en/rest/releases/releases),
-[binary asset API](https://docs.github.com/en/rest/releases/assets#get-a-release-asset)
-and [artifact-attestation API](https://docs.github.com/en/rest/repos/attestations).
-The GitHub API can redirect binary retrieval; metadata redirects are rejected.
+## Bounds and currentness
 
-The live check on **21 October 2026** found `immutable: false`. Both catalogue
-assets still matched SHA-256
+| Resource | Bound / policy |
+| --- | --- |
+| Original catalogue | 4 MiB, at most 200 entries; canonical per-entry 256 KiB |
+| Pointer | 1,024 bytes, canonical original JSON |
+| Each original Sigstore bundle | 1 MiB |
+| Ordinary metadata / Contents envelope | 256 KiB / 2 MiB |
+| Persisted publication evidence | 3 MiB application bound; lossless base64 originals |
+| Connections / connect / read / request | Two / 5 / 5 / 15 seconds |
+| Entire retrieval / verifier subprocess | 90 seconds / 20 seconds reserved per profile |
+| Refresh lease / cooldown | 150 seconds / 15 minutes, durable instance-global state |
+
+The existing reader disables ambient authentication, proxies, cookies and
+decompression; validates HTTPS/public DNS; bounds streamed and declared lengths;
+rejects metadata redirects/pagination; and permits one binary API 302 only to
+`release-assets.githubusercontent.com`. No credential fallback exists. Rate limits
+honor Retry-After/reset in durable next-attempt state without long request sleeps.
+
+Before promotion, reread release/all selected asset identities, original pointer
+bytes at the exact commit and finally the authoritative current ref. Require
+unchanged selection/transport identity. A newer unapproved selection rejects;
+sequence one is never used as a fallback. The first-attempt public checks and both
+signatures are rerun for unchanged refreshes. Cached evidence or historical
+immutable-release availability cannot renew currentness.
+
+## Persistence, history and restore
+
+No new migration is required. Existing migration `20261021_0031` provides the
+singleton checkpoint and append-only immutable revisions. PostgreSQL UPDATE/DELETE
+revision guards and checkpoint monotonic/composite-FK constraints are unchanged.
+
+A short advisory/row-lock transaction claims the UUID/lease. Network and crypto
+run outside row locks. Finalization reacquires the lock, validates ownership and
+lease, checks the completed typed operation-bound candidate and trusted history,
+then commits revision/checkpoint/audit together. Lost ownership, interrupted
+refresh, insertion or audit failure cannot partially promote. An unchanged verified
+selection updates currentness without creating a second revision.
+
+The revision retains:
+
+- Original catalogue bytes in `original_bytes`, digest, schema/sequence,
+  generated_at and accepted_at.
+- Both bounded verified profile results in `verification_evidence` (below its
+  existing 64 KiB constraint).
+- Original pointer and both original bundles losslessly base64-encoded in
+  `publication_evidence`, pointer/catalogue digests, release/asset identities,
+  authenticated transport/root/tag binding, approval/exception/decision,
+  sanitized typed public observations, withheld ruleset IDs, historical limitation
+  and confirmation/observation timestamps. Signed download URLs, CLI output,
+  credentials and executable packages are excluded.
+
+Promotion cannot be authorized with an arbitrary dictionary. It requires the
+completed immutable candidate minted only after all checks, the matching refresh
+UUID and a recent confirmation. The underlying private storage primitive remains
+available for explicitly unauthenticated storage unit fixtures, not API callers.
+
+| Transition | Result |
+| --- | --- |
+| Empty trusted store, exact approved sequence one | Accepted after all trust gates |
+| Same authenticated original selection | Unchanged; one retained revision |
+| Invalid or unapproved selection, including sequence two | Failed; no new trust |
+| Lower/same-sequence substituted catalogue | Conflict; retained trust preserved |
+| Sequence gap or incomplete/inconsistent retained history | Reject; reviewed recovery required |
+| Transient provider/verifier failure | Retain last-known-good without renewing currentness |
+
+Contiguous retained revisions and original-byte digests are checked during refresh,
+with a 1,000-revision/20-second processing bound. Identity history retains complete
+Manifest/tag/asset identity and sticky withdrawals even when later omitted. No
+version may silently change identity or reactivate after withdrawal. Recovery can
+reconstruct a missing/older checkpoint from consistent retained history and clears
+currentness. Missing retained history never authorizes rebootstrap.
+
+The existing shared `normal_operation` lock spans refresh and drains before
+restore. Restore finalization preserves accepted revisions/history but clears
+`last_confirmed_current_at`, refresh ownership/lease and cooldown. Renewed full
+live verification is required. Historical acceptance and freshness are distinct.
+**Rollback of the entire database and all its checkpoints cannot be proven absent
+using that database alone.** No independent checkpoint service is added.
+
+## API and operations
+
+| Existing route | Required global permission |
+| --- | --- |
+| `GET /api/integration-catalogue/status` | `integration_runtime.view` |
+| `POST /api/integration-catalogue/refresh` | `integration_runtime.manage` |
+
+Refresh accepts no body or `{}`, and no selection/query parameters. Scoped users
+cannot inspect or refresh instance-global trust. Existing 401/403/422 contracts,
+restore/maintenance coordination and tenant boundaries are unchanged. Results are
+`accepted`, `unchanged`, `in_progress`, `cooldown` or `failed`. Ordinary verification
+failure uses HTTP 200 with explicit result/diagnostic; persistence/ownership errors
+may return a safe top-level code.
+
+After acceptance status reports `trusted_remote_available: true`, sequence **1**,
+the exact digest above, original generation time, acceptance/currentness/stage
+timestamps and policy `atlas-bootstrap-consumer-policy-proposal-v1`. Read-only
+accepted entries have `package_available: false` and no supported actions.
+Historical Proxmox 0.2.0 is metadata only: its original package release is mutable,
+and catalogue acceptance neither downloads nor makes it installable/upgradable/
+executable. The bundled and installed connector are unchanged. No UI redesign or
+installer provider change is included.
+
+On `source_rate_limited`, honor `next_attempt_at`. On root/selection/release/asset
+conflict or `checkpoint_inconsistent`, preserve history and investigate; do not
+delete state or override trust. Fix missing verifier/roots through reviewed release
+packaging. No failure renews currentness; an older confirmation remains historical.
+
+## Live acceptance record
+
+On **25 October 2026, 11:20 NZDT**, the opt-in anonymous read-only GitHub acceptance
+using an empty disposable PostgreSQL 17 database and the existing refresh API
+accepted sequence **1**, digest
 `55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd`.
-The legacy catalogue workflow prepared and attested candidates; the later
-producer publication workflow has a separate contract that this adapter does not
-consume. Naming an Actions environment does not prove reviewer settings or
-release approval. A build signature cannot supply those missing guarantees.
+Both actual pinned verifier profiles passed; the immutable release, original
+selection/build sources and all public observations were checked. The following
+full live unchanged attempt hit `source_rate_limited`; **live unchanged acceptance
+was not completed**. Deterministic genuine-crypto API tests verify unchanged
+acceptance without duplicate revisions.
 
-`require_publication` rejects mutable releases as `publication_not_immutable`.
-Even setting this same release immutable yields
-`current_channel_policy_unavailable`: freezing it also freezes its current alias.
-There is no runtime bypass or permissive test mode. The separate
-[historical publication plan](../architecture/integrations/b1-3-publication-plan.md)
-and current selection contract describe the prerequisites for a reviewed Atlas
-publication adapter. No hypothetical URL is used.
-
-## Transport and verifier limits
-
-| Resource | Limit / policy |
-| --- | --- |
-| Catalogue original bytes | 4 MiB, plus unchanged B1.1 canonical/envelope bounds |
-| Repository/release metadata | 256 KiB per response; at most 100 release asset records |
-| Attestation response | 1 MiB total; at most three embedded bundles; a fourth fails closed |
-| Single bundle / verifier output | Existing B1.2 1 MiB limits |
-| Connections | One operation-local session, connector concurrency two |
-| Connect / read / request | 5 / 5 / 15 seconds |
-| Refresh retrieval budget | 90 seconds shared across requests/verification; reserve the complete B1.2 20-second subprocess budget before each verification |
-| Redirect | At most one binary API 302 to `release-assets.githubusercontent.com` |
-| Retry | At most one retry after 250 ms for transient connections or HTTP 500/502/503/504 without a server delay; TLS/other protocol failures are not retried |
-| Coalescing / cooldown | One durable 150-second lease; 15-minute instance-global cooldown |
-| Rate-limit delay | Honor Retry-After/date/reset through durable next-attempt time; pathological values capped at one day |
-
-TLS certificate verification is enabled. Only HTTPS, the exact API/distribution
-hosts and default/443 ports are admitted. Userinfo, fragments, backslashes,
-control characters, unexpected origins and private/non-global DNS answers fail.
-DNS validation occurs in the connector's resolver used for the connection; no
-separate unchecked second lookup is made. Corporate proxies, ambient credentials,
-cookies and decompression are disabled. `Accept-Encoding: identity` is sent;
-encoded bodies are rejected. Both declared length and streamed bytes are bounded.
-A truncated response fails. Rate limits do not cause request-thread sleeps.
-
-Manual refresh executes synchronously in FastAPI's request thread pool. The
-verifier remains in the API distribution, with no event-loop blocking, new worker,
-queue, broker or scheduler. The existing worker owns discovery operations, not
-this verifier. Shutdown/crash may leave a lease until its bounded expiry.
-
-## Cryptographic and publication evidence
-
-The pipeline reuses `parse_official_catalogue` unchanged and
-`GithubSigstoreVerifier().verify_catalogue(original_bytes, bundle,
-subject_name="catalogue.json")`. It requires the catalogue profile, not the
-executable-package profile. B1.2 verifies exact original-byte digest, signature,
-Public Good chain/log evidence, numeric repository/owner identity, hosted runner,
-issuer and `.github/workflows/catalogue.yml@refs/heads/main` identity/ref/source
-consistency. Its pinned CLI, roots and failure semantics are unchanged.
-
-Snapshot bytes must equal authenticated current bytes. They are consistency
-checks only; this existing mutable snapshot is not claimed to be immutable.
-A successful channel reread alone cannot renew currentness. Publication policy,
-sequence/history checks and commit must also succeed.
-
-Accepted revisions retain original bytes, SHA-256, schema/sequence, generated time,
-acceptance time, bounded typed verified claims (including verifier/policy/root
-identity) and safe release/asset identities. Raw CLI output, signed download URLs,
-raw attestation bundles and credentials are not persisted. Failed candidates are
-not stored as accepted revisions; download/authentication times can still record
-completed stages without granting trust.
-
-## Transactions, history and restore
-
-Migration `20261021_0031` adds two instance-global tables. It changes no customer,
-site, integration, credential, bootstrap or installed-package record and performs
-no network I/O. `connector_catalogue_revisions` is append-only: PostgreSQL rejects
-UPDATE/DELETE. `connector_catalogue_state` contains the highest sequence/digest,
-composite FK to its revision, stage timestamps, conflict/error, lease and cooldown.
-PostgreSQL rejects checkpoint deletion/decrease/same-sequence identity changes.
-
-A short transaction takes the existing advisory-lock pattern plus a row lock,
-records an operation UUID and commits. Network and cryptography run without
-PostgreSQL row locks. Finalization reacquires the lock, checks UUID and lease
-expiry against committed state, reapplies history checks, inserts revision and
-updates state/audit atomically. A lost lease cannot finalize. Persistence or audit
-failure rolls back promotion and leaves the old accepted catalogue intact; the
-claim expires for recovery. Lock/statement waits are bounded to 3/10 seconds.
-
-| Candidate transition | Result |
-| --- | --- |
-| First | Full trust gates; sequence at least one, exact frozen digest if sequence one |
-| Same sequence / identical bytes | No duplicate revision; live authoritative full verification required to renew currentness |
-| Higher sequence | Full trust gates and consistent immutable historical identities |
-| Lower sequence | `catalogue_rollback`; old state/currentness preserved |
-| Same sequence / changed bytes | `catalogue_substitution`; source conflict, old state preserved |
-| Invalid provenance/structure/publication | Rejected; stage diagnostics only, no trust advancement |
-
-The state holds a derived identity-history index for every observed ID/version:
-SHA-256 of canonical complete Manifest + release tag + asset ID, and retained
-withdrawal status. Omission does not erase identity or withdrawal. A withdrawn
-version cannot reactivate; package absence does not uninstall/revoke anything.
-Compatibility with this Atlas/runtime is a later eligibility question, not
-catalogue corruption. History is bounded to 10,000 identities/approximately
-2 MiB; exhaustion fails closed without dropping history.
-
-A missing/older checkpoint can reconstruct from retained revisions (up to 1,000
-revisions per recovery), verifying their byte digests and historical consistency;
-recovery streams one revision at a time with a 20-second processing budget,
-clears currentness and never invents a live confirmation. Retained
-history beyond that exceptional recovery bound requires operator review.
-The normal refresh reads the cumulative bounded history, not every prior blob.
-
-The existing `normal_operation` shared filesystem lock spans the entire refresh.
-A restore must drain it before replacing PostgreSQL; finalization also checks the
-maintenance marker. A restored lease cannot let an old process promote across
-replacement. The complete trust tables are included in ordinary database backups.
-**Restoring the entire database can restore an older trust checkpoint.** Absolute
-rollback resistance needs a checkpoint outside that rollback boundary; no external
-witness is added in B1.3. See [backup/restore](backup-restore.md).
-
-## API and troubleshooting
-
-| Route | Required global authority | Contract |
-| --- | --- | --- |
-| `GET /api/integration-catalogue/status` | `integration_runtime.view` | Sanitized persisted status plus read-only accepted entries |
-| `POST /api/integration-catalogue/refresh` | `integration_runtime.manage` | No body or `{}`; no query parameters; bounded coalesced operation |
-
-Scoped integration managers cannot refresh or inspect global runtime status.
-The static routes precede the connector-ID route. Existing list/detail, bootstrap
-installation and UI response contracts remain unchanged. Read-only remote entries
-have `package_available: false` and no supported actions; they never enter the
-existing installer selection provider. Existing authentication, origin checks
-and no-store response policy apply.
-
-Refresh results are `accepted`, `unchanged`, `in_progress`, `cooldown` or `failed`.
-Ordinary failures use HTTP 200 with the explicit result and persisted diagnostic;
-authentication/authorization and invalid input retain 401/403/422. Restore mode
-uses the existing HTTP 503 mechanism. Failed persistence/ownership may return a
-safe top-level `code` because no new state could be committed.
-
-`generated_at` describes the source build. `last_attempt_at`, `last_download_at`,
-`last_authenticity_verified_at`, `last_confirmed_current_at` and `accepted_at` are
-separate. No `expires_at` exists. Old generated bytes can be current if the live
-authoritative channel is fully verified and accepted. Cached verification,
-historical snapshot retrieval and failed/newer-unusable candidates cannot renew
-currentness. The previous timestamp remains historical evidence, not a claim
-that the most recent attempt succeeded. Persistent `source_conflict` is cleared
-only by successful full acceptance. B2 must consult conflicts as well as age.
-
-| Diagnostic group | Operator response |
-| --- | --- |
-| `publication_not_immutable`, `current_channel_policy_unavailable` | Expected present blocker; implement/audit publication plan, then ship a reviewed Atlas policy. Do not disable gates. |
-| `source_rate_limited`, `source_forbidden`, `source_not_found`, `source_unavailable`, `source_timeout` | Respect `next_attempt_at`; check public connectivity/repository availability. A token is not required or accepted. |
-| `source_tls_failed` | Check certificate validation and network interception; do not disable TLS verification. |
-| `invalid_source_*`, `unexpected_source_response`, `truncated_source_response`, `source_response_too_large` | Source/transport violates fixed bounds or identity. Preserve diagnostics; investigate rather than override. |
-| `invalid_channel_identity`, `invalid_asset_identity`, missing/ambiguous asset, `asset_digest_mismatch`, `channel_changed`, `historical_snapshot_mismatch` | Publication inconsistency; do not promote. |
-| B1.1/B1.2 diagnostic codes | Consult the structural and [provenance](attestation-verification.md) contract; repair packaged dependencies through normal upgrades. |
-| `catalogue_rollback`, `catalogue_substitution`, `historical_identity_changed`, `withdrawal_reactivated` | Security conflict; preserve last-known-good/history and investigate publication. |
-| `refresh_ownership_lost`, `catalogue_persistence_failed`, `catalogue_state_unavailable` | Wait for lease/cooldown, check database health/maintenance; no candidate was promoted. |
-| `history_capacity_exceeded`, `history_recovery_limit`, `checkpoint_inconsistent` | Operator review of retained trust history; never delete history to force acceptance. |
-| `catalogue_refresh_internal_failure` | Safe unexpected failure; no raw exception/body is exposed. Review deployed code/dependencies. |
+The disposable PostgreSQL server was restarted. Reopened state retained the exact
+revision/evidence; both retained signatures reverified offline. The status API
+returned the accepted sequence/digest and non-installable metadata. A simulated
+later source failure preserved that state and the original confirmation time.
+No production data, GitHub credentials, mutations, workflows or connector packages
+were used. The source reads were subsequently reduced to avoid redundant immutable
+metadata rereads while retaining final pointer/release confirmation.
 
 ## Validation and next increments
 
-Ordinary CI uses controlled HTTP responses and disposable PostgreSQL. Genuine
-pipeline tests invoke the actual pinned verifier. Hypothetical future connectors
-are tested through structural parsing, projection and private storage primitives
-with explicitly unauthenticated storage fixtures. Those tests are not signatures
-and are never supplied to a production verifier-success path.
-
-Opt-in live acceptance, from `apps/api`, with `ATLAS_TEST_DATABASE_URL` set to an
-**empty disposable** `atlas_b13_*` or `atlas_test_*` database and a separate private
-`ATLAS_STATE_DIR`:
+From `apps/api`, with an **empty disposable** `atlas_b13_*` or `atlas_test_*`
+database in `ATLAS_TEST_DATABASE_URL` and private temporary `ATLAS_STATE_DIR`:
 
 ```bash
 python -m scripts.accept_official_catalogue --allow-live-github --disposable-database
 ```
 
-The script migrates the empty database, fetches/verifies authentic public bytes,
-reopens the session, then simulates unavailability. It prints `milestone_accepted`
-and distinguishes zero accepted revisions from live last-known-good recovery.
-The present expected result is cryptographic success and publication rejection.
-It never downloads or activates packages.
+The harness refuses nonempty databases, migrates, invokes existing refresh/status
+APIs, controls cooldown only in this disposable environment, repeats full refresh,
+reopens connections and simulates later unavailability. It reports
+`milestone_accepted` separately from `complete_live_acceptance` and exits nonzero
+if the second live verification fails. Anonymous provider limits can prevent the
+second verification; no cached-evidence shortcut or token fallback is allowed.
 
-B2 still needs daily scheduling, authoritative <72-hour installation eligibility,
-compatibility/version/withdrawal lifecycle projection and UI integration. B3 still
-needs approved immutable package publication, verified package bytes bound to an
-accepted current catalogue, archive/store gates and explicit global administrator
-approval. B4 must prove newly published compatible connectors appear without an
-Atlas rebuild. These increments are not implemented here.
+Future sequences need the stronger reviewed publication evidence/archive contract.
+Next product work is to surface trusted metadata in Integrations and prepare a
+new immutable connector package. Secure installation still needs separate generic
+package provenance/immutable identity, runtime/SDK compatibility, current accepted
+catalogue eligibility, explicit global administrator authority and protected-store
+validation. Daily scheduling and installation freshness policy remain later work.

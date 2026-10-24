@@ -27,7 +27,10 @@ LEASE_SECONDS = 150
 COOLDOWN_SECONDS = 900
 CONFLICTS = {"catalogue_rollback", "catalogue_substitution", "historical_identity_changed",
              "withdrawal_reactivated", "channel_changed", "historical_snapshot_mismatch",
-             "checkpoint_inconsistent", "bootstrap_policy_rejected"}
+             "checkpoint_inconsistent", "bootstrap_policy_rejected", "catalogue_sequence_gap",
+             "unapproved_selection_root", "retained_selection_mismatch",
+             "selection_contents_identity_mismatch", "selected_catalogue_digest_mismatch",
+             "bootstrap_authorization_historical_identity_mismatch"}
 
 
 def _lock(db):
@@ -59,7 +62,7 @@ def history_after(document, previous):
 def transition(document, digest, state):
     sequence = document["sequence"]
     if state.highest_sequence is None:
-        source.require(sequence >= source.BOOTSTRAP_SEQUENCE, "bootstrap_policy_rejected")
+        source.require(sequence == source.BOOTSTRAP_SEQUENCE, "catalogue_sequence_gap")
         if sequence == source.BOOTSTRAP_SEQUENCE:
             source.require(digest == source.BOOTSTRAP_DIGEST, "bootstrap_policy_rejected")
     else:
@@ -67,6 +70,7 @@ def transition(document, digest, state):
         if sequence == state.highest_sequence:
             source.require(digest == state.highest_digest, "catalogue_substitution")
             return "unchanged"
+        source.require(sequence == state.highest_sequence + 1, "catalogue_sequence_gap")
     return "accepted"
 
 
@@ -78,24 +82,29 @@ def recover_checkpoint(db, state):
     """
     latest = db.scalar(select(Revision).order_by(Revision.sequence.desc()).limit(1))
     if latest is None:
-        source.require(state.highest_sequence is None, "checkpoint_inconsistent")
+        source.require(state.highest_sequence is None and not state.identity_history
+                       and state.last_confirmed_current_at is None, "checkpoint_inconsistent")
         return
+    source.require(state.highest_sequence is None or state.highest_sequence <= latest.sequence, "checkpoint_inconsistent")
     if state.highest_sequence == latest.sequence:
         source.require(state.highest_digest == latest.content_digest, "checkpoint_inconsistent")
-        return
-    source.require(state.highest_sequence is None or state.highest_sequence < latest.sequence, "checkpoint_inconsistent")
     history = {}
-    # Recovery is exceptional and bounded; never discard history to fit a limit.
+    # Validate retained continuity even when the checkpoint agrees. Recovery and
+    # validation are bounded; never discard missing history to fit a limit.
     deadline = time.monotonic() + 20
     with db.scalars(select(Revision).order_by(Revision.sequence).limit(1001)
                     .execution_options(yield_per=1)) as revisions:
         for index, revision in enumerate(revisions):
             source.require(index < 1000 and time.monotonic() < deadline, "history_recovery_limit")
+            source.require(revision.sequence == index + 1, "checkpoint_inconsistent")
             source.require(hashlib.sha256(revision.original_bytes).hexdigest() == revision.content_digest, "checkpoint_inconsistent")
             history = history_after(parse_official_catalogue(revision.original_bytes).document, history)
-    state.highest_sequence, state.highest_digest = latest.sequence, latest.content_digest
-    state.identity_history = history
-    state.last_confirmed_current_at = None
+    if state.highest_sequence == latest.sequence:
+        source.require(state.identity_history == history, "checkpoint_inconsistent")
+    else:
+        state.highest_sequence, state.highest_digest = latest.sequence, latest.content_digest
+        state.identity_history = history
+        state.last_confirmed_current_at = None
 
 
 def claim(db):
@@ -149,14 +158,17 @@ def _store_revision(db, state, raw, verification, publication, confirmed_at):
     return result
 
 
-def _promote(db, state, candidate):
+def _promote(db, state, candidate, *, operation_id=None):
     # Reparse original bytes, never a mutable caller-owned document. Match the
     # genuine verifier result again at the persistence boundary.
     evidence = candidate.provenance
-    source.require(evidence.profile == TrustProfile.CATALOGUE and evidence.subject_name == "catalogue.json"
+    source.require(evidence.profile == TrustProfile.CATALOGUE
+                   and evidence.subject_name in ("catalogue.json", "catalogue-000001.json")
                    and evidence.artifact_sha256 == hashlib.sha256(candidate.raw).hexdigest(), "catalogue_evidence_mismatch")
-    source.require_publication(candidate)
-    return _store_revision(db, state, candidate.raw, to_json_value(asdict(evidence)),
+    source.require_publication(candidate, operation_id=operation_id)
+    return _store_revision(db, state, candidate.raw, to_json_value({
+                               "catalogue": asdict(evidence),
+                               "selection": asdict(candidate.authorization.public_observations.selection_provenance)}),
                            candidate.publication, candidate.confirmed_at)
 
 
@@ -192,7 +204,7 @@ def refresh(db, *, actor=None, request=None):
         progress = {}
         candidate, error = None, None
         try:
-            candidate = asyncio.run(source.retrieve_candidate(progress))
+            candidate = asyncio.run(source.retrieve_candidate(progress, operation_id=operation))
         except ConnectorPackageError as failure:
             error = failure
         except Exception:
@@ -212,7 +224,7 @@ def refresh(db, *, actor=None, request=None):
                     document = parse_official_catalogue(candidate.raw).document
                     transition(document, candidate.provenance.artifact_sha256, state)
                     history_after(document, state.identity_history)
-                    result = _promote(db, state, candidate)
+                    result = _promote(db, state, candidate, operation_id=operation)
                 except ConnectorPackageError as failure:
                     error = failure
             for key, stamp in progress.items():

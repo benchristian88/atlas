@@ -185,6 +185,11 @@ def test_release_and_asset_policy(mutation, code):
 
 @pytest.fixture
 def http_fixture(monkeypatch):
+    # Explicit legacy-adapter regression. Production refresh now uses the
+    # immutable selection adapter tested in test_official_catalogue_ingestion.
+    async def legacy(progress, *, operation_id=None):
+        return await source.retrieve_legacy_candidate(progress)
+    monkeypatch.setattr(source, "retrieve_candidate", legacy)
     state = {"release": release(), "raw": RAW, "bundle": json.loads(BUNDLE), "requests": [], "mutation": False}
     def respond(url):
         state["requests"].append(url)

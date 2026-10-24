@@ -1,6 +1,6 @@
 """Genuine offline signatures plus SYNTHETIC public GitHub observations.
 
-Approval instances here are TEST ONLY; no production Atlas policy is approved.
+Provider responses here are synthetic; production policy is approved by ADR 0013.
 These tests do not demonstrate online historical authorization or acceptance.
 """
 import asyncio
@@ -15,6 +15,7 @@ from app.services import catalogue_publication_evidence as public, catalogue_sou
 from app.services.catalogue_trust import (
     AtlasApprovedBootstrapPolicy, BOOTSTRAP_EXCEPTION_MODE, BOOTSTRAP_POLICY_PROPOSAL as PROPOSAL,
     parse_catalogue_trust_policy_candidate,
+    approved_bootstrap_policy,
 )
 from app.services.connector_verification import GithubSigstoreVerifier, VerificationEvidence
 from app.services.official_catalogue_selection import (
@@ -29,7 +30,7 @@ from tests.test_catalogue_source import Response, reader as http_reader
 
 RAW = (FIXTURES / "current.json").read_bytes()
 ROOT = PROPOSAL.identity.root_commit
-TEST_APPROVAL = AtlasApprovedBootstrapPolicy(PROPOSAL, "TEST ONLY: explicit complete pin-set approval")
+TEST_APPROVAL = approved_bootstrap_policy()
 
 
 @pytest.fixture
@@ -161,6 +162,12 @@ def test_missing_or_unknown_exception_mode_rejects(authenticated_selection, mode
 @pytest.mark.parametrize("reference", [None, "", " ", "producer\nreceipt", "x" * 257])
 def test_approval_reference_required(authenticated_selection, reference):
     with pytest.raises(source.SourceError, match="approval_reference_required"):
+        evaluate({}, authenticated_selection, policy=replace(TEST_APPROVAL, approval_reference=reference))
+
+
+@pytest.mark.parametrize("reference", ["producer-approval", "owner-approved", "atlas-owner-2026-10-26-adr-0013"])
+def test_arbitrary_caller_approval_string_cannot_activate_policy(authenticated_selection, reference):
+    with pytest.raises(source.SourceError, match="consumer_decision_mismatch"):
         evaluate({}, authenticated_selection, policy=replace(TEST_APPROVAL, approval_reference=reference))
 
 

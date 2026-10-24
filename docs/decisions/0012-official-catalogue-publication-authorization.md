@@ -4,6 +4,14 @@ Status: **Proposed**
 
 Date: 2026-10-25
 
+**Phase 3 decision boundary:** [Accepted ADR 0013](0013-sequence-one-consumer-bootstrap-approval.md)
+records the owner's subsequent approval of the complete unchanged Atlas-owned
+bootstrap proposal and activates only original sequence-one ingestion. The
+general signed publication-evidence/archive design in this ADR remains Proposed.
+References below to pending complete pin approval describe the Phase 2 review
+state; they are resolved only for that exact bootstrap by ADR 0013. No future
+sequence, package eligibility or general publication authority is approved.
+
 ## Context and delivered boundary
 
 [ADR 0006](0006-verified-connector-supply-chain.md) requires approved immutable
@@ -18,8 +26,9 @@ Phase 2A adds an internal evaluator of independently retrieved **public** GitHub
 observations against that evidence and explicitly supplied review expectations.
 Its frozen `VerifiedPublicObservations` always retains unresolved authorization
 blockers. Phase 2B adds the restricted authorization evaluator described below;
-there is still no approved policy instance, new route, database change or path to
-promotion. See the
+at that phase there was no approved policy instance or path to promotion.
+Phase 3 connects the separately approved bootstrap to existing B1.3 routes and
+storage, without new routes or schema. See the
 [component contract](../architecture/integrations/official-catalogue-selection.md).
 
 The boundaries remain: structural pointer validity; cryptographic authenticity;
@@ -215,22 +224,23 @@ recovery dispatch, source, root, regenerated catalogue, substituted release,
 changed sequence-one pointer or sequence two and above cannot use this exception.
 Referencing sequence one from a later publication grants no authority.
 
-**Overall ADR status remains Proposed.** Approval of this limited exception does
-not approve the complete Atlas-owned authority pins. The reviewable
+**Overall ADR status remains Proposed.** The Phase 2 limited exception alone did
+not approve the complete Atlas-owned authority pins. Accepted ADR 0013 now
+approves the exact complete proposal for sequence one only. The original
 `atlas-bootstrap-consumer-policy-proposal-v1` in
 [`catalogue_trust.py`](../../apps/api/app/services/catalogue_trust.py) includes the
 maintainer, repository/owner, both environments, Publisher App/slug/bot, workflow,
 five rulesets, historical identities and existing release-owned verifier/roots.
-Those are review candidates, independently requiring explicit Atlas approval as a
-complete set. Producer configuration only corroborates them. No production
-approval instance, loader, environment override or remote configuration exists.
+Those review candidates required complete independent approval, now recorded in
+ADR 0013. Producer configuration only corroborates them. Production activation
+uses release-owned code only, with no environment override or remote configuration.
 
 Phase 2B implements an evaluator requiring that explicit approval input, original
 structural pointer, genuine Phase 1 provenance/digest/original invocation and all
 Phase 2A public checks. Its distinct frozen bootstrap-exception result retains
 the limitation and outstanding checks; it never clears the Phase 2A blockers.
-Tests use an explicitly labelled test-only approval and synthetic HTTP evidence,
-with genuine offline signatures. They establish no live historical authorization.
+Tests use the fixed approved decision and synthetic HTTP evidence with genuine
+offline signatures. They establish component behavior, not live historical proof.
 
 This decision does not prove uninterrupted historical settings, complete current
 hidden bypass state, historical App/token permissions, immutable release state,
@@ -239,7 +249,8 @@ protection. Separate acceptance must establish the exact immutable release and
 asset IDs, original catalogue/selection/bundles, both genuine signing profiles,
 original catalogue build source, authenticated transport, current-pointer reread
 and durable transactional history. The evaluator compares a candidate root with
-its pin; it does not authenticate that transport. No trusted revision is promoted.
+its pin; it does not authenticate that transport or itself promote a revision.
+Phase 3 separately completes those checks through the existing trust store.
 
 Historical catalogue metadata may contain active Proxmox 0.2.0. Its mutable
 package remains ineligible for remote installation. Catalogue authorization is
@@ -262,8 +273,8 @@ review generic entry eligibility against immutable package release/asset identit
 source/tag/provenance, runtime/SDK compatibility, current accepted catalogue and
 explicit installation authority. No Proxmox-specific bypass, Manifest rewrite,
 bootstrap installation change or executable-store change is permitted here.
-Implementing acceptance and package eligibility remains later work, rather than
-a Phase 2A/2B feature.
+Acceptance is now a separate Phase 3 feature under ADR 0013; package eligibility
+remains later work. Neither is authority supplied by Phase 2A/2B alone.
 
 Future acceptance must retain original bytes/evidence, consumer policy identity,
 contiguous predecessor/high-water history and sticky withdrawals atomically.
@@ -278,14 +289,12 @@ rebootstrap or deletion of trusted state.
 
 ## Required human decisions and remaining risks
 
-Reviewers must still approve the complete Atlas consumer policy and actual
-authority/bootstrap/S pins; decide whether authenticated producer observation may
-satisfy hidden publication-time fields; approve archive availability and historical
-freshness/binding rules; resolve sequence-one evidence availability; and separately
-review acceptance/history/restore and package eligibility before activation. The
-limited owner decision above resolves the missing historical bypass evidence
-decision only for the pinned original bootstrap; it does not resolve these other
-approvals or recover the missing evidence.
+For future publications reviewers must decide whether authenticated producer
+observation may satisfy hidden publication-time fields, approve independent S
+and policy pins, archive availability and historical freshness/binding rules,
+and separately review acceptance/history and package eligibility. ADR 0013
+resolves complete pin approval and the restricted historical bootstrap decision;
+it does not recover missing evidence or approve this future-publication design.
 If these decisions change ADR 0006/0011 boundaries, follow the supersession process.
 Acceptance of this ADR would still not demonstrate implementation or live acceptance.
 
@@ -294,5 +303,5 @@ trust infrastructure, accepted S/action/dependency, privileged Verifier key or
 Publisher credential remains relevant. Isolation and signed observations reduce
 specific risks but cannot prove uninterrupted settings, human independence or
 correctness of trusted code. Immutable publication protects retained bytes, not
-all surrounding provider state. Production acceptance preserves rejection until
-the remaining decisions and later implementation/acceptance are complete.
+all surrounding provider state. Future-publication acceptance preserves rejection
+until the remaining decisions and implementation/acceptance are complete.
