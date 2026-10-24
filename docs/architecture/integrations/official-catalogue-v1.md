@@ -3,18 +3,20 @@
 **B1.3 integration:** the unchanged parser now feeds the separate
 [bounded consumer and durable trust service](../../deployment/official-catalogue.md).
 That service adds global status/refresh APIs and migration `20261021_0031`.
-Genuine live verification succeeds, but promotion remains closed pending the
-[publication prerequisites](b1-3-publication-plan.md). Statements below about no
+Phase 3 genuinely accepts the original immutable sequence-one release under
+[Accepted ADR 0013](../../decisions/0013-sequence-one-consumer-bootstrap-approval.md).
+Future sequences and remote installation remain closed. Statements below about no
 I/O, migration or API authority describe this B1.1 parser itself.
 
 Separate [selection Phases 1/2A/2B](official-catalogue-selection.md) authenticate
 the historical pointer, evaluate public observations and implement a restricted
-original-sequence-one bootstrap authorization exception. Its policy proposal is
-inactive pending complete consumer pin approval. The exception tolerates only
-missing historical bypass arrays; it supplies no immutable selection, trusted
-revision or executable eligibility. These components do not change this parser
-or B1.3 promotion. The limited owner decision and remaining approvals are recorded
-in [Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md).
+original-sequence-one bootstrap authorization exception. The exact complete
+consumer pin set is now approved by ADR 0013. The exception tolerates only missing
+historical bypass arrays and grants no executable eligibility. Phase 3 separately
+verifies immutable selection and promotes through B1.3; it requires canonical
+original catalogue bytes in addition to this unchanged parser's structural
+contract. Future-publication decisions remain in
+[Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md).
 
 B1.1 implements the offline `parse_official_catalogue(bytes)` service in
 `apps/api/app/services/official_catalogue.py`. It accepts untrusted aggregate

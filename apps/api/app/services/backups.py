@@ -142,6 +142,12 @@ class BackupService:
                 db.execute(update(DiscoveryRun).where(DiscoveryRun.execution_provenance.is_not(None))
                     .values(ingestion_generation=None))
                 db.execute(update(User).values(session_version=User.session_version + 1))
+                # Accepted immutable history survives restore; freshness and an
+                # interrupted operation cannot become fresh provider authority.
+                from app.models import ConnectorCatalogueState
+                db.execute(update(ConnectorCatalogueState).values(
+                    last_confirmed_current_at=None, operation_id=None, lease_until=None,
+                    next_attempt_at=None))
                 db.execute(delete(MfaChallenge))
                 # Pending enrollment was rewrapped/authenticated above, then
                 # retired as transient security authorization. Active seeds,

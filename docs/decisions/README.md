@@ -30,7 +30,8 @@ remain understandable after the original implementation discussion is gone.
 - [0009 — Read-only technical discovery for official v1 Connectors](0009-read-only-official-connectors.md).
 
 - [0011 — Pinned offline official provenance verification](0011-offline-official-provenance.md).
-- [0012 — Official catalogue publication authorization](0012-official-catalogue-publication-authorization.md) — **Proposed**; public evidence is implemented, authorization remains blocked.
+- [0012 — Official catalogue publication authorization](0012-official-catalogue-publication-authorization.md) — **Proposed** for the stronger future-publication evidence contract.
+- [0013 — Exact sequence-one consumer bootstrap trust approval](0013-sequence-one-consumer-bootstrap-approval.md) — **Accepted**; approves the complete fixed consumer pin set and restricted historical exception.
 
 ## ADR maintenance
 

@@ -1,4 +1,4 @@
-"""Consumer policy review and explicit approval types. No active policy or loader.
+"""Consumer policy review and release-owned sequence-one approval.
 
 Parsed policy inputs and the constant proposal are review candidates. Producer
 documents, downloaded metadata, environment variables and provider observations
@@ -7,6 +7,8 @@ cannot supply approval. Structural validity never supplies publication or execut
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import hashlib
+import json
 import re
 
 from atlas_connector_sdk.contracts import ContractError, strict_json
@@ -108,8 +110,7 @@ class BootstrapTrustPolicyProposal:
 class AtlasApprovedBootstrapPolicy:
     """Explicit code-owned approval input, never parsed from producer data.
 
-    No production instance exists. A later reviewed Atlas change must approve the
-    complete proposal and supply its decision reference. This internal type is
+    Production uses only the fixed ADR 0013 approval below. This internal type is
     not a defense against arbitrary Python execution, just like verified evidence.
     """
     proposal: BootstrapTrustPolicyProposal
@@ -117,8 +118,8 @@ class AtlasApprovedBootstrapPolicy:
 
 
 BOOTSTRAP_EXCEPTION_MODE = "atlas-bootstrap-sequence1-exception-v1"
-# Versioned consumer proposal ONLY. No runtime consumer instantiates an approval.
-# These review inputs do not acquire authority from the producer configuration.
+# Original proposal, unchanged by activation. Its complete immutable fingerprint
+# is independently pinned below; producer configuration supplies no authority.
 BOOTSTRAP_POLICY_PROPOSAL = BootstrapTrustPolicyProposal(
     policy_version="atlas-bootstrap-consumer-policy-proposal-v1",
     exception_mode=BOOTSTRAP_EXCEPTION_MODE,
@@ -144,6 +145,17 @@ BOOTSTRAP_POLICY_PROPOSAL = BootstrapTrustPolicyProposal(
         selection_source="8ce0b80c74d6ceb8ce75ac7ec8693f5bba78b305",
         catalogue_build_source="91dfd86f18d0b59ff977bb1e8a5fef42c5329943"),
 )
+
+BOOTSTRAP_APPROVAL_REFERENCE = "atlas-owner-2026-10-25-adr-0013"
+APPROVED_PROPOSAL_SHA256 = "d11992962353b4141d734ae28e9dd5d38362bcaaf92029f8278502bd50703867"
+
+
+def approved_bootstrap_policy() -> AtlasApprovedBootstrapPolicy:
+    """Only release-owned activation; no caller input, environment or remote policy."""
+    fingerprint = hashlib.sha256(json.dumps(asdict(BOOTSTRAP_POLICY_PROPOSAL),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    _require(fingerprint == APPROVED_PROPOSAL_SHA256, "approved_bootstrap_pin_mismatch")
+    return AtlasApprovedBootstrapPolicy(BOOTSTRAP_POLICY_PROPOSAL, BOOTSTRAP_APPROVAL_REFERENCE)
 
 
 def _require(condition: bool, code: str) -> None:

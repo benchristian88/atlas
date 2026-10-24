@@ -29,7 +29,7 @@ CHANNEL_TAG = "catalogue-v1"
 CHANNEL_RELEASE_ID = 416561696
 BOOTSTRAP_SEQUENCE = 1
 BOOTSTRAP_DIGEST = "55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd"
-POLICY = "atlas-catalogue-channel-v1-blocked"
+POLICY = "atlas-bootstrap-consumer-policy-proposal-v1"
 METADATA_LIMIT = 256 * 1024
 EVIDENCE_LIMIT = MAX_BUNDLE_BYTES  # total response, not per unbounded result
 REFRESH_SECONDS = 90
@@ -214,6 +214,20 @@ class GithubReader:
         except UnicodeError:
             raise SourceError("invalid_source_metadata") from None
 
+    async def selection_metadata(self, path: str):
+        """Fixed official selection transport endpoints; never provider URLs/refs."""
+        require(type(path) is str and re.fullmatch(
+            r"/(?:git/ref/(?:heads/catalogue-current|tags/(?:catalogue-bootstrap-root|catalogue-000001))"
+            r"|git/(?:commits|trees|tags)/[a-f0-9]{40}"
+            r"|contents/current(?:\.sigstore)?\.json\?ref=[a-f0-9]{40}"
+            r"|releases/421426993)", path) is not None, "invalid_source_destination")
+        maximum = 2 * MAX_BUNDLE_BYTES if path.startswith("/contents/") else METADATA_LIMIT
+        raw = await self.get(BASE + path, maximum, reject_pagination=True)
+        try:
+            return decode(raw.decode("utf-8"))
+        except UnicodeError:
+            raise SourceError("invalid_source_metadata") from None
+
     async def repository(self):
         value = decode(await self.get(BASE, METADATA_LIMIT))
         require(isinstance(value, dict) and value.get("id") == REPOSITORY_ID
@@ -232,21 +246,22 @@ class GithubReader:
                 "invalid_channel_identity")
         return value
 
-    def asset(self, release, name):
+    def asset(self, release, name, *, tag=CHANNEL_TAG, maximum=MAX_CATALOGUE_BYTES):
         matches = [a for a in release["assets"] if isinstance(a, dict) and a.get("name") == name]
         require(len(matches) == 1, "missing_catalogue_asset" if not matches else "ambiguous_catalogue_asset")
         asset = matches[0]
         identifier = asset.get("id")
         require(type(identifier) is int and 0 < identifier <= 2**53 - 1
                 and asset.get("state") == "uploaded"
-                and type(asset.get("size")) is int and 0 < asset["size"] <= MAX_CATALOGUE_BYTES
+                and type(asset.get("size")) is int and 0 < asset["size"] <= maximum
                 and asset.get("url") == f"{BASE}/releases/assets/{identifier}"
-                and asset.get("browser_download_url") == f"https://github.com/{REPOSITORY}/releases/download/{CHANNEL_TAG}/{name}",
+                and asset.get("browser_download_url") == f"https://github.com/{REPOSITORY}/releases/download/{tag}/{name}"
+                and type(asset.get("digest")) is str and re.fullmatch(r"sha256:[a-f0-9]{64}", asset["digest"]),
                 "invalid_asset_identity")
         return asset
 
-    async def download(self, asset):
-        raw = await self.get(f"{BASE}/releases/assets/{asset['id']}", MAX_CATALOGUE_BYTES, asset=True)
+    async def download(self, asset, *, maximum=MAX_CATALOGUE_BYTES):
+        raw = await self.get(f"{BASE}/releases/assets/{asset['id']}", maximum, asset=True)
         require(len(raw) == asset["size"], "truncated_source_response")
         require(asset.get("digest") == "sha256:" + hashlib.sha256(raw).hexdigest(), "asset_digest_mismatch")
         return raw
@@ -285,7 +300,7 @@ class AuthenticatedCandidate:
     confirmed_at: datetime
 
 
-async def retrieve_candidate(progress: dict) -> AuthenticatedCandidate:
+async def retrieve_legacy_candidate(progress: dict) -> AuthenticatedCandidate:
     async with GithubReader() as reader:
         await reader.repository()
         release = await reader.resolve_channel()
@@ -319,7 +334,7 @@ async def retrieve_candidate(progress: dict) -> AuthenticatedCandidate:
         }, confirmed)
 
 
-def require_publication(candidate: AuthenticatedCandidate):
+def require_legacy_publication(candidate: AuthenticatedCandidate):
     """No override flag: this channel has no approved advancing pointer contract.
 
     Even immutable=true would freeze the alias. A reviewed publication adapter,
@@ -327,3 +342,16 @@ def require_publication(candidate: AuthenticatedCandidate):
     """
     require(candidate.publication.get("immutable") is True, "publication_not_immutable")
     raise SourceError("current_channel_policy_unavailable")
+
+
+async def retrieve_candidate(progress: dict, *, operation_id=None):
+    from app.services.official_catalogue_ingestion import retrieve_bootstrap
+    return await retrieve_bootstrap(progress, operation_id=operation_id)
+
+
+def require_publication(candidate, *, operation_id=None):
+    from app.services.official_catalogue_ingestion import VerifiedBootstrapCandidate, require_authenticated
+    if type(candidate) is VerifiedBootstrapCandidate:
+        return require_authenticated(candidate, operation_id=operation_id)
+    # Legacy dictionaries, even containing valid partial proofs, cannot promote.
+    require_legacy_publication(candidate)

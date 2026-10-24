@@ -92,6 +92,8 @@ Neither present main HEAD nor the activation receipt supplies signing identity.
 `test_official_selection_provenance.py` requires real GitHub CLI 2.102.1 and
 Atlas's frozen Public Good roots. Separate structured-output policy tests are
 explicitly labelled and cannot substitute for genuine verification. Ordinary
-tests need no network or credentials. These fixtures prove selection provenance
-only: consumer trust approval, provider authorization, history acceptance and
-remote installation remain unavailable. Proxmox `0.2.0` remains non-installable.
+tests need no network or credentials. These fixtures prove selection provenance only. Phase 3 now combines them with
+synthetic HTTP and disposable PostgreSQL to test complete acceptance using the
+release-owned ADR 0013 policy. Separate opt-in live acceptance uses the actual
+public producer. Remote installation remains unavailable; Proxmox `0.2.0` remains
+non-installable. No original fixture bytes were changed.

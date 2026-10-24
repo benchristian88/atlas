@@ -237,7 +237,7 @@ def test_failed_refresh_preserves_last_known_good_and_freshness(db, http_fixture
     store(db)
     original = consumer.status(db)
     if kind == "transport":
-        async def fail(_):
+        async def fail(_, **kwargs):
             raise OSError("secret signed download URL must never escape")
         monkeypatch.setattr(source, "retrieve_candidate", fail)
     elif kind == "crypto":
@@ -253,7 +253,7 @@ def test_failed_refresh_preserves_last_known_good_and_freshness(db, http_fixture
 
 
 def test_lost_lease_during_network_cannot_finish(db, monkeypatch):
-    async def lose(_):
+    async def lose(_, **kwargs):
         s = db.get(State, 1)
         s.operation_id = uuid.uuid4()
         db.commit()
@@ -267,7 +267,7 @@ def test_lost_lease_during_network_cannot_finish(db, monkeypatch):
 
 def test_restore_marker_during_fetch_blocks_promotion(db, monkeypatch):
     from app.services.backup_runtime import set_maintenance
-    async def restore(_):
+    async def restore(_, **kwargs):
         set_maintenance(str(uuid.uuid4()), "draining")
         raise source.SourceError("source_timeout")
     monkeypatch.setattr(source, "retrieve_candidate", restore)
@@ -445,7 +445,7 @@ def test_higher_sequence_cannot_reuse_genuine_old_attestation(db, http_fixture):
 
 
 def test_rate_limit_delay_persists_across_sessions(db, monkeypatch):
-    async def limited(_):
+    async def limited(_, **kwargs):
         raise source.SourceError("source_rate_limited", retry_after=3600)
     monkeypatch.setattr(source, "retrieve_candidate", limited)
     start = source.utcnow()
