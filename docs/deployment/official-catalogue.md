@@ -8,6 +8,13 @@ advancing current pointer. This is a delivered foundation, not full milestone
 acceptance. No remote package download, installation, activation, automatic update
 or new UI is enabled. Bundled and installed connectors remain independent.
 
+[Selection Phase 1](../architecture/integrations/official-catalogue-selection.md)
+now strictly parses and genuinely verifies the published historical selection
+offline, using a distinct signature profile. Its consumer trust-policy schema
+produces review candidates only; final Atlas security approval and provider
+authorization are pending. This internal work does not change this B1.3 adapter,
+its endpoints, publication gates or trusted PostgreSQL state.
+
 ## Fixed source and publication boundary
 
 The consumer's release-owned policy is in `catalogue_source.py`; no browser or

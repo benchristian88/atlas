@@ -55,3 +55,43 @@ installation/execution. No live GitHub access is needed by ordinary tests.
 
 Both GitHub releases remained mutable when captured. These attestations prove
 workflow provenance, not immutable release history, asset IDs or release approval.
+
+## Phase 1 frozen genuine selection
+
+Captured anonymously over HTTPS on 25 October 2026 (Pacific/Auckland) from the
+exact historical root `a1597730687be993d766ddb465a0d3362aef2d02`:
+
+- [current.json](https://raw.githubusercontent.com/benchristian88/atlas-connectors/a1597730687be993d766ddb465a0d3362aef2d02/current.json)
+- [current.sigstore.json](https://raw.githubusercontent.com/benchristian88/atlas-connectors/a1597730687be993d766ddb465a0d3362aef2d02/current.sigstore.json)
+
+Both fixtures retain exact original bytes, including formatting and final newline;
+the bundle was not reserialized. The pointer's independently supplied SHA-256 was
+checked **before** creating fixtures. The actual pinned Atlas verifier then
+authenticated the pointer/bundle before they were copied into this directory.
+
+| Fixture | Bytes | SHA-256 |
+| --- | ---: | --- |
+| current.json | 251 | a275f63d0ac818a193826478328ee324be62353addc5c97a2ed0a28d217b5372 |
+| current.sigstore.json | 11,781 | 5ccab9abdc31fbae55787c102e4f2eb305f7d37966d9dacb02d0c5cb8f8cf522 |
+
+The pointer selects release `421426993`, tag `catalogue-000001`, catalogue asset
+`667867351` and the unchanged catalogue digest above. No new catalogue or package
+bytes were generated or acquired. Inspection found only public identities,
+certificates, signatures, payload and transparency evidence; no credentials,
+inventory or executable content.
+
+Genuine offline verification authenticates workflow
+`.github/workflows/catalogue-publish.yml@refs/heads/main`, signing source
+`8ce0b80c74d6ceb8ce75ac7ec8693f5bba78b305`, invocation
+`https://github.com/benchristian88/atlas-connectors/actions/runs/39896288128/attempts/1`
+and Rekor witness `2026-10-23T03:41:42Z`. This signing source differs from the
+original catalogue build source `91dfd86f18d0b59ff977bb1e8a5fef42c5329943` and
+producer activation revision `51f8693fbcca1e4c6c9615662bca368839ea0757`.
+Neither present main HEAD nor the activation receipt supplies signing identity.
+
+`test_official_selection_provenance.py` requires real GitHub CLI 2.102.1 and
+Atlas's frozen Public Good roots. Separate structured-output policy tests are
+explicitly labelled and cannot substitute for genuine verification. Ordinary
+tests need no network or credentials. These fixtures prove selection provenance
+only: consumer trust approval, provider authorization, history acceptance and
+remote installation remain unavailable. Proxmox `0.2.0` remains non-installable.

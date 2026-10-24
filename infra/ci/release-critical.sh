@@ -6,6 +6,8 @@ python -m pytest tests/test_release_foundation.py tests/test_docker_ingress.py \
   tests/test_release_distribution.py tests/test_updates.py \
   tests/test_integration_runtime.py tests/test_runtime_packaging.py \
   tests/test_official_provenance.py tests/test_attestation_distribution.py \
+  tests/test_official_catalogue_selection.py tests/test_official_selection_provenance.py \
+  tests/test_catalogue_trust.py \
   tests/test_catalogue_source.py \
   tests/test_connector_packages.py tests/test_integration_catalogue_api.py \
   tests/test_i2_runtime.py tests/test_i3_runtime.py tests/test_i4a_runtime.py tests/test_connector_bootstrap.py \
