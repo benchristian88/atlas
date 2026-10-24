@@ -123,6 +123,9 @@ def test_api_accept_unchanged_durable_evidence_and_no_execution(db, official_htt
     db.add(principal.user); db.commit()
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_principal] = lambda: principal
+    successful_refresh_audits = select(func.count()).select_from(AuditEvent).where(
+        AuditEvent.event_type == "connector_catalogue.refreshed", AuditEvent.success.is_(True))
+    audit_count_before = db.scalar(successful_refresh_audits)
     with TestClient(app) as client:
         result = client.post("/api/integration-catalogue/refresh", json={}).json()
         assert result["result"] == "accepted", result
@@ -143,7 +146,7 @@ def test_api_accept_unchanged_durable_evidence_and_no_execution(db, official_htt
         assert revision.original_bytes == RAW and revision.publication_evidence["pointer_sha256"] == PINS.pointer_sha256
         assert revision.verification_evidence["selection"]["profile"] == "official-catalogue-selection"
         assert db.scalar(select(func.count()).select_from(InstalledConnectorPackage)) == 0
-        assert db.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.success.is_(True))) == 2
+        assert db.scalar(successful_refresh_audits) == audit_count_before + 2
         with Session(bind=db.get_bind(), join_transaction_mode="create_savepoint") as reopened:
             assert consumer.status(reopened)["content_digest"] == DIGEST
 
