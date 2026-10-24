@@ -4,29 +4,40 @@ B1.3 provides bounded retrieval, genuine B1.2 verification, PostgreSQL trust
 storage, sequence/history checks and global manual-refresh APIs. **Production
 promotion remains blocked:** the legacy adapter still targets `catalogue-v1`,
 and has no approved adapter for the producer's separate immutable publication
-and advancing selection. Complete authorization also lacks reviewed hidden
-ruleset evidence and consumer trust approval. This is a delivered foundation,
+and advancing selection. Complete consumer pin approval and immutable-catalogue
+acceptance remain pending, including the limited bootstrap policy. This is a delivered foundation,
 not full milestone acceptance. No remote package download, installation, activation, automatic update
 or new UI is enabled. Bundled and installed connectors remain independent.
 
-[Selection Phases 1/2A](../architecture/integrations/official-catalogue-selection.md)
+[Selection Phases 1/2A/2B](../architecture/integrations/official-catalogue-selection.md)
 components now strictly parse and genuinely verify the published historical selection
 offline, using a distinct signature profile, and evaluate independent public run,
 actor, workflow, source CI, environment, App and visible ruleset observations.
-Its consumer trust-policy schema produces review candidates only; full provider
-authorization and final Atlas security approval are pending. This internal work
+The separate restricted bootstrap evaluator requires an explicit Atlas approval
+input; the supplied versioned consumer proposal remains inactive. This internal work
 does not change this B1.3 adapter, its endpoints, publication gates or trusted
 PostgreSQL state.
 
 Anonymous ruleset reads withhold `bypass_actors`; omission is unavailable evidence,
 never an empty bypass list. Public observation results always retain authorization
 blockers. [Proposed ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md)
-evaluates preserved signed producer evidence, privileged consumer verification and
-continued rejection. Its recommended archive amendment needs separate security
-approval and producer work: current preflight artifacts have one-day retention and
-are absent from the four-asset immutable sequence-one release. Operators cannot
-enable this with credentials, environment variables or a refresh flag. No active
-authorization or catalogue acceptance is delivered by Phase 2A.
+records the owner's 25 October 2026 approval of a narrowly pinned historical
+exception for those missing arrays only. It does not approve the complete consumer
+pin set. Phase 2B implements that evaluator with a distinct immutable result;
+there is no production approval instance or refresh integration. Any other public
+failure or contradictory returned array still rejects. The future signed-evidence
+archive amendment needs separate review and producer work: preflight artifacts
+have one-day retention and are absent from the four-asset immutable sequence-one
+release. Future sequences cannot use the bootstrap exception.
+
+Operators cannot enable this with credentials, environment variables or a refresh
+flag. Final Atlas approval of the complete proposal and the separate acceptance
+implementation/review are still required. That phase must independently verify
+immutable release/asset identity, original bytes and both signing profiles,
+authenticated root/ref transport, original build source, live currentness and
+trusted history. No catalogue promotion or remote package becomes eligible from
+this evaluator. Historical Proxmox 0.2.0 metadata retains its signed identity;
+its mutable package remains non-installable. No runtime or bundled connector changes.
 
 ## Fixed source and publication boundary
 

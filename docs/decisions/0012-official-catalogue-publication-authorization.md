@@ -17,14 +17,16 @@ Phase 1 authenticates `current.json` under its distinct selection profile.
 Phase 2A adds an internal evaluator of independently retrieved **public** GitHub
 observations against that evidence and explicitly supplied review expectations.
 Its frozen `VerifiedPublicObservations` always retains unresolved authorization
-blockers. There is no approved policy instance, authorization function, new route,
-database change or path to promotion. See the
+blockers. Phase 2B adds the restricted authorization evaluator described below;
+there is still no approved policy instance, new route, database change or path to
+promotion. See the
 [component contract](../architecture/integrations/official-catalogue-selection.md).
 
 The boundaries remain: structural pointer validity; cryptographic authenticity;
 verified public observations; complete reviewed publication authorization; trusted
-catalogue acceptance; executable package eligibility. Only the first three have
-components here. A review-schema candidate is never an active trust policy.
+catalogue acceptance; executable package eligibility. The restricted historical
+authorization component does not merge these boundaries. A review-schema
+candidate is never an active trust policy.
 
 ## Proposed assurance and consumer authority
 
@@ -128,7 +130,7 @@ authorization blockers retained. These observations are corroboration, not
 historical authorization. Normal CI tests use mocked HTTP and genuine offline
 selection fixtures, never live provider calls.
 
-## Options and recommendation — not approved
+## Options and recommendation — historical analysis, future contract not approved
 
 | Option | Benefit | Limit / requirement |
 | --- | --- | --- |
@@ -136,8 +138,10 @@ selection fixtures, never live provider calls.
 | B: authenticated consumer observation | Retrieves full present-day bypass data independently | Requires write-level administrative access to a producer-owned repository; distributing such credentials to self-hosted instances creates an unacceptable shared credential/administration boundary for the default deployment |
 | C: continue rejecting incomplete evidence | Preserves all accepted trust boundaries with no new privilege | Catalogue acceptance stays unavailable until an approved, retrievable provider-evidence contract exists |
 
-Recommend **A as the smallest future contract amendment, with C remaining the
-current behavior**. Do not implement A through a permissive receipt parser,
+The Phase 2A recommendation was **A as the smallest future contract amendment,
+with C remaining the behavior at that phase**. The limited sequence-one decision
+below changes only that historical case; future sequences still require complete
+appropriately authenticated ruleset evidence. Do not implement A through a permissive receipt parser,
 unsigned snapshot, new consumer token fallback or this proposed ADR. B could
 only be a separate explicitly reviewed administrative deployment design, not
 an automatic fallback; Read-only permissions would not solve the hidden field.
@@ -163,9 +167,11 @@ Sequence one's immutable release cannot be amended. A separate reviewed immutabl
 evidence release or consumer-distributed archive could preserve an already
 captured genuine pair, with exact digests and context verified independently.
 If that evidence was lost, current observations or a new retrospective signature
-cannot recreate historical observations. Historical acceptance remains blocked
-pending an explicit security decision; do not rewrite catalogue bytes/signatures
-or manufacture a replacement preflight. No producer changes are made here.
+cannot recreate historical observations. At Phase 2A historical acceptance remained
+blocked pending an explicit security decision. The Phase 2B decision below records
+that limited decision without claiming recovery of any evidence. Do not rewrite
+catalogue bytes/signatures or manufacture a replacement preflight. No producer
+changes are made here.
 
 Archived evidence could support **publication-time** verification if its original
 signature, full bypass lists, S, exact policy/context and time bounds are verified.
@@ -178,6 +184,75 @@ temporary protection disablement, later environment/App changes, credential
 compromise or withholding of a newer selection. A requirement for full **current**
 bypass state would still block A; reviewers must explicitly decide that tradeoff.
 
+## Limited historical exception decision — owner approved 25 October 2026
+
+The project owner approved a deliberate reduction in assurance for the **original
+signed sequence-one publication only**, named
+`atlas-bootstrap-sequence1-exception-v1`. The human authorization basis remains
+`single-maintainer-v1`; this is no general second authorization model. The only
+waived requirement is independently recoverable historical `bypass_actors` data
+for rulesets **25618213, 25618809, 25628137, 25618684, 25618901**. Omitted arrays
+remain unavailable evidence. Any returned contradictory array, visible protection
+conflict or other public-evidence failure rejects without reclassification.
+No signed preflight pair or historical privileged observation was recovered.
+
+The exception is bounded by these immutable historical identity pins:
+
+| Identity | Exact scope |
+| --- | --- |
+| Sequence | `1` |
+| Pointer SHA-256 | `a275f63d0ac818a193826478328ee324be62353addc5c97a2ed0a28d217b5372` |
+| Catalogue SHA-256 | `55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd` |
+| Release tag / ID / catalogue asset ID | `catalogue-000001` / `421426993` / `667867351` |
+| Bootstrap root | `a1597730687be993d766ddb465a0d3362aef2d02` |
+| Original selection run / attempt | `39896288128` / `1` |
+| Selection signing source | `8ce0b80c74d6ceb8ce75ac7ec8693f5bba78b305` |
+| Original catalogue build source | `91dfd86f18d0b59ff977bb1e8a5fef42c5329943` |
+| Reviewed producer activation source | `51f8693fbcca1e4c6c9615662bca368839ea0757` |
+
+The activation dispatch is not the signed selection invocation. Another run,
+recovery dispatch, source, root, regenerated catalogue, substituted release,
+changed sequence-one pointer or sequence two and above cannot use this exception.
+Referencing sequence one from a later publication grants no authority.
+
+**Overall ADR status remains Proposed.** Approval of this limited exception does
+not approve the complete Atlas-owned authority pins. The reviewable
+`atlas-bootstrap-consumer-policy-proposal-v1` in
+[`catalogue_trust.py`](../../apps/api/app/services/catalogue_trust.py) includes the
+maintainer, repository/owner, both environments, Publisher App/slug/bot, workflow,
+five rulesets, historical identities and existing release-owned verifier/roots.
+Those are review candidates, independently requiring explicit Atlas approval as a
+complete set. Producer configuration only corroborates them. No production
+approval instance, loader, environment override or remote configuration exists.
+
+Phase 2B implements an evaluator requiring that explicit approval input, original
+structural pointer, genuine Phase 1 provenance/digest/original invocation and all
+Phase 2A public checks. Its distinct frozen bootstrap-exception result retains
+the limitation and outstanding checks; it never clears the Phase 2A blockers.
+Tests use an explicitly labelled test-only approval and synthetic HTTP evidence,
+with genuine offline signatures. They establish no live historical authorization.
+
+This decision does not prove uninterrupted historical settings, complete current
+hidden bypass state, historical App/token permissions, immutable release state,
+authenticated root/ref transport, safe currentness, trusted history or rollback
+protection. Separate acceptance must establish the exact immutable release and
+asset IDs, original catalogue/selection/bundles, both genuine signing profiles,
+original catalogue build source, authenticated transport, current-pointer reread
+and durable transactional history. The evaluator compares a candidate root with
+its pin; it does not authenticate that transport. No trusted revision is promoted.
+
+Historical catalogue metadata may contain active Proxmox 0.2.0. Its mutable
+package remains ineligible for remote installation. Catalogue authorization is
+neither package qualification nor explicit execution authority. No Manifest,
+historical publication, bundled connector, package store or runtime is changed.
+
+Future sequences retain the default requirement for complete appropriately
+authenticated ruleset evidence. The proposed durable solution remains publicly
+recoverable, context-bound signed evidence from the producer's existing isolated
+S4 verifier, independently pinned by Atlas. The archival contract and historical
+evaluation rules above still require review and later producer work. No consumer
+administrative credentials or new verifier are introduced by this exception.
+
 ## Knowledge, executable eligibility and restore
 
 Proposed historical sequence-one acceptance would accept authenticated catalogue
@@ -187,7 +262,8 @@ review generic entry eligibility against immutable package release/asset identit
 source/tag/provenance, runtime/SDK compatibility, current accepted catalogue and
 explicit installation authority. No Proxmox-specific bypass, Manifest rewrite,
 bootstrap installation change or executable-store change is permitted here.
-Implementing that distinction remains later work, rather than a Phase 2A feature.
+Implementing acceptance and package eligibility remains later work, rather than
+a Phase 2A/2B feature.
 
 Future acceptance must retain original bytes/evidence, consumer policy identity,
 contiguous predecessor/high-water history and sticky withdrawals atomically.
@@ -202,11 +278,14 @@ rebootstrap or deletion of trusted state.
 
 ## Required human decisions and remaining risks
 
-Reviewers must approve the single-maintainer assurance level and actual Atlas
+Reviewers must still approve the complete Atlas consumer policy and actual
 authority/bootstrap/S pins; decide whether authenticated producer observation may
 satisfy hidden publication-time fields; approve archive availability and historical
 freshness/binding rules; resolve sequence-one evidence availability; and separately
-review acceptance/history/restore and package eligibility before activation.
+review acceptance/history/restore and package eligibility before activation. The
+limited owner decision above resolves the missing historical bypass evidence
+decision only for the pinned original bootstrap; it does not resolve these other
+approvals or recover the missing evidence.
 If these decisions change ADR 0006/0011 boundaries, follow the supersession process.
 Acceptance of this ADR would still not demonstrate implementation or live acceptance.
 
@@ -215,5 +294,5 @@ trust infrastructure, accepted S/action/dependency, privileged Verifier key or
 Publisher credential remains relevant. Isolation and signed observations reduce
 specific risks but cannot prove uninterrupted settings, human independence or
 correctness of trusted code. Immutable publication protects retained bytes, not
-all surrounding provider state. Phase 2A preserves rejection until these explicit
-decisions and later implementation/acceptance are complete.
+all surrounding provider state. Production acceptance preserves rejection until
+the remaining decisions and later implementation/acceptance are complete.

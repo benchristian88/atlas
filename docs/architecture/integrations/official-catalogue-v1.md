@@ -7,11 +7,14 @@ Genuine live verification succeeds, but promotion remains closed pending the
 [publication prerequisites](b1-3-publication-plan.md). Statements below about no
 I/O, migration or API authority describe this B1.1 parser itself.
 
-Separate [selection Phases 1/2A](official-catalogue-selection.md) now authenticate
-the historical pointer and evaluate public provider observations. Their results
-remain internal partial evidence; hidden ruleset bypass evidence and consumer
-trust approval still block authorization. They do not change this parser or B1.3
-promotion. The proposed policy is recorded in [ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md).
+Separate [selection Phases 1/2A/2B](official-catalogue-selection.md) authenticate
+the historical pointer, evaluate public observations and implement a restricted
+original-sequence-one bootstrap authorization exception. Its policy proposal is
+inactive pending complete consumer pin approval. The exception tolerates only
+missing historical bypass arrays; it supplies no immutable selection, trusted
+revision or executable eligibility. These components do not change this parser
+or B1.3 promotion. The limited owner decision and remaining approvals are recorded
+in [Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md).
 
 B1.1 implements the offline `parse_official_catalogue(bytes)` service in
 `apps/api/app/services/official_catalogue.py`. It accepts untrusted aggregate
