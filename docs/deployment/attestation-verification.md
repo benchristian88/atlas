@@ -6,6 +6,14 @@ packages, persist trusted state, install packages or expose new API/UI routes.
 [ADR 0011](../decisions/0011-offline-official-provenance.md) refines the existing
 supply-chain boundary. The SDK and B1.1 structural parser are unchanged.
 
+The separate [selection Phase 1 component](../architecture/integrations/official-catalogue-selection.md)
+adds `verify_selection(original_bytes, local_bundle_bytes)` with profile
+`official-catalogue-selection`, fixed `catalogue-publish.yml@refs/heads/main`
+and subject `current.json`. It reuses this pinned offline infrastructure, requires
+an exact first-attempt invocation and preserves the catalogue/package profiles.
+Its strict pointer parser and consumer-policy review schema grant no publication
+authorization or acceptance; B1.3 rejection remains active.
+
 ## Interface and authority
 
 Use the existing import boundary:

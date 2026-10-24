@@ -74,6 +74,7 @@ class ProvenanceError(ConnectorPackageError):
 class TrustProfile(StrEnum):
     CATALOGUE = "official-catalogue"
     PACKAGE = "official-package"
+    SELECTION = "official-catalogue-selection"
 
 
 @dataclass(frozen=True)
@@ -273,8 +274,13 @@ def _evidence(raw: bytes, *, profile: TrustProfile, digest: str, name: str,
                  and predicate["runDetails"]["builder"]["id"] == identity,
                  ProvenanceFailure.UNVERIFIABLE)
         invocation = certificate["runInvocationURI"]
+        # Selection authenticates only first-attempt run identity. Provider
+        # observations and publication authorization remain separate later gates.
+        invocation_pattern = (r"/actions/runs/[1-9][0-9]{0,19}/attempts/1"
+                              if profile == TrustProfile.SELECTION
+                              else r"/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,8}")
         _require(isinstance(invocation, str) and re.fullmatch(
-            re.escape(REPOSITORY_URI) + r"/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,8}", invocation)
+            re.escape(REPOSITORY_URI) + invocation_pattern, invocation)
             is not None and predicate["runDetails"]["metadata"]["invocationId"] == invocation,
             ProvenanceFailure.UNVERIFIABLE)
         stamps = verified["verifiedTimestamps"]
@@ -297,6 +303,15 @@ def _evidence(raw: bytes, *, profile: TrustProfile, digest: str, name: str,
 
 class GithubAttestationVerifier:
     """Fixed trusted policy; callers supply bytes and expected artifact context."""
+
+    def verify_selection(self, artifact: bytes, bundle: bytes) -> VerifiedProvenance:
+        # No caller-selected subject, commit, workflow, root or authority policy.
+        # Structural validity is deliberately independent of cryptographic proof.
+        from app.services.official_catalogue_selection import MAX_POINTER_BYTES
+
+        return self._verify(artifact, bundle, TrustProfile.SELECTION, "current.json",
+                            "refs/heads/main", ".github/workflows/catalogue-publish.yml",
+                            None, None, MAX_POINTER_BYTES)
 
     def verify_catalogue(self, artifact: bytes, bundle: bytes, *,
                          subject_name: str = "catalogue.json") -> VerifiedProvenance:
