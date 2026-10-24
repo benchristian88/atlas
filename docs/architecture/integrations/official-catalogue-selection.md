@@ -1,8 +1,9 @@
-# Official catalogue selection — Phases 1 and 2A
+# Official catalogue selection — Phases 1, 2A and 2B
 
 Implemented internal components: strict pointer parsing, a separate offline
 selection provenance profile, consumer-policy **review schema** and independent
-public GitHub observation evaluation. These extend
+public GitHub observation evaluation, plus a restricted bootstrap-exception
+authorization evaluator requiring explicit consumer approval. These extend
 B1.1/B1.2 without connecting to B1.3 acceptance, persistence, refresh APIs,
 installation, runtime or UI. PostgreSQL models and migrations are unchanged.
 
@@ -78,8 +79,9 @@ the later producer activation revision.
 `parse_catalogue_trust_policy_candidate(raw, expected=None)` validates bounded
 (1–8,192 byte), strict UTF-8/SDK JSON review input. It returns only a frozen,
 slotted `CatalogueTrustPolicyReviewCandidate` with frozen nested values.
-There is **no approved policy instance, default identity configuration, policy
-loader, activation flag, authorization function or production trust-policy consumer**.
+There is **no approved policy instance, active default identity configuration,
+policy loader, activation flag or production trust-policy consumer**. Phase 2B's
+separate proposal and explicit approval input are described below.
 No environment variable, downloaded pointer/policy, release description or
 provider response configures Atlas trust.
 
@@ -117,8 +119,9 @@ evidence also fails the existing catalogue-profile promotion check. No accepted
 catalogue revision, package eligibility or executable authority is created.
 The legacy remote Proxmox `0.2.0` package remains non-installable.
 
-Phase 2A public observations are described below. Complete publication
-authorization, immutable release selection and acceptance remain deferred.
+Phase 2A public observations and Phase 2B's restricted authorization are described
+below. General publication authorization, immutable selection and acceptance
+remain deferred.
 Anonymous ruleset responses omit bypass actors: missing evidence must never mean
 an empty bypass list. No privileged GitHub credentials or implicit authentication
 fallback may be added to work around missing evidence.
@@ -193,8 +196,78 @@ public evaluation cannot open B1.3's gates, approve consumer trust, renew catalo
 currentness, promote catalogue data or make Proxmox 0.2.0 installable.
 
 [Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md)
-records the actual one-day producer preflight retention and missing immutable
-archive/binding contract. It recommends preserved S4-authenticated historical
-ruleset evidence as a future amendment while continuing rejection today. That
-recommendation is not approved or implemented. Current public settings cannot
-prove uninterrupted historical settings or detect hidden present-day bypass changes.
+records the actual one-day producer preflight retention, missing immutable
+archive/binding contract and the limited owner-approved historical exception.
+The future preserved S4 evidence contract is not approved or implemented. Current
+public settings cannot prove uninterrupted historical settings or detect hidden
+present-day bypass changes.
+
+## Phase 2B restricted bootstrap authorization
+
+`catalogue_bootstrap_authorization.evaluate_bootstrap_exception(selection,
+provenance, root_commit=..., policy=..., reader=...)` is an internal evaluator,
+disconnected from refresh, persistence and installation. It accepts only a strict
+`StructurallyValidSelection` and genuine Phase 1 `VerifiedProvenance`. It reparses
+the original pointer bytes, compares the authenticated digest and original
+first-attempt signing invocation, and requires the exact historical identity in
+[ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md#limited-historical-exception-decision--owner-approved-25-october-2026).
+Root input is compared with the pinned root; authenticating its transport and the
+catalogue build profile/source remains a separate acceptance requirement.
+
+The small trust-model extension in `catalogue_trust.py` adds frozen identity,
+proposal and approval types. `BOOTSTRAP_POLICY_PROPOSAL`, version
+`atlas-bootstrap-consumer-policy-proposal-v1`, contains **review candidates**:
+
+| Authority | Proposed consumer pin |
+| --- | --- |
+| Human maintainer / owner | `93822871` / `93822871` (separately explicit) |
+| Repository | `1414494920` |
+| Publication / package environments | `24999137498` / `24617213627` |
+| Publisher App / slug / bot-user | `5422372` / `atlas-catalogue-publisher` / `346232650` |
+| Publication workflow | `392548804` |
+| Main / history / bootstrap lock rulesets | `25618213` / `25618809` / `25628137` |
+| Current / publication-tag rulesets | `25618684` / `25618901` |
+| Verifier / root | Existing independently pinned CLI `2.102.1` and `sigstore-public-good-2026-10-21`; exact digest retained in the proposal and checked against Atlas's distribution lock |
+
+The complete historical identity and reviewed activation source also belong to
+that proposal. The existing Phase 1 review parser is unchanged. Its signing/root
+checks are reapplied; no downloaded producer policy is read. Shared
+`RulesetReviewIdentities` now lives in the trust model and remains available from
+the Phase 2A module for compatibility.
+
+An explicit `AtlasApprovedBootstrapPolicy(proposal, approval_reference)` must be
+supplied by reviewed Atlas code **after complete pin-set approval**. No production
+instance or activation function exists. Approval is an internal typed boundary,
+like verified provenance, not protection against arbitrary Python execution.
+Review/schema validity, signatures and public observations cannot substitute for
+approval. The evaluator rejects any alteration to the versioned proposal; future
+pin changes require deliberate Atlas code review. There are no environment,
+remote configuration or root-update paths.
+
+All public observations are obtained through the **unchanged** Phase 2A evaluator
+and bounded anonymous `GithubReader`. Every actor/workflow/repository/source-CI,
+environment, App, visible ruleset and transport failure propagates unchanged.
+The named `atlas-bootstrap-sequence1-exception-v1` only tolerates omitted
+historical bypass arrays for these five exact rulesets. Present arrays must still
+match the no-bypass or Publisher-only protections. Public observations retain
+their original two authorization blockers, even within a successful exception
+result; their meaning is not reclassified.
+
+`BootstrapExceptionAuthorization` is a distinct frozen, slotted result retaining
+policy/exception versions, approval reference, exact identity, original structural
+selection, verified public observations including original signed provenance,
+the IDs with withheld arrays, the historical proof limitation and required next
+checks. It cannot serve as general later-publication authorization,
+`AuthenticatedCandidate`, trusted revision or package `VerificationEvidence`.
+Sequence two and above, another run/recovery/source, a substituted release or
+changed original pointer fail. There is no future-publication fallback; complete
+appropriately authenticated ruleset evidence remains required for that work.
+
+Acceptance still must verify actual release immutability and exact IDs, original
+catalogue/selection/bundle bytes, both genuine Sigstore profiles and catalogue
+build source, authenticated root/ref transport, safe live current-pointer
+confirmation, contiguous trusted history/rollback/restore checks and transactional
+persistence. None is inferred from this result. Package eligibility and explicit
+installation authority are further independent gates; mutable Proxmox 0.2.0 stays
+ineligible. Tests combine genuine offline selection signatures with **synthetic**
+HTTP responses and test-only approval, never genuine online authorization.

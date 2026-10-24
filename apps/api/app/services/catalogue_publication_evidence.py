@@ -13,7 +13,9 @@ import re
 import time
 
 from app.services import catalogue_source as source
-from app.services.catalogue_trust import CatalogueTrustPolicyReviewCandidate, parse_catalogue_trust_policy_candidate
+from app.services.catalogue_trust import (
+    CatalogueTrustPolicyReviewCandidate, RulesetReviewIdentities, parse_catalogue_trust_policy_candidate,
+)
 from app.services.official_catalogue import MAX_INTEGER
 from app.services.official_provenance import (
     REPOSITORY_URI, TrustProfile, VerifiedProvenance,
@@ -22,18 +24,6 @@ from app.services.official_provenance import (
 WORKFLOW = ".github/workflows/catalogue-publish.yml"
 CHECK_APP_ID = 15368
 RULESET_LIST = "/rulesets?includes_parents=true&per_page=6&page=1"
-
-
-@dataclass(frozen=True, slots=True)
-class RulesetReviewIdentities:
-    main: int
-    history_lock: int
-    bootstrap_lock: int
-    catalogue_current: int
-    publication_tags: int
-
-    def named(self) -> tuple[tuple[str, int], ...]:
-        return tuple(("atlas-" + name.replace("_", "-"), value) for name, value in asdict(self).items())
 
 
 @dataclass(frozen=True, slots=True)
