@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 import hashlib
 import ipaddress
 import json
+import re
 import time
 from urllib.parse import urlsplit
 
@@ -123,14 +124,14 @@ class GithubReader:
     async def __aexit__(self, *args):
         await self.session.close()
 
-    async def get(self, url, maximum, *, asset=False):
+    async def get(self, url, maximum, *, asset=False, reject_pagination=False):
         checked_url(url)
         for attempt in range(2):
             try:
                 remaining = self.deadline - time.monotonic()
                 require(remaining > 0, "source_timeout")
                 async with asyncio.timeout(remaining):
-                    return await self._get(url, maximum, asset=asset)
+                    return await self._get(url, maximum, asset=asset, reject_pagination=reject_pagination)
             except SourceError as error:
                 if error.code != "source_unavailable" or error.retry_after > 0 or attempt:
                     raise
@@ -148,7 +149,7 @@ class GithubReader:
             await asyncio.sleep(0.25)
         raise SourceError("source_unavailable")
 
-    async def _get(self, url, maximum, *, asset):
+    async def _get(self, url, maximum, *, asset, reject_pagination=False):
         # API metadata never redirects. Binary asset API permits exactly one
         # redirect to the fixed public distribution origin, checked by DNS too.
         for hop in range(2):
@@ -170,6 +171,7 @@ class GithubReader:
                         key in response.headers for key in ("Retry-After", "X-RateLimit-Reset")) else 0
                     raise SourceError("source_unavailable", retry_after=delay)
                 require(response.status == 200, "unexpected_source_response")
+                require(not reject_pagination or not response.headers.get("Link"), "incomplete_source_pagination")
                 require(response.headers.get("Content-Encoding", "identity").lower() == "identity",
                         "invalid_source_encoding")
                 require(response.content_length is None or response.content_length <= maximum, "source_response_too_large")
@@ -180,6 +182,37 @@ class GithubReader:
                 require(response.content_length is None or len(result) == response.content_length, "truncated_source_response")
                 return bytes(result)
         raise SourceError("invalid_source_redirect")
+
+    async def publication_metadata(self, path: str):
+        """Phase 2A public observations only; never follow provider-supplied URLs.
+
+        Fixed repository endpoints plus validated account/App routing. Lists use
+        an overflow slot and reject pagination, including unsolicited Link headers.
+        The ordinary B1.3 retrieval/publication policy is unchanged.
+        """
+        number = r"[1-9][0-9]{0,15}"
+        repository_path = (r"(?:/branches/main|/environments/catalogue-publication"
+            r"|/actions/runs/" + number + r"(?:/attempts/1)?"
+            r"|/actions/workflows/" + number
+            + r"|/commits/[a-f0-9]{40}/check-runs\?check_name=validate&filter=latest&per_page=2&page=1"
+            r"|/rulesets\?includes_parents=true&per_page=6&page=1"
+            r"|/rulesets/" + number + r"\?includes_parents=true)?")
+        require(type(path) is str, "invalid_source_destination")
+        if re.fullmatch(repository_path, path):
+            identifier = re.search(r"/(?:runs|workflows|rulesets)/([0-9]+)", path)
+            require(identifier is None or int(identifier[1]) <= 2**53 - 1, "invalid_source_destination")
+            url = BASE + path
+        else:
+            require((re.fullmatch(r"/users/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*", path) is not None
+                     and len(path.removeprefix("/users/")) <= 39)
+                    or re.fullmatch(r"/apps/[a-z0-9][a-z0-9-]{0,99}", path) is not None,
+                    "invalid_source_destination")
+            url = API + path
+        raw = await self.get(url, METADATA_LIMIT, reject_pagination=True)
+        try:
+            return decode(raw.decode("utf-8"))
+        except UnicodeError:
+            raise SourceError("invalid_source_metadata") from None
 
     async def repository(self):
         value = decode(await self.get(BASE, METADATA_LIMIT))

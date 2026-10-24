@@ -2,18 +2,31 @@
 
 B1.3 provides bounded retrieval, genuine B1.2 verification, PostgreSQL trust
 storage, sequence/history checks and global manual-refresh APIs. **Production
-promotion remains blocked:** the established channel does not provide immutable
-history plus independently established publication approval and a separately
-advancing current pointer. This is a delivered foundation, not full milestone
-acceptance. No remote package download, installation, activation, automatic update
+promotion remains blocked:** the legacy adapter still targets `catalogue-v1`,
+and has no approved adapter for the producer's separate immutable publication
+and advancing selection. Complete authorization also lacks reviewed hidden
+ruleset evidence and consumer trust approval. This is a delivered foundation,
+not full milestone acceptance. No remote package download, installation, activation, automatic update
 or new UI is enabled. Bundled and installed connectors remain independent.
 
-[Selection Phase 1](../architecture/integrations/official-catalogue-selection.md)
-now strictly parses and genuinely verifies the published historical selection
-offline, using a distinct signature profile. Its consumer trust-policy schema
-produces review candidates only; final Atlas security approval and provider
-authorization are pending. This internal work does not change this B1.3 adapter,
-its endpoints, publication gates or trusted PostgreSQL state.
+[Selection Phases 1/2A](../architecture/integrations/official-catalogue-selection.md)
+components now strictly parse and genuinely verify the published historical selection
+offline, using a distinct signature profile, and evaluate independent public run,
+actor, workflow, source CI, environment, App and visible ruleset observations.
+Its consumer trust-policy schema produces review candidates only; full provider
+authorization and final Atlas security approval are pending. This internal work
+does not change this B1.3 adapter, its endpoints, publication gates or trusted
+PostgreSQL state.
+
+Anonymous ruleset reads withhold `bypass_actors`; omission is unavailable evidence,
+never an empty bypass list. Public observation results always retain authorization
+blockers. [Proposed ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md)
+evaluates preserved signed producer evidence, privileged consumer verification and
+continued rejection. Its recommended archive amendment needs separate security
+approval and producer work: current preflight artifacts have one-day retention and
+are absent from the four-asset immutable sequence-one release. Operators cannot
+enable this with credentials, environment variables or a refresh flag. No active
+authorization or catalogue acceptance is delivered by Phase 2A.
 
 ## Fixed source and publication boundary
 
@@ -48,16 +61,18 @@ The GitHub API can redirect binary retrieval; metadata redirects are rejected.
 The live check on **21 October 2026** found `immutable: false`. Both catalogue
 assets still matched SHA-256
 `55533ca67e7e9a14f82961e0a8c34ad78e2596049b3db02fde787494e3975afd`.
-The connector workflow prepares and attests candidates; it does not publish
-releases. Naming an Actions environment does not prove reviewer settings or
+The legacy catalogue workflow prepared and attested candidates; the later
+producer publication workflow has a separate contract that this adapter does not
+consume. Naming an Actions environment does not prove reviewer settings or
 release approval. A build signature cannot supply those missing guarantees.
 
 `require_publication` rejects mutable releases as `publication_not_immutable`.
 Even setting this same release immutable yields
 `current_channel_policy_unavailable`: freezing it also freezes its current alias.
 There is no runtime bypass or permissive test mode. The separate
-[publication implementation plan](../architecture/integrations/b1-3-publication-plan.md)
-must precede a reviewed Atlas publication adapter. No hypothetical URL is used.
+[historical publication plan](../architecture/integrations/b1-3-publication-plan.md)
+and current selection contract describe the prerequisites for a reviewed Atlas
+publication adapter. No hypothetical URL is used.
 
 ## Transport and verifier limits
 

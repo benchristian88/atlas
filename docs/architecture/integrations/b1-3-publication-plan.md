@@ -1,8 +1,16 @@
 # B1.3 publication prerequisite: separate implementation plan
 
-Status: **Required, not applied**. Inspection date: 21 October 2026.
+Status: **Historical producer prerequisite plan; Atlas authorization and acceptance remain outstanding.**
+Original inspection: 21 October 2026.
 
-The current `atlas-connectors/.github/workflows/catalogue.yml` performs preparation,
+The producer subsequently implemented separate immutable publication and advancing
+selection. Atlas has delivered internal [selection Phases 1/2A](official-catalogue-selection.md),
+but its B1.3 adapter remains blocked. [Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md)
+records the remaining hidden-ruleset evidence and consumer-approval decisions.
+The original sequence below is retained as historical design context, not a claim
+that those producer steps remain unimplemented.
+
+At that inspection, `atlas-connectors/.github/workflows/catalogue.yml` performed preparation,
 attestation and candidate-artifact upload only, with contents-read permission.
 The established `catalogue-v1` release holds both the updateable `catalogue.json`
 and numbered historical assets. Its API reports `immutable: false`. Making that
