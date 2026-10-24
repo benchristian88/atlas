@@ -1,7 +1,8 @@
-# Official catalogue selection — Phase 1
+# Official catalogue selection — Phases 1 and 2A
 
 Implemented internal components: strict pointer parsing, a separate offline
-selection provenance profile and consumer-policy **review schema**. These extend
+selection provenance profile, consumer-policy **review schema** and independent
+public GitHub observation evaluation. These extend
 B1.1/B1.2 without connecting to B1.3 acceptance, persistence, refresh APIs,
 installation, runtime or UI. PostgreSQL models and migrations are unchanged.
 
@@ -78,7 +79,7 @@ the later producer activation revision.
 (1–8,192 byte), strict UTF-8/SDK JSON review input. It returns only a frozen,
 slotted `CatalogueTrustPolicyReviewCandidate` with frozen nested values.
 There is **no approved policy instance, default identity configuration, policy
-loader, activation flag, authorization function or runtime consumer**.
+loader, activation flag, authorization function or production trust-policy consumer**.
 No environment variable, downloaded pointer/policy, release description or
 provider response configures Atlas trust.
 
@@ -116,11 +117,84 @@ evidence also fails the existing catalogue-profile promotion check. No accepted
 catalogue revision, package eligibility or executable authority is created.
 The legacy remote Proxmox `0.2.0` package remains non-installable.
 
-Provider run/attempt, actor, workflow, source CI, environment, App, immutable
-release and ruleset authorization are deferred to the next explicitly reviewed
-phase. Anonymous ruleset responses omit bypass actors: missing evidence must
-never mean an empty bypass list. No privileged GitHub credentials or implicit
-authentication fallback may be added to work around missing evidence.
+Phase 2A public observations are described below. Complete publication
+authorization, immutable release selection and acceptance remain deferred.
+Anonymous ruleset responses omit bypass actors: missing evidence must never mean
+an empty bypass list. No privileged GitHub credentials or implicit authentication
+fallback may be added to work around missing evidence.
 Pointer history/recovery, transactional acceptance and remote installation remain
 separate future work. Offline cryptographic verification satisfies none of those
 authorization or operational acceptance requirements.
+
+## Phase 2A public provider observations
+
+`catalogue_publication_evidence.verify_public_observations(provenance, expected=..., reader=...)`
+is an internal async evaluator. Callers supply genuine Phase 1
+`VerifiedProvenance`, explicit `PublicObservationReviewExpectations` and an
+operation-local `GithubReader`. Expectations contain the existing inactive review
+candidate, a reviewed numeric publication workflow ID and five distinct reviewed
+ruleset IDs (`RulesetReviewIdentities`). Phase 1 schema/release pins are rechecked;
+neither producer responses nor producer configuration select expected authority.
+There is no default configured identity, active policy loader or API integration.
+
+The evaluator independently fetches and checks:
+
+- Both latest run and attempt 1, using only the authenticated invocation. Numeric
+  identity/attempt, manual main dispatch, authenticated SHA, public repository and
+  head repository, exact API/HTML URLs, workflow ID/path and both human actors
+  must agree. Latest attempt 2 rejects; original source need not equal current main.
+- The public account routed by validated login, matching the externally supplied
+  numeric maintainer, User type and every actor login. Ownership grants no authority.
+- The independently retrieved active workflow, exact numeric identity/API/HTML
+  URLs and `catalogue-publish.yml` path, consistent with Phase 1 signer evidence.
+  Only bare path, path`@main` and path`@refs/heads/main` run forms are supported.
+- Public repository/owner identities, protected main, and exactly one current
+  `validate` check on the authenticated SHA, completed/successful from Actions
+  App 15368. Missing, ambiguous, failed or conflicting checks reject.
+- `catalogue-publication` environment ID/name, no admin bypass, protected-branch
+  deployment policy, an explicit branch-policy protection rule and optional
+  bounded wait timer. Required reviewers and unsupported rule types reject.
+- Publisher App ID/slug/owner and exactly Contents Write plus Actions,
+  Administration and Metadata Read. This is registration metadata only, not
+  installation/token scope or historical permissions.
+- The complete bounded five-ruleset inventory and each pinned detail: repository
+  source, active enforcement, exact ref scopes and required visible protections.
+  Main requires zero approving reviews, stale-review dismissal, no last-push
+  approval and strict Actions `validate` checks. Current/history/bootstrap locks
+  and publication tags retain their explicit creation/update/deletion/force-push
+  protections; an additional tag non-fast-forward lock is supported. Returned
+  bypass arrays must match the expected no-bypass or Publisher Integration-only
+  profile; a withheld field stays unavailable.
+
+`GithubReader.publication_metadata` reuses the existing anonymous transport.
+It accepts only fixed repository endpoints or strictly validated decimal ID,
+40-character source SHA, account login and App slug components. It accepts no
+remote URL. Every response is at most 256 KiB, strict UTF-8/unambiguous JSON;
+metadata redirects and any pagination Link fail closed. The check list requests
+two slots and requires exactly one; the ruleset list requests six slots and
+requires exactly five. No continuation URL is followed. Existing DNS, HTTPS,
+5/5/15-second connect/read/request timeouts, shared 90-second operation deadline,
+sanitized errors/retries/rate limits and disabled ambient auth/proxy/cookies apply.
+
+The frozen, slotted `VerifiedPublicObservations` retains the genuine provenance,
+review expectations, observation start/end, both checked run records (including
+repository/head repository and actors), account, workflow, current main SHA,
+source CI, environment, App and ordered rulesets. All nested results are frozen
+values/tuples; checked visible rule parameters are immutable canonical JSON bytes.
+`bypass_actors=None` means withheld; `()` means an explicitly returned empty
+array. Neither is inferred from the other. Results are operation-local and are
+not persisted or exposed through a route.
+
+Every result carries `reviewed_ruleset_evidence_required` and
+`consumer_trust_approval_required` as non-constructor authorization blockers,
+including when public bypass arrays happen to be returned. This type is neither
+a publication-authorized candidate nor package verification evidence. A successful
+public evaluation cannot open B1.3's gates, approve consumer trust, renew catalogue
+currentness, promote catalogue data or make Proxmox 0.2.0 installable.
+
+[Proposed ADR 0012](../../decisions/0012-official-catalogue-publication-authorization.md)
+records the actual one-day producer preflight retention and missing immutable
+archive/binding contract. It recommends preserved S4-authenticated historical
+ruleset evidence as a future amendment while continuing rejection today. That
+recommendation is not approved or implemented. Current public settings cannot
+prove uninterrupted historical settings or detect hidden present-day bypass changes.

@@ -30,6 +30,7 @@ remain understandable after the original implementation discussion is gone.
 - [0009 — Read-only technical discovery for official v1 Connectors](0009-read-only-official-connectors.md).
 
 - [0011 — Pinned offline official provenance verification](0011-offline-official-provenance.md).
+- [0012 — Official catalogue publication authorization](0012-official-catalogue-publication-authorization.md) — **Proposed**; public evidence is implemented, authorization remains blocked.
 
 ## ADR maintenance
 
