@@ -159,6 +159,55 @@ conflict or `checkpoint_inconsistent`, preserve history and investigate; do not
 delete state or override trust. Fix missing verifier/roots through reviewed release
 packaging. No failure renews currentness; an older confirmation remains historical.
 
+## Integrations catalogue UI
+
+In **Integrations → Catalogue**, the **Official Connector Catalogue** section
+shows accepted remote metadata separately from the existing local package cards.
+The page still requires `integrations.view`. Only a **global**
+`integration_runtime.view` assignment can load or see official status. A global
+`integration_runtime.manage` assignment additionally exposes **Check official
+catalogue**. Customer/site assignments do not grant either global capability.
+The backend continues to enforce these permissions.
+
+- **Refresh local catalogue** reloads the existing local list and page data. It
+  never performs an official remote check.
+- **Reload official status** reads retained backend state without contacting
+  GitHub. Use it to see the outcome of another administrator's check or to
+  reread state after a cooldown expires.
+- **Check official catalogue** deliberately invokes the existing refresh API.
+  Opening the page only reads status; it never starts remote verification.
+  Anonymous GitHub access is rate limited, so no automatic retries, polling or
+  periodic checks are introduced.
+
+Before the first attempt the section says the catalogue has not yet been
+checked. Accepted metadata shows its sequence and last source confirmation time.
+That timestamp is historical: the UI does not infer that GitHub is unchanged now,
+or invent a freshness expiry. A missing confirmation (including after restore)
+is displayed as **Not recorded**. SHA-256, schema and stage timestamps are in a
+collapsed technical disclosure.
+
+An `accepted` refresh confirms verification and acceptance; `unchanged` confirms
+successful live verification of the existing catalogue. A failed application
+result remains a failure even with HTTP 200. Verification warnings retain
+previously accepted metadata and its historical confirmation. Status retrieval
+errors and permission failures are presented separately from verification
+failures, and local package cards remain usable. Permission denial clears the
+official display. Pending checks prevent duplicate submission. Cooldown/rate-limit
+messages show the backend's next permitted time, where available; reload status
+after that time. There is no cooldown bypass.
+
+Official entries are read only, including for administrators. Proxmox **0.2.0**
+is accepted catalogue metadata, but its historical mutable package is ineligible
+for remote installation (`package_available: false`, `supported_actions: []`).
+Catalogue acceptance does not establish package eligibility. No Install, Upgrade,
+Rollback, Activate, Configure or Resolve mappings actions are created from this
+metadata. Existing independent local/installed package behavior is preserved.
+
+This UI does not add cryptographic guarantees: verification and trust decisions
+remain backend responsibilities under ADR 0013. Future publication policy in
+Proposed ADR 0012, remote package eligibility/download/installation, scheduling,
+runtime/SDK changes and community catalogues remain outside this increment.
+
 ## Live acceptance record
 
 On **25 October 2026, 11:20 NZDT**, the opt-in anonymous read-only GitHub acceptance
@@ -196,8 +245,8 @@ if the second live verification fails. Anonymous provider limits can prevent the
 second verification; no cached-evidence shortcut or token fallback is allowed.
 
 Future sequences need the stronger reviewed publication evidence/archive contract.
-Next product work is to surface trusted metadata in Integrations and prepare a
-new immutable connector package. Secure installation still needs separate generic
+Trusted metadata is now surfaced read only in Integrations. A new immutable
+connector package remains future work. Secure installation still needs separate generic
 package provenance/immutable identity, runtime/SDK compatibility, current accepted
 catalogue eligibility, explicit global administrator authority and protected-store
 validation. Daily scheduling and installation freshness policy remain later work.
