@@ -173,5 +173,7 @@ alone. No external checkpoint service is added.
 Catalogue trust is not package trust. The active historical Proxmox 0.2.0 entry
 is accepted metadata; its mutable package remains unavailable for remote download,
 install, upgrade or execution. Bundled/installed Proxmox remains unchanged.
-Integrations catalogue UI and a newly published immutable connector package with
-separate eligibility/explicit installation authority are later milestones.
+The Integrations catalogue UI now displays this metadata read only; see the
+[UI operation contract](../../deployment/official-catalogue.md#integrations-catalogue-ui).
+A newly published immutable connector package with separate eligibility/explicit
+installation authority remains a later milestone.

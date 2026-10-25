@@ -17,4 +17,13 @@
 .stats dl { flex: 1; min-width: 160px; margin: 0; }
 .stats dt { color: var(--muted); font-size: var(--type-label); margin-bottom: var(--space-2); }
 .stats dd { margin: 0; font-weight: var(--weight-semibold); }
+.official { border-top: 1px solid var(--border); padding-top: var(--space-6); }
+.official :global(.form-actions) { flex-wrap: wrap; margin-top: 0; }
+.official p, .official h3, .official dd { overflow-wrap: anywhere; }
+.official h3 { font-size: var(--type-title); font-weight: var(--weight-semibold); line-height: var(--leading-h3); margin: 0 0 var(--space-2); }
+.officialEntries { list-style: none; margin: var(--space-5) 0; padding: 0; }
+.officialEntry { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); border-top: 1px solid var(--border); padding-block: var(--space-4); }
+.officialEntry p, .officialEntry dl { margin: 0; }
+.detailRow { display: contents; }
 @media (max-width: 800px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 800px) { .officialEntry { grid-template-columns: minmax(0, 1fr); } }

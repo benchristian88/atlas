@@ -33,6 +33,7 @@ try {
       else if (path === "/integration-forms") body = [form];
       else if (path === "/integration-runtime") body = { status: "healthy", capabilities: { operations: ["test_connection"] }, installed_connector_count: 1 };
       else if (path === "/integration-catalogue") body = { entries: [] };
+      else if (path === "/integration-catalogue/status") body = { trusted_remote_available: false, refresh_state: "idle", entries: [] };
       else if (path === "/integrations" && request.method() === "GET") body = saved ? [record] : [];
       else if (path.endsWith("/test-connection")) { await new Promise(resolve => setTimeout(resolve, 300)); body = { success: category === "connected", category, source_version: category === "connected" ? "8.4" : null, compatibility: category === "connected" ? "untested" : "unknown" }; }
       else if (path === "/integrations" && request.method() === "POST") {

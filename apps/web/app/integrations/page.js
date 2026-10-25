@@ -9,6 +9,7 @@ import { Button } from "../../components/button";
 import { CatalogueFilters, useCatalogueSearch } from "../../components/catalogue-filters";
 import { DataTable } from "../../components/data-table";
 import { ConnectorCard, RuntimePanel } from "../../components/integration-panels";
+import { OfficialCatalogue } from "../../components/official-catalogue";
 import { PageHeader } from "../../components/page-header";
 import { EmptyState, Section, Surface } from "../../components/section";
 import { StatusIndicator } from "../../components/status-indicator";
@@ -82,10 +83,11 @@ export default function IntegrationsPage() {
     </>}
     {tab === "catalogue" && <>
       <CatalogueFilters label="Search Connectors" search={search} activeCount={state ? 1 : 0} onClear={clear}><label className="field"><span>Package state</span><select value={state} onChange={event => setState(event.target.value)}><option value="">All states</option>{states.map(value => <option key={value} value={value}>{value.replaceAll("_", " ").replace(/^./, letter => letter.toUpperCase())}</option>)}</select></label></CatalogueFilters>
-      <Section title="Connector catalogue" className={styles.section} actions={<Button variant="quiet" loading={loading} onClick={load}>Refresh</Button>}>
+      <Section title="Connector catalogue" className={styles.section} actions={<Button variant="quiet" loading={loading} onClick={load}>Refresh local catalogue</Button>}>
         {loading && !catalogue ? <div className="status-banner" role="status">Loading Connector catalogue…</div> : visible.length > 0 ? <div className={styles.grid}>{visible.map(entry => <ConnectorCard key={entry.connector_id} entry={entry} className={styles.card} canManage={canManage} busy={busy} onAction={action} />)}</div> : !activeError && <EmptyState title="No matching Connectors" description="Clear your filters to view the catalogue." />}
         {catalogue && <p className={styles.meta}>{catalogue.source === "bootstrap" ? "Included offline catalogue" : "Connector catalogue"}{catalogue.checked_at ? ` · Checked ${formatIntegrationTime(catalogue.checked_at)}` : ""}</p>}
       </Section>
+      {canViewRuntime && <OfficialCatalogue canManage={canManage} styles={styles} />}
     </>}
     {tab === "runtime" && <Section title="Integration runtime" className={styles.section} actions={<Button loading={loading} onClick={load}>Refresh health</Button>}>
       {loading && !runtime ? <div className="status-banner" role="status">Checking runtime health…</div> : <div className={styles.grid}><RuntimePanel runtime={runtime} className={styles.runtime} healthClassName={styles.runtime} technicalClassName={styles.technical} /></div>}
