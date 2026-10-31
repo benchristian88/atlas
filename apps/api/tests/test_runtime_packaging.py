@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import secrets
 import stat
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -37,6 +38,26 @@ def test_local_release_operator_has_separate_authority_and_read_only_consumers()
     assert "connector_store:/var/lib/atlas-connectors:ro" in operator["volumes"]
     assert not any("private" in mount for name in ("api","worker","runtime") for mount in override["services"][name]["volumes"])
     assert "runtime-init" not in override["services"] and "connector-bootstrap" not in override["services"]
+
+
+def test_local_release_operator_merged_compose_has_one_valid_tmpfs(tmp_path):
+    environment = {
+        **os.environ,
+        "DATABASE_URL": "",
+        "POSTGRES_PASSWORD": secrets.token_hex(32),
+        "AUTH_SECRET_KEY": secrets.token_hex(48),
+        "ATLAS_DATA_ENCRYPTION_KEY": secrets.token_hex(32),
+        "ATLAS_BUILD_ID": "a" * 40,
+        "ATLAS_LOCAL_RELEASE_DEPLOYMENT_FILE": str(tmp_path / "identity.json"),
+    }
+    result = subprocess.run([
+        "docker", "compose", "--env-file", os.devnull,
+        "-f", str(ROOT / "infra/docker/docker-compose.yml"),
+        "-f", str(ROOT / "infra/docker/docker-compose.local-release.yml"),
+        "config", "--format", "json",
+    ], env=environment, capture_output=True, text=True, check=True, timeout=30)
+    operator = json.loads(result.stdout)["services"]["release-operator"]
+    assert operator["tmpfs"] == ["/tmp:size=128m,mode=1777"]
 
 
 def test_bundled_restoration_retains_authority_mounts_and_only_selects_ordinary_store():
