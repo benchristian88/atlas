@@ -75,12 +75,14 @@ def cleanup_stale():
 
 def execute(runtime, payload):
     from atlas_runtime.server import read_regular, MAX_FILE
-    if not isinstance(payload, dict) or set(payload) != {"reference", "request_id", "config", "credentials"}:
+    if not isinstance(payload, dict) or set(payload) - {"local_execution"} != {"reference", "request_id", "config", "credentials"}:
         raise ValueError("invalid_request")
     import uuid
     uuid.UUID(payload["request_id"])
     reference = payload["reference"]
-    if runtime.verify_connector(reference)["state"] != "verified":
+    try:
+        runtime.execution_admission(reference, payload.get("local_execution"))
+    except (OSError, ValueError):
         return {"success": False, "category": "package_unavailable", "source_version": None}
     directory = runtime.store / reference["connector_id"] / reference["version"] / reference["digest"]
     manifest = json.loads(read_regular(directory / "manifest.json", 256 * 1024))

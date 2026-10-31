@@ -32,6 +32,9 @@ remain understandable after the original implementation discussion is gone.
 - [0011 — Pinned offline official provenance verification](0011-offline-official-provenance.md).
 - [0012 — Official catalogue publication authorization](0012-official-catalogue-publication-authorization.md) — **Proposed** for the stronger future-publication evidence contract.
 - [0013 — Exact sequence-one consumer bootstrap trust approval](0013-sequence-one-consumer-bootstrap-approval.md) — **Accepted**; approves the complete fixed consumer pin set and restricted historical exception.
+- [0014 — Instance-bound operator acceptance of signed immutable releases](0014-local-release-acceptance.md) — local installation authority, separate from catalogue eligibility and prerelease qualification.
+- [0015 — Separate local artifact evidence, approval and execution authority](0015-local-release-execution-authority.md) — partially supersedes 0014's authorization, isolation and audit lifecycle after security review.
+- [0016 — Recover local maintenance, revocation evidence and bundled management](0016-local-release-recovery.md) — supplements 0015 with lease-independent maintenance, a signed ordinary-management handoff and crash-safe irreversible revocation recovery.
 
 ## ADR maintenance
 

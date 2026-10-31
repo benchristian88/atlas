@@ -1,0 +1,70 @@
+# Explicit isolated-instance enrollment only. Do not combine with qualification.
+# Select the existing dedicated test project; this does not create another stack.
+services:
+  api:
+    environment:
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-local-release-connectors
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    volumes:
+      - local_release_store:/var/lib/atlas-local-release-connectors:ro
+      - local_release_binding:/etc/atlas-local-release:ro
+      - ${ATLAS_LOCAL_RELEASE_DEPLOYMENT_FILE:?Set the protected inspected deployment identity file}:/etc/atlas-local-release-deployment/identity.json:ro
+  worker:
+    environment:
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-local-release-connectors
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    volumes:
+      - local_release_store:/var/lib/atlas-local-release-connectors:ro
+      - local_release_binding:/etc/atlas-local-release:ro
+      - ${ATLAS_LOCAL_RELEASE_DEPLOYMENT_FILE:?Set the protected inspected deployment identity file}:/etc/atlas-local-release-deployment/identity.json:ro
+  runtime:
+    environment:
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-local-release-connectors
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    volumes:
+      - local_release_store:/var/lib/atlas-local-release-connectors:ro
+      - local_release_binding:/etc/atlas-local-release:ro
+      - ${ATLAS_LOCAL_RELEASE_DEPLOYMENT_FILE:?Set the protected inspected deployment identity file}:/etc/atlas-local-release-deployment/identity.json:ro
+  release-operator:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      args:
+        ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+    user: "0:0"
+    entrypoint: ["python", "-m", "scripts.accept_connector_release"]
+    environment:
+      ATLAS_INSTALL_METHOD: docker_compose
+      ATLAS_BUILD_ID: ${ATLAS_BUILD_ID:?Set the exact reviewed Atlas commit}
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-atlas}
+      POSTGRES_USER: ${POSTGRES_USER:-atlas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Use only isolated test credentials}
+      ATLAS_DATA_ENCRYPTION_KEY: ${ATLAS_DATA_ENCRYPTION_KEY:?Use only the test instance key}
+      ATLAS_RUNTIME_ENABLED: 'true'
+      ATLAS_RUNTIME_URL: http://runtime:8091
+      ATLAS_RUNTIME_CONTROL_SECRET_FILE: /run/atlas-runtime-control/control.secret
+      ATLAS_RUNTIME_BASELINE_FILE: /app/runtime-baseline/baseline.json
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-local-release-connectors
+    volumes:
+      - local_release_store:/var/lib/atlas-local-release-connectors
+      # Inspect the separately staged ordinary bundle for reviewed restoration.
+      - connector_store:/var/lib/atlas-connectors:ro
+      - local_release_binding:/etc/atlas-local-release
+      - local_release_private:/etc/atlas-local-release-private
+      - ${ATLAS_LOCAL_RELEASE_DEPLOYMENT_FILE:?Set the protected inspected deployment identity file}:/etc/atlas-local-release-deployment/identity.json:ro
+      - runtime_control:/run/atlas-runtime-control:ro
+    networks: [default, runtime_private]
+    restart: 'no'
+    read_only: true
+    tmpfs: [/tmp:size=128m,mode=1777]
+    cap_drop: [ALL]
+    # Read the existing 10001-owned 0400 runtime-control credential as root.
+    # This applies only to the explicit operator container, never the runtime.
+    cap_add: [DAC_READ_SEARCH]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  local_release_store:
+  local_release_binding:
+  local_release_private:

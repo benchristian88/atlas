@@ -46,13 +46,43 @@ def lock_connector(db, connector_id: str):
     db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": "atlas-connector:" + connector_id})
 
 
-def activate(db, stored, health: dict, *, operator_qualification=False):
+def require_local_revoked(record, *, db=None, replacement=None):
+    """Non-operator transitions must first remove all offline runtime authority."""
+    if record is not None and record.verification_evidence.get("method") == "operator-local-release":
+        from app.services.local_release_authority import DIRECTORY, binding, protected, authenticated, digest, require
+        root = package_store().root
+        # An environment/store switch alone never authorizes reclassification.
+        # Only the persisted root-signed exact handoff permits normal activation.
+        from app.services.connector_contracts import strict_json
+        from app.services.local_release_authority import BINDING
+        original = strict_json(protected(BINDING))["store_path"]
+        if str(root) != original:
+            require(db is not None and replacement is not None, "local_release_bundled_handoff_required")
+            from app.services.local_release_restoration import consume
+            consume(db, record, replacement)
+            return
+        bound = binding(root)
+        identifier = record.verification_evidence["authorization_id"]
+        value = authenticated(protected(root / DIRECTORY / (identifier + ".revoked.json")), bound)
+        require(value.get("artifact_id") == identifier and value.get("binding_digest") == digest(bound),
+                "local_release_operator_revocation_required")
+
+
+def activate(db, stored, health: dict, *, operator_qualification=False, local_release_acceptance=False):
     from app.services.connector_contracts import validate_manifest
-    if operator_qualification:
+    if local_release_acceptance:
+        from app.services.local_release_authority import authorize, check_database, operator
+        operator()
+        bound, _ = authorize(package_store().root, stored.manifest, stored.verification)
+        check_database(db, bound)
+        package_store().verify_connector(stored.connector_id, stored.version, stored.bundle_digest)
+    elif operator_qualification:
         from app.services.connector_qualification import authorize
         authorize(package_store().root, stored.manifest, stored.verification)
         package_store().verify_connector(stored.connector_id, stored.version, stored.bundle_digest)
     else:
+        if stored.verification.get("method") == "operator-local-release":
+            raise ValueError("local_release_operator_activation_required")
         validate_manifest(stored.manifest, activation=True)
     if (stored.verification.get("status") != "verified"
             or stored.verification.get("bundle_digest") != stored.bundle_digest
@@ -62,6 +92,8 @@ def activate(db, stored, health: dict, *, operator_qualification=False):
             or health.get("status") != "healthy"):
         raise ValueError("Only verified packages can become active")
     lock_connector(db, stored.connector_id)
+    if not local_release_acceptance:
+        require_local_revoked(db.get(InstalledConnectorPackage, stored.connector_id), db=db, replacement=stored)
     if active_connector_runs(db, stored.connector_id):
         raise ConnectorInUse("Wait for active discovery runs to settle before changing this Connector package")
     from app.services.connector_mappings import require_resolved
@@ -92,9 +124,9 @@ def activate(db, stored, health: dict, *, operator_qualification=False):
     return active
 
 
-def installed_response(record: InstalledConnectorPackage) -> dict:
+def installed_response(record: InstalledConnectorPackage, *, db=None) -> dict:
     # Never serialize filesystem/transport details or mutable ORM state.
-    return {"connector_id": record.connector_id, "version": record.version,
+    value = {"connector_id": record.connector_id, "version": record.version,
         "digest": record.bundle_digest, "manifest_version": record.manifest_version,
         "protocol_version": record.protocol_version, "publisher_id": record.publisher_id,
         "trust_tier": record.trust_tier, "verification_status": record.verification_status,
@@ -102,3 +134,7 @@ def installed_response(record: InstalledConnectorPackage) -> dict:
         "runtime_baseline_digest": record.runtime_baseline_digest,
         "status": record.status, "installed_at": record.installed_at,
         "activated_at": record.activated_at}
+    if record.verification_evidence.get("method") == "operator-local-release":
+        from app.services.local_release_authority import effective_status
+        value["local_execution"] = effective_status(record, db=db)
+    return value

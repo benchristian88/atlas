@@ -142,7 +142,7 @@ async def catalogue_detail(connector_id: str, principal: Principal = Depends(req
 @router.get("/installed-connectors")
 def installed_list(principal: Principal = Depends(require_permission("integration_runtime.view")), db: Session = Depends(get_db)):
     require_global(principal, "integration_runtime.view")
-    return [lifecycle.installed_response(item) for item in _installed(db).values()]
+    return [lifecycle.installed_response(item, db=db) for item in _installed(db).values()]
 
 
 @router.get("/installed-connectors/{connector_id}")
@@ -152,7 +152,7 @@ def installed_detail(connector_id: str, principal: Principal = Depends(require_p
     active = db.get(InstalledConnectorPackage, connector_id)
     if active is None:
         raise HTTPException(404, "Installed Connector not found")
-    return lifecycle.installed_response(active)
+    return lifecycle.installed_response(active, db=db)
 
 
 async def _install(connector_id: str, payload: PackageSelection, request: Request, principal: Principal, db: Session):
@@ -183,7 +183,7 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
         add_audit_event(db, action="connector.activated", target_type="connector_package", actor=principal.user,
             summary="Verified Connector package activated", metadata=reference, request=request)
         db.commit()
-        return lifecycle.installed_response(active)
+        return lifecycle.installed_response(active, db=db)
     except UpdateRequiresConfiguration:
         db.rollback()
         raise HTTPException(409, {"code": "update_requires_configuration", "message": "Review dependent connection configuration before updating. The active version is unchanged."}) from None
@@ -225,6 +225,7 @@ def uninstall_connector(connector_id: str, request: Request,
         raise HTTPException(404, "Installed Connector not found")
     try:
         lifecycle.require_unused(db, connector_id)
+        lifecycle.require_local_revoked(active)
         reference = {"connector_id": active.connector_id, "version": active.version, "digest": active.bundle_digest}
         store = lifecycle.package_store()
         quarantine = store.quarantine_connector(connector_id)
