@@ -92,10 +92,13 @@ jobs:
           heads = ScriptDirectory.from_config(Config('alembic.ini')).get_heads()
           assert len(heads) == 1, f'Expected one Alembic head, found {heads}'
           PY
-      - name: Full API, SDK, Proxmox, PostgreSQL and migration regression (no skips)
+      - name: Ordinary-user API, SDK, Proxmox, PostgreSQL and migration regression (no skips)
         working-directory: apps/api
         run: |
           python -m pytest tests ../../plugins/sdk/tests ../../plugins/proxmox/tests \
+            --ignore=tests/test_local_release_authority_postgres.py \
+            --ignore=tests/test_local_release_recovery.py \
+            --ignore=tests/test_local_release_remediation.py \
             -q -rs --tb=short --junitxml="$RUNNER_TEMP/atlas-ci-backend.xml"
           python - <<'PY'
           import os
@@ -105,6 +108,18 @@ jobs:
           skipped = report.findall('.//testcase/skipped')
           assert not skipped, f'{len(skipped)} tests skipped; all PostgreSQL/nginx suites must run'
           PY
+      - name: Root-only local-release security regression in disposable Docker (no skips)
+        # Part of the existing Backend check: neither regression can fail or skip
+        # independently while that required check reports success.
+        env:
+          ATLAS_BIND_ADDRESS: 127.0.0.1
+        run: |
+          python infra/install/configuration.py --method docker_compose --output "$RUNNER_TEMP/atlas-ci-local-release.env"
+          docker build --file apps/api/Dockerfile -t atlas-ci-local-release-api .
+          docker compose --project-name atlas-ci-local-release --env-file "$RUNNER_TEMP/atlas-ci-local-release.env" \
+            -f infra/ci/docker-compose.local-release-tests.yml build tests
+          docker compose --project-name atlas-ci-local-release --env-file "$RUNNER_TEMP/atlas-ci-local-release.env" \
+            -f infra/ci/docker-compose.local-release-tests.yml run --rm tests
       - name: I0 AIP and Manifest contract regression
         # Run separately: legacy SDK tests also use the test_contracts basename.
         run: python -m pytest docs/architecture/integrations/contracts/tests -q --tb=short
@@ -113,10 +128,16 @@ jobs:
       - name: Remove disposable PostgreSQL and protected configuration
         if: always()
         run: |
-          if docker container inspect atlas-ci-postgres > /dev/null 2>&1; then
-            docker rm --force --volumes atlas-ci-postgres
+          trap 'rm -f "$RUNNER_TEMP/atlas-ci-postgres.env" "$RUNNER_TEMP/atlas-ci-local-release.env"' EXIT
+          cleanup_status=0
+          if [ -f "$RUNNER_TEMP/atlas-ci-local-release.env" ]; then
+            docker compose --project-name atlas-ci-local-release --env-file "$RUNNER_TEMP/atlas-ci-local-release.env" \
+              -f infra/ci/docker-compose.local-release-tests.yml down --volumes --remove-orphans || cleanup_status=$?
           fi
-          rm -f "$RUNNER_TEMP/atlas-ci-postgres.env"
+          if docker container inspect atlas-ci-postgres > /dev/null 2>&1; then
+            docker rm --force --volumes atlas-ci-postgres || cleanup_status=$?
+          fi
+          exit "$cleanup_status"
 
   frontend:
     name: Frontend
