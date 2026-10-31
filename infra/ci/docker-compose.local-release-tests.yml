@@ -1,0 +1,40 @@
+# Test-only infrastructure. No production mounts, host ports or Docker socket.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: atlas_ci_bootstrap
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate a disposable CI configuration}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U atlas_ci_bootstrap -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  tests:
+    build:
+      context: ../..
+      dockerfile: infra/ci/local-release-tests.Dockerfile
+    user: "0:0"
+    init: true
+    environment:
+      ATLAS_CI_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate a disposable CI configuration}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cap_drop: [ALL]
+    # One recovery test actually switches a child to the application UID/GID.
+    cap_add: [SETUID, SETGID]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 2g
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    internal: true

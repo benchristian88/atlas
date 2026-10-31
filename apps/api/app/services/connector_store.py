@@ -215,6 +215,9 @@ class PackageStore:
         # Independently compute the digest even when a verifier is supplied.
         verify_digest(raw, package.bundle_digest)
         evidence = verifier.verify(raw, package).safe_metadata() | {"status": "verified"}
+        if package.source == "operator-local-release":
+            from app.services.local_release_authority import authorize
+            authorize(self.root, package.manifest, evidence)
         if package.source == "operator-qualification":
             authorize(self.root, package.manifest, evidence)
         if (evidence.get("bundle_digest") != package.bundle_digest
@@ -341,7 +344,10 @@ class PackageStore:
         manifest = validate_manifest(strict_json(_read_regular(path / "manifest.json", 256 * 1024)))
         if not isinstance(metadata, dict) or not isinstance(metadata.get("verification"), dict):
             raise PackageStoreError("invalid_installed_metadata")
-        if metadata["verification"].get("method") == "operator-qualification":
+        if (self.root / ".local-instance.json").exists() or metadata["verification"].get("method") == "operator-local-release":
+            from app.services.local_release_authority import authorize
+            authorize(self.root, manifest, metadata["verification"])
+        elif metadata["verification"].get("method") == "operator-qualification":
             from app.services.connector_qualification import authorize
             authorize(self.root, manifest, metadata["verification"])
         else:

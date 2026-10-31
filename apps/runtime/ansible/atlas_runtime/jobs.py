@@ -157,7 +157,7 @@ class Jobs:
         from atlas_runtime.server import read_regular
         values = payload.get("credentials") if isinstance(payload, dict) else None
         try:
-            if (not isinstance(payload, dict) or set(payload) - {"debug_enabled"} != {"request_id", "run_id", "integration_id",
+            if (not isinstance(payload, dict) or set(payload) - {"debug_enabled", "local_execution"} != {"request_id", "run_id", "integration_id",
                     "reference", "config", "credentials", "selected_scopes", "object_classes", "coverage", "ingestion_token", "timeout_seconds"}):
                 raise ValueError("invalid_request")
             if type(payload.get("debug_enabled", False)) is not bool:
@@ -171,8 +171,7 @@ class Jobs:
                     or not isinstance(payload["ingestion_token"], str) or not 1 <= len(payload["ingestion_token"]) <= 4096):
                 raise ValueError("invalid_request")
             reference = payload["reference"]
-            if self.runtime.verify_connector(reference)["state"] != "verified":
-                raise ValueError("package_unavailable")
+            self.runtime.execution_admission(reference, payload.get("local_execution"))
             directory = self.runtime.store / reference["connector_id"] / reference["version"] / reference["digest"]
             manifest = strict_json(read_regular(directory / "manifest.json", 256 * 1024))
             if (manifest["capabilities"]["discover"] != "read_only"

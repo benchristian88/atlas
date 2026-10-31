@@ -65,8 +65,8 @@ def update_system_setting(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "system_settings.manage")
-    if key == "auth.restore_epoch":
-        raise HTTPException(status_code=409, detail="This internal authentication setting cannot be edited")
+    if key in {"auth.restore_epoch", "connector_local_release_instance"} or key.startswith("connector_local_release_restoration:"):
+        raise HTTPException(status_code=409, detail="This protected internal setting cannot be edited through the application")
     setting = db.scalar(select(SystemSetting).where(SystemSetting.key == key))
     if setting is None:
         raise HTTPException(status_code=404, detail="System setting not found")

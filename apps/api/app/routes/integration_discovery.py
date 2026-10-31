@@ -131,7 +131,9 @@ async def set_schedule(integration_id: uuid.UUID, payload: ScheduleInput, reques
     if payload.preset not in orchestration.SCHEDULES:
         raise HTTPException(422, "Select a supported schedule preset")
     try:
-        _, manifest, _, _, _, _ = await orchestration.eligibility(db, row, require_runtime=False)
+        record, manifest, _, _, _, _ = await orchestration.eligibility(db, row, require_runtime=False)
+        from app.services.integration_connections import require_manual
+        require_manual(record, payload.preset)
         if not manifest["capabilities"]["scheduling"]:
             raise orchestration.DiscoveryEligibilityError("scheduling_unavailable")
         row.schedule_preset = payload.preset

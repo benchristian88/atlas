@@ -156,6 +156,18 @@ class Runtime:
     def cancel_job(self, payload):
         return self.jobs.get(payload, cancel=True)
 
+    def execution_admission(self, reference, context=None):
+        """Integrity verification alone never conveys local execution authority."""
+        if self.verify_connector(reference)["state"] != "verified":
+            raise ValueError("package_unavailable")
+        directory = self.store / reference["connector_id"] / reference["version"] / reference["digest"]
+        receipt = json.loads(read_regular(directory / "verification.json", MAX_METADATA))
+        evidence = receipt.get("verification", {})
+        if (self.store / ".local-instance.json").exists() or evidence.get("method") == "operator-local-release":
+            from .local_release import check_execution
+            manifest = json.loads(read_regular(directory / "manifest.json", MAX_METADATA))
+            check_execution(self.store, manifest, evidence, context, read_regular)
+
     def verify_connector(self, reference):
         if not isinstance(reference, dict) or set(reference) != {"connector_id", "version", "digest"}:
             raise ValueError("invalid_reference")

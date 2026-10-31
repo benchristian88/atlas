@@ -256,9 +256,12 @@ if the transaction fails. Prior inactive immutable versions support explicit
 catalogue-driven rollback while installed; uninstall removes their code too.
 No automatic version activation occurs.
 
-Official remote installation is disabled and fails closed while the reviewed
-GitHub/Sigstore verifier, pinned trust roots and official release workflow are
-unavailable. There is no skip-verification switch. Bundled packages, when qualified
+Official catalogue-selected remote installation remains disabled: provenance
+verification exists, but catalogue package eligibility/installation authority is
+still separate. The [local signed release acceptance procedure](local-release-acceptance.md)
+adds explicit root authority only in a bound isolated test instance; it changes
+neither production catalogue eligibility nor prerelease qualification. There is
+no skip-verification switch. Bundled packages, when qualified
 and shipped later, require exact digests bound to the trusted Atlas release.
 The current offline catalogue needs no Internet connection and ships one exact
 Proxmox probe archive produced in `atlas-connectors`. Its bootstrap digest is bound

@@ -20,6 +20,31 @@ from atlas_runtime import bootstrap
 configuration = importlib.import_module("configuration")
 
 
+def test_local_release_operator_has_separate_authority_and_read_only_consumers():
+    override=yaml.safe_load((ROOT / "infra/docker/docker-compose.local-release.yml").read_text())
+    for name in ("api", "worker", "runtime"):
+        service=override["services"][name]
+        assert set(service["volumes"])=={
+            "local_release_store:/var/lib/atlas-local-release-connectors:ro",
+            "local_release_binding:/etc/atlas-local-release:ro",
+            "${ATLAS_LOCAL_RELEASE_DEPLOYMENT_FILE:?Set the protected inspected deployment identity file}:/etc/atlas-local-release-deployment/identity.json:ro"}
+        assert "ATLAS_CONNECTOR_QUALIFICATION_ENABLED" not in service["environment"]
+    operator=override["services"]["release-operator"]
+    assert operator["user"]=="0:0" and operator["restart"]=="no"
+    assert operator["read_only"] is True and operator["cap_drop"]==["ALL"]
+    assert operator["cap_add"]==["DAC_READ_SEARCH"]
+    assert "local_release_private:/etc/atlas-local-release-private" in operator["volumes"]
+    assert "connector_store:/var/lib/atlas-connectors:ro" in operator["volumes"]
+    assert not any("private" in mount for name in ("api","worker","runtime") for mount in override["services"][name]["volumes"])
+    assert "runtime-init" not in override["services"] and "connector-bootstrap" not in override["services"]
+
+
+def test_bundled_restoration_retains_authority_mounts_and_only_selects_ordinary_store():
+    override = yaml.safe_load((ROOT / "infra/docker/docker-compose.local-release-restoration.yml").read_text())
+    assert override == {"services": {name: {"environment": {"ATLAS_CONNECTOR_STORE_PATH": "/var/lib/atlas-connectors"}}
+                                      for name in ("api", "worker", "runtime")}}
+
+
 def test_docker_runtime_is_private_isolated_read_only_and_failure_independent():
     compose = yaml.safe_load((ROOT / "infra/docker/docker-compose.yml").read_text())
     runtime = compose["services"]["runtime"]

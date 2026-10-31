@@ -12,7 +12,7 @@ from app.models import DiscoveryRun, Integration
 from app.services.connector_contracts import SDK_VERSION
 from app.services.connector_catalogue import compatibility
 from app.services.connector_mappings import require_resolved
-from app.services.integration_connections import installed_manifest, validate_scopes
+from app.services.integration_connections import installed_manifest, validate_scopes, require_manual, locally_accepted
 from app.services.integration_runtime import runtime, _approved_baseline
 from app.services.integration_secrets import AtlasEncryptedSecretProvider
 from app.services import discovery_tokens, discovery_diagnostics
@@ -97,6 +97,7 @@ async def create_run(db, row, *, trigger="manual", user_id=None):
         error.run_id = existing.id
         raise error
     record, manifest, mappings, coverage, classes, health = await eligibility(db, row)
+    require_manual(record, trigger)
     baseline = _approved_baseline()
     if SDK_VERSION != baseline["sdk_version"]:
         raise DiscoveryEligibilityError("sdk_version_changed")
@@ -110,6 +111,9 @@ async def create_run(db, row, *, trigger="manual", user_id=None):
         "credential_revision": str(row.credential_reference) if row.credential_reference else None,
         "selected_scopes": sorted(row.selected_scopes), "object_classes": classes, "coverage": coverage,
         "debug_enabled": bool(row.debug_next_run)}
+    if locally_accepted(record):
+        from app.services.local_release_authority import execution_context
+        provenance["local_execution"] = execution_context(record)
     created = utcnow()
     run = DiscoveryRun(id=uuid.uuid4(), integration_id=row.id, data_source_id=row.data_source_id,
         customer_id=row.customer_id, site_id=row.site_id, status="pending", started_at=created, created_at=created,
@@ -196,8 +200,13 @@ async def dispatch(db, run_id):
         return
     run.dispatch_attempts += 1
     try:
-        _, manifest, _, _, _, _ = await eligibility(db, row)
+        record, manifest, _, _, _, _ = await eligibility(db, row)
         provenance = run.execution_provenance
+        require_manual(record, provenance.get("trigger"))
+        if locally_accepted(record):
+            from app.services.local_release_authority import execution_context
+            if provenance.get("local_execution") != execution_context(record):
+                raise DiscoveryEligibilityError("local_release_activation_changed")
         if (row.connector_id, row.connector_version, row.connector_digest, row.data_source_id,
                 row.customer_id, row.site_id, str(row.credential_reference) if row.credential_reference else None,
                 row.config_json, sorted(row.selected_scopes)) != (provenance["connector_id"], provenance["connector_version"],
@@ -222,6 +231,8 @@ async def dispatch(db, run_id):
                 "credentials": lease.values, "selected_scopes": provenance["selected_scopes"], "object_classes": provenance["object_classes"],
                 "coverage": provenance["coverage"], "ingestion_token": token, "timeout_seconds": JOB_SECONDS,
                 "debug_enabled": run.debug_enabled}
+            if locally_accepted(record):
+                request["local_execution"] = provenance["local_execution"]
             # Persist generation and attempt before the runtime can callback.
             db.commit()
             try:

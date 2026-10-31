@@ -12,7 +12,8 @@ from app.services.connector_mappings import require_resolved
 from app.services.integration_secrets import AtlasEncryptedSecretProvider
 
 
-def installed_manifest(db, connector_id):
+def installed_manifest(db, connector_id, *, for_execution=True):
+    """Integrity and scoped DB binding always apply; only execution needs a lease."""
     record = db.get(InstalledConnectorPackage, connector_id)
     if record is None or record.status != "active" or record.verification_status != "verified":
         raise ValueError("A verified active Connector is required")
@@ -22,8 +23,27 @@ def installed_manifest(db, connector_id):
     # Store verification enforces ordinary qualification or the exact protected
     # operator grant. Repeating the ordinary gate would reject the test package.
     manifest = validate_manifest(strict_json(_read_regular(directory / "manifest.json", 256 * 1024)))
+    if (store.root / ".local-instance.json").exists() or record.verification_evidence.get("method") == "operator-local-release":
+        from app.services.local_release_authority import authorize, check_database, execution, artifact_evidence
+        evidence = artifact_evidence(record.verification_evidence)
+        bound, _ = authorize(store.root, manifest, evidence)
+        check_database(db, bound)
+        receipt = strict_json(_read_regular(directory / "verification.json", 512 * 1024), maximum=512 * 1024)
+        if receipt["verification"] != evidence:
+            raise ValueError("local_release_active_authorization_mismatch")
+        if for_execution:
+            execution(store.root, manifest, evidence, record.verification_evidence.get("local_activation"))
     require_resolved(db, manifest)
     return record, manifest
+
+
+def locally_accepted(record):
+    return record.verification_evidence.get("method") == "operator-local-release"
+
+
+def require_manual(record, trigger):
+    if locally_accepted(record) and trigger != "manual":
+        raise ValueError("local_release_manual_execution_only")
 
 
 def validate_scopes(manifest, selection):

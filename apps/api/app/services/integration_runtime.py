@@ -240,10 +240,11 @@ class LocalIntegrationRuntime:
         except (OSError, ValueError, TypeError, UnicodeError, RecursionError, aiohttp.ClientError, TimeoutError):
             return {**reference, "state": "unavailable"}
 
-    async def test_connection(self, reference, config, credentials, request_id):
+    async def test_connection(self, reference, config, credentials, request_id, *, local_execution=None):
         try:
             result = await control_request("test_connection", {"reference": reference, "request_id": str(request_id),
-                "config": config, "credentials": credentials})
+                "config": config, "credentials": credentials,
+                **({"local_execution": local_execution} if local_execution is not None else {})})
             # Fixed result fields only; never expose runtime/vendor text.
             categories = {"connected", "authentication_failed", "permission_limited", "tls_trust_required", "timeout", "source_unavailable", "unsafe_endpoint", "redirect_rejected", "response_too_large", "invalid_source_response", "invalid_configuration", "invalid_credentials", "package_unavailable", "runtime_unavailable"}
             if type(result.get("success")) is not bool or result.get("category") not in categories:

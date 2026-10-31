@@ -9,7 +9,7 @@ configured separately; this change does not configure branch protection:
 
 | Check | Required validation |
 | --- | --- |
-| **Backend / PostgreSQL** | Python 3.12; full API/SDK/Proxmox regression including installation, MFA, backup and release checks, real PostgreSQL/migration/nginx tests and Redis-backed restore checks; zero skipped tests; exactly one Alembic head; Python compilation. |
+| **Backend / PostgreSQL** | Python 3.12; ordinary-user API/SDK/Proxmox regression including installation, MFA, backup and release checks, real PostgreSQL/migration/nginx tests and Redis-backed restore checks; separate root-only local-release Docker regression; zero skipped tests in either run; exactly one Alembic head; Python compilation. |
 | **Frontend** | Node 22, `npm ci`, `npm test`, `npm run build`; Next telemetry disabled. |
 | **Release & Deployment Integrity** | Canonical metadata, shared release-critical regression, actionlint 1.7.7, whitespace, committed dry-run packages, independent verifier and SHA256SUMS, extracted installer/upgrade help, protected configuration, actual production/development/packaged Compose configuration and packaged API/web/worker/runtime image builds. |
 
@@ -26,6 +26,38 @@ healthcheck. The backend also installs the exact isolated Ansible runtime baseli
 The API test harness installs psutil for runtime-module tests; API production
 requirements remain independent of runtime dependencies. Both servers publish only on runner loopback. PostgreSQL also has
 a `pg_isready` healthcheck and a bounded authenticated readiness check.
+
+The ordinary-user run excludes exactly `test_local_release_authority_postgres.py`,
+`test_local_release_recovery.py` and `test_local_release_remediation.py`. Their 83
+cases require root-owned authority files, real UID/GID switching and committed
+PostgreSQL sessions. Running them as the runner user skips them by design, which
+caused the no-skips assertion to fail even though the other tests passed.
+Their skip conditions and security assertions remain unchanged.
+
+An unconditional step in the **same Backend / PostgreSQL job** runs these three
+modules in a disposable root-enabled test container; it cannot be bypassed by
+requiring only the existing backend check. The ordinary suite still runs as the
+runner user and still rejects every skip. The test image extends the existing
+production API Dockerfile with pytest, httpx, psutil and repository test/runtime
+source. It retains the image's integrity-checked pinned verifier and the original
+signature fixtures. No trust or catalogue policy changes.
+
+The test-only Compose project has an internal network, no published ports, no
+host mounts or Docker socket, and its own PostgreSQL 17 server and data volume.
+Generated bootstrap credentials provision a fresh non-superuser/non-createdb/
+non-createrole owner and migrated database. Only the additional non-secret
+`pg_control_system()` execution grant is provided for real cluster-identity checks.
+Bootstrap credentials are removed from the test process environment before pytest;
+tests and their children receive only the restricted database URL. Each database
+fixture also migrates and drops its own schema, preserving independent-session,
+database-lock, real process restart and runtime admission coverage. Redis, nginx
+and a separate Ansible installation are unnecessary for these three suites.
+The test container drops all capabilities except SETUID/SETGID for the actual
+application-UID child and enables `no-new-privileges`. A successful pytest exit
+and JUnit evidence of at least all 83 cases, every selected module and no skips,
+errors or failures are required. `always()` cleanup removes this project's
+containers, network, database volume and protected configuration, including on
+test/build failure. The backend's existing 20-minute timeout remains in force.
 
 Ubuntu 24.04's nginx 1.24 cannot validate the gateway's upstream `resolve`
 directive. CI builds nginx 1.28.3 from an official HTTPS archive checked against
@@ -126,11 +158,44 @@ from alembic.script import ScriptDirectory
 assert len(ScriptDirectory.from_config(Config('alembic.ini')).get_heads()) == 1
 PY
 python -m pytest tests ../../plugins/sdk/tests ../../plugins/proxmox/tests \
+  --ignore=tests/test_local_release_authority_postgres.py \
+  --ignore=tests/test_local_release_recovery.py \
+  --ignore=tests/test_local_release_remediation.py \
   -q -rs --tb=short
 bash ../../infra/ci/release-critical.sh
 ```
 
-All optional PostgreSQL/nginx suites should execute with **zero skips**. From
+From the repository root, run the mandatory root-only complement with Docker
+Compose in a subshell. It builds test-only images and requires no host root test
+execution or running Atlas installation:
+
+```bash
+(
+  set -euo pipefail
+  ATLAS_CI_ROOT_WORK=$(mktemp -d)
+  cleanup() {
+    cleanup_status=0
+    docker compose --project-name atlas-ci-local-release \
+      --env-file "$ATLAS_CI_ROOT_WORK/config.env" \
+      -f infra/ci/docker-compose.local-release-tests.yml down --volumes --remove-orphans || cleanup_status=$?
+    rm -rf "$ATLAS_CI_ROOT_WORK"
+    return "$cleanup_status"
+  }
+  trap cleanup EXIT
+  ATLAS_BIND_ADDRESS=127.0.0.1 python infra/install/configuration.py \
+    --method docker_compose --output "$ATLAS_CI_ROOT_WORK/config.env"
+  docker build --file apps/api/Dockerfile -t atlas-ci-local-release-api .
+  docker compose --project-name atlas-ci-local-release \
+    --env-file "$ATLAS_CI_ROOT_WORK/config.env" \
+    -f infra/ci/docker-compose.local-release-tests.yml build tests
+  docker compose --project-name atlas-ci-local-release \
+    --env-file "$ATLAS_CI_ROOT_WORK/config.env" \
+    -f infra/ci/docker-compose.local-release-tests.yml run --rm tests
+)
+```
+
+Use a unique Compose project name if another copy of this test harness is running.
+Both runs should execute with **zero skips**. From
 `apps/web`, run `npm ci`, `npm test` and `npm run build`. From the repository:
 
 ```bash

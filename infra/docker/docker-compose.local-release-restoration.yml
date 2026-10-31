@@ -1,0 +1,13 @@
+# Temporary handoff configuration. Merge AFTER base and local-release overrides.
+# Retain original authority/deployment/store mounts until normal activation has
+# consumed the persisted root handoff; an environment change alone is denied.
+services:
+  api:
+    environment:
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
+  worker:
+    environment:
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors
+  runtime:
+    environment:
+      ATLAS_CONNECTOR_STORE_PATH: /var/lib/atlas-connectors

@@ -10,6 +10,10 @@ from atlas_connector_sdk.contracts import strict_json, validate_manifest
 
 
 def check(store, manifest, evidence, read_regular):
+    if (store / ".local-instance.json").exists() or evidence.get("method") == "operator-local-release":
+        from .local_release import check as check_local_release
+        check_local_release(store, manifest, evidence, read_regular)
+        return
     if evidence.get("method") != "operator-qualification":
         # Retain inspection compatibility with historical minimal I1 receipts;
         # execution still requires the fixed complete entry-point contracts.

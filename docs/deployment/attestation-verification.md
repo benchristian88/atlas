@@ -43,6 +43,12 @@ freshness, withdrawal, compatibility, qualification, administrator authorization
 and protected-store controls separately. No connector IDs or versions are
 allowlisted in the production verifier.
 
+Phase 4B.12A adds a separate [local release acceptance adapter](local-release-acceptance.md)
+for exact officially signed immutable releases outside catalogue selection. It
+reuses this unchanged `verify_package` profile, with independently checked release,
+tag, asset and source expectations. Protected root operator authorization remains
+distinct from provenance and catalogue eligibility; no verifier/root override exists.
+
 Catalogue names may be catalogue.json or a numbered catalogue snapshot.
 Package names and tag refs derive from validated generic ID/SemVer context.
 Input bytes remain the digest authority, including whitespace. Never authenticate

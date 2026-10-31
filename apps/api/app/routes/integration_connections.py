@@ -16,7 +16,7 @@ from app.database import get_db
 from app.models import Integration, DataSource, Site, InstalledConnectorPackage, ConnectorMapping
 from app.services import connector_lifecycle as lifecycle
 from app.services import connector_mappings as mappings
-from app.services.integration_connections import installed_manifest, response, validate_scopes, protect_source_identity, SourceIdentityLocked
+from app.services.integration_connections import installed_manifest, response, validate_scopes, protect_source_identity, SourceIdentityLocked, locally_accepted
 from app.services.integration_secrets import AtlasEncryptedSecretProvider, JobSecretLease, SecretProviderError
 from app.services.integration_runtime import runtime
 
@@ -120,7 +120,7 @@ def connection_forms(principal: Principal = Depends(require_permission("integrat
     result = []
     for row in db.scalars(select(InstalledConnectorPackage).order_by(InstalledConnectorPackage.connector_id)):
         try:
-            record, manifest = installed_manifest(db, row.connector_id)
+            record, manifest = installed_manifest(db, row.connector_id, for_execution=False)
             result.append(form(record, manifest))
         except (ValueError, OSError):
             continue  # No actionable form for an unavailable/unresolved package.
@@ -143,7 +143,7 @@ def integration_detail(integration_id: uuid.UUID, principal: Principal = Depends
         record, manifest = installed_manifest(db, row.connector_id) if row.connector_id else (None, None)
         if manifest and (record.version, record.bundle_digest) == (row.connector_version, row.connector_digest):
             value.update(discovery_capable=manifest["capabilities"]["discover"] == "read_only",
-                scheduling_capable=manifest["capabilities"]["scheduling"])
+                scheduling_capable=manifest["capabilities"]["scheduling"] and not locally_accepted(record))
             validate_configuration(manifest, row.config_json, configured_fields=AtlasEncryptedSecretProvider(db).state(row))
             validate_scopes(manifest, row.selected_scopes)
             value["discovery_configured"] = True
@@ -191,7 +191,7 @@ async def create_integration(payload: ConnectionCreate, request: Request,
         initial = None
         can_run = db.scalar(select(Integration.id).where(Integration.id == row.id,
             scope_condition(principal, "integrations.run", Integration.customer_id, Integration.site_id))) is not None
-        if manifest["capabilities"]["discover"] == "read_only" and row.enabled and can_run:
+        if manifest["capabilities"]["discover"] == "read_only" and row.enabled and can_run and not locally_accepted(record):
             if manifest["capabilities"]["scheduling"]:
                 row.schedule_preset = "hourly"
                 row.next_run_at = discovery.next_run("hourly", datetime.now(timezone.utc))
@@ -220,7 +220,7 @@ def update_integration(integration_id: uuid.UUID, payload: ConnectionUpdate, req
     require_live(row)
     lifecycle.lock_connector(db, row.connector_id)
     try:
-        record, manifest = installed_manifest(db, row.connector_id)
+        record, manifest = installed_manifest(db, row.connector_id, for_execution=False)
         provider = AtlasEncryptedSecretProvider(db)
         if payload.config is not None:
             protect_source_identity(db, row, manifest, payload.config)
@@ -261,7 +261,7 @@ def replace_credentials(integration_id: uuid.UUID, payload: Credentials, request
     row = scoped(db, principal, "integrations.manage", integration_id, lock=True)
     require_live(row)
     try:
-        _, manifest = installed_manifest(db, row.connector_id)
+        _, manifest = installed_manifest(db, row.connector_id, for_execution=False)
         values = {key: value.get_secret_value() for key, value in payload.values.items()}
         validate_configuration(manifest, row.config_json, values)
         provider = AtlasEncryptedSecretProvider(db)
@@ -320,7 +320,11 @@ def retire_integration(integration_id: uuid.UUID, payload: Confirm, request: Req
 
 
 async def invoke(record, manifest, config, values, request_id):
-    result = await runtime.test_connection({"connector_id": record.connector_id, "version": record.version, "digest": record.bundle_digest}, config, values, request_id)
+    options = {}
+    if locally_accepted(record):
+        from app.services.local_release_authority import execution_context
+        options["local_execution"] = execution_context(record)
+    result = await runtime.test_connection({"connector_id": record.connector_id, "version": record.version, "digest": record.bundle_digest}, config, values, request_id, **options)
     result["compatibility"] = source_compatibility(manifest, result.get("source_version"))
     if result["compatibility"] == "known_incompatible":
         result.update(success=False, category="source_incompatible")
