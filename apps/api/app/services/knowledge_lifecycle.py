@@ -106,7 +106,8 @@ def can_delete_discovery_run(db: Session, run: DiscoveryRun) -> DeletionSafety:
         db,
         select(func.count()).select_from(KnowledgeAssertion).where(
             KnowledgeAssertion.discovery_run_id != run.id,
-            KnowledgeAssertion.superseded_by_id.in_(assertion_ids),
+            or_(KnowledgeAssertion.superseded_by_id.in_(assertion_ids),
+                KnowledgeAssertion.acceptance_replaced_by_id.in_(assertion_ids)),
         ),
     )
 
@@ -284,7 +285,8 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
     history_references = _count(
         db,
         select(func.count()).select_from(KnowledgeAssertion).where(
-            KnowledgeAssertion.superseded_by_id == assertion.id
+            or_(KnowledgeAssertion.superseded_by_id == assertion.id,
+                KnowledgeAssertion.acceptance_replaced_by_id == assertion.id)
         ),
     )
     linked_entities = 0

@@ -42,7 +42,7 @@ def ensure_asset_link(
     observed_at: datetime | None = None,
 ) -> EntitySourceLink:
     observed_at = observed_at or datetime.now(timezone.utc)
-    source = db.get(DataSource, data_source_id)
+    source = db.get(DataSource, data_source_id, with_for_update={"key_share": True})
     if source is None:
         raise HTTPException(status_code=409, detail="The data source no longer exists")
     if source.customer_id != asset.customer_id or source.site_id not in {
@@ -94,6 +94,9 @@ def technical_link(db, *, data_source_id, customer_id, site_id, entity_type, ext
 
 def ensure_technical_link(db, *, source, target, entity_type, external_id, observed_at):
     """Explicit reconciliation acceptance only; no name-based cross-source merge."""
+    # Serialize absent-link creation as well as existing-link checks. The unique
+    # source/type/external constraint remains the final integrity boundary.
+    db.get(DataSource, source.id, with_for_update={"key_share": True})
     if entity_type == "network":
         customer_id, site_id = target.customer_id, target.site_id
         owner_id, network_id, interface_id, interface_owner_id = None, target.id, None, None
@@ -107,10 +110,11 @@ def ensure_technical_link(db, *, source, target, entity_type, external_id, obser
         raise HTTPException(409, "Unsupported technical source identity")
     if source.customer_id != customer_id or source.site_id not in {None, site_id} or site_id is None:
         raise HTTPException(409, "Source and target must share the customer and site")
-    link = technical_link(db, data_source_id=source.id, customer_id=customer_id, site_id=site_id,
-        entity_type=entity_type, external_id=external_id)
+    link = db.scalar(select(EntitySourceLink).where(EntitySourceLink.data_source_id == source.id,
+        EntitySourceLink.entity_type == entity_type, EntitySourceLink.external_id == external_id))
     if link is not None:
-        if (link.entity_id, link.network_id, link.interface_id, link.interface_owner_id) != (owner_id, network_id, interface_id, interface_owner_id):
+        if ((link.customer_id, link.site_id) != (customer_id, site_id) or
+                (link.entity_id, link.network_id, link.interface_id, link.interface_owner_id) != (owner_id, network_id, interface_id, interface_owner_id)):
             raise HTTPException(409, "The technical source identity already has a target")
         link.last_observed_at = observed_at
         return link

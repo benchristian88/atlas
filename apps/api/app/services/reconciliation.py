@@ -49,6 +49,34 @@ SAFE_ASSET_FIELDS = {
 }
 
 
+def canonical_asset_field(item):
+    if item.entity_type != "asset":
+        return None
+    if item.category == "no_longer_observed":
+        return "status"
+    observed = item.observed_value_json if isinstance(item.observed_value_json, dict) else {}
+    field = observed.get("field")
+    if item.category in {"changed", "contradiction"} and isinstance(field, str) and field in SAFE_ASSET_FIELDS:
+        return field
+    return None
+
+
+def canonical_asset_snapshot(item, asset):
+    """The authorized canonical state reviewed by both presentation and decisions.
+
+    The persisted proposal snapshot remains historical. Never use it as a live
+    value or as the predecessor of a newly approved canonical field change.
+    Callers serialize decisions by locking/reloading the Asset before using this.
+    """
+    field = canonical_asset_field(item)
+    if (field is None or asset is None
+            or (asset.customer_id, asset.site_id) != (item.customer_id, item.site_id)):
+        return None
+    if item.category == "no_longer_observed":
+        return {"status": asset.status}
+    return to_json_value({"field": field, "value": getattr(asset, field)})
+
+
 class RelationshipResolutionError(Exception):
     def __init__(self, payload: dict[str, Any]):
         super().__init__(payload["detail"])
@@ -94,6 +122,16 @@ def create_item(
         observed_value_json=to_json_value(observed_value),
         recommended_action=recommended_action,
     )
+    if canonical_asset_field(item) and category in {"changed", "contradiction"}:
+        identifier = entity_id or assertion.subject_id
+        asset = db.get(Asset, identifier) if identifier else None
+        if (canonical_asset_snapshot(item, asset) is not None and asset.updated_at is not None
+                and isinstance(item.current_value_json, dict)):
+            # A legacy versionless decision needs the exact original canonical
+            # epoch, not updated_at > created_at: PostgreSQL now() is transaction
+            # start and concurrent PATCH transactions may predate this proposal.
+            item.current_value_json = {**item.current_value_json,
+                "_canonical_updated_at": to_json_value(asset.updated_at)}
     db.add(item)
     db.flush()
     return item, True
@@ -135,6 +173,25 @@ def _assertion_for_item(db: Session, item: ReconciliationItem) -> KnowledgeAsser
     if assertion is None:
         raise HTTPException(status_code=409, detail="The source assertion no longer exists")
     return assertion
+
+
+def _current_link_assertion(db, item):
+    assertion = _assertion_for_item(db, item)
+    if ((assertion.customer_id, assertion.site_id) != (item.customer_id, item.site_id)
+            or assertion.subject_type != item.entity_type
+            or not item.candidate_external_id
+            or assertion.subject_external_id != item.candidate_external_id):
+        raise HTTPException(409, "The source identity context does not match")
+    if assertion.retracted_at or assertion.superseded_by_id or assertion.is_source_current is False:
+        raise HTTPException(409, "This proposal is stale; review the latest observation")
+    return assertion
+
+
+def technical_configuration(target):
+    """Accepted values for review; canonical IDs are never source bridge names."""
+    fields = (["name", "network_type", "vlan_id", "cidr", "gateway"] if isinstance(target, Network)
+              else ["name", "asset_id", "network_id", "ip_address", "mac_address", "is_primary"])
+    return to_json_value({field: getattr(target, field) for field in fields})
 
 
 def _attach_external_identity(
@@ -248,7 +305,7 @@ def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
     return asset
 
 
-def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
+def _accept_changed_fact(db: Session, item: ReconciliationItem) -> tuple[Asset, Any]:
     assertion = _assertion_for_item(db, item)
     identifier = item.entity_id or assertion.subject_id
     if identifier is None and assertion.data_source_id:
@@ -256,7 +313,7 @@ def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
             customer_id=item.customer_id, site_id=item.site_id, entity_type="asset",
             external_id=assertion.subject_external_id or item.candidate_external_id)
         identifier = link.entity_id if link else None
-    asset = db.get(Asset, identifier) if identifier else None
+    asset = db.get(Asset, identifier, with_for_update=True) if identifier else None
     if asset is None:
         raise HTTPException(status_code=409, detail="The target asset no longer exists")
     if (asset.customer_id, asset.site_id) != (item.customer_id, item.site_id):
@@ -267,14 +324,15 @@ def _accept_changed_fact(db: Session, item: ReconciliationItem) -> Asset:
     if assertion.fact_metadata is not None and field == assertion.predicate and "." in field:
         # Accepted namespaced facts live in the existing assertion knowledge
         # model. They are never aliases for canonical Asset columns.
-        return asset
+        return asset, item.current_value_json
     if field not in SAFE_ASSET_FIELDS:
         raise HTTPException(status_code=422, detail="This fact cannot be applied automatically")
     if field == "asset_type":
         _active_asset_type(db, value.get("value"))
+    previous = canonical_asset_snapshot(item, asset)
     setattr(asset, field, value.get("value"))
     asset.last_seen_at = datetime.now(timezone.utc)
-    return asset
+    return asset, previous
 
 
 def _accept_matching_asset_assertions(
@@ -320,6 +378,8 @@ def _accept_absence(
     asset = db.get(Asset, item.entity_id) if item.entity_id else None
     if asset is None:
         raise HTTPException(status_code=409, detail="The target asset no longer exists")
+    if (asset.customer_id, asset.site_id) != (item.customer_id, item.site_id):
+        raise HTTPException(409, "The target asset is outside this reconciliation context")
     disposition = disposition or "mark_missing"
     status_by_disposition = {
         "mark_missing": "missing",
@@ -333,12 +393,25 @@ def _accept_absence(
         raise HTTPException(status_code=422, detail="Unsupported absence disposition")
     previous_status = asset.status
     asset.status = status_by_disposition[disposition]
+    assertion = _assertion_for_item(db, item)
+    change_assertion = assertion
+    if disposition not in {"keep_active", "exception"}:
+        # This is a new, explicit operator declaration, not a discovered status
+        # or a rewrite of the prior manual assertion. Normal replacement retains
+        # the old declaration and records its independent acceptance lineage.
+        from app.services.data_sources import manual_inventory_source
+        from app.services.knowledge_assertions import record_assertion
+        source = manual_inventory_source(db, asset.customer_id, asset.site_id)
+        change_assertion, _ = record_assertion(db, customer_id=asset.customer_id,
+            site_id=asset.site_id, subject_type="asset", subject_id=asset.id,
+            predicate="status", value=asset.status, truth_classification="declared", data_source_id=source.id)
+        accept_assertion(db, change_assertion, user_id=actor_user_id)
     item.decision_reason = reason or {
         "mark_missing": "Marked missing after complete discovery snapshot",
         "mark_inactive": "Marked inactive after complete discovery snapshot",
         "mark_retired": "Retired after complete discovery snapshot",
         "retire": "Retired after complete discovery snapshot",
-        "keep_active": "Kept active despite not being observed",
+        "keep_active": "Kept the existing status despite not being observed",
         "exception": "Exception recorded for the missing observation",
     }[disposition]
     if disposition == "exception":
@@ -347,24 +420,24 @@ def _accept_absence(
         current["exception_review_at"] = exception_review_at
         current["disposition"] = disposition
         item.current_value_json = to_json_value(current)
-    assertion = _assertion_for_item(db, item)
     record_assertion_change(
         db,
-        assertion=assertion,
+        assertion=change_assertion,
         item=item,
         change_type=("exception_recorded" if disposition == "exception" else "lifecycle_changed"),
         entity_name=asset.name,
         summary=(
             f"Recorded a no-longer-observed exception for {asset.name}"
             if disposition == "exception"
-            else f"Kept {asset.name} active after absence review"
+            else f"Retained {asset.name}'s {asset.status} status after absence review"
             if disposition == "keep_active"
             else f"{asset.name}: {previous_status} → {asset.status}"
         ),
         actor_user_id=actor_user_id,
         previous_value=previous_status,
         new_value=asset.status,
-        metadata={"disposition": disposition, "exception_review_at": exception_review_at},
+        metadata={"disposition": disposition, "exception_review_at": exception_review_at,
+                  "origin": "absence_review", "observation_assertion_id": assertion.id},
         occurred_at=datetime.now(timezone.utc),
     )
     return asset
@@ -582,7 +655,7 @@ def accept_item(
     elif item.entity_type == "asset" and item.category in {"newly_discovered", "possible_duplicate"}:
         result = _accept_new_asset(db, item)
     elif item.entity_type == "asset" and item.category in {"changed", "contradiction"}:
-        result = _accept_changed_fact(db, item)
+        result, previous_value = _accept_changed_fact(db, item)
     elif item.entity_type == "asset_relationship":
         result = _accept_relationship(db, item)
     elif item.entity_type == "asset" and item.category == "no_longer_observed":
@@ -618,6 +691,9 @@ def accept_item(
         )
     if item.category != "no_longer_observed":
         name = getattr(result, "name", None) or item.candidate_external_id or item.entity_type
+        new_value = canonical_asset_snapshot(item, result) if isinstance(result, Asset) else None
+        if new_value is None:
+            new_value = item.observed_value_json
         change_type = (
             "relationship_added"
             if item.entity_type == "asset_relationship"
@@ -625,6 +701,9 @@ def accept_item(
             if item.category in {"newly_discovered", "possible_duplicate"}
             else "fact_changed"
         )
+        if (change_type == "fact_changed" and isinstance(previous_value, dict)
+                and previous_value == item.observed_value_json):
+            change_type = "assertion_confirmed"
         record_assertion_change(
             db,
             assertion=assertion,
@@ -634,7 +713,7 @@ def accept_item(
             summary=f"Accepted {item.category.replace('_', ' ')} for {name}",
             actor_user_id=user.id,
             previous_value=previous_value,
-            new_value=item.observed_value_json,
+            new_value=new_value,
             occurred_at=item.decided_at,
         )
     return result
@@ -648,7 +727,11 @@ def _accept_technical(db, item, assertion):
     link = technical_link(db, data_source_id=source.id, customer_id=item.customer_id, site_id=item.site_id,
         entity_type=kind, external_id=item.candidate_external_id)
     target_id = (link.network_id if kind == "network" else link.interface_id) if link else None
-    target = db.get(Network if kind == "network" else AssetInterface, target_id) if target_id else None
+    target = db.get(Network if kind == "network" else AssetInterface, target_id, with_for_update=True) if target_id else None
+    if target is not None:
+        owner = db.get(Asset, target.asset_id) if kind == "asset_interface" else target
+        if owner is None or (owner.customer_id, owner.site_id) != (item.customer_id, item.site_id):
+            raise HTTPException(409, "The technical source context is unavailable")
     value = assertion.value_json
     if assertion.fact_metadata is not None:
         if target is None:
@@ -671,6 +754,8 @@ def _accept_technical(db, item, assertion):
             site_id=item.site_id, entity_type="asset", external_id=value["asset_external_id"])
         if asset_link is None:
             raise HTTPException(409, "Accept or link the source Asset before its interface")
+        # The owner lock serializes competing interface-name checks across sources.
+        db.get(Asset, asset_link.entity_id, with_for_update=True)
         network_link = technical_link(db, data_source_id=source.id, customer_id=item.customer_id,
             site_id=item.site_id, entity_type="network", external_id=value["network_external_id"]) if value.get("network_external_id") else None
         if value.get("network_external_id") and network_link is None:
@@ -703,10 +788,16 @@ def link_item_to_technical(db, *, item, target, user, reason=None):
     """Explicit source association preserves the manually curated configuration."""
     if item.status not in {"open", "deferred"} or item.category != "newly_discovered":
         raise HTTPException(409, "This technical identity has already been resolved")
-    assertion = _assertion_for_item(db, item)
-    source = db.get(DataSource, assertion.data_source_id)
-    if source is None or assertion.predicate != "configuration":
+    if item.entity_type not in {"network", "asset_interface"}:
         raise HTTPException(422, "This item cannot link a technical identity")
+    assertion = _current_link_assertion(db, item)
+    source = db.get(DataSource, assertion.data_source_id)
+    if (source is None or assertion.predicate != "configuration" or assertion.fact_metadata is not None
+            or not isinstance(target, Network if item.entity_type == "network" else AssetInterface)):
+        raise HTTPException(422, "This item cannot link a technical identity")
+    owner = db.get(Asset, target.asset_id) if item.entity_type == "asset_interface" else target
+    if owner is None or (owner.customer_id, owner.site_id) != (item.customer_id, item.site_id):
+        raise HTTPException(404, "Technical entity not found")
     if item.entity_type == "asset_interface":
         owner = db.get(Asset, target.asset_id)
         value = assertion.value_json
@@ -717,14 +808,23 @@ def link_item_to_technical(db, *, item, target, user, reason=None):
     ensure_technical_link(db, source=source, target=target, entity_type=item.entity_type,
         external_id=item.candidate_external_id, observed_at=assertion.last_observed_at)
     item.entity_id = assertion.subject_id = target.id
+    for claim in db.scalars(select(KnowledgeAssertion).where(
+            KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id,
+            KnowledgeAssertion.data_source_id == source.id, KnowledgeAssertion.subject_type == item.entity_type,
+            KnowledgeAssertion.subject_external_id == item.candidate_external_id,
+            KnowledgeAssertion.is_source_current.is_(True))):
+        claim.subject_id = target.id
     item.status, item.decision_reason = "accepted", reason or "Linked source identity; accepted configuration retained"
     item.decided_by_user_id, item.decided_at = user.id, datetime.now(timezone.utc)
+    # Production disables autoflush. Close the identity review before looking
+    # for an open review of this same assertion, within this transaction.
+    db.flush()
     # Identity association is not acceptance of the observed configuration.
     record_assertion_change(db, assertion=assertion, item=item, change_type="source_linked",
         entity_name=target.name, summary="Linked technical source identity to " + target.name,
         actor_user_id=user.id, new_value={"entity_id": target.id}, occurred_at=item.decided_at)
     create_item(db, assertion=assertion, category="changed", entity_type=item.entity_type, entity_id=target.id,
-        candidate_external_id=item.candidate_external_id, current_value=None,
+        candidate_external_id=item.candidate_external_id, current_value=technical_configuration(target),
         observed_value=assertion.value_json, recommended_action="Review source configuration after linking")
     return target
 
@@ -746,14 +846,21 @@ def link_item_to_asset(
         raise HTTPException(status_code=422, detail="This item cannot be linked to an asset")
     if asset.customer_id != item.customer_id or asset.site_id != item.site_id:
         raise HTTPException(status_code=422, detail="The asset must be in the same customer and site")
-    assertion = _assertion_for_item(db, item)
+    assertion = _current_link_assertion(db, item)
     _attach_external_identity(db, item=item, assertion=assertion, asset=asset)
     item.status = "accepted"
     item.decision_reason = reason or "Linked discovered identity to existing asset"
     item.decided_by_user_id = user.id
     item.decided_at = datetime.now(timezone.utc)
-    confirm(assertion)
-    accept_assertion(db, assertion, user_id=user.id, accepted_at=item.decided_at)
+    db.flush()
+    if assertion.predicate == "name" and assertion.value_json != asset.name:
+        create_item(db, assertion=assertion, category="changed", entity_type="asset", entity_id=asset.id,
+            candidate_external_id=item.candidate_external_id, current_value={"field": "name", "value": asset.name},
+            observed_value={"field": "name", "value": assertion.value_json},
+            recommended_action="Review source name after linking")
+    else:
+        confirm(assertion)
+        accept_assertion(db, assertion, user_id=user.id, accepted_at=item.decided_at)
     record_assertion_change(
         db,
         assertion=assertion,
@@ -766,15 +873,36 @@ def link_item_to_asset(
         new_value={"asset_id": asset.id, "external_id": item.candidate_external_id},
         occurred_at=item.decided_at,
     )
+    # Identity acceptance does not select otherwise unreviewed field claims.
+    # Make matching corroboration as well as disagreements explicitly reviewable.
+    for claim in db.scalars(select(KnowledgeAssertion).where(
+            KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id,
+            KnowledgeAssertion.data_source_id == assertion.data_source_id, KnowledgeAssertion.subject_type == "asset",
+            KnowledgeAssertion.subject_external_id == item.candidate_external_id,
+            KnowledgeAssertion.predicate.in_(ASSET_FIELD_PREDICATES), KnowledgeAssertion.is_source_current.is_(True))):
+        if claim.id == assertion.id or claim.is_accepted or claim.retracted_at or claim.confirmation_status in {"rejected", "superseded"}:
+            continue
+        current = getattr(asset, claim.predicate)
+        create_item(db, assertion=claim, category="changed" if current == claim.value_json else "contradiction",
+            entity_type="asset", entity_id=asset.id, candidate_external_id=item.candidate_external_id,
+            current_value={"field": claim.predicate, "value": current},
+            observed_value={"field": claim.predicate, "value": claim.value_json},
+            recommended_action="Review source field after linking")
     for related in db.scalars(
-        select(ReconciliationItem).where(
+        select(ReconciliationItem).join(KnowledgeAssertion,
+            KnowledgeAssertion.id == ReconciliationItem.assertion_id).where(
             ReconciliationItem.customer_id == item.customer_id,
             ReconciliationItem.site_id == item.site_id,
             ReconciliationItem.entity_type == "asset_relationship",
             ReconciliationItem.status.in_(("open", "deferred")),
+            KnowledgeAssertion.data_source_id == assertion.data_source_id,
+            (KnowledgeAssertion.subject_external_id == item.candidate_external_id)
+            | (KnowledgeAssertion.object_external_id == item.candidate_external_id),
         )
     ):
-        relationship_resolution(db, related)
+        # Refresh only this identity's source-local dependants. Read-only
+        # resolution must not acquire another DataSource lock under ours.
+        relationship_resolution(db, related, persist_links=False)
     return asset
 
 

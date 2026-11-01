@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import KnowledgeAssertion
 from app.services.predicate_definitions import predicate_cardinality
+from app.services.knowledge_locks import lock_subject
 from app.utils.json_values import to_json_value
 
 
@@ -116,7 +117,9 @@ def record_assertion(
         )
     )
     for assertion in current:
-        if _same_claim(assertion, value, object_external_id) and assertion.fact_metadata == fact_metadata:
+        if (_same_claim(assertion, value, object_external_id) and assertion.fact_metadata == fact_metadata
+                and assertion.retracted_at is None and assertion.superseded_by_id is None
+                and assertion.confirmation_status != "superseded"):
             assertion.last_observed_at = observed_at
             assertion.discovery_run_id = discovery_run_id
             assertion.evidence_record_id = evidence_record_id
@@ -219,11 +222,21 @@ def accept_assertion(
 
     if assertion.retracted_at is not None:
         raise ValueError("A retracted assertion cannot be accepted")
+    # A common canonical row serializes competing sources, including when
+    # neither has an accepted claim yet. Routes acquire this before claim locks.
+    lock_subject(db, assertion.subject_type, assertion.subject_id)
+    # record_assertion may have pending source-supersession updates. With
+    # autoflush disabled, populate_existing below would discard those changes
+    # while refreshing accepted flags. Persist them under the canonical lock
+    # before reloading the selected set; the outer transaction still owns commit.
+    db.flush()
     replaced: list[KnowledgeAssertion] = []
     if predicate_cardinality(
         assertion.predicate, object_type=assertion.object_type
     ) == "single":
         query = select(KnowledgeAssertion).where(
+            KnowledgeAssertion.customer_id == assertion.customer_id,
+            KnowledgeAssertion.site_id.is_not_distinct_from(assertion.site_id),
             KnowledgeAssertion.subject_type == assertion.subject_type,
             KnowledgeAssertion.predicate == assertion.predicate,
             KnowledgeAssertion.id != assertion.id,
@@ -234,15 +247,20 @@ def accept_assertion(
         else:
             query = query.where(
                 KnowledgeAssertion.subject_id.is_(None),
+                KnowledgeAssertion.data_source_id == assertion.data_source_id,
                 KnowledgeAssertion.subject_external_id
                 == assertion.subject_external_id,
             )
-        replaced = list(db.scalars(query))
+        # A bulk review may have loaded other sources before waiting for the
+        # canonical lock. Refresh accepted flags so clearing them emits UPDATEs.
+        replaced = list(db.scalars(query.execution_options(populate_existing=True)))
         for previous in replaced:
             previous.is_accepted = False
             previous.accepted_at = None
             previous.accepted_by_user_id = None
-            previous.superseded_by_id = assertion.id
+            # Acceptance replacement is not supersession of another source's
+            # observation. Its freshness and source lineage remain independent.
+            previous.acceptance_replaced_by_id = assertion.id
             if previous.truth_classification == "declared":
                 previous.confirmation_status = "superseded"
         # Avoid a transient partial-unique-index violation when SQLAlchemy

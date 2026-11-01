@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { loadComponent } from "./helpers/components.mjs";
 import { reconciliationEntityPagePath, reconciliationQueueFromValue, reconciliationReviewHref, reconciliationReturnHref } from "../lib/reconciliation-queues.mjs";
 
-const { ReconciliationEntityCard, ReconciliationReviewLink } = loadComponent(new URL("../components/reconciliation-cards.js", import.meta.url));
+const { ReconciliationEntityCard, ReconciliationReviewLink, TechnicalIdentityLink } = loadComponent(new URL("../components/reconciliation-cards.js", import.meta.url));
 const row = { id: "fact", category: "changed", status: "open", entity_type: "asset", label: "Serial number", proposed: "12345", current: null, assertion_predicate: "generic.serial", source_name: "Source", can_accept: false, can_reject: true, can_defer: true, blocked_reason: "Requires Workload to exist", blockers: [{ item_id: "parent", entity_id: "owner", name: "Workload" }], warning: null };
 const parent = { ...row, id: "parent", category: "newly_discovered", entity_type: "asset", label: "New asset", can_accept: true, blockers: [], blocked_reason: null };
 const entity = { id: "owner", entity_type: "asset", customer_id: "customer", site_id: "site", name: "Workload", type_label: "Virtual Machine", default_expanded: true, matching_record_count: 2, parent, sections: [{ key: "facts", label: "Facts", total: 1, items: [row], warnings: [row.blocked_reason], blocked_count: 1, next_offset: null }], decision_items: [{ id: "parent", version: "0".repeat(64) }, { id: "fact", version: "0".repeat(64) }], accept_all_available: true, bulk_limit: 1000 };
@@ -34,6 +34,16 @@ test("accepted parent remains visible while children are independently actionabl
   assert.doesNotMatch(html, />Accept asset<\/button>/);
   assert.match(html, />Accept<\/button>/);
   assert.match(html, /<details><summary class="review-entity-heading"/);
+});
+
+test("canonical review renders the backend snapshot in the comparison and evidence", () => {
+  const fresh = { ...row, label: "Name", current: "New manual value", proposed: "Observed",
+    current_value_json: { field: "name", value: "New manual value" },
+    observed_value_json: { field: "name", value: "Observed" },
+    version: "2".repeat(64), can_accept: true, blocked_reason: null, blockers: [] };
+  const html = render({ ...entity, parent: null, sections: [{ ...entity.sections[0], items: [fresh] }] });
+  assert.match(html, /New manual value<\/span><span aria-label="changes to"> → <\/span><span>Observed/);
+  assert.match(html, /<span>Current<\/span><code>\{&quot;field&quot;:&quot;name&quot;,&quot;value&quot;:&quot;New manual value&quot;\}<\/code>/);
 });
 
 test("existing entity shares sections, starts compact, and focus expands it", () => {
@@ -92,4 +102,58 @@ test("review links record query history and retain modified-click browser behavi
     assert.equal(prevented, false);
     assert.equal(visited.length, 1);
   } finally { globalThis.window = previous; }
+});
+
+const technical = { ...row, id: "interface", entity_type: "asset_interface", category: "newly_discovered", technical_identity: true, can_link_technical: true, link_asset_id: "accepted-owner" };
+const interfaceCandidates = [
+  { id: "eth0", asset_id: "accepted-owner", name: "eth0", mac_address: "02:00:00:00:00:01", ip_address: "192.0.2.8", network_id: "lan" },
+  { id: "hidden", asset_id: "other-owner", name: "Hidden interface", mac_address: "02:00:00:00:00:ff" },
+];
+function renderTechnical(item = technical, extra = {}) {
+  return renderToStaticMarkup(React.createElement(TechnicalIdentityLink, { item, technicalChoices: { [item.id]: { items: interfaceCandidates, loading: false } }, ...extra }));
+}
+
+test("technical linking identifies same-owner interfaces and requires an explicit valid selection", () => {
+  const html = renderTechnical();
+  assert.match(html, /Link existing interface/);
+  assert.match(html, /for="technical-link-interface"/);
+  assert.match(html, /id="technical-link-interface"/);
+  assert.match(html, /eth0 · 02:00:00:00:00:01 · 192.0.2.8 · Network lan/);
+  assert.doesNotMatch(html, /Hidden interface|00:ff/);
+  assert.match(html, /disabled=""[^>]*>Link interface/);
+  assert.doesNotMatch(renderTechnical(technical, { linkSelections: { interface: "eth0" } }), /disabled=""[^>]*>Link interface/);
+  assert.match(renderTechnical(technical, { linkSelections: { interface: "hidden" } }), /disabled=""[^>]*>Link interface/);
+  assert.match(renderTechnical(technical, { busy: true, linkSelections: { interface: "eth0" } }), /disabled=""[^>]*>Link interface/);
+});
+
+test("technical identity selection loads lazily and conveys owner prerequisites and empty/error states", () => {
+  const calls = [];
+  const control = TechnicalIdentityLink({ item: technical, loadTechnicalChoices: (...args) => calls.push(args) });
+  control.props.onToggle({ currentTarget: { open: true } });
+  assert.deepEqual(calls, [[technical, 0]]);
+  const blocked = renderTechnical({ ...technical, can_link_technical: false, link_blocked_reason: "Accept or link the source Asset" });
+  assert.match(blocked, /role="status">Accept or link the source Asset/);
+  assert.doesNotMatch(blocked, /<select/);
+  const empty = renderTechnical(technical, { technicalChoices: { interface: { items: [], loading: false } } });
+  assert.match(empty, /No existing interfaces are available for this accepted asset/);
+  assert.match(renderTechnical(technical, { technicalChoices: { interface: { error: "Refresh required" } } }), /role="alert">Refresh required/);
+  assert.equal(renderTechnical({ ...technical, status: "accepted" }), "");
+});
+
+test("Network linking filters customer and site, and configuration review stays distinct", () => {
+  const network = { ...technical, entity_type: "network", customer_id: "c", site_id: "s" };
+  const html = renderTechnical(network, { technicalChoices: { interface: { items: [
+    { id: "lan", customer_id: "c", site_id: "s", name: "LAN", cidr: "192.0.2.0/24", vlan_id: 9 },
+    { id: "hidden", customer_id: "c", site_id: "other", name: "Hidden network" },
+  ] } } });
+  assert.match(html, /Link existing network/);
+  assert.match(html, /LAN · 192.0.2.0\/24 · VLAN 9/);
+  assert.doesNotMatch(html, /Hidden network/);
+  const changed = { ...technical, technical_identity: false, category: "changed", assertion_predicate: "configuration", can_accept: true,
+    proposed: { mac_address: "02:00:00:00:00:02" }, current: { mac_address: "02:00:00:00:00:01" } };
+  const review = render({ ...entity, sections: [{ ...entity.sections[0], items: [changed] }] });
+  assert.match(review, /Accepted configuration/);
+  assert.match(review, /Observed configuration awaiting review/);
+  assert.match(review, /Accept interface changes/);
+  assert.doesNotMatch(review, /Link existing interface/);
 });

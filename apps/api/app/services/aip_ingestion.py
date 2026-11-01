@@ -10,7 +10,8 @@ from atlas_connector_sdk.configuration import source_compatibility
 from app.models import (DataSource, DiscoveryBatchReceipt, EvidenceRecord, RunObservedEntity,
     EntitySourceLink, AssetType, RelationshipType, KnowledgeAssertion)
 from app.schemas import SimulationObservation, SimulationRelationship
-from app.services.discovery_observations import record_observed_entity, reconcile_complete_snapshot
+from app.services.discovery_observations import record_observed_entity, reconcile_complete_snapshot, snapshot_asset_external_ids
+from app.services.knowledge_locks import lock_ingestion_subjects
 from app.services.simulated_discovery import ingest_observations, ingest_technical_observation
 from app.services.connector_contracts import SDK_VERSION
 
@@ -259,6 +260,24 @@ def finalise(db, run, row, message, *, failure=False):
         memberships = {(record.entity_type, record.external_id): record for record in db.scalars(select(RunObservedEntity).where(RunObservedEntity.discovery_run_id == run.id))}
         source = db.get(DataSource, run.data_source_id)
         payload = SimpleNamespace(customer_id=run.customer_id, site_id=run.site_id, observations=list(assets.values()))
+        # One transaction spans all batches/domains. Prelock the entire known
+        # set in canonical model/UUID order BEFORE any Asset or technical claims.
+        # Per-observation locking alone can invert two Networks, or take an
+        # Interface owner Asset after an earlier Network/claim has been locked.
+        db.get(DataSource, source.id, with_for_update={"key_share": True})
+        references = {("asset", external) for external in assets}
+        for relationship, _, external in relationship_rows:
+            references.update({("asset", external), ("asset", relationship.target_external_id)})
+        for batch in messages:
+            references.update(("network", row["external_id"]) for row in batch["networks"])
+            for interface in batch["interfaces"]:
+                references.update({("asset_interface", interface["external_id"]),
+                    ("asset", interface["asset_external_id"]),
+                    ("network", interface.get("network_external_id"))})
+        if message["completeness"] == "complete":
+            references.update(("asset", external) for external in snapshot_asset_external_ids(db, run))
+        lock_ingestion_subjects(db, source_id=source.id, customer_id=run.customer_id,
+            site_id=run.site_id, references=references)
         _, _, assertions, items = ingest_observations(db, payload=payload, user_id=run.created_by_user_id,
             source=source, run=run, observed_at=datetime.now(timezone.utc), evidence_by_identity=evidence,
             memberships=memberships, namespaced_facts=facts, relationship_observations=relationship_rows)

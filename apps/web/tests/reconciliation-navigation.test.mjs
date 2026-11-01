@@ -45,6 +45,11 @@ test("client queue transitions use URL state and reset stale request state", asy
   assert.match(page, /history\.pushState/);
   assert.match(page, /history\.replaceState/);
   assert.match(page, /reconciliationReviewHref/);
+  assert.match(page, /entity_id: entityId, expected_version: item.version/);
+  assert.match(page, /asset_id: assetId, expected_version: item.version/);
+  assert.match(page, /candidateRequests.current.get\(item.id\) !== token/);
+  assert.match(page, /candidateRequests.current.clear\(\)/);
+  assert.match(page, /setTechnicalChoices\(\{\}\)/);
 });
 
 const components = loadComponent(new URL("../components/reconciliation-cards.js", import.meta.url));

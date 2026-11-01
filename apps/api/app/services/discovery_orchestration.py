@@ -168,7 +168,7 @@ def cancel_intent(run):
 
 def cancel_integration_runs(db, integration_id):
     for run in db.scalars(select(DiscoveryRun).where(DiscoveryRun.integration_id == integration_id,
-            DiscoveryRun.execution_provenance.is_not(None), DiscoveryRun.status.in_(["pending", "running"])).with_for_update()):
+            DiscoveryRun.execution_provenance.is_not(None), DiscoveryRun.status.in_(["pending", "running"])).with_for_update(key_share=True)):
         cancel_intent(run)
 
 
@@ -191,7 +191,7 @@ async def dispatch(db, run_id):
     if identity is None or identity.execution_provenance is None:
         return
     row = db.scalar(select(Integration).where(Integration.id == identity.integration_id).with_for_update())
-    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update(key_share=True).execution_options(populate_existing=True))
     if run.status != "pending" or run.dispatch_state != "pending" or run.dispatch_after and run.dispatch_after > utcnow():
         return
     if run.created_at < utcnow() - timedelta(minutes=15):
@@ -240,7 +240,7 @@ async def dispatch(db, run_id):
             finally:
                 request.clear()
         row = db.scalar(select(Integration).where(Integration.id == row.id).with_for_update().execution_options(populate_existing=True))
-        run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+        run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update(key_share=True).execution_options(populate_existing=True))
         if result.get("diagnostics") is not None:
             discovery_diagnostics.persist(db, run, result["diagnostics"])
         if result.get("job_id"):
@@ -277,7 +277,7 @@ async def reconcile(db, run_id):
         return
     result = await runtime.get_job(run_id, identity.runtime_job_id)
     row = db.scalar(select(Integration).where(Integration.id == identity.integration_id).with_for_update())
-    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update(key_share=True).execution_options(populate_existing=True))
     if run.dispatch_state == "settled":
         return
     if run.cancellation_requested_at or run.status in {"failed", "cancelled"}:

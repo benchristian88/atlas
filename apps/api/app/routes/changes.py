@@ -30,7 +30,7 @@ from app.schemas import (
     KnowledgeChangeResponse,
     KnowledgeChangeSummaryResponse,
 )
-from app.services.knowledge_summary import asset_knowledge_summary
+from app.services.knowledge_summary import SummaryValues, asset_knowledge_summary
 from app.utils.json_values import to_json_value
 
 router = APIRouter(tags=["changes"])
@@ -243,29 +243,31 @@ def asset_fact_history(
         asset.site_id,
         hide_existence=True,
     )
-    rows = db.scalars(
+    rows = list(db.scalars(
         select(KnowledgeAssertion)
         .where(
             KnowledgeAssertion.subject_type == "asset",
             KnowledgeAssertion.subject_id == asset.id,
+            KnowledgeAssertion.customer_id == asset.customer_id,
+            KnowledgeAssertion.site_id.is_not_distinct_from(asset.site_id),
         )
         .order_by(
             KnowledgeAssertion.predicate,
             KnowledgeAssertion.last_observed_at.desc(),
         )
         .limit(500)
-    )
+    ))
+    summary_values = SummaryValues(db, asset, rows, principal)
     facts: dict[str, list[dict]] = {}
     for assertion in rows:
-        source = db.get(DataSource, assertion.data_source_id) if assertion.data_source_id else None
+        source = summary_values.sources.get(assertion.data_source_id)
         history_value = assertion.value_json
-        if assertion.object_type == "asset" and assertion.object_id:
-            subject = db.get(Asset, assertion.subject_id) if assertion.subject_id else asset
-            target = db.get(Asset, assertion.object_id)
+        relationship = summary_values.relationship(assertion)
+        if relationship:
             history_value = {
-                "source": subject.name if subject else assertion.subject_external_id or "Unavailable",
-                "relationship": assertion.predicate.replace("_", " "),
-                "target": target.name if target else assertion.object_external_id or "Unavailable",
+                "source": asset.name,
+                "relationship": relationship["label"],
+                "target": relationship["target_name"],
             }
         facts.setdefault(assertion.predicate, []).append(
             to_json_value(
@@ -308,4 +310,4 @@ def get_asset_knowledge_summary(
         asset.site_id,
         hide_existence=True,
     )
-    return asset_knowledge_summary(db, asset)
+    return asset_knowledge_summary(db, asset, principal)

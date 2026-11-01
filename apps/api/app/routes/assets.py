@@ -37,6 +37,7 @@ from app.services.manual_knowledge import (
     MANUAL_ASSET_KNOWLEDGE_FIELDS,
     declare_asset_changes,
 )
+from app.services.knowledge_locks import concurrent_decision
 
 from app.services import asset_icons
 
@@ -325,6 +326,7 @@ def get_asset_icon(
 
 
 @router.patch("/{asset_id}", response_model=ManualAssetResponse)
+@concurrent_decision
 def update_asset(
     asset_id: uuid.UUID,
     payload: ManualAssetUpdate,
@@ -333,7 +335,7 @@ def update_asset(
     principal: Principal = Depends(require_permission("assets.edit")),
     db: Session = Depends(get_db),
 ):
-    asset = db.get(Asset, asset_id)
+    asset = db.get(Asset, asset_id, with_for_update=True, populate_existing=True)
     if asset is None:
         raise not_found("Asset")
     require_scope(

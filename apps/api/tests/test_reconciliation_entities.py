@@ -447,7 +447,7 @@ def test_concurrent_group_decisions_accept_once_with_one_audit():
     principal.user.email = uuid.uuid4().hex + "@example.test"
     customer_id = workspace_id = None
     try:
-        with Session(engine, expire_on_commit=False) as setup:
+        with Session(engine, autoflush=False, expire_on_commit=False) as setup:
             setup.add(principal.user)
             workspace = Workspace(name="Concurrent entity review", slug=uuid.uuid4().hex)
             setup.add(workspace); setup.flush(); workspace_id = workspace.id
@@ -472,14 +472,14 @@ def test_concurrent_group_decisions_accept_once_with_one_audit():
             identifier = uuid.UUID(group["id"])
         barrier = Barrier(2)
         def decide():
-            with Session(engine) as connection:
+            with Session(engine, autoflush=False, expire_on_commit=False) as connection:
                 barrier.wait(timeout=10)
                 return accept_reconciliation_entity(identifier, payload, request(), context, principal, connection)
         with ThreadPoolExecutor(max_workers=2) as workers:
             outcomes = list(workers.map(lambda _: decide(), range(2)))
         assert sorted(len(result["accepted"]) for result in outcomes) == [0, 1]
         assert sorted(len(result["already_resolved"]) for result in outcomes) == [0, 1]
-        with Session(engine) as check:
+        with Session(engine, autoflush=False, expire_on_commit=False) as check:
             assert check.scalar(select(func.count()).select_from(Asset).where(Asset.customer_id == customer_id)) == 1
             assert check.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.customer_id == customer_id)) == 1
     finally:

@@ -36,6 +36,8 @@ remain understandable after the original implementation discussion is gone.
 - [0015 — Separate local artifact evidence, approval and execution authority](0015-local-release-execution-authority.md) — partially supersedes 0014's authorization, isolation and audit lifecycle after security review.
 - [0016 — Recover local maintenance, revocation evidence and bundled management](0016-local-release-recovery.md) — supplements 0015 with lease-independent maintenance, a signed ordinary-management handoff and crash-safe irreversible revocation recovery.
 
+- [0017 — Canonical knowledge serialization and separate acceptance history](0017-reconciliation-knowledge-integrity.md).
+
 ## ADR maintenance
 
 Create or supersede an ADR when a change affects any of the following:

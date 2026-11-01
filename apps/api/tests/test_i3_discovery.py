@@ -40,7 +40,7 @@ def db():
     engine = create_engine(os.environ["ATLAS_TEST_DATABASE_URL"], hide_parameters=True)
     with engine.connect() as connection:
         transaction = connection.begin()
-        with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
+        with Session(bind=connection, join_transaction_mode="create_savepoint", autoflush=False, expire_on_commit=False) as session:
             yield session
         transaction.rollback()
     engine.dispose()
@@ -138,6 +138,9 @@ def test_narrow_token_binding_and_revocation(db, configured, mutation):
         routes.authenticate_ingestion(db, auth_request(altered), run.id)
     assert error.value.status_code == 401
     orchestration.cancel_intent(run)
+    # Authentication reloads the committed run under lock. Production cancellation
+    # persists before another ingestion request; autoflush=False must do so here.
+    db.flush()
     with pytest.raises(HTTPException): routes.authenticate_ingestion(db, auth_request(original), run.id)
 
 
