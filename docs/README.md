@@ -32,6 +32,7 @@ Services you operate. See [project status](product/status.md) for the path to 1.
 
 - [Services, Service Types and Criticality](admin/service-types-and-criticality.md).
 - [Knowledge profiles and requirements](admin/knowledge-profiles.md).
+- [Cross-source reconciliation](admin/cross-source-reconciliation.md).
 - [Knowledge Graph](admin/knowledge-graph.md).
 - [Infrastructure Topology](admin/infrastructure-topology.md) and [Showcase](admin/showcase.md).
 - [Asset Types](admin/asset-types.md), [Asset Categories](admin/asset-categories.md)

@@ -17,7 +17,58 @@ installer inside that root: `python3 infra/install/compose.py` for Docker, or
 Keep the [installation prerequisites](installation.md) and proxy/one-ingress contract.
 Git is no longer a production installation prerequisite.
 
+## Reconciliation integrity migration 0032
+
+`20261101_0032` is an unmerged, unreleased migration on the reconciliation fix
+branch. Its amendment was authorized by the remediation request; no deployed
+migration was rewritten and the enrolled acceptance instance was not accessed.
+It adds independent acceptance lineage and the complete scalar uniqueness index.
+
+Use a maintenance window. An ACCESS EXCLUSIVE assertion-table lock freezes
+writers before preflight and remains through transactional DDL/index creation.
+There is no online/concurrent index guarantee or production-volume timing claim.
+Preflight refuses duplicate accepted scalar subjects without selecting a winner.
+Legacy pointer classification checks source identity, canonical subject, customer,
+site, predicate, freshness, acceptance, retraction, observation timestamps and
+retained accepted review/Changes evidence:
+
+- A source-current, current, deselected, non-retracted row pointing to the same
+  canonical scalar subject/predicate can prove an acceptance replacement. Move
+  that retained pointer to `acceptance_replaced_by_id`.
+- A still-accepted source-stale row can prove source supersession only when
+  source and external subject identity match, it is marked superseded, and its
+  validity end matches the successor's first observation. Retain the source edge.
+- Other retained edges refuse safely. In particular, a source-stale deselected
+  row can represent source supersession, acceptance replacement or both. Baseline
+  acceptance erased acceptance timestamps and could overwrite the source pointer.
+  Even accepted decision records cannot reconstruct the missing source edge.
+  An unselected source-only row without sufficient proof also refuses; this is
+  deliberately conservative. Source-only edges with missing source identity,
+  wrong-subject/predicate, retracted, reselection and other ambiguous pointer
+  states are not guessed.
+
+Diagnostics identify assertion IDs and a recovery path without values or secrets.
+On refusal revision remains 0031, rows and retained values survive, and no new
+column/index/FK remains. Keep a verified backup and the current schema. Collect
+independent evidence for an audited, separately reviewed repair migration or
+restore a verified pre-loss backup. Do not delete observations, clear links or
+automatically choose an accepted winner to make preflight pass.
+
+Downgrade preflight runs before any DDL or pointer copy. It refuses dual lineage,
+even when both edges have the same target, and other states that cannot be
+classified identically on re-upgrade (including stale acceptance-only and
+unselected source-only histories). Refusal leaves revision 0032 usable and every
+lineage intact. Supported source-only and acceptance-only histories and chains
+round-trip losslessly; downgrade is **not generally reversible**. For unsupported
+cases keep 0032 or recover a verified backup with its matching code. No parallel
+history store, fabricated edge or silent history deletion is introduced.
+
 ## Before every upgrade
+
+An enrolled local signed-release acceptance instance has a separate exact-build
+restriction. No build-rotation procedure currently exists; follow the
+[reconciliation build-transition constraint](local-release-acceptance.md#reconciliation-fix-build-transition)
+before using the ordinary upgrade instructions below.
 
 1. Create and download an [encrypted backup](backup-restore.md) and retain
    its passphrase separately. Retain the matching old release for recovery.

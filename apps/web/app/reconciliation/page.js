@@ -33,6 +33,8 @@ export default function ReconciliationPage() {
   const [focusedEntity, setFocusedEntity] = useState(null);
   const [assets, setAssets] = useState([]);
   const [linkSelections, setLinkSelections] = useState({});
+  const [technicalChoices, setTechnicalChoices] = useState({});
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [deciding, setDeciding] = useState("");
   const [error, setError] = useState("");
@@ -40,6 +42,7 @@ export default function ReconciliationPage() {
   const requestId = useRef(0);
   const activeLoadKey = useRef("");
   const loadedKey = useRef("");
+  const candidateRequests = useRef(new Map());
   const loadKey = JSON.stringify([queue.key, search, section, cursor, focusId, workspace.reloadKey]);
   activeLoadKey.current = loadKey;
 
@@ -56,6 +59,9 @@ export default function ReconciliationPage() {
   const load = useCallback(async () => {
     if (!canViewReconciliation) return;
     const currentRequest = ++requestId.current;
+    candidateRequests.current.clear();
+    setTechnicalChoices({});
+    setLinkSelections({});
     setLoading(true);
     setError("");
     try {
@@ -86,6 +92,7 @@ export default function ReconciliationPage() {
     setFocusedEntity(null);
     setAssets([]);
     setLinkSelections({});
+    setNotice("");
     setDeciding("");
     setOutcome(null);
     load();
@@ -137,10 +144,42 @@ export default function ReconciliationPage() {
     setDeciding(item.id);
     setError("");
     try {
-      await apiRequest(`/reconciliation-items/${item.id}/link-asset`, { method: "POST", body: JSON.stringify({ asset_id: assetId, reason: "Linked during reconciliation" }) });
+      await apiRequest(`/reconciliation-items/${item.id}/link-asset`, { method: "POST", body: JSON.stringify({ asset_id: assetId, expected_version: item.version, reason: "Linked during reconciliation" }) });
       if (activeLoadKey.current !== actionKey) return;
       await load();
     } catch (requestError) { if (activeLoadKey.current === actionKey) setError(requestError.message || "Atlas could not link this asset."); }
+    finally { if (activeLoadKey.current === actionKey) setDeciding(""); }
+  }
+
+  async function loadTechnicalChoices(item, offset) {
+    const actionKey = loadKey;
+    const token = {};
+    candidateRequests.current.set(item.id, token);
+    setTechnicalChoices(current => ({ ...current, [item.id]: { ...current[item.id], loading: true, error: "" } }));
+    const params = new URLSearchParams({ limit: "100", offset: String(offset) });
+    if (item.entity_type === "asset_interface") params.set("asset_id", item.link_asset_id);
+    else { params.set("customer_id", item.customer_id); params.set("site_id", item.site_id); }
+    try {
+      const items = await apiRequest(`/${item.entity_type === "asset_interface" ? "asset-interfaces" : "networks"}?${params}`);
+      if (activeLoadKey.current !== actionKey || candidateRequests.current.get(item.id) !== token) return;
+      setTechnicalChoices(current => ({ ...current, [item.id]: { items: offset ? [...(current[item.id]?.items || []), ...items] : items, nextOffset: items.length === 100 ? offset + 100 : null, loading: false } }));
+    } catch (requestError) {
+      if (activeLoadKey.current === actionKey && candidateRequests.current.get(item.id) === token)
+        setTechnicalChoices(current => ({ ...current, [item.id]: { ...current[item.id], loading: false, error: requestError.message || "Atlas could not load candidates." } }));
+    }
+  }
+
+  async function linkTechnical(item) {
+    const entityId = linkSelections[item.id];
+    if (!entityId || !item.can_link_technical) return;
+    const actionKey = loadKey;
+    setDeciding(item.id); setError(""); setNotice(""); setOutcome(null);
+    try {
+      await apiRequest(`/reconciliation-items/${item.id}/link-technical`, { method: "POST", body: JSON.stringify({ entity_id: entityId, expected_version: item.version, reason: "Linked during reconciliation" }) });
+      if (activeLoadKey.current !== actionKey) return;
+      await load();
+      if (activeLoadKey.current === actionKey) setNotice("Identity linked. Accepted configuration is preserved; observed configuration and source facts still need review.");
+    } catch (requestError) { if (activeLoadKey.current === actionKey) setError(requestError.message || "Atlas could not link this identity. Refresh to review the latest proposal."); }
     finally { if (activeLoadKey.current === actionKey) setDeciding(""); }
   }
 
@@ -187,13 +226,14 @@ export default function ReconciliationPage() {
     <SearchFilterBar label="Search entities" search={searchControl} activeCount={section ? 1 : 0} onClear={() => { searchControl.reset(); updateFilters({ search: "", section: "" }); }} ><label className="field"><span>Review section</span><select aria-label="Review section" value={section} onChange={event => updateFilters({ section: event.target.value })}><option value="">All sections</option><option value="facts">Facts</option><option value="relationships">Relationships</option><option value="network">Network</option></select></label></SearchFilterBar>
     {returnHref && <p><ReconciliationReviewLink href={returnHref}>Return to previous entity</ReconciliationReviewLink></p>}
     {queueReady && error && <div className="error-banner" role="alert">{error}</div>}
+    {queueReady && notice && <div className="status-banner" role="status">{notice}</div>}
     {outcome && <div className={`status-banner ${styles.outcome}`} role="status"><strong>{outcome.name}: {outcome.accepted.length} accepted · {outcome.already_resolved.length} already resolved · {outcome.blocked.length} waiting · {outcome.failed.length} failed</strong>
       {[...outcome.blocked, ...outcome.failed, ...outcome.already_resolved].length > 0 && <ul>{[...outcome.blocked, ...outcome.failed, ...outcome.already_resolved].map(item => <li key={item.id}>{item.label}: {item.reason}</li>)}</ul>}
     </div>}
     {!queueReady || loading ? <div className="status-banner" role="status">Loading entity reviews…</div> : page && <section className={`knowledge-list ${styles.list}`}>
       <div className="timeline-summary" role="status">{page.record_total} reconciliation records grouped into {page.entity_total} entities · {entities.length} {entities.length === 1 ? "entity" : "entities"} on this page</div>
       {focusedEntity && <p className="secondary-text">Reviewing a prerequisite and its unresolved changes. Return to continue your previous review.</p>}
-      {displayed.length === 0 ? <div className="empty-state detail-card">No reconciliation items in this queue.</div> : displayed.map(entity => <ReconciliationEntityCard key={entity.id} entity={entity} focused={focusId === entity.id} assets={assets} canDecide={canDecide} busy={busy} linkSelections={linkSelections} setLinkSelections={setLinkSelections} linkAsset={linkAsset} decide={decide} acceptAll={acceptAll} loadSection={loadSection} reviewHref={target => reconciliationReviewHref(paramsString, target, entity.id)} />)}
+      {displayed.length === 0 ? <div className="empty-state detail-card">No reconciliation items in this queue.</div> : displayed.map(entity => <ReconciliationEntityCard key={entity.id} entity={entity} focused={focusId === entity.id} assets={assets} canDecide={canDecide} busy={busy} linkSelections={linkSelections} setLinkSelections={setLinkSelections} linkAsset={linkAsset} technicalChoices={technicalChoices} loadTechnicalChoices={loadTechnicalChoices} linkTechnical={linkTechnical} decide={decide} acceptAll={acceptAll} loadSection={loadSection} reviewHref={target => reconciliationReviewHref(paramsString, target, entity.id)} />)}
     </section>}
     {queueReady && !loading && page && <ReconciliationPagination pageIndex={pageIndex} hasMore={Boolean(page.next_cursor)} busy={busy} onPrevious={previousPage} onNext={nextPage} />}
   </>;

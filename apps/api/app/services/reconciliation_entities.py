@@ -50,12 +50,20 @@ def _name(value, fallback):
     return value.strip() if isinstance(value, str) and 0 < len(value.strip()) <= 255 else fallback
 
 
-def item_version(item, claim):
+def item_version(item, claim, target=None):
     # Includes the reviewed proposal and freshness, not just a timestamp. A
     # coalesced assertion can change without updating its reconciliation record.
     value = [str(item.id), item.status, item.updated_at, item.observed_value_json,
              claim.updated_at, claim.value_json, claim.is_source_current,
              claim.retracted_at, claim.superseded_by_id]
+    if target is not None and item.entity_type in {"network", "asset_interface"} and claim.predicate == "configuration" and claim.fact_metadata is None:
+        from app.services.reconciliation import technical_configuration
+        value.append(technical_configuration(target))
+    if item.entity_type == "asset" and item.category in {"changed", "contradiction", "no_longer_observed"}:
+        from app.services.reconciliation import canonical_asset_snapshot, canonical_asset_field
+        snapshot = canonical_asset_snapshot(item, target)
+        if canonical_asset_field(item):
+            value.append([snapshot, target.updated_at if snapshot is not None else None])
     return hashlib.sha256(json.dumps(to_json_value(value), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -135,10 +143,11 @@ class EntityReview:
                     identifiers[kind].add(identifier)
         self.interfaces = {row.id: row for row in db.scalars(select(AssetInterface).where(
             AssetInterface.id.in_(identifiers["asset_interface"]),
-            AssetInterface.asset_id.in_(scoped(Asset).with_only_columns(Asset.id))))}
+            AssetInterface.asset_id.in_(scoped(Asset).with_only_columns(Asset.id))).execution_options(populate_existing=True))}
         identifiers["asset"].update(row.asset_id for row in self.interfaces.values())
-        self.assets = {row.id: row for row in db.scalars(scoped(Asset).where(Asset.id.in_(identifiers["asset"])))}
-        self.networks = {row.id: row for row in db.scalars(scoped(Network).where(Network.id.in_(identifiers["network"])))}
+        identifiers["network"].update(row.network_id for row in self.interfaces.values() if row.network_id)
+        self.assets = {row.id: row for row in db.scalars(scoped(Asset).where(Asset.id.in_(identifiers["asset"])).execution_options(populate_existing=True))}
+        self.networks = {row.id: row for row in db.scalars(scoped(Network).where(Network.id.in_(identifiers["network"])).execution_options(populate_existing=True))}
         self.sources = {row.id: row for row in db.scalars(scoped(DataSource).where(DataSource.id.in_(source_ids)))}
         # Eight SELECTs independent of card count. Evidence, receipts, diagnostic
         # payloads, Integration configuration and credentials are never loaded.
@@ -203,6 +212,10 @@ class EntityReview:
         target = self.target(item, claim, kind, external, identifier)
         return (item.customer_id, item.site_id, None if target else claim.data_source_id, kind,
                 target.id if target else external or item.id)
+
+    def version(self, item):
+        claim = self.claims[item.id]
+        return item_version(item, claim, self.target(item, claim, identifier=item.entity_id or claim.subject_id))
 
     def owner_key(self, item, claim):
         value = _object(item.observed_value_json)
@@ -325,6 +338,19 @@ class EntityReview:
         elif isinstance(proposed, dict) and "field" in proposed:
             label, proposed = fact_label(proposed["field"], claim.fact_metadata), proposed.get("value")
         current = item.current_value_json
+        from app.services.reconciliation import canonical_asset_snapshot, canonical_asset_field
+        snapshot = canonical_asset_snapshot(item, self.target(item, claim, identifier=item.entity_id or claim.subject_id))
+        if canonical_asset_field(item):
+            current = snapshot
+        if item.entity_type in {"network", "asset_interface"} and claim.predicate == "configuration" and claim.fact_metadata is None:
+            target = self.target(item, claim, identifier=item.entity_id or claim.subject_id)
+            if target:
+                from app.services.reconciliation import technical_configuration
+                current = technical_configuration(target)
+                if isinstance(target, AssetInterface) and target.network_id in self.networks:
+                    network = self.networks[target.network_id]
+                    current["network"] = network.name
+                    current["vlan_id"] = network.vlan_id
         if item.entity_type == "asset_relationship" and isinstance(current, dict):
             managed = self.relationship_types.get(current.get("relationship_type"))
             try:
@@ -337,11 +363,32 @@ class EntityReview:
         if isinstance(current, dict) and "field" in current:
             current = current.get("value")
         result = ReconciliationItemResponse.model_validate(item).model_dump()
+        if canonical_asset_field(item):
+            result["current_value_json"] = snapshot
+        technical_identity = (item.entity_type in {"network", "asset_interface"}
+                              and item.category == "newly_discovered" and claim.predicate == "configuration"
+                              and claim.fact_metadata is None)
+        owner, link_reason = None, None
+        if technical_identity:
+            if item.status not in ACTIVE:
+                link_reason = "This identity has already been decided"
+            elif not all(self.principal.can(permission, item.customer_id, item.site_id)
+                         for permission in ("reconciliation.decide", "networks.view", "networks.edit")):
+                link_reason = "Permission required to link network information"
+            elif claim.retracted_at or claim.superseded_by_id or claim.is_source_current is False:
+                link_reason = "This proposal is stale; review the latest observation"
+            elif item.entity_type == "asset_interface":
+                owner = self.target(item, claim, "asset", _object(claim.value_json).get("asset_external_id"))
+                if owner is None:
+                    link_reason = "Accept or link the source Asset before linking its interface"
         return to_json_value({**result, "source_name": source.name if source else None,
+                              "technical_identity": technical_identity,
+                              "can_link_technical": technical_identity and link_reason is None,
+                              "link_asset_id": owner.id if owner else None, "link_blocked_reason": link_reason,
                               "data_source_id": claim.data_source_id, "discovery_run_id": claim.discovery_run_id,
                               "assertion_predicate": claim.predicate, "label": label, "proposed": proposed,
                               "last_observed_at": claim.last_observed_at,
-                              "current": current, "version": item_version(item, claim),
+                              "current": current, "version": self.version(item),
                               "warning": item.category.replace("_", " ").capitalize() if item.category in {"contradiction", "possible_duplicate"} else None,
                               **self.eligibility(item)})
 
@@ -433,7 +480,7 @@ class EntityReview:
                               "default_expanded": bool(parent and parent.status in ACTIVE),
                               "matching_record_count": len(matching), "status_counts": dict(Counter(row.status for row in matching)),
                               "sections": sections, "accept_all_available": 0 < len(decisions) <= BULK_LIMIT,
-                              "decision_items": [{"id": row.id, "version": item_version(row, self.claims[row.id])} for row in decisions] if len(decisions) <= BULK_LIMIT else [],
+                              "decision_items": [{"id": row.id, "version": self.version(row)} for row in decisions] if len(decisions) <= BULK_LIMIT else [],
                               "bulk_limit": BULK_LIMIT})
 
 

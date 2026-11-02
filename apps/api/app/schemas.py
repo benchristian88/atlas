@@ -1063,6 +1063,7 @@ class KnowledgeAssertionResponse(ORMResponse):
     valid_from: datetime | None
     valid_to: datetime | None
     superseded_by_id: uuid.UUID | None
+    acceptance_replaced_by_id: uuid.UUID | None = None
     is_current: bool
     is_source_current: bool
     is_accepted: bool
@@ -1143,6 +1144,10 @@ class ReconciliationReviewItem(ReconciliationItemResponse):
     can_reject: bool
     can_defer: bool
     blockers: list[ReconciliationBlocker]
+    technical_identity: bool = False
+    can_link_technical: bool = False
+    link_asset_id: uuid.UUID | None = None
+    link_blocked_reason: str | None = None
 
 
 class ReconciliationReviewSection(BaseModel):
@@ -1236,12 +1241,14 @@ class ReconciliationSummaryResponse(BaseModel):
 
 class ReconciliationLinkAssetRequest(BaseModel):
     asset_id: uuid.UUID
+    expected_version: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
     reason: str | None = Field(default=None, max_length=10000)
 
 
 class ReconciliationLinkTechnicalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     entity_id: uuid.UUID
+    expected_version: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
     reason: str | None = Field(default=None, max_length=10000)
 
 
@@ -1327,9 +1334,20 @@ class AssetFactHistoryResponse(BaseModel):
     facts: dict[str, list[AssetFactHistoryItem]]
 
 
+class KnowledgeRelationshipValue(BaseModel):
+    relationship_type: str
+    label: str
+    direction: Literal["outgoing"]
+    target_id: uuid.UUID | None = None
+    target_name: str
+    href: str | None = None
+
+
 class KnowledgeSummaryValue(BaseModel):
     assertion_id: uuid.UUID
     value: Any | None
+    display_value: str | None = None
+    relationship: KnowledgeRelationshipValue | None = None
     truth_classification: str
     confirmation_status: str
     source_id: uuid.UUID | None
@@ -1346,6 +1364,15 @@ class KnowledgeSummaryValue(BaseModel):
     conflicts_with_accepted: bool = False
 
 
+class KnowledgeLogicalValue(BaseModel):
+    key: str
+    value: Any | None
+    display_value: str
+    relationship: KnowledgeRelationshipValue | None = None
+    assertions: list[KnowledgeSummaryValue]
+    source_count: int
+
+
 class KnowledgePredicateSummary(BaseModel):
     predicate: str
     label: str
@@ -1353,6 +1380,13 @@ class KnowledgePredicateSummary(BaseModel):
     accepted: KnowledgeSummaryValue | None = None
     accepted_values: list[KnowledgeSummaryValue] = Field(default_factory=list)
     latest_observations: list[KnowledgeSummaryValue] = Field(default_factory=list)
+    accepted_groups: list[KnowledgeLogicalValue] = Field(default_factory=list)
+    observation_groups: list[KnowledgeLogicalValue] = Field(default_factory=list)
+    canonical_value: Any | None = None
+    canonical_display_value: str | None = None
+    canonical_consistency: Literal["not_applicable", "matches", "missing_acceptance", "mismatch"] = "not_applicable"
+    awaiting_acceptance: bool = False
+    state: Literal["accepted", "observed", "conflicting", "unresolved", "historical", "unknown"] | None = None
     active_source_count: int
     source_count: int
     distinct_active_value_count: int
@@ -1369,6 +1403,7 @@ class AssetKnowledgeSummaryResponse(BaseModel):
     groups: list[KnowledgePredicateSummary]
     conflict_count: int
     unresolved_count: int
+    consistency_issue_count: int = 0
 
 
 RequirementLevel = Literal["required", "conditional", "recommended"]

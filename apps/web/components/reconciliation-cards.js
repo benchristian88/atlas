@@ -80,7 +80,7 @@ function ReviewActions({ item, decide, busy, parent = false }) {
     {item.can_defer && <Button variant="quiet" disabled={busy} onClick={() => decide(item, "defer")}>Defer</Button>}
   </div>;
   return <div className="form-actions">
-    <Button variant="primary" type="button" disabled={busy || !item.can_accept} title={item.blocked_reason || undefined} onClick={() => decide(item, "accept")}>{parent && item.entity_type === "asset" ? "Accept asset" : "Accept"}</Button>
+    <Button variant="primary" type="button" disabled={busy || !item.can_accept} title={item.blocked_reason || undefined} onClick={() => decide(item, "accept")}>{parent && item.entity_type === "asset" ? "Accept asset" : item.entity_type === "asset_interface" && item.category === "changed" && item.assertion_predicate === "configuration" ? "Accept interface changes" : "Accept"}</Button>
     <Button variant="secondary" type="button" disabled={busy || !item.can_reject} onClick={() => decide(item, "reject")}>Reject</Button>
     <Button variant="quiet" type="button" disabled={busy || !item.can_defer} onClick={() => decide(item, "defer")}>Defer</Button>
   </div>;
@@ -89,8 +89,9 @@ function ReviewActions({ item, decide, busy, parent = false }) {
 function ProposedValue({ item }) {
   if (item.entity_type === "asset_relationship") return item.current ? <p className="secondary-text">Current: {value(item.current)}</p> : null;
   if (item.proposed && typeof item.proposed === "object" && !Array.isArray(item.proposed)) {
-    return <dl className="review-fields">{Object.entries(item.proposed).filter(([key, field]) => field !== null && !["asset_external_id", "network_external_id", "facts", "interfaces"].includes(key)).map(([key, field]) =>
-      <div key={key}><dt>{({ ip_address: "IP address", mac_address: "MAC address", is_primary: "Primary" })[key] || key.replaceAll("_", " ")}</dt><dd>{value(field)}</dd></div>)}</dl>;
+    return <>{item.current && typeof item.current === "object" && <div><p className="secondary-text">Accepted configuration</p><dl className="review-fields">{Object.entries(item.current).filter(([key]) => !["asset_id", "asset_external_id", "network_external_id"].includes(key)).map(([key, field]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{value(field)}</dd></div>)}</dl><p className="secondary-text">Observed configuration awaiting review</p></div>}<dl className="review-fields">{Object.entries(item.proposed).filter(([key, field]) => field !== null && !["asset_external_id", "network_external_id", "facts", "interfaces"].includes(key)).map(([key, field]) =>
+      <div key={key}><dt>{({ ip_address: "IP address", mac_address: "MAC address", is_primary: "Primary" })[key] || key.replaceAll("_", " ")}</dt><dd>{value(field)}</dd></div>)}</dl>
+    </>;
   }
   return <div className="review-value">{item.current !== null && item.current !== undefined && <><span className="secondary-text">{value(item.current)}</span><span aria-label="changes to"> → </span></>}<span>{value(item.proposed)}</span></div>;
 }
@@ -108,7 +109,32 @@ function ReviewProvenance({ item }) {
   </details>;
 }
 
-export function ReconciliationReviewRow({ item, busy, decide, reviewHref }) {
+export function TechnicalIdentityLink({ item, busy, technicalChoices = {}, loadTechnicalChoices, linkSelections = {}, setLinkSelections, linkTechnical }) {
+  if (!item.technical_identity || !["open", "deferred"].includes(item.status)) return null;
+  const kind = item.entity_type === "asset_interface" ? "interface" : "network";
+  const choices = technicalChoices[item.id];
+  const candidates = (choices?.items || []).filter(candidate => kind === "interface" ? candidate.asset_id === item.link_asset_id : candidate.customer_id === item.customer_id && candidate.site_id === item.site_id);
+  const selected = candidates.some(candidate => candidate.id === linkSelections[item.id]);
+  return <details className="review-provenance" onToggle={event => {
+    if (event.currentTarget.open && item.can_link_technical && !choices) loadTechnicalChoices?.(item, 0);
+  }}><summary>Link existing {kind}</summary>
+    <p className="secondary-text">Linking preserves accepted configuration. Review observed changes separately. An existing name requires an explicit link; names alone do not establish identity.</p>
+    {!item.can_link_technical ? <p role="status">{item.link_blocked_reason}</p> : <>
+      {choices?.error && <p role="alert">{choices.error}</p>}
+      {choices?.loading && <p role="status">Loading existing {kind}s…</p>}
+      {choices && !choices.loading && !candidates.length && <p role="status">No existing {kind}s are available{kind === "interface" ? " for this accepted asset" : " in this customer and site"}. Accept a new entity only if it is distinct.</p>}
+      <div className="reconciliation-link"><label htmlFor={`technical-link-${item.id}`}>Existing {kind}</label>
+        <select id={`technical-link-${item.id}`} value={linkSelections[item.id] || ""} disabled={busy || choices?.loading || !candidates.length} onChange={event => setLinkSelections(current => ({ ...current, [item.id]: event.target.value }))}>
+          <option value="">Select existing {kind}…</option>{candidates.map(candidate => <option key={candidate.id} value={candidate.id}>{[candidate.name, candidate.mac_address, candidate.ip_address, candidate.network_id && `Network ${candidate.network_id}`, candidate.cidr, candidate.vlan_id != null && `VLAN ${candidate.vlan_id}`].filter(Boolean).join(" · ")}</option>)}
+        </select><Button variant="secondary" type="button" disabled={busy || choices?.loading || !selected} onClick={() => linkTechnical(item)}>Link {kind}</Button>
+      </div>
+      {choices?.nextOffset != null && <Button variant="quiet" type="button" disabled={busy || choices.loading} onClick={() => loadTechnicalChoices(item, choices.nextOffset)}>Show more {kind}s</Button>}
+      {choices?.error && <Button variant="quiet" type="button" disabled={busy || choices.loading} onClick={() => loadTechnicalChoices(item, 0)}>Retry candidates</Button>}
+    </>}
+  </details>;
+}
+
+export function ReconciliationReviewRow({ item, busy, decide, reviewHref, ...actions }) {
   return <article className="review-row" aria-labelledby={`review-item-${item.id}`}>
     <div className="review-row-heading"><h4 id={`review-item-${item.id}`}>{item.label}</h4><StatusBadge status={item.status} /></div>
     {item.warning && <p className="review-warning">{item.warning}</p>}
@@ -116,6 +142,7 @@ export function ReconciliationReviewRow({ item, busy, decide, reviewHref }) {
     {item.category === "no_longer_observed" && <p className="secondary-text">This source no longer observes the asset. Choose a lifecycle disposition.</p>}
     <ReviewBlockers item={item} reviewHref={reviewHref} />
     <ReviewActions item={item} busy={busy} decide={decide} />
+    <TechnicalIdentityLink item={item} busy={busy} {...actions} />
     <ReviewProvenance item={item} />
   </article>;
 }
@@ -151,6 +178,7 @@ export function ReconciliationEntityCard({ entity, focused = false, canDecide, b
           {parent.warning && <p className="review-warning">{parent.warning}</p>}
           <ReviewBlockers item={parent} reviewHref={actions.reviewHref} />
           {canDecide && <ReviewActions item={parent} parent busy={busy} decide={actions.decide} />}
+          <TechnicalIdentityLink item={parent} busy={busy} {...actions} linkSelections={linkSelections} setLinkSelections={setLinkSelections} />
           {canDecide && ["open", "deferred"].includes(parent.status) && parent.entity_type === "asset" && <details className="review-provenance"><summary>Link an existing asset</summary><div className="reconciliation-link">
             <select aria-label={`Existing asset to link to ${entity.name}`} value={linkSelections[parent.id] || ""} onChange={event => setLinkSelections(current => ({ ...current, [parent.id]: event.target.value }))}><option value="">Select existing asset…</option>{candidates.map(asset => <option key={asset.id} value={asset.id}>{asset.name} · {asset.asset_type}</option>)}</select>
             <Button variant="secondary" disabled={busy || !linkSelections[parent.id]} onClick={() => linkAsset(parent)}>Link asset</Button>
@@ -159,7 +187,7 @@ export function ReconciliationEntityCard({ entity, focused = false, canDecide, b
         </section>}
         {canDecide && entity.decision_items.length > 0 && <div className="review-bulk"><Button variant="secondary" disabled={busy || !entity.accept_all_available} onClick={() => acceptAll(entity)}>Accept all</Button><span className="secondary-text">Accept eligible changes in this review{parent && ["open", "deferred"].includes(parent.status) ? ", including the asset" : ""}. Waiting items stay unresolved.</span></div>}
         {!entity.accept_all_available && entity.matching_record_count > entity.bulk_limit && <p className="review-warning">Review these changes individually; this entity exceeds the {entity.bulk_limit} record bulk limit.</p>}
-        {entity.sections.map(section => <ReviewSection key={section.key} entity={entity} section={section} busy={busy} {...actions} />)}
+        {entity.sections.map(section => <ReviewSection key={section.key} entity={entity} section={section} busy={busy} {...actions} linkSelections={linkSelections} setLinkSelections={setLinkSelections} />)}
         {!entity.sections.length && !parent && <p className="secondary-text">No unresolved changes remain for this entity.</p>}
       </div>
     </details>

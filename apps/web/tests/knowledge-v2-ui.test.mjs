@@ -40,8 +40,10 @@ test("asset detail defaults to knowledge summary with history and raw tabs", asy
   assert.match(asset, /\["summary", "Summary"\]/);
   assert.match(asset, /\["history", "History"\]/);
   assert.match(asset, /\["raw", "Raw assertions"\]/);
-  assert.match(asset, /Accepted Atlas value/);
-  assert.match(asset, /Latest source observations/);
+  const summary = await readFile(new URL("../components/asset-knowledge-summary.js", import.meta.url), "utf8");
+  assert.match(asset, /<AssetKnowledgeSummary groups=\{knowledgeGroups\}/);
+  assert.match(summary, /Accepted Atlas value/);
+  assert.match(summary, /Latest source observations/);
   assert.match(asset, /Unavailable/);
 });
 

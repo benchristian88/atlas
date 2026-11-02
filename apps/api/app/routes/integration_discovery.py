@@ -15,6 +15,7 @@ from app.models import DiscoveryRun, DiscoveryRunDebugTrace, Integration, DataSo
 from app.routes.integration_connections import scoped, require_live
 from app.routes.knowledge import run_response
 from app.services import discovery_orchestration as orchestration, discovery_tokens, aip_ingestion
+from app.services.knowledge_locks import decision_conflicts
 
 router = APIRouter(tags=["integration-discovery"])
 
@@ -41,7 +42,7 @@ def set_debug_next_run(integration_id: uuid.UUID, payload: DebugNextRunInput, re
 def debug_run(db, principal, run_id):
     require_global(principal, "integration_runtime.manage")
     row = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id,
-        scope_condition(principal, "integrations.view", DiscoveryRun.customer_id, DiscoveryRun.site_id)).with_for_update())
+        scope_condition(principal, "integrations.view", DiscoveryRun.customer_id, DiscoveryRun.site_id)).with_for_update(key_share=True))
     if row is None:
         raise HTTPException(404, "Discovery run not found")
     return row
@@ -158,7 +159,7 @@ def cancel_run(run_id: uuid.UUID, request: Request,
     if identity.execution_provenance is None:
         raise HTTPException(409, "This run does not use asynchronous Integration discovery")
     db.scalar(select(Integration).where(Integration.id == identity.integration_id).with_for_update())
-    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update(key_share=True).execution_options(populate_existing=True))
     orchestration.cancel_intent(run)
     add_audit_event(db, action="integration.discovery_cancel_requested", target_type="discovery_run", target_id=run.id,
         customer_id=run.customer_id, site_id=run.site_id, actor=principal.user, request=request,
@@ -184,7 +185,7 @@ def authenticate_ingestion(db, request, run_id, *, finalisation=False):
     if identity is None or str(identity.integration_id) != claims["integration_id"]:
         raise unauthorized
     row = db.scalar(select(Integration).where(Integration.id == identity.integration_id).with_for_update())
-    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update().execution_options(populate_existing=True))
+    run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update(key_share=True).execution_options(populate_existing=True))
     source = db.get(DataSource, run.data_source_id) if run.data_source_id else None
     if (row is None or source is None or run.execution_provenance is None or row.retired_at or not row.enabled
             or run.cancellation_requested_at or claims["jti"] != str(run.ingestion_generation)
@@ -209,6 +210,13 @@ async def body(request):
 
 
 async def ingest(run_id, request, db, operation):
+    # Authentication itself takes writer locks and can also encounter a bounded
+    # transaction conflict. Keep it inside the same rollback/error boundary.
+    with decision_conflicts(db):
+        return await _ingest(run_id, request, db, operation)
+
+
+async def _ingest(run_id, request, db, operation):
     run, row = authenticate_ingestion(db, request, run_id, finalisation=operation != "batch")
     try:
         message = await body(request)

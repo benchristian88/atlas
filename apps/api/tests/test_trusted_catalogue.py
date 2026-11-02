@@ -32,6 +32,7 @@ from app.services.connector_catalogue import accepted_official_metadata, catalog
 from app.services.official_catalogue import parse_official_catalogue
 from tests.test_administration import make_principal, request
 from tests.test_catalogue_source import RAW, BUNDLE, DIGEST, http_fixture
+from tests.test_knowledge_integrity_migration import migrated_history, HEAD
 
 STORAGE_ONLY = {"test_boundary": "unauthenticated storage unit fixture; NOT verifier evidence"}
 
@@ -374,7 +375,17 @@ def test_uncommitted_revision_invisible_to_independent_session():
         engine.dispose()
 
 
-def test_additive_migration_roundtrip_preserves_existing_tables():
+@pytest.fixture
+def catalogue_migration_db(migrated_history):
+    # Downgrade only this complete disposable schema. The shared domain DB may
+    # legitimately contain dual assertion lineage, which 0032 must not discard.
+    migrated_history.migrate("upgrade", HEAD)
+    with migrated_history.session() as session:
+        yield session
+
+
+@pytest.mark.skipif(not os.getenv("ATLAS_TEST_DATABASE_URL"), reason="requires disposable migrated PostgreSQL")
+def test_additive_migration_roundtrip_preserves_existing_tables(catalogue_migration_db):
     from alembic import command
     from alembic.config import Config
     from sqlalchemy import inspect
@@ -382,7 +393,7 @@ def test_additive_migration_roundtrip_preserves_existing_tables():
     url = os.getenv("ATLAS_TEST_DATABASE_URL")
     if not url:
         pytest.skip("requires disposable migrated PostgreSQL")
-    engine = create_engine(url, hide_parameters=True)
+    engine = catalogue_migration_db.get_bind()
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
     try:
@@ -390,12 +401,17 @@ def test_additive_migration_roundtrip_preserves_existing_tables():
             outer = connection.begin()
             try:
                 assert connection.scalar(select(func.count()).select_from(Revision)) == 0
+                sentinel = connection.scalar(text("""INSERT INTO integrations
+                    (customer_id,site_id,plugin_id,name,base_url,username_or_token_id,secret_reference)
+                    SELECT customer_id,id,'migration-fixture','Migration sentinel','https://example.test','',''
+                    FROM sites LIMIT 1 RETURNING id"""))
                 original = connection.scalar(text("SELECT count(*) FROM integrations"))
                 config.attributes["connection"] = connection
                 command.downgrade(config, "20261018_0030")
                 assert "connector_catalogue_state" not in inspect(connection).get_table_names()
                 command.upgrade(config, "head")
                 assert connection.scalar(text("SELECT count(*) FROM integrations")) == original
+                assert connection.scalar(text("SELECT name FROM integrations WHERE id=:id"), {"id": sentinel}) == "Migration sentinel"
                 assert connection.scalar(text("SELECT count(*) FROM connector_catalogue_state")) == 1
                 assert connection.scalar(text("SELECT highest_sequence FROM connector_catalogue_state")) is None
                 assert {c["name"] for c in inspect(connection).get_columns("connector_catalogue_revisions")} == set(Revision.__table__.columns.keys())
@@ -406,16 +422,19 @@ def test_additive_migration_roundtrip_preserves_existing_tables():
         engine.dispose()
 
 
-def test_migration_downgrade_refuses_accepted_history(db):
+@pytest.mark.skipif(not os.getenv("ATLAS_TEST_DATABASE_URL"), reason="requires disposable migrated PostgreSQL")
+def test_migration_downgrade_refuses_accepted_history(catalogue_migration_db):
     from alembic import command
     from alembic.config import Config
     from pathlib import Path
+    db = catalogue_migration_db
     store(db)
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
     config.attributes["connection"] = db.connection()
     with pytest.raises(RuntimeError, match="Retain authenticated catalogue history"):
         command.downgrade(config, "20261018_0030")
+    db.rollback()
     assert db.get(Revision, 1).original_bytes == RAW
 
 

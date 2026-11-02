@@ -308,7 +308,8 @@ def test_archive_and_retraction_routes_record_audit_events():
 
     assertion = assertion_record(status="confirmed")
     assertion_db = MagicMock()
-    assertion_db.get.side_effect = [assertion, customer]
+    # Retraction now refreshes the assertion under its canonical/source locks.
+    assertion_db.get.side_effect = [assertion, assertion, customer]
     with patch(
         "app.routes.knowledge.assertion_response",
         return_value={"id": assertion.id},

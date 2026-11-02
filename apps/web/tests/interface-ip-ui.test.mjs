@@ -21,7 +21,8 @@ test("Asset detail displays Interface addresses without a legacy summary or fall
   assert.doesNotMatch(page, /asset\.ip_address|Primary IP/);
   assert.match(page, /Interfaces and networks/);
   assert.match(page, /group.predicate !== "ip_address"/);
-  assert.match(page, /knowledgeGroups.map/);
+  assert.match(page, /<AssetKnowledgeSummary groups=\{knowledgeGroups\}/);
+  assert.match(await source("../components/asset-knowledge-summary.js"), /groups.map/);
   assert.match(page, /item\.ip_address \|\| "No IP"/);
 });
 

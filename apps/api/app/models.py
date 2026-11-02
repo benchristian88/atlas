@@ -1326,10 +1326,10 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             unique=True,
             postgresql_where=text(
                 "is_accepted = true AND retracted_at IS NULL "
-                "AND subject_id IS NOT NULL AND predicate IN "
-                "('name', 'hostname', 'asset_type', 'status', "
-                "'operational_state', 'observation_state', 'platform', "
-                "'lifecycle_state')"
+                "AND subject_id IS NOT NULL AND object_type IS NULL "
+                "AND predicate NOT IN ('interface_ip', 'interface', "
+                "'network_membership', 'relationship', 'owner', 'dependency') "
+                "AND predicate NOT LIKE 'interface.%'"
             ),
         ),
     )
@@ -1375,6 +1375,10 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("knowledge_assertions.id", ondelete="SET NULL"), index=True
+    )
+    acceptance_replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("knowledge_assertions.id", ondelete="SET NULL",
+                   name="fk_knowledge_assertions_acceptance_replacement"), index=True
     )
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", index=True

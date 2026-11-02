@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
+from app.services.knowledge_locks import lock_subjects, decision_conflicts as _decision_conflicts, concurrent_decision as _concurrent_decision
 from app.models import (
     Customer,
     Asset,
@@ -183,7 +185,14 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     result["source_name"] = _source_name(db, assertion.data_source_id) if assertion else None
     run = db.get(DiscoveryRun, assertion.discovery_run_id) if assertion and assertion.discovery_run_id else None
-    asset = db.get(Asset, item.entity_id) if item.entity_type == "asset" and item.entity_id else None
+    identifier = item.entity_id or (assertion.subject_id if assertion and assertion.subject_type == "asset" else None)
+    asset = db.get(Asset, identifier) if item.entity_type == "asset" and identifier else None
+    if asset and (asset.customer_id, asset.site_id) != (item.customer_id, item.site_id):
+        asset = None
+    from app.services.reconciliation import canonical_asset_snapshot, canonical_asset_field
+    snapshot = canonical_asset_snapshot(item, asset)
+    if canonical_asset_field(item):
+        result["current_value_json"] = snapshot
     observed = item.observed_value_json if isinstance(item.observed_value_json, dict) else {}
     observed_name = observed.get("name") if item.entity_type == "asset" else None
     if not isinstance(observed_name, str) or not 0 < len(observed_name.strip()) <= 255:
@@ -558,6 +567,11 @@ def _lifecycle_assertion(
         assertion.site_id,
         hide_existence=True,
     )
+    if assertion.data_source_id:
+        db.get(DataSource, assertion.data_source_id, with_for_update={"key_share": True})
+    lock_subjects(db, {assertion.subject_type: {assertion.subject_id}})
+    assertion = db.get(KnowledgeAssertion, assertion_id, with_for_update=True, populate_existing=True)
+    require_scope(principal, permission, assertion.customer_id, assertion.site_id, hide_existence=True)
     return assertion
 
 
@@ -641,6 +655,7 @@ def remove_assertion(
 @router.post(
     "/assertions/{assertion_id}/retract", response_model=KnowledgeAssertionResponse
 )
+@_concurrent_decision
 def retract_knowledge_assertion(
     assertion_id: uuid.UUID,
     payload: AssertionRetractionRequest,
@@ -775,20 +790,87 @@ def reconciliation_summary(
     }
 
 
-def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID, expected_version=None) -> ReconciliationItem:
-    item = db.get(ReconciliationItem, item_id, with_for_update=True, populate_existing=True)
+def _lock_decision_sources(db, identifiers):
+    source_ids = select(KnowledgeAssertion.data_source_id).join(
+        ReconciliationItem, ReconciliationItem.assertion_id == KnowledgeAssertion.id).where(
+            ReconciliationItem.id.in_(identifiers))
+    list(db.scalars(select(DataSource).where(DataSource.id.in_(source_ids)).order_by(DataSource.id).with_for_update(key_share=True)))
+
+
+def _lock_decision_targets(db, items, *, asset_id=None, technical_id=None):
+    """Prelock all canonical subjects before any item/assertion row locks."""
+    from app.models import EntitySourceLink
+    targets, aliases = defaultdict(set), set()
+    claims = {claim.id: claim for claim in db.scalars(select(KnowledgeAssertion).where(
+        KnowledgeAssertion.id.in_([item.assertion_id for item in items]))
+        .execution_options(populate_existing=True))}
+    for item in items:
+        claim = claims.get(item.assertion_id)
+        if claim is None:
+            continue
+        targets[item.entity_type].add(item.entity_id)
+        targets[claim.subject_type].add(claim.subject_id)
+        targets[claim.object_type].add(claim.object_id)
+        if asset_id:
+            targets["asset"].add(asset_id)
+        if technical_id:
+            targets[item.entity_type].add(technical_id)
+        value = claim.value_json if isinstance(claim.value_json, dict) else {}
+        for kind, external in ((claim.subject_type, claim.subject_external_id),
+                               (claim.object_type, claim.object_external_id),
+                               ("asset", value.get("asset_external_id")),
+                               ("network", value.get("network_external_id"))):
+            if claim.data_source_id and kind and external:
+                aliases.add((claim.data_source_id, kind, external))
+    if aliases:
+        for link in db.scalars(select(EntitySourceLink).where(tuple_(EntitySourceLink.data_source_id,
+                EntitySourceLink.entity_type, EntitySourceLink.external_id).in_(aliases))):
+            targets["asset"].update({link.entity_id, link.interface_owner_id})
+            targets["network"].add(link.network_id)
+            targets["asset_interface"].add(link.interface_id)
+    if targets["asset_interface"] - {None}:
+        for interface in db.scalars(select(AssetInterface).where(AssetInterface.id.in_(targets["asset_interface"] - {None}))):
+            targets["asset"].add(interface.asset_id)
+    lock_subjects(db, targets)
+
+
+def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID, expected_version=None, context=None,
+                   *, asset_id=None, technical_id=None) -> ReconciliationItem:
+    item = db.get(ReconciliationItem, item_id)
     if item is None:
         raise not_found("Reconciliation item")
-    permission = (
-        "reconciliation.decide"
-        if principal.can("reconciliation.decide", item.customer_id, item.site_id)
-        else "assets.edit"
-    )
-    require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
+    require_scope(principal, "reconciliation.decide", item.customer_id, item.site_id, hide_existence=True)
+    if context and ((context.customer_id and context.customer_id != item.customer_id)
+                    or (context.site_id and context.site_id != item.site_id)):
+        raise not_found("Reconciliation item")
+    # Sources, canonical subjects, items, assertions; shared with group decisions.
+    _lock_decision_sources(db, [item_id])
+    _lock_decision_targets(db, [item], asset_id=asset_id, technical_id=technical_id)
+    item = db.get(ReconciliationItem, item_id, with_for_update=True, populate_existing=True)
+    claim = db.get(KnowledgeAssertion, item.assertion_id, with_for_update=True, populate_existing=True)
+    target = None
+    if claim and item.entity_type in {"asset", "network", "asset_interface"}:
+        identifier = item.entity_id or claim.subject_id
+        if identifier is None and claim.data_source_id:
+            from app.services.entity_resolution import technical_link
+            link = technical_link(db, data_source_id=claim.data_source_id, customer_id=item.customer_id,
+                site_id=item.site_id, entity_type=item.entity_type, external_id=claim.subject_external_id)
+            identifier = ({"asset": link.entity_id, "network": link.network_id,
+                           "asset_interface": link.interface_id}[item.entity_type]) if link else None
+        target = db.get({"asset": Asset, "network": Network, "asset_interface": AssetInterface}[item.entity_type],
+                        identifier) if identifier else None
     if expected_version:
-        claim = db.get(KnowledgeAssertion, item.assertion_id, with_for_update=True, populate_existing=True)
-        if claim is None or item_version(item, claim) != expected_version:
+        if claim is None or item_version(item, claim, target) != expected_version:
             raise HTTPException(409, "This proposal changed; refresh before deciding")
+    elif target is not None and item.entity_type == "asset" and item.category in {"changed", "contradiction"}:
+        from app.services.reconciliation import canonical_asset_field, canonical_asset_snapshot
+        old = item.current_value_json if isinstance(item.current_value_json, dict) else {}
+        field = canonical_asset_field(item)
+        snapshot = canonical_asset_snapshot(item, target)
+        if field and (snapshot is None or old.get("_canonical_updated_at") is None
+                or old["_canonical_updated_at"] != to_json_value(target.updated_at)
+                or old.get("field") != field or old.get("value") != snapshot.get("value")):
+            raise HTTPException(409, "The canonical review cannot be verified; refresh and supply the reviewed proposal version")
     return item
 
 
@@ -837,6 +919,9 @@ def _apply_acceptance(db, item, request, principal, payload):
         )
     if payload and payload.reason is not None:
         item.decision_reason = payload.reason
+    # Domain failures must escape before the completeness evaluator's isolated
+    # savepoint; its implicit preflush must not swallow a decision failure.
+    db.flush()
     from app.services.knowledge_completeness import evaluate_asset_safely
     if isinstance(accepted, Asset):
         evaluate_asset_safely(db, accepted, trigger_context="reconciliation_accepted", actor_user_id=principal.user.id)
@@ -849,14 +934,18 @@ def _apply_acceptance(db, item, request, principal, payload):
 
 
 @router.post("/reconciliation-items/{item_id}/accept", response_model=ReconciliationItemResponse)
+@_concurrent_decision
 def accept_reconciliation_item(
     item_id: uuid.UUID,
     request: Request,
     payload: ReconciliationDecisionRequest | None = None,
     principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None)
+    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None, context)
+    if item.category == "no_longer_observed" and not (payload and payload.expected_version):
+        raise HTTPException(409, "Absence decisions require a reviewed proposal version; refresh before deciding")
     try:
         _apply_acceptance(db, item, request, principal, payload)
     except RelationshipResolutionError as exc:
@@ -871,16 +960,18 @@ def accept_reconciliation_item(
     "/reconciliation-items/{item_id}/link-asset",
     response_model=ReconciliationItemResponse,
 )
+@_concurrent_decision
 def link_reconciliation_asset(
     item_id: uuid.UUID,
     payload: ReconciliationLinkAssetRequest,
     request: Request,
     principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    item = _decision_item(db, principal, item_id)
+    item = _decision_item(db, principal, item_id, payload.expected_version, context, asset_id=payload.asset_id)
     asset = db.get(Asset, payload.asset_id)
-    if asset is None:
+    if asset is None or (asset.customer_id, asset.site_id) != (item.customer_id, item.site_id):
         raise not_found("Asset")
     require_scope(
         principal,
@@ -905,9 +996,10 @@ def link_reconciliation_asset(
 
 
 @router.post("/reconciliation-items/{item_id}/link-technical", response_model=ReconciliationItemResponse)
+@_concurrent_decision
 def link_reconciliation_technical(item_id: uuid.UUID, payload: ReconciliationLinkTechnicalRequest, request: Request,
-        principal: Principal = Depends(require_permission("reconciliation.decide")), db: Session = Depends(get_db)):
-    item = _decision_item(db, principal, item_id)
+        principal: Principal = Depends(require_permission("reconciliation.decide")), db: Session = Depends(get_db), context: RequestContext = None):
+    item = _decision_item(db, principal, item_id, payload.expected_version, context, technical_id=payload.entity_id)
     if item.entity_type not in {"network", "asset_interface"}:
         raise HTTPException(422, "This item is not a technical source identity")
     require_scope(principal, "networks.edit", item.customer_id, item.site_id, hide_existence=True)
@@ -922,14 +1014,16 @@ def link_reconciliation_technical(item_id: uuid.UUID, payload: ReconciliationLin
 
 
 @router.post("/reconciliation-items/{item_id}/reject", response_model=ReconciliationItemResponse)
+@_concurrent_decision
 def reject_reconciliation_item(
     item_id: uuid.UUID,
     request: Request,
     payload: ReconciliationDecisionRequest | None = None,
     principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None)
+    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None, context)
     reject_item(db, item, principal.user, payload.reason if payload else None)
     _audit_decision(db, request=request, principal=principal, item=item, action="rejected")
     commit(db, "Reconciliation decision")
@@ -938,14 +1032,16 @@ def reject_reconciliation_item(
 
 
 @router.post("/reconciliation-items/{item_id}/defer", response_model=ReconciliationItemResponse)
+@_concurrent_decision
 def defer_reconciliation_item(
     item_id: uuid.UUID,
     request: Request,
     payload: ReconciliationDecisionRequest | None = None,
     principal: Principal = Depends(require_permission("reconciliation.decide")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None)
+    item = _decision_item(db, principal, item_id, payload.expected_version if payload else None, context)
     defer_item(db, item, principal.user, payload.reason if payload else None)
     _audit_decision(db, request=request, principal=principal, item=item, action="deferred")
     commit(db, "Reconciliation decision")
@@ -1011,6 +1107,7 @@ def get_reconciliation_entity_section(
 
 
 @router.post("/reconciliation-entities/{entity_id}/accept", response_model=ReconciliationGroupAcceptResponse)
+@_concurrent_decision
 def accept_reconciliation_entity(
     entity_id: uuid.UUID, payload: ReconciliationGroupAcceptRequest, request: Request, context: RequestContext,
     principal: Principal = Depends(require_permission("reconciliation.decide")),
@@ -1025,10 +1122,19 @@ def accept_reconciliation_entity(
         raise HTTPException(404, "Reconciliation items not found in this entity")
     # Lock in deterministic order and refresh the identity map. Individual
     # decisions use these same row locks, so concurrent requests cannot both win.
+    _lock_decision_sources(db, requested)
+    _lock_decision_targets(db, [review.items[identifier] for identifier in requested])
     locked = list(db.scalars(select(ReconciliationItem).where(ReconciliationItem.id.in_(requested)).order_by(
         ReconciliationItem.id).with_for_update().execution_options(populate_existing=True)))
     list(db.scalars(select(KnowledgeAssertion).where(KnowledgeAssertion.id.in_(
         [row.assertion_id for row in locked])).order_by(KnowledgeAssertion.id).with_for_update().execution_options(populate_existing=True)))
+    for kind, model in (("network", Network), ("asset_interface", AssetInterface)):
+        identifiers = {row.entity_id or db.get(KnowledgeAssertion, row.assertion_id).subject_id
+                       for row in locked if row.entity_type == kind}
+        identifiers.discard(None)
+        if identifiers:
+            list(db.scalars(select(model).where(model.id.in_(identifiers)).order_by(model.id).with_for_update()
+                            .execution_options(populate_existing=True)))
     review = EntityReview(db, context, principal)
     key = review.key_for(entity_id)
     if len(locked) != len(requested) or any(review.group_for_item.get(identifier) != key for identifier in requested):
@@ -1040,7 +1146,7 @@ def accept_reconciliation_entity(
         entry = {"id": item.id, "label": review.present_item(item)["label"]}
         if item.status not in {"open", "deferred"}:
             result["already_resolved"].append({**entry, "reason": f"Already {item.status}"})
-        elif item_version(item, review.claims[item.id]) != version:
+        elif review.version(item) != version:
             result["failed"].append({**entry, "reason": "This proposal changed; refresh before deciding"})
         else:
             pending.append(item.id)
@@ -1057,8 +1163,9 @@ def accept_reconciliation_entity(
     for identifiers in phases.values():
         if not identifiers:
             continue
-        review = EntityReview(db, context, principal)
-        for identifier in identifiers:
+        for identifier in sorted(identifiers, key=str):
+            # Earlier decisions can resolve a prerequisite within this phase.
+            review = EntityReview(db, context, principal)
             item = review.items[identifier]
             entry = {"id": item.id, "label": review.present_item(item)["label"]}
             eligibility = review.eligibility(item)
@@ -1074,7 +1181,9 @@ def accept_reconciliation_entity(
                 result["blocked"].append({**entry, "reason": "Relationship endpoints are unresolved; refresh to review prerequisites"})
             except HTTPException as exc:
                 result["failed"].append({**entry, "reason": exc.detail if isinstance(exc.detail, str) else "This item could not be accepted"})
-            except DBAPIError:
+            except DBAPIError as exc:
+                if getattr(exc.orig, "sqlstate", None) not in {"23505", "40001", "40P01", "55P03"}:
+                    raise
                 result["failed"].append({**entry, "reason": "A concurrent change prevented acceptance; refresh and review this item"})
     commit(db, "Entity reconciliation decisions")
     return result

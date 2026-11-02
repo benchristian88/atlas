@@ -783,7 +783,7 @@ def test_unresolved_relationship_has_detailed_block_and_remains_open():
         grants=(ScopeGrant(
             assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Test",
             scope_type="global", customer_id=None, site_id=None,
-            permissions=frozenset({"assets.edit", "relationships.create"}),
+            permissions=frozenset({"assets.edit", "relationships.create", "reconciliation.decide"}),
         ),),
     )
     request = Request({

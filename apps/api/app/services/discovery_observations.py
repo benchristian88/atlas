@@ -101,6 +101,21 @@ def _current_observation_state(
     return next(iter(candidates), None)
 
 
+def snapshot_asset_external_ids(db: Session, run: DiscoveryRun) -> set[str]:
+    """Known identities whose absence/re-observation may write claims later.
+
+    Callers prelock these with the rest of a complete ingestion operation,
+    before technical entities or assertions, rather than late in finalisation.
+    """
+    baseline = _previous_complete_run(db, run)
+    run_ids = [run.id, *([baseline.id] if baseline else [])]
+    return set(db.scalars(select(RunObservedEntity.external_id).where(
+        RunObservedEntity.discovery_run_id.in_(run_ids),
+        RunObservedEntity.customer_id == run.customer_id,
+        RunObservedEntity.site_id == run.site_id,
+        RunObservedEntity.entity_type == "asset")))
+
+
 def _asset_link(db: Session, *, run: DiscoveryRun, external_id: str) -> EntitySourceLink | None:
     return db.scalar(
         select(EntitySourceLink).where(

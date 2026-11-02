@@ -28,11 +28,13 @@ from app.services.entity_resolution import (
 )
 from app.services.data_sources import manual_inventory_source
 from app.services.knowledge_assertions import accept_assertion, confirm, record_assertion
+from app.services.knowledge_locks import lock_ingestion_subjects
 from app.services.discovery_observations import (
     SnapshotReconciliation,
     default_coverage_key,
     reconcile_complete_snapshot,
     record_observed_entity,
+    snapshot_asset_external_ids,
 )
 from app.services.knowledge_changes import record_assertion_change
 from app.services.reconciliation import create_item
@@ -115,6 +117,27 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
     run and immutable evidence/membership from its receipt transaction. Neither
     adapter changes accepted records or decides absence before finalisation.
     """
+    db.get(DataSource, source.id, with_for_update={"key_share": True})
+    relationship_observations = list(relationship_observations or [])
+
+    def asset_external_id(observation):
+        return observation.external_id or f"simulated:{observation.asset_type}:{observation.name}"
+
+    # Relationship corroboration can declare accepted manual knowledge later in
+    # this transaction. Lock its already-linked subjects BEFORE writing claims:
+    # otherwise ingestion holds an old assertion while waiting for the Asset,
+    # and cross-source acceptance holds that Asset while replacing the assertion.
+    # Resolve no new identities here; only this batch's source-local links count.
+    external_ids = set()
+    for observation in payload.observations:
+        external_ids.add(asset_external_id(observation))
+        external_ids.update(relationship.target_external_id for relationship in observation.relationships)
+    for relationship, _, external_id in relationship_observations:
+        external_ids.update((external_id, relationship.target_external_id))
+    if finalise and run.is_complete_snapshot:
+        external_ids.update(snapshot_asset_external_ids(db, run))
+    lock_ingestion_subjects(db, source_id=source.id, customer_id=payload.customer_id,
+        site_id=payload.site_id, references={("asset", external) for external in external_ids})
     now = observed_at
     memberships = memberships or {}
     namespaced_facts = namespaced_facts or {}
@@ -139,9 +162,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
 
     # Pass one records evidence and resolves every asset before relationships.
     for observation in payload.observations:
-        external_id = observation.external_id or (
-            f"simulated:{observation.asset_type}:{observation.name}"
-        )
+        external_id = asset_external_id(observation)
         raw = to_json_value(observation)
         evidence = evidence_by_identity.get((observation.entity_kind, external_id)) if evidence_by_identity is not None else None
         if evidence is None:
@@ -297,6 +318,10 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
                 current_value = getattr(asset, field, None)
                 observed_value = assertion.value_json
                 if current_value == observed_value:
+                    if not assertion.is_accepted and assertion.confirmation_status != "rejected":
+                        remember(create_item(db, assertion=assertion, category="changed", entity_type="asset", entity_id=asset.id,
+                            candidate_external_id=external_id, current_value={"field": field, "value": current_value},
+                            observed_value={"field": field, "value": observed_value}, recommended_action="Review corroborating source field"))
                     continue
                 if field in {"name", "hostname"} and normalized_name(
                     current_value
@@ -540,6 +565,14 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
 
 def ingest_technical_observation(db, *, run, source, evidence, observation, entity_type, user_id):
     """Canonical Network/Interface evidence enters the same review machinery."""
+    # Standalone callers need the same serialization as complete AIP runs.
+    # AIP prelocks the whole run first; these are only reacquired subsets there.
+    references = {(entity_type, observation["external_id"])}
+    if entity_type == "asset_interface":
+        references.update({("asset", observation["asset_external_id"]),
+                           ("network", observation.get("network_external_id"))})
+    lock_ingestion_subjects(db, source_id=source.id, customer_id=run.customer_id,
+        site_id=run.site_id, references=references)
     link = technical_link(db, data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id,
         entity_type=entity_type, external_id=observation["external_id"])
     target_id = (link.network_id if entity_type == "network" else link.interface_id) if link else None

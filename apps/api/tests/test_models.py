@@ -147,7 +147,7 @@ CRITICAL_COLUMNS = {
         "object_id", "object_external_id", "truth_classification",
         "confirmation_status", "data_source_id", "discovery_run_id",
         "evidence_record_id", "confidence", "first_observed_at",
-        "last_observed_at", "valid_from", "valid_to", "superseded_by_id",
+        "last_observed_at", "valid_from", "valid_to", "superseded_by_id", "acceptance_replaced_by_id",
         "is_current", "is_source_current", "is_accepted", "accepted_at",
         "accepted_by_user_id", "retracted_at", "retracted_by_user_id",
         "retraction_reason", "fact_metadata", "created_at", "updated_at",

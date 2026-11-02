@@ -353,3 +353,34 @@ acceptance remains outstanding. A changed build, copied deployment, expired leas
 or lost identity fails closed. Key/build rotation and cross-instance
 restore require separate reviewed procedures; do not delete evidence to bypass
 one-time enrollment or immutable receipts.
+
+## Reconciliation fix build transition
+
+The operator-reported `atlas-test-docker` acceptance instance is enrolled against
+Atlas build `af32da2d3153e48feeec26adb91c64e7732e36a0` with Proxmox 0.2.2 staged and
+activated under exact-build authority. The reconciliation changes do not alter
+that authority or authorize deployment to it.
+
+`local_release_authority.binding()` validates `ATLAS_BUILD_ID` against the
+protected binding. PostgreSQL enrollment, signed grants, execution leases and
+runtime admission bind the same deployment/build identity. ADRs
+[0014](../decisions/0014-local-release-acceptance.md),
+[0015](../decisions/0015-local-release-execution-authority.md) and
+[0016](../decisions/0016-local-release-recovery.md) provide no build/key rotation
+or cross-instance restore procedure. Renewal and recovery apply to the original
+build; bundled restoration also retains that build. A normal pull/rebuild/restart
+does not provide a supported transition for this enrolled instance.
+
+No in-place transition currently preserves its data, decisions, original binding,
+signing authority, staged evidence and authorization/revocation history while
+changing the Atlas build. Plan a separate reviewed build-migration engineering
+task before upgrading it. Keep its PostgreSQL and all original volumes/evidence
+intact. Never spoof the old build ID, edit enrollment rows, regenerate/copy keys,
+reset enrollment or delete historical authority to work around this limitation.
+
+Development acceptance can use a new isolated deployment and disposable database
+with synthetic inventory and its own supported enrollment/authority. It must not
+reuse the live binding, keys, volumes or database. That demonstrates workflow
+behavior, not preservation of the existing instance through an upgrade. Resume
+the original live two-source scenario only after a supported transition has been
+designed, reviewed and performed by the human operator.
