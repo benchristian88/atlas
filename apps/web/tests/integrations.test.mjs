@@ -141,3 +141,21 @@ test("official viewer and manager controls stay separate from executable local p
   assert.equal(connectorActions(local, true).length, 1);
   assert.equal(filterConnectors([{ ...local, name: "Local Proxmox" }], "local", "installable").length, 1);
 });
+
+test("remote install confirmation binds the exact accepted identity", async () => {
+  const { remoteInstallSelection, officialConnectorMetadata } = await import("../lib/integrations.mjs");
+  const entry = { connector_id: "proxmox", version: "0.2.2", status: "active", eligible_for_install: true,
+    catalogue_sequence: 2, catalogue_digest: "a".repeat(64), release_asset_id: 693849044, digest: "b".repeat(64) };
+  const selection = remoteInstallSelection(entry);
+  assert.equal(selection.confirm, "install");
+  assert.equal(selection.source, "official");
+  assert.equal(selection.catalogue_sequence, 2);
+  assert.equal(selection.release_asset_id, 693849044);
+  assert.equal(selection.digest, "b".repeat(64));
+  assert.ok(Object.isFrozen(selection));
+  assert.deepEqual(officialConnectorMetadata(entry).installSelection, selection);
+  for (const change of [{ eligible_for_install: false }, { status: "withdrawn" }, { catalogue_sequence: true },
+      { catalogue_digest: "wrong" }, { release_asset_id: 1.5 }, { digest: null }, { connector_id: "../other" }]) {
+    assert.equal(remoteInstallSelection({ ...entry, ...change }), null);
+  }
+});

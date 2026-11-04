@@ -240,3 +240,23 @@ def test_i2_invalid_credential_payload_never_echoes_values_or_execution_argument
     assert value not in response.text and "/tmp/forbidden" not in response.text
     assert response.headers["cache-control"] == "no-store"
     assert client.get("/api/integration-secrets/" + str(uuid.uuid4())).status_code == 404
+
+
+@pytest.mark.parametrize("scope", ["customer", "site"])
+def test_remote_install_requires_global_management_before_lookup(client, scope):
+    grant("integration_runtime.manage", scope=scope)
+    response = client.post("/api/integration-catalogue/proxmox/install", json={
+        "source": "official", "version": "0.2.2", "digest": "a" * 64,
+        "catalogue_sequence": 2, "catalogue_digest": "b" * 64,
+        "release_asset_id": 693849044, "confirm": "install"})
+    assert response.status_code == 403
+
+
+def test_remote_install_without_owner_policy_stops_before_lookup(client):
+    grant("integration_runtime.manage")
+    response = client.post("/api/integration-catalogue/proxmox/install", json={
+        "source": "official", "version": "0.2.2", "digest": "a" * 64,
+        "catalogue_sequence": 2, "catalogue_digest": "b" * 64,
+        "release_asset_id": 693849044, "confirm": "install"})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "future_publication_owner_approval_required"

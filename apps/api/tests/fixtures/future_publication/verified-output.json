@@ -1,0 +1,49 @@
+[
+  {
+    "verificationResult": {
+      "signature": {
+        "certificate": {
+          "buildConfigDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "buildConfigURI": "https://github.com/benchristian88/atlas-connectors/.github/workflows/catalogue-publish.yml@refs/heads/main",
+          "buildSignerDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "buildSignerURI": "https://github.com/benchristian88/atlas-connectors/.github/workflows/catalogue-verifier.yml@refs/heads/main",
+          "buildTrigger": "workflow_dispatch",
+          "issuer": "https://token.actions.githubusercontent.com",
+          "runInvocationURI": "https://github.com/benchristian88/atlas-connectors/actions/runs/60/attempts/1",
+          "runnerEnvironment": "github-hosted",
+          "sourceRepositoryDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRepositoryIdentifier": "1414494920",
+          "sourceRepositoryOwnerIdentifier": "93822871",
+          "sourceRepositoryOwnerURI": "https://github.com/benchristian88",
+          "sourceRepositoryRef": "refs/heads/main",
+          "sourceRepositoryURI": "https://github.com/benchristian88/atlas-connectors",
+          "sourceRepositoryVisibilityAtSigning": "public",
+          "subjectAlternativeName": "https://github.com/benchristian88/atlas-connectors/.github/workflows/catalogue-verifier.yml@refs/heads/main"
+        }
+      },
+      "statement": {
+        "_type": "https://in-toto.io/Statement/v1",
+        "predicate": {
+          "preflight_sha256": "f5245130b3da2e8f9e377fc699bf8de0cb6b36e43bf4b45d95d5000546ca590a",
+          "schema": "atlas-publication-preflight-predicate/v2"
+        },
+        "predicateType": "https://atlas-impact.dev/attestations/publication-preflight/v2",
+        "subject": [
+          {
+            "digest": {
+              "sha256": "f5245130b3da2e8f9e377fc699bf8de0cb6b36e43bf4b45d95d5000546ca590a"
+            },
+            "name": "preflight.json"
+          }
+        ]
+      },
+      "verifiedTimestamps": [
+        {
+          "timestamp": "2027-01-15T08:00:05+00:00",
+          "type": "Tlog",
+          "uri": "https://rekor.sigstore.dev"
+        }
+      ]
+    }
+  }
+]

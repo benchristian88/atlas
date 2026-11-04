@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "authorization_mode": "single-maintainer-v1",
+  "allowed_maintainer_id": 93822871,
+  "environment_id": 24999137498,
+  "package_environment_id": 24617213627,
+  "app_id": 5422372,
+  "app_slug": "atlas-catalogue-publisher",
+  "app_installation_id": 174027755,
+  "app_bot_user_id": 346232650,
+  "bootstrap_operation": "disabled",
+  "bootstrap": {
+    "sequence": 1,
+    "pointer_sha256": "a275f63d0ac818a193826478328ee324be62353addc5c97a2ed0a28d217b5372"
+  }
+}

@@ -38,6 +38,8 @@ remain understandable after the original implementation discussion is gone.
 
 - [0017 — Canonical knowledge serialization and separate acceptance history](0017-reconciliation-knowledge-integrity.md).
 
+- [0018 — Durable original catalogue evidence and separate remote installation approval](0018-catalogue-durable-publication-evidence.md) — **Proposed**; inactive candidate only.
+
 ## ADR maintenance
 
 Create or supersede an ADR when a change affects any of the following:

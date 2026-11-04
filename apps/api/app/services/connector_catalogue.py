@@ -94,10 +94,10 @@ def compatibility(manifest: dict, runtime: dict | None, *, atlas_version: str | 
 
 
 def accepted_official_metadata(db):
-    """Read-only global metadata; deliberately never returned by get/install.
+    """Global accepted metadata with separately approved review eligibility.
 
-    B2 may project lifecycle/compatibility later. An accepted catalogue alone
-    cannot make executable packages available to the existing bootstrap facade.
+    Metadata never enters the bootstrap facade. The remote installer independently
+    reselects the exact accepted identity and verifies its immutable package.
     """
     from app.models import ConnectorCatalogueRevision, ConnectorCatalogueState
     from app.services.official_catalogue import parse_official_catalogue
@@ -105,10 +105,37 @@ def accepted_official_metadata(db):
     if state is None or state.highest_sequence is None:
         return []
     revision = db.get(ConnectorCatalogueRevision, state.highest_sequence)
-    return [{"connector_id": entry["manifest"]["id"], "version": entry["manifest"]["version"],
+    entries = [{"connector_id": entry["manifest"]["id"], "version": entry["manifest"]["version"],
              "status": entry["status"], "manifest": entry["manifest"], "source": "official",
              "package_available": False, "supported_actions": []}
             for entry in parse_official_catalogue(revision.original_bytes).document["entries"]]
+    from app.services import catalogue_future_authorization as future
+    if future.APPROVED_FUTURE_POLICY is not None:
+        from app.services.remote_connector_packages import select_remote
+        for entry in entries:
+            try:
+                selected = select_remote(db, entry['connector_id'], entry['version'])
+                entry.update(eligible_for_install=True, catalogue_sequence=selected.sequence,
+                    catalogue_digest=selected.catalogue_digest, release_asset_id=selected.asset_id,
+                    digest=selected.package.bundle_digest.removeprefix('sha256:'))
+            except ConnectorPackageError:
+                entry['eligible_for_install'] = False
+    return entries
+
+
+def catalogue_manifest(db, connector_id, version):
+    """Mapping forms reuse accepted/installed manifests, including offline packages."""
+    from app.models import InstalledConnectorPackage
+    installed = db.get(InstalledConnectorPackage, connector_id)
+    if installed is not None and (version is None or installed.version == version):
+        from app.services.integration_connections import installed_manifest
+        return installed_manifest(db, connector_id, for_execution=False)[1]
+    try:
+        return catalogue.get(connector_id, version).manifest
+    except CatalogueUnavailable:
+        from app.services.remote_connector_packages import select_remote
+        return select_remote(db, connector_id, version).package.manifest
+
 
 
 class CatalogueService:

@@ -1,0 +1,396 @@
+{
+  "authority": {
+    "maintainer_id": 93822871,
+    "owner_id": 93822871,
+    "publisher_app_id": 5422372,
+    "publisher_installation_id": 174027755,
+    "repository_id": 1414494920,
+    "verifier_app_id": 5424851,
+    "verifier_installation_id": 174088125
+  },
+  "execution": {
+    "acceptance_only": false,
+    "operation": "publish",
+    "run_attempt": 1,
+    "run_id": 60,
+    "workflow": ".github/workflows/catalogue-publish.yml"
+  },
+  "freshness": {
+    "expires_at": 1800000900,
+    "issued_at": 1800000000,
+    "observation_completed": 1800000000,
+    "observation_started": 1800000000
+  },
+  "rulesets": {
+    "approved_bypass_actors": {
+      "atlas-bootstrap-lock": [],
+      "atlas-catalogue-current": [
+        {
+          "actor_id": 5422372,
+          "actor_type": "Integration",
+          "bypass_mode": "always"
+        }
+      ],
+      "atlas-history-lock": [],
+      "atlas-main": [],
+      "atlas-publication-tags": [
+        {
+          "actor_id": 5422372,
+          "actor_type": "Integration",
+          "bypass_mode": "always"
+        }
+      ]
+    },
+    "ids": {
+      "atlas-bootstrap-lock": 25628137,
+      "atlas-catalogue-current": 25618684,
+      "atlas-history-lock": 25618809,
+      "atlas-main": 25618213,
+      "atlas-publication-tags": 25618901
+    },
+    "observations": [
+      {
+        "bypass_actors": [],
+        "conditions": {
+          "ref_name": {
+            "exclude": [],
+            "include": [
+              "refs/tags/catalogue-bootstrap-root"
+            ]
+          }
+        },
+        "enforcement": "active",
+        "id": 25628137,
+        "name": "atlas-bootstrap-lock",
+        "rules": [
+          {
+            "type": "update"
+          },
+          {
+            "type": "deletion"
+          }
+        ],
+        "source": "benchristian88/atlas-connectors",
+        "source_type": "Repository",
+        "target": "tag"
+      },
+      {
+        "bypass_actors": [
+          {
+            "actor_id": 5422372,
+            "actor_type": "Integration",
+            "bypass_mode": "always"
+          }
+        ],
+        "conditions": {
+          "ref_name": {
+            "exclude": [],
+            "include": [
+              "refs/heads/catalogue-current"
+            ]
+          }
+        },
+        "enforcement": "active",
+        "id": 25618684,
+        "name": "atlas-catalogue-current",
+        "rules": [
+          {
+            "type": "creation"
+          },
+          {
+            "type": "update"
+          },
+          {
+            "type": "deletion"
+          },
+          {
+            "type": "non_fast_forward"
+          }
+        ],
+        "source": "benchristian88/atlas-connectors",
+        "source_type": "Repository",
+        "target": "branch"
+      },
+      {
+        "bypass_actors": [],
+        "conditions": {
+          "ref_name": {
+            "exclude": [],
+            "include": [
+              "refs/heads/catalogue-current"
+            ]
+          }
+        },
+        "enforcement": "active",
+        "id": 25618809,
+        "name": "atlas-history-lock",
+        "rules": [
+          {
+            "type": "deletion"
+          },
+          {
+            "type": "non_fast_forward"
+          }
+        ],
+        "source": "benchristian88/atlas-connectors",
+        "source_type": "Repository",
+        "target": "branch"
+      },
+      {
+        "bypass_actors": [],
+        "conditions": {
+          "ref_name": {
+            "exclude": [],
+            "include": [
+              "refs/heads/main"
+            ]
+          }
+        },
+        "enforcement": "active",
+        "id": 25618213,
+        "name": "atlas-main",
+        "rules": [
+          {
+            "parameters": {
+              "dismiss_stale_reviews_on_push": true,
+              "require_last_push_approval": false,
+              "required_approving_review_count": 0
+            },
+            "type": "pull_request"
+          },
+          {
+            "parameters": {
+              "required_status_checks": [
+                {
+                  "context": "validate",
+                  "integration_id": 15368
+                }
+              ],
+              "strict_required_status_checks_policy": true
+            },
+            "type": "required_status_checks"
+          },
+          {
+            "type": "deletion"
+          },
+          {
+            "type": "non_fast_forward"
+          }
+        ],
+        "source": "benchristian88/atlas-connectors",
+        "source_type": "Repository",
+        "target": "branch"
+      },
+      {
+        "bypass_actors": [
+          {
+            "actor_id": 5422372,
+            "actor_type": "Integration",
+            "bypass_mode": "always"
+          }
+        ],
+        "conditions": {
+          "ref_name": {
+            "exclude": [],
+            "include": [
+              "refs/tags/catalogue-*",
+              "refs/tags/*-v*"
+            ]
+          }
+        },
+        "enforcement": "active",
+        "id": 25618901,
+        "name": "atlas-publication-tags",
+        "rules": [
+          {
+            "type": "creation"
+          },
+          {
+            "type": "update"
+          },
+          {
+            "type": "deletion"
+          }
+        ],
+        "source": "benchristian88/atlas-connectors",
+        "source_type": "Repository",
+        "target": "tag"
+      }
+    ],
+    "sha256": "663dcf3ffc058c95e4e933d3e735f8095991bd5def4ddf6fb0b700aa364f1be6"
+  },
+  "schema": "atlas-publication-preflight/v2",
+  "security": {
+    "attempt": {
+      "actor": {
+        "id": 93822871,
+        "login": "benchristian88",
+        "type": "User"
+      },
+      "created_at": "2027-01-15T07:59:40+00:00",
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_repository": {
+        "full_name": "benchristian88/atlas-connectors",
+        "id": 1414494920,
+        "owner": {
+          "id": 93822871
+        },
+        "private": false
+      },
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "html_url": "https://github.com/benchristian88/atlas-connectors/actions/runs/60",
+      "id": 60,
+      "path": ".github/workflows/catalogue-publish.yml",
+      "repository": {
+        "full_name": "benchristian88/atlas-connectors",
+        "id": 1414494920,
+        "owner": {
+          "id": 93822871
+        },
+        "private": false
+      },
+      "run_attempt": 1,
+      "triggering_actor": {
+        "id": 93822871,
+        "login": "benchristian88",
+        "type": "User"
+      },
+      "url": "https://api.github.com/repos/benchristian88/atlas-connectors/actions/runs/60",
+      "workflow_id": 80
+    },
+    "branch": {
+      "commit": {
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "main",
+      "protected": true
+    },
+    "checks": {
+      "check_runs": [
+        {
+          "app": {
+            "id": 15368
+          },
+          "conclusion": "success",
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": 601,
+          "name": "validate",
+          "status": "completed"
+        }
+      ],
+      "total_count": 1
+    },
+    "environment": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": false,
+        "protected_branches": true
+      },
+      "id": 24999137498,
+      "name": "catalogue-publication",
+      "protection_rules": [
+        {
+          "id": 701,
+          "type": "branch_policy"
+        }
+      ]
+    },
+    "immutable_releases": {
+      "enabled": true
+    },
+    "publisher_app": {
+      "id": 5422372,
+      "owner": {
+        "id": 93822871
+      },
+      "permissions": {
+        "actions": "read",
+        "administration": "read",
+        "contents": "write",
+        "metadata": "read"
+      },
+      "slug": "atlas-catalogue-publisher"
+    },
+    "repository": {
+      "full_name": "benchristian88/atlas-connectors",
+      "id": 1414494920,
+      "owner": {
+        "id": 93822871
+      },
+      "private": false
+    },
+    "run": {
+      "actor": {
+        "id": 93822871,
+        "login": "benchristian88",
+        "type": "User"
+      },
+      "created_at": "2027-01-15T07:59:40+00:00",
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_repository": {
+        "full_name": "benchristian88/atlas-connectors",
+        "id": 1414494920,
+        "owner": {
+          "id": 93822871
+        },
+        "private": false
+      },
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "html_url": "https://github.com/benchristian88/atlas-connectors/actions/runs/60",
+      "id": 60,
+      "path": ".github/workflows/catalogue-publish.yml",
+      "referenced_workflows": [
+        {
+          "path": "benchristian88/atlas-connectors/.github/workflows/catalogue-verifier.yml@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "repository": {
+        "full_name": "benchristian88/atlas-connectors",
+        "id": 1414494920,
+        "owner": {
+          "id": 93822871
+        },
+        "private": false
+      },
+      "run_attempt": 1,
+      "triggering_actor": {
+        "id": 93822871,
+        "login": "benchristian88",
+        "type": "User"
+      },
+      "url": "https://api.github.com/repos/benchristian88/atlas-connectors/actions/runs/60",
+      "workflow_id": 80
+    },
+    "user": {
+      "id": 93822871,
+      "login": "benchristian88",
+      "type": "User"
+    },
+    "verification_environment": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": false,
+        "protected_branches": true
+      },
+      "id": 25016263801,
+      "name": "catalogue-verification",
+      "protection_rules": []
+    },
+    "workflow": {
+      "html_url": "https://github.com/benchristian88/atlas-connectors/blob/main/.github/workflows/catalogue-publish.yml",
+      "id": 80,
+      "path": ".github/workflows/catalogue-publish.yml",
+      "state": "active",
+      "url": "https://api.github.com/repos/benchristian88/atlas-connectors/actions/workflows/80"
+    }
+  },
+  "source": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_sha256": "c9a88eeb6c7e6d0a7f1a08eaa07eeed5ea251449db7104f7757626842cf1bbe9",
+    "signer_workflow": ".github/workflows/catalogue-verifier.yml",
+    "verifier_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

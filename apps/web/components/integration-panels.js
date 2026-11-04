@@ -4,12 +4,12 @@ import { Surface, EmptyState, Section } from "./section";
 import { StatusIndicator } from "./status-indicator";
 import { connectorActions, connectorState, formatIntegrationTime, PACKAGING_LABELS, TRUST_LABELS, runtimeErrorMessage, runtimeOperations, formatOfficialCatalogueTime, officialCatalogueBlocked, officialCatalogueDiagnostic, officialCatalogueSummary } from "../lib/integrations.mjs";
 
-export function OfficialCataloguePanel({ status, canManage, loading, refreshing, error, feedback, onRefresh, onReload, styles = {} }) {
+export function OfficialCataloguePanel({ status, canManage, loading, refreshing, error, feedback, onRefresh, onReload, onInstall, installing, styles = {} }) {
   const pending = loading || refreshing;
   const inProgress = refreshing || status?.refresh_state === "in_progress";
   const blocked = officialCatalogueBlocked(status);
   const warning = status && (status.last_error_code || status.source_conflict || status.refresh_state === "failed");
-  return <Section id="official-catalogue" title="Official Connector Catalogue" description="Remote connector metadata · read only" className={styles.official} actions={<div className="form-actions">
+  return <Section id="official-catalogue" title="Official Connector Catalogue" description="Verified official publications" className={styles.official} actions={<div className="form-actions">
     <Button variant="quiet" disabled={pending} onClick={onReload}>Reload official status</Button>
     {canManage && <Button loading={refreshing} disabled={pending || !status || blocked || Boolean(error) || ["cooldown", "in_progress"].includes(feedback?.result)} onClick={onRefresh}>Check official catalogue</Button>}
   </div>}>
@@ -26,9 +26,10 @@ export function OfficialCataloguePanel({ status, canManage, loading, refreshing,
       {blocked && !inProgress && <p role="status" className={styles.meta}>Checks are temporarily unavailable. Next permitted check: {formatOfficialCatalogueTime(status.next_attempt_at)}. Reload official status after this time.</p>}
       {status.trusted_remote_available && (status.entries.length ? <ul className={styles.officialEntries}>{status.entries.map((entry, index) => <li key={`${entry.connector_id}/${entry.version}/${index}`} className={styles.officialEntry}>
         <div><h3>{entry.name}</h3><p>{entry.description}</p></div>
-        <dl className="ops-definition"><dt>Publisher</dt><dd>{entry.publisher}</dd><dt>Category</dt><dd>{entry.category}</dd><dt>Version</dt><dd>{entry.version}</dd><dt>Licence</dt><dd>{entry.licence}</dd><dt>Package</dt><dd>{entry.packageAvailable ? "Reported available; actions unavailable in this view" : "Unavailable for remote installation"}</dd>{entry.withdrawn && <><dt>Publication</dt><dd>Withdrawn</dd></>}</dl>
+        <dl className="ops-definition"><dt>Publisher</dt><dd>{entry.publisher}</dd><dt>Category</dt><dd>{entry.category}</dd><dt>Version</dt><dd>{entry.version}</dd><dt>Licence</dt><dd>{entry.licence}</dd><dt>Package</dt><dd>{entry.installSelection ? "Available for administrator review" : "Unavailable for remote installation"}</dd>{entry.withdrawn && <><dt>Publication</dt><dd>Withdrawn</dd></>}</dl>
+        {canManage && entry.installSelection && <div className="form-actions"><Button disabled={pending || Boolean(installing) || Boolean(error) || Boolean(warning)} onClick={() => onInstall(entry)}>Review installation</Button><Button href={`/integrations/mappings/${encodeURIComponent(entry.connector_id)}?version=${encodeURIComponent(entry.version)}`}>Resolve mappings</Button></div>}
       </li>)}</ul> : <EmptyState title="No official connector entries" description="No entries are available in the accepted catalogue display." />)}
-      <p className={styles.meta}>Official metadata is separate from locally available packages above. Package actions remain in the local catalogue.</p>
+      <p className={styles.meta}>Installation verifies the current publication and package before activation. Installed Connectors remain available offline.</p>
       <details className={styles.technical}><summary>Official catalogue technical details</summary><dl className="ops-definition">
         <dt>Schema</dt><dd>{status.schema_version}</dd>
         {status.content_digest && <><dt>SHA-256</dt><dd className="mono">{status.content_digest}</dd></>}

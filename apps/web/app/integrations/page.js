@@ -87,7 +87,7 @@ export default function IntegrationsPage() {
         {loading && !catalogue ? <div className="status-banner" role="status">Loading Connector catalogue…</div> : visible.length > 0 ? <div className={styles.grid}>{visible.map(entry => <ConnectorCard key={entry.connector_id} entry={entry} className={styles.card} canManage={canManage} busy={busy} onAction={action} />)}</div> : !activeError && <EmptyState title="No matching Connectors" description="Clear your filters to view the catalogue." />}
         {catalogue && <p className={styles.meta}>{catalogue.source === "bootstrap" ? "Included offline catalogue" : "Connector catalogue"}{catalogue.checked_at ? ` · Checked ${formatIntegrationTime(catalogue.checked_at)}` : ""}</p>}
       </Section>
-      {canViewRuntime && <OfficialCatalogue canManage={canManage} styles={styles} />}
+      {canViewRuntime && <OfficialCatalogue canManage={canManage} styles={styles} onInstalled={load} />}
     </>}
     {tab === "runtime" && <Section title="Integration runtime" className={styles.section} actions={<Button loading={loading} onClick={load}>Refresh health</Button>}>
       {loading && !runtime ? <div className="status-banner" role="status">Checking runtime health…</div> : <div className={styles.grid}><RuntimePanel runtime={runtime} className={styles.runtime} healthClassName={styles.runtime} technicalClassName={styles.technical} /></div>}

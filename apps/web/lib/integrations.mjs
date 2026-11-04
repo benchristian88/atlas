@@ -66,6 +66,7 @@ export function officialConnectorMetadata(entry) {
     licence: displayText(manifest.licensing?.licence, "Not specified", 255),
     withdrawn: entry.status === "withdrawn",
     packageAvailable: entry.package_available === true,
+    installSelection: remoteInstallSelection(entry),
   };
 }
 
@@ -121,4 +122,18 @@ export function officialCatalogueRequestError(error) {
   if (error?.status === 401) return "Your session has expired. Sign in again to view official catalogue status.";
   if (error?.status === 403) return "You do not have permission to access official catalogue status or checks.";
   return "Atlas could not complete the official catalogue request. This does not establish a verification failure. Reload official status before checking again. The local catalogue remains available.";
+}
+
+// The backend revalidates every field against retained current signed metadata.
+export function remoteInstallSelection(entry) {
+  if (!record(entry) || entry.eligible_for_install !== true || entry.status !== "active"
+      || typeof entry.connector_id !== "string" || !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(entry.connector_id)
+      || typeof entry.version !== "string" || !entry.version || entry.version.length > 64
+      || !Number.isSafeInteger(entry.catalogue_sequence) || entry.catalogue_sequence < 2
+      || !Number.isSafeInteger(entry.release_asset_id) || entry.release_asset_id < 1
+      || typeof entry.catalogue_digest !== "string" || !/^[a-f0-9]{64}$/.test(entry.catalogue_digest)
+      || typeof entry.digest !== "string" || !/^[a-f0-9]{64}$/.test(entry.digest)) return null;
+  return Object.freeze({ source: "official", version: entry.version, digest: entry.digest,
+    catalogue_sequence: entry.catalogue_sequence, catalogue_digest: entry.catalogue_digest,
+    release_asset_id: entry.release_asset_id, confirm: "install" });
 }

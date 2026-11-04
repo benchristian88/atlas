@@ -66,15 +66,22 @@ def decode(raw):
         raise SourceError("invalid_source_metadata") from None
 
 
-def checked_url(url: str, *, distribution: bool = False):
+def checked_url(url: str, *, distribution: bool = False, release_download: bool = False):
     try:
         parsed = urlsplit(url)
-        origins = {"release-assets.githubusercontent.com"} if distribution else {"api.github.com"}
+        require(not (distribution and release_download), "invalid_source_destination")
+        origins = {"release-assets.githubusercontent.com"} if distribution else {"github.com"} if release_download else {"api.github.com"}
         require(parsed.scheme == "https" and parsed.hostname in origins
                 and parsed.username is None and parsed.password is None
                 and parsed.port in (None, 443) and not parsed.fragment
                 and not any(c.isspace() or ord(c) < 32 for c in url)
                 and "\\" not in url, "invalid_source_destination")
+        if release_download:
+            require(not parsed.query and re.fullmatch(
+                "/" + re.escape(REPOSITORY) + r"/releases/download/"
+                r"(?:catalogue-[0-9]{6,16}|[a-z][a-z0-9._-]{0,99}-v[0-9][A-Za-z0-9.+-]{0,63})/"
+                r"[A-Za-z0-9][A-Za-z0-9._+-]{0,199}", parsed.path) is not None,
+                "invalid_source_destination")
     except ValueError:
         raise SourceError("invalid_source_destination") from None
 
@@ -111,8 +118,12 @@ def retry_delay(headers) -> int:
 
 class GithubReader:
     """One operation-local session, no ambient auth, cookies, proxy or decompression."""
+    def __init__(self, *, budget=REFRESH_SECONDS):
+        require(type(budget) is int and 1 <= budget <= 240, "source_budget")
+        self.budget = budget
+
     async def __aenter__(self):
-        self.deadline = time.monotonic() + REFRESH_SECONDS
+        self.deadline = time.monotonic() + self.budget
         self.session = aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(resolver=PublicResolver(), limit=2),
             trust_env=False, cookie_jar=aiohttp.DummyCookieJar(), auto_decompress=False,
@@ -124,8 +135,9 @@ class GithubReader:
     async def __aexit__(self, *args):
         await self.session.close()
 
-    async def get(self, url, maximum, *, asset=False, reject_pagination=False):
-        checked_url(url)
+    async def get(self, url, maximum, *, asset=False, reject_pagination=False, release_download=False):
+        require(not release_download or asset, "invalid_source_destination")
+        checked_url(url, release_download=release_download)
         for attempt in range(2):
             try:
                 remaining = self.deadline - time.monotonic()
@@ -150,8 +162,8 @@ class GithubReader:
         raise SourceError("source_unavailable")
 
     async def _get(self, url, maximum, *, asset, reject_pagination=False):
-        # API metadata never redirects. Binary asset API permits exactly one
-        # redirect to the fixed public distribution origin, checked by DNS too.
+        # API metadata never redirects. Binary API or constructed official release
+        # downloads permit one redirect to the fixed distribution origin/DNS.
         for hop in range(2):
             async with self.session.get(url, allow_redirects=False,
                     headers={"Accept": "application/octet-stream" if asset else "application/vnd.github+json"}) as response:
@@ -346,12 +358,19 @@ def require_legacy_publication(candidate: AuthenticatedCandidate):
 
 async def retrieve_candidate(progress: dict, *, operation_id=None):
     from app.services.official_catalogue_ingestion import retrieve_bootstrap
-    return await retrieve_bootstrap(progress, operation_id=operation_id)
+    from app.services import catalogue_future_authorization as future
+    if future.APPROVED_FUTURE_POLICY is None:
+        return await retrieve_bootstrap(progress, operation_id=operation_id)
+    from app.services.catalogue_chain import retrieve_chain
+    return await retrieve_chain(progress, operation_id=operation_id)
 
 
 def require_publication(candidate, *, operation_id=None):
     from app.services.official_catalogue_ingestion import VerifiedBootstrapCandidate, require_authenticated
     if type(candidate) is VerifiedBootstrapCandidate:
         return require_authenticated(candidate, operation_id=operation_id)
+    from app.services.catalogue_chain import VerifiedCatalogueChain, require_chain
+    if type(candidate) is VerifiedCatalogueChain:
+        return require_chain(candidate, operation_id=operation_id)
     # Legacy dictionaries, even containing valid partial proofs, cannot promote.
     require_legacy_publication(candidate)
