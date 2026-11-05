@@ -1,6 +1,6 @@
 """Bounded complete signed selection history; transactional trust promotion only.
 
-Future history is inactive pending independent Atlas owner approvals. Each
+Future history requires the release-owned Atlas publication approval. Each
 ordinary snapshot must carry the original seven assets; no sequence-two bypass.
 """
 import base64

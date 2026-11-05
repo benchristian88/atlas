@@ -34,8 +34,14 @@ class RemoteInstallationPolicy:
 
 # Separate release-owned executable eligibility approval. Publication approval
 # alone never activates remote executable installation.
-APPROVED_REMOTE_INSTALLATION = None
-APPROVED_REMOTE_INSTALLATION_SHA256 = None
+# This task records the owner's explicit consumer/Compose installation approval;
+# the reference names this scope, not a pre-existing historical approval event.
+APPROVED_REMOTE_INSTALLATION = RemoteInstallationPolicy(
+    publication_policy_sha256='83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d',
+    approval_reference='atlas-owner-2026-11-05-official-catalogue-docker-compose-installation',
+    packaging_mode='docker_compose',
+)
+APPROVED_REMOTE_INSTALLATION_SHA256 = 'a375a626042e7f02c14f0bc2d11b2723263394327888a1d73611ffcaaf1605f5'
 
 
 def approved_remote_installation():

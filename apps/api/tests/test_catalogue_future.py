@@ -38,6 +38,8 @@ VERIFIED = json.loads((FIXTURE / 'verified-output.json').read_bytes())
 VALUE = json.loads(ORIGINAL)
 SOURCE = VALUE['source']['commit']
 ISSUED = VALUE['freshness']['issued_at']
+RELEASE_POLICY = future.APPROVED_FUTURE_POLICY
+RELEASE_POLICY_SHA256 = future.APPROVED_FUTURE_POLICY_SHA256
 
 
 def stamp(seconds):
@@ -66,11 +68,45 @@ def original(monkeypatch, approval):
 
 
 def test_no_downloaded_or_environment_approval(monkeypatch):
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', None)
     monkeypatch.setenv('APPROVED_FUTURE_POLICY_SHA256', 'a' * 64)
     with pytest.raises(source.SourceError, match='owner_approval_required'):
         future.approved_future_policy()
     with pytest.raises(source.SourceError, match='owner_approval_required'):
         future.authenticate_original({'policy.json': POLICY}, None, published_at='2026-11-04T00:00:00Z')
+
+
+def test_exact_release_owned_publication_approval():
+    policy = future.approved_future_policy()
+    signer = '4be90c5292f931497473595a0958cc5e0f9d1beb'
+    adr = ('https://github.com/benchristian88/atlas/blob/76031dc6358a81c3babd15f74d407e22f0778dee/'
+           'docs/decisions/0018-catalogue-durable-publication-evidence.md')
+    assert policy == future.FuturePublicationPolicy(
+        PublicObservationReviewExpectations(
+            replace(BOOTSTRAP_POLICY_PROPOSAL.consumer_review, reviewed_producer_revision=signer),
+            392548804, BOOTSTRAP_POLICY_PROPOSAL.rulesets),
+        signer, 'c9a88eeb6c7e6d0a7f1a08eaa07eeed5ea251449db7104f7757626842cf1bbe9',
+        25016263801, 900, 300, adr + '#historical-authorization', adr + '#selection-binding',
+        'disabled-pending-permanent-archive-decision')
+    # Independent expected fingerprint also binds every reused identity/root.
+    fingerprint = '83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d'
+    assert hashlib.sha256(ingestion.canonical(asdict(policy))).hexdigest() == fingerprint
+    assert future.APPROVED_FUTURE_POLICY_SHA256 == fingerprint
+
+
+@pytest.mark.parametrize('field', ['signer_revision', 'policy_sha256', 'historical_decision'])
+def test_modified_publication_approval_rejected(monkeypatch, field):
+    policy = replace(future.APPROVED_FUTURE_POLICY, **{field: 'a' * (40 if field == 'signer_revision' else 64)})
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', policy)
+    with pytest.raises(source.SourceError, match='future_publication_approval_pin_mismatch'):
+        future.approved_future_policy()
+
+
+@pytest.mark.parametrize('fingerprint', [None, '', 'a' * 64])
+def test_missing_or_tampered_publication_fingerprint_rejected(monkeypatch, fingerprint):
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY_SHA256', fingerprint)
+    with pytest.raises(source.SourceError, match='future_publication_(owner_approval_required|approval_pin_mismatch)'):
+        future.approved_future_policy()
 
 
 def test_original_authenticated_profile_and_historical_binding(original):
@@ -126,7 +162,10 @@ def test_historical_time_fail_closed(original, monkeypatch, kind):
 
 
 @pytest.fixture
-def future_http(official_http, original, monkeypatch):
+def future_http(official_http, original, approval, monkeypatch):
+    # Explicitly leave the inherited bootstrap-only fixture's policy scope.
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', approval)
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY_SHA256', hashlib.sha256(ingestion.canonical(asdict(approval))).hexdigest())
     files, future_proof = original
     values = official_http['values']
     commit = 'd' * 40
@@ -216,6 +255,99 @@ def future_http(official_http, original, monkeypatch):
     return official_http
 
 
+def append_synthetic_revision(state, monkeypatch, sequence):
+    """TEST ONLY: unsigned later releases, with crypto mocked only in this fixture.
+
+    Keep real chain, identity, original-authorization, time and lifecycle checks.
+    This is forward-compatibility evidence, never genuine signing acceptance.
+    """
+    values = state['values']
+    source_commit, commit, run = str(sequence) * 40, hex(sequence + 11)[2:] * 40, 60 + sequence
+    document = json.loads(state['catalogue'])
+    document['sequence'] = sequence
+    additions = [('proxmox', f'0.2.{sequence}')]
+    if sequence == 3:
+        additions.append(('future-example', '1.0.0'))
+    for number, (connector_id, version) in enumerate(additions):
+        manifest = json.loads((LOCAL / 'manifest.json').read_bytes())
+        manifest.update(id=connector_id, version=version)
+        tag = f'{connector_id}-v{version}'
+        manifest['distribution'].update(bundle_digest='sha256:' + str(sequence + number) * 64,
+            asset_uri=f'https://github.com/{source.REPOSITORY}/releases/download/{tag}/{connector_id}-{version}.tar.gz')
+        manifest['distribution']['provenance']['source_commit'] = source_commit
+        document['entries'].append({'status': 'active', 'release_tag': tag,
+            'release_asset_id': 2000 + sequence * 10 + number, 'manifest': manifest})
+    document['entries'].sort(key=lambda e: (e['manifest']['id'], e['manifest']['version']))
+    catalogue = ingestion.canonical(document)
+    release_id, asset_id = 1000 + sequence * 10, 1001 + sequence * 10
+    tag = f'catalogue-{sequence:06d}'
+    pointer = ingestion.canonical({'schema_version': '1.0', 'sequence': sequence, 'release_tag': tag,
+        'release_id': release_id, 'asset_id': asset_id, 'sha256': hashlib.sha256(catalogue).hexdigest(),
+        'previous_pointer_sha256': hashlib.sha256(state['pointer']).hexdigest()})
+    bundle = f'SYNTHETIC-SELECTION-{sequence}'.encode()
+    blobs = {name: ingestion.blob_sha(raw) for name, raw in [('current.json', pointer), ('current.sigstore.json', bundle)]}
+    tree_raw = b''.join(b'100644 ' + n.encode() + b'\0' + bytes.fromhex(sha) for n, sha in sorted(blobs.items()))
+    tree_sha = hashlib.sha1(b'tree ' + str(len(tree_raw)).encode() + b'\0' + tree_raw).hexdigest()
+    def obj(sha, kind): return {'sha': sha, 'type': kind, 'url': f'{source.BASE}/git/{kind}s/{sha}'}
+    values[ingestion.CURRENT]['object'] = obj(commit, 'commit')
+    values[f'/git/commits/{commit}'] = {'sha': commit, 'url': f'{source.BASE}/git/commits/{commit}',
+        'parents': [{'sha': state['selection_commit'], 'url': f"{source.BASE}/git/commits/{state['selection_commit']}"}],
+        'tree': obj(tree_sha, 'tree')}
+    values[f'/git/trees/{tree_sha}'] = {'sha': tree_sha, 'url': f'{source.BASE}/git/trees/{tree_sha}', 'truncated': False,
+        'tree': [{'path': n, 'type': 'blob', 'mode': '100644', 'sha': sha, 'url': f'{source.BASE}/git/blobs/{sha}'} for n, sha in blobs.items()]}
+    for name, raw in [('current.json', pointer), ('current.sigstore.json', bundle)]:
+        path = f'/contents/{name}?ref={commit}'
+        values[path] = {'name': name, 'path': name, 'type': 'file', 'sha': blobs[name], 'size': len(raw),
+            'encoding': 'base64', 'content': base64.b64encode(raw).decode(), 'url': source.BASE + path}
+    original = json.loads(ORIGINAL.replace(SOURCE.encode(), source_commit.encode()).replace(b'/runs/60', f'/runs/{run}'.encode()))
+    original['execution']['run_id'] = run
+    for key in ('run', 'attempt'):
+        original['security'][key]['id'] = run
+        suffix = '' if key == 'run' else '/attempts/1'
+        values[f'/actions/runs/{run}{suffix}'] = deepcopy(original['security'][key])
+    values[f'/commits/{source_commit}/check-runs?check_name=validate&filter=latest&per_page=2&page=1'] = deepcopy(original['security']['checks'])
+    preflight = ingestion.canonical(original)
+    data = {tag + '.json': catalogue, 'catalogue.sigstore.json': f'SYNTHETIC-CATALOGUE-{sequence}'.encode(),
+        'current.json': pointer, 'current.sigstore.json': bundle,
+        'preflight.json': preflight, 'preflight.sigstore.json': b'SYNTHETIC-PREFLIGHT', 'policy.json': POLICY}
+    release = deepcopy(values['/releases/902'])
+    release.update(id=release_id, tag_name=tag, url=f'{source.BASE}/releases/{release_id}',
+        html_url=f'https://github.com/{source.REPOSITORY}/releases/tag/{tag}', target_commitish=source_commit, assets=[])
+    for identifier, (name, raw) in enumerate(data.items(), asset_id):
+        release['assets'].append({'id': identifier, 'name': name, 'size': len(raw), 'state': 'uploaded',
+            'url': f'{source.BASE}/releases/assets/{identifier}', 'digest': 'sha256:' + hashlib.sha256(raw).hexdigest(),
+            'browser_download_url': f'https://github.com/{source.REPOSITORY}/releases/download/{tag}/{name}', 'uploader': release['author']})
+        values[f'/releases/assets/{identifier}'] = raw
+    values[f'/releases/{release_id}'] = release
+    values['/releases/tags/' + tag] = deepcopy(release)
+    path = '/git/ref/tags/' + tag
+    values[path] = {'ref': 'refs/tags/' + tag, 'url': source.BASE + path.replace('/ref/', '/refs/'), 'object': obj(source_commit, 'commit')}
+    verify_selection, verify_catalogue = GithubSigstoreVerifier.verify_selection, GithubSigstoreVerifier.verify_catalogue
+    verified_output = future._verified_output
+    def selection(self, raw, signed):
+        if (raw, signed) == (pointer, bundle):
+            return replace(state['future_proof'], artifact_sha256=hashlib.sha256(raw).hexdigest(),
+                source_commit=source_commit, invocation_uri=f'https://github.com/{source.REPOSITORY}/actions/runs/{run}/attempts/1')
+        return verify_selection(self, raw, signed)
+    def build(self, raw, signed, **kw):
+        if (raw, signed) == (catalogue, data['catalogue.sigstore.json']):
+            genuine = verify_catalogue(self, RAW, BUNDLE, subject_name='catalogue-000001.json')
+            return replace(genuine, artifact_sha256=hashlib.sha256(raw).hexdigest(), subject_name=tag + '.json', source_commit=source_commit)
+        return verify_catalogue(self, raw, signed, **kw)
+    def output(raw, signed, **kw):
+        if raw != preflight:
+            return verified_output(raw, signed, **kw)
+        value = json.loads(json.dumps(VERIFIED).replace(SOURCE, source_commit).replace('/runs/60', f'/runs/{run}'))
+        digest = hashlib.sha256(raw).hexdigest()
+        statement = value[0]['verificationResult']['statement']
+        statement['subject'][0]['digest']['sha256'] = statement['predicate']['preflight_sha256'] = digest
+        return value
+    monkeypatch.setattr(GithubSigstoreVerifier, 'verify_selection', selection)
+    monkeypatch.setattr(GithubSigstoreVerifier, 'verify_catalogue', build)
+    monkeypatch.setattr(future, '_verified_output', output)
+    state.update(pointer=pointer, catalogue=catalogue, selection_commit=commit)
+
+
 def test_complete_chain_genuine_bootstrap_and_isolated_future(future_http):
     operation = uuid.uuid4()
     candidate = asyncio.run(chain.retrieve_chain({}, operation_id=operation))
@@ -226,6 +358,30 @@ def test_complete_chain_genuine_bootstrap_and_isolated_future(future_http):
     assert candidate.revisions[1].publication['archive_base64']['preflight.json'] == base64.b64encode(ORIGINAL).decode()
     with pytest.raises(source.SourceError):
         chain.require_chain(replace(candidate, operation_id=operation), operation_id=operation)
+
+
+def test_synthetic_later_history_keeps_publication_approval(future_http, monkeypatch):
+    policy, fingerprint = future.APPROVED_FUTURE_POLICY, future.APPROVED_FUTURE_POLICY_SHA256
+    for sequence in (3, 4):
+        append_synthetic_revision(future_http, monkeypatch, sequence)
+        operation = uuid.uuid4()
+        candidate = asyncio.run(chain.retrieve_chain({}, operation_id=operation))
+        chain.require_chain(candidate, operation_id=operation)
+        assert [r.selection.sequence for r in candidate.revisions] == list(range(1, sequence + 1))
+        assert candidate.policy_sha256 == fingerprint
+        assert (future.APPROVED_FUTURE_POLICY, future.APPROVED_FUTURE_POLICY_SHA256) == (policy, fingerprint)
+
+
+def test_genuine_bootstrap_remains_valid_with_release_owned_future_approval(future_http, monkeypatch):
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', RELEASE_POLICY)
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY_SHA256', RELEASE_POLICY_SHA256)
+    future_http['values'][ingestion.CURRENT]['object'].update(
+        sha=PINS.root_commit, url=f'{source.BASE}/git/commits/{PINS.root_commit}')
+    operation = uuid.uuid4()
+    candidate = asyncio.run(source.retrieve_candidate({}, operation_id=operation))
+    chain.require_chain(candidate, operation_id=operation)
+    assert len(candidate.revisions) == 1 and candidate.raw == RAW
+    assert candidate.policy_sha256 == '83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d'
 
 
 @pytest.mark.parametrize('kind', ['gap', 'cycle', 'missing-archive', 'wrong-archive', 'wrong-pointer', 'mutable', 'by-tag', 'channel'])
