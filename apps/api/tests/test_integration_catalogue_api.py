@@ -252,7 +252,9 @@ def test_remote_install_requires_global_management_before_lookup(client, scope):
     assert response.status_code == 403
 
 
-def test_remote_install_without_owner_policy_stops_before_lookup(client):
+def test_remote_install_without_owner_policy_stops_before_lookup(client, monkeypatch):
+    from app.services import catalogue_future_authorization as future
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', None)
     grant("integration_runtime.manage")
     response = client.post("/api/integration-catalogue/proxmox/install", json={
         "source": "official", "version": "0.2.2", "digest": "a" * 64,

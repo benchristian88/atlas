@@ -1,10 +1,10 @@
 """Original v2 signed authorization under independent Atlas release-owned pins.
 
-Inactive until the owner accepts the proposed historical/selection contracts and
-independently reviews the successor signer and exact policy. Remote bytes and
-environment variables cannot approve themselves. ADR 0013 is never reused here.
+Owner-approved Catalogue 2 signer/policy and accepted historical/selection
+contracts are pinned in release code. Remote bytes and environment variables
+cannot approve themselves. ADR 0013 remains restricted to sequence one.
 """
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 from pathlib import Path
@@ -16,6 +16,7 @@ import time
 from app import attestation_distribution as distribution
 from app.services import catalogue_source as source, official_provenance as crypto
 from app.services.catalogue_publication_evidence import PublicObservationReviewExpectations, _expectations
+from app.services.catalogue_trust import BOOTSTRAP_POLICY_PROPOSAL
 from app.services.official_catalogue_ingestion import canonical
 from app.services.publication_contracts.authorization import check_authorization, parse, WORKFLOW, PREDICATE
 
@@ -35,8 +36,30 @@ class FuturePublicationPolicy:
     recovery_decision: str
 
 
-APPROVED_FUTURE_POLICY = None
-APPROVED_FUTURE_POLICY_SHA256 = None
+# Owner-authorised Catalogue 2 consumer acceptance. Reuse the independently
+# approved numeric identities and verifier/root review; only reviewed S changes.
+# Remote executable installation has its own separate release-owned approval.
+APPROVED_FUTURE_POLICY = FuturePublicationPolicy(
+    expectations=PublicObservationReviewExpectations(
+        consumer_review=replace(BOOTSTRAP_POLICY_PROPOSAL.consumer_review,
+            reviewed_producer_revision='4be90c5292f931497473595a0958cc5e0f9d1beb'),
+        workflow_id=BOOTSTRAP_POLICY_PROPOSAL.workflow_id,
+        rulesets=BOOTSTRAP_POLICY_PROPOSAL.rulesets),
+    signer_revision='4be90c5292f931497473595a0958cc5e0f9d1beb',
+    policy_sha256='c9a88eeb6c7e6d0a7f1a08eaa07eeed5ea251449db7104f7757626842cf1bbe9',
+    verification_environment_id=25016263801,
+    selection_seconds=900,
+    publication_seconds=300,
+    historical_decision=(
+        'https://github.com/benchristian88/atlas/blob/76031dc6358a81c3babd15f74d407e22f0778dee/'
+        'docs/decisions/0018-catalogue-durable-publication-evidence.md#historical-authorization'),
+    selection_binding_decision=(
+        'https://github.com/benchristian88/atlas/blob/76031dc6358a81c3babd15f74d407e22f0778dee/'
+        'docs/decisions/0018-catalogue-durable-publication-evidence.md#selection-binding'),
+    recovery_decision='disabled-pending-permanent-archive-decision',
+)
+# sha256(canonical(asdict(APPROVED_FUTURE_POLICY))); literal approval, never repaired at runtime.
+APPROVED_FUTURE_POLICY_SHA256 = '83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d'
 
 
 def approved_future_policy():

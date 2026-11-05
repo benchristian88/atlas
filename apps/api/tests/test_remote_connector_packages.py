@@ -4,6 +4,7 @@ No source system or deployed Atlas instance is contacted. Runtime verification
 reads the real temporary store independently; health/provider metadata are fixtures.
 """
 import asyncio
+import hashlib
 from copy import deepcopy
 from dataclasses import replace, asdict
 import json
@@ -19,11 +20,12 @@ from sqlalchemy import select, func
 from app.models import InstalledConnectorPackage, AuditEvent
 from app.routes import integrations as routes
 from app.services import remote_connector_packages as remote, connector_lifecycle as lifecycle, trusted_catalogue as trust
+from app.services import catalogue_future_authorization as future, official_catalogue_ingestion as ingestion
 from app.services.connector_store import PackageStore
 from app.services.integration_connections import installed_manifest
 from app.services.connector_catalogue import catalogue_manifest, accepted_official_metadata
 from app.services.official_provenance import GithubAttestationVerifier
-from tests.test_catalogue_future import future_http, original, approval, official_http, bootstrap_provider, provider, review_document, db, LOCAL
+from tests.test_catalogue_future import future_http, original, approval, official_http, bootstrap_provider, provider, review_document, db, LOCAL, append_synthetic_revision
 from tests.test_administration import make_principal, request
 from scripts.seed_system import seed_system
 
@@ -190,9 +192,83 @@ def test_withdrawn_version_and_stale_or_conflicting_state_rejected(db, selected)
         remote.select_remote(db, 'proxmox', '0.2.2')
 
 
-def test_publication_approval_alone_does_not_authorize_remote_installation(approval):
+def test_publication_approval_alone_does_not_authorize_remote_installation(monkeypatch):
+    future.approved_future_policy()
+    monkeypatch.setattr(remote, 'APPROVED_REMOTE_INSTALLATION', None)
     with pytest.raises(ValueError, match='remote_installation_owner_approval_required'):
         remote.approved_remote_installation()
+
+
+def test_exact_release_owned_installation_approval():
+    policy = remote.approved_remote_installation()
+    assert policy == remote.RemoteInstallationPolicy(
+        '83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d',
+        'atlas-owner-2026-11-05-official-catalogue-docker-compose-installation', 'docker_compose')
+    fingerprint = 'a375a626042e7f02c14f0bc2d11b2723263394327888a1d73611ffcaaf1605f5'
+    assert hashlib.sha256(ingestion.canonical(asdict(policy))).hexdigest() == fingerprint
+    assert remote.APPROVED_REMOTE_INSTALLATION_SHA256 == fingerprint
+    assert policy.publication_policy_sha256 == future.APPROVED_FUTURE_POLICY_SHA256
+    assert policy.publication_policy_sha256 != future.APPROVED_FUTURE_POLICY.policy_sha256
+
+
+@pytest.mark.parametrize('fingerprint', [None, '', 'a' * 64])
+def test_missing_or_tampered_installation_fingerprint_rejected(monkeypatch, fingerprint):
+    monkeypatch.setattr(remote, 'APPROVED_REMOTE_INSTALLATION_SHA256', fingerprint)
+    with pytest.raises(ValueError, match='remote_installation_(owner_approval_required|approval_pin_mismatch)'):
+        remote.approved_remote_installation()
+
+
+@pytest.mark.parametrize('change', [
+    {'publication_policy_sha256': 'c9a88eeb6c7e6d0a7f1a08eaa07eeed5ea251449db7104f7757626842cf1bbe9'},
+    {'packaging_mode': 'systemd'}, {'approval_reference': ''}])
+def test_invalid_installation_authority_rejected_even_with_test_only_repin(monkeypatch, change):
+    policy = replace(remote.APPROVED_REMOTE_INSTALLATION, **change)
+    monkeypatch.setattr(remote, 'APPROVED_REMOTE_INSTALLATION', policy)
+    monkeypatch.setattr(remote, 'APPROVED_REMOTE_INSTALLATION_SHA256', hashlib.sha256(ingestion.canonical(asdict(policy))).hexdigest())
+    with pytest.raises(ValueError, match='remote_installation_approval_pin_mismatch'):
+        remote.approved_remote_installation()
+
+
+def test_installation_approval_cannot_replace_publication_authority(monkeypatch):
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', None)
+    with pytest.raises(ValueError, match='future_publication_owner_approval_required'):
+        remote.approved_remote_installation()
+
+
+@pytest.mark.parametrize('connector_id,version', [('proxmox', '0.2.0'), ('proxmox', '9.9.9'), ('other', '0.2.2')])
+def test_installation_has_no_connector_or_version_fallback(db, selected, connector_id, version):
+    with pytest.raises(ValueError, match='remote_package_not_eligible'):
+        remote.select_remote(db, connector_id, version)
+
+
+def test_synthetic_later_catalogues_and_new_connectors_keep_same_authority(db, selected, remote_http, monkeypatch):
+    # TEST ONLY unsigned releases; the fixture isolates synthetic crypto output.
+    # Genuine package/signature enforcement remains covered by the tests above.
+    from tests.test_trusted_catalogue import allow_attempt
+    policies = (future.APPROVED_FUTURE_POLICY, future.APPROVED_FUTURE_POLICY_SHA256,
+                remote.APPROVED_REMOTE_INSTALLATION, remote.APPROVED_REMOTE_INSTALLATION_SHA256)
+    for sequence in (3, 4):
+        append_synthetic_revision(remote_http, monkeypatch, sequence)
+        allow_attempt(db)
+        result = trust.refresh(db)
+        assert result['result'] == 'accepted', result['status'].get('last_error_code')
+        assert trust.status(db)['sequence'] == sequence
+        assert db.scalar(select(func.count()).select_from(trust.Revision)) == sequence
+        # Full sequential history and each original seven-asset authorization survive.
+        for number in range(2, sequence + 1):
+            assert db.get(trust.Revision, number).publication_evidence['consumer_policy_sha256'] == policies[1]
+        for connector_id, version in [('proxmox', f'0.2.{sequence}'), ('future-example', '1.0.0')]:
+            selection = remote.select_remote(db, connector_id, version)
+            assert selection.sequence == sequence and selection.package.package_available
+            entry = next(e for e in accepted_official_metadata(db)
+                if (e['connector_id'], e['version']) == (connector_id, version))
+            assert entry['eligible_for_install']
+            remote.require_confirmation(selection, payload(selection))
+            with pytest.raises(ValueError, match='confirmation_mismatch'):
+                remote.require_confirmation(selection, payload(selection, confirm=None))
+        assert db.get(trust.State, 1).identity_history['proxmox/0.2.0']['withdrawn']
+        assert policies == (future.APPROVED_FUTURE_POLICY, future.APPROVED_FUTURE_POLICY_SHA256,
+                            remote.APPROVED_REMOTE_INSTALLATION, remote.APPROVED_REMOTE_INSTALLATION_SHA256)
 
 
 @pytest.mark.parametrize('change', ['refresh-in-progress', 'currentness-invalidated', 'withdrawn'])

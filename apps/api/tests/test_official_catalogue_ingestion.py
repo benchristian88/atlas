@@ -41,6 +41,10 @@ FILES = {"catalogue-000001.json": RAW, "catalogue.sigstore.json": BUNDLE,
 
 @pytest.fixture
 def official_http(monkeypatch, bootstrap_provider):
+    # Explicit historical bootstrap-adapter fixture, also reused by backup tests.
+    # Future fixtures separately activate their labelled test-only approval.
+    from app.services import catalogue_future_authorization as future
+    monkeypatch.setattr(future, 'APPROVED_FUTURE_POLICY', None)
     values = deepcopy(bootstrap_provider)
     root = PINS.root_commit
     for path, ref, sha in [(ingestion.CURRENT, "heads/catalogue-current", root),

@@ -1,19 +1,21 @@
 # Official catalogue retrieval and durable trust
 
-The [Catalogue 2 operator sequence](catalogue2.md) covers the architecture accepted
-in [ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md), including
-deployment-independent packages and future native compatibility. Both executable
-Atlas approval records remain unset, so the sequence-one production boundary below
-is unchanged. Compose remote writing requires separate approval; native remote
-writing is unsupported and existing operator-staged workflows are preserved.
+The [official catalogue approval and operator sequence](catalogue2.md) records
+the active release-owned publication and separate Docker Compose installation
+policies under [accepted ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md).
+Atlas follows authenticated `catalogue-current` and verifies complete sequential
+signed history. Catalogue 2 and later valid releases from the same approved
+authority need no per-sequence approval change. Eligible new Connectors/versions
+require individual global administrator review and exact confirmation before
+genuine package verification and installation. Native remote writing remains
+unsupported; existing operator staging/offline operation is preserved. Automatic
+refresh remains disabled. Fresh LXC ingestion/installation is not yet qualified.
 
-The existing global refresh API now retrieves and accepts the genuine immutable
-**sequence-one** catalogue under the complete owner-approved policy in
-[Accepted ADR 0013](../decisions/0013-sequence-one-consumer-bootstrap-approval.md).
-Future sequences fail closed pending independent executable pins and genuine
-acceptance of ADR 0018's stronger publication evidence contract. The broader
+The sections below document the **preserved sequence-one bootstrap profile** and
+its original acceptance, under [accepted ADR 0013](../decisions/0013-sequence-one-consumer-bootstrap-approval.md).
+The linked operator sequence supplies later-release bounds, approval fingerprints
+and installation procedure. The broader
 [ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md) remains Proposed.
-Remote package installation and automatic refresh remain disabled.
 
 ## Source and trust policy
 
@@ -120,7 +122,7 @@ available for explicitly unauthenticated storage unit fixtures, not API callers.
 | --- | --- |
 | Empty trusted store, exact approved sequence one | Accepted after all trust gates |
 | Same authenticated original selection | Unchanged; one retained revision |
-| Invalid or unapproved selection, including sequence two | Failed; no new trust |
+| Invalid or unapproved selection | Failed; no new trust; later releases require the separate future-publication policy |
 | Lower/same-sequence substituted catalogue | Conflict; retained trust preserved |
 | Sequence gap or incomplete/inconsistent retained history | Reject; reviewed recovery required |
 | Transient provider/verifier failure | Retain last-known-good without renewing currentness |
@@ -204,19 +206,20 @@ official display. Pending checks prevent duplicate submission. Cooldown/rate-lim
 messages show the backend's next permitted time, where available; reload status
 after that time. There is no cooldown bypass.
 
-Official entries are read only, including for administrators. Proxmox **0.2.0**
-is accepted catalogue metadata, but its historical mutable package is ineligible
+Proxmox **0.2.0** is read-only accepted catalogue metadata, including for administrators;
+its historical mutable package is ineligible
 for remote installation (`package_available: false`, `supported_actions: []`).
-Catalogue acceptance does not establish package eligibility. No Install, Upgrade,
-Rollback, Activate, Configure or Resolve mappings actions are created from this
-metadata. Existing independent local/installed package behavior is preserved.
+Catalogue acceptance does not establish package eligibility for that withdrawn
+version. No installation or activation actions are created from this historical
+entry. Eligible later entries use the separate installation approval and review
+flow in the linked operator sequence. Local/installed package behavior is preserved.
 
 This UI does not add cryptographic guarantees: verification and trust decisions
-remain backend responsibilities under ADR 0013. Future publication policy in
-Proposed ADR 0012, remote package eligibility/download/installation, scheduling,
-runtime/SDK changes and community catalogues remain outside this increment.
+remain backend responsibilities under ADR 0013 and ADR 0018. The future-publication
+and remote-installation approvals are recorded separately in the operator sequence;
+scheduling, native remote writing and community catalogues remain outside this scope.
 
-## Live acceptance record
+## Historical sequence-one live acceptance record
 
 On **25 October 2026, 11:20 NZDT**, the opt-in anonymous read-only GitHub acceptance
 using an empty disposable PostgreSQL 17 database and the existing refresh API
@@ -252,9 +255,11 @@ reopens connections and simulates later unavailability. It reports
 if the second live verification fails. Anonymous provider limits can prevent the
 second verification; no cached-evidence shortcut or token fallback is allowed.
 
-Future sequences need the stronger reviewed publication evidence/archive contract.
-Trusted metadata is now surfaced read only in Integrations. A new immutable
-connector package remains future work. Secure installation still needs separate generic
-package provenance/immutable identity, runtime/SDK compatibility, current accepted
-catalogue eligibility, explicit global administrator authority and protected-store
-validation. Daily scheduling and installation freshness policy remain later work.
+Later sequences use the approved stronger publication evidence/archive contract.
+Current approval records, the existing immutable Proxmox 0.2.2 package and pending
+fresh deployment qualification are documented in the linked operator sequence.
+Secure installation retains separate genuine package provenance/immutable identity,
+runtime/SDK compatibility, current catalogue eligibility, explicit global
+administrator authority and protected-store validation. Daily scheduling remains
+later work. The historical acceptance harness above qualifies its original
+sequence-one scenario; use the current operator sequence for a fresh deployment.

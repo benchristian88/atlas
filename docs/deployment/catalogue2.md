@@ -1,185 +1,242 @@
-# Catalogue 2 review and operator sequence
+# Official catalogue consumer approval and Docker Compose installation
 
-**Accepted architecture; inactive implementation. Do not execute publication, deployment or installation from
-this document without the separately recorded approvals below.** No such action
-was performed during implementation. Neither Docker LXC was accessed.
+The owner has authorised release-owned publication acceptance and, separately,
+Docker Compose remote Connector installation in this change. These approvals
+trust the reviewed publication authority and policy for subsequent authenticated
+catalogues; they are not a sequence-two exception or a Proxmox allowlist.
+[Accepted ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md)
+defines the unchanged architecture. Its approval-unset statements describe the
+architectural decision at acceptance; the records below are the later activation.
+The earlier [preparation report](../catalogue2-adr0018-approval-report.md) and
+[security remediation report](../catalogue2-security-remediation-report.md) retain
+historical evidence, rather than current executable approval status.
 
-The [security remediation report](../catalogue2-security-remediation-report.md)
-records request-budget, pre-finalization deadline and generated-workflow corrections.
-Local regression success does not supply executable or operational approval.
-The owner accepted [ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md)
-on 5 November 2026, including native compatibility. The
-[acceptance and preparation report](../catalogue2-adr0018-approval-report.md)
-records exact baseline identities, remaining pins and the successor freeze order.
+**Code acceptance is separate from live deployment qualification.** The immutable
+publication and locally authenticated original evidence are identified below.
+No Atlas service has been deployed, restarted, refreshed or used to download or
+install a Connector during this change. Neither development LXC `192.168.3.220`
+nor the protected historical `atlas-test-docker` was accessed. GitHub CI and fresh
+LXC ingestion/installation/source qualification remain outstanding. Publication
+is complete; do not dispatch publication again or change either producer gate.
 
-The new development LXC is `192.168.3.220`. Rebuilding it requires explicit operator
-approval. The historical `atlas-test-docker` instance is excluded from every step.
-There is no application-data migration requirement; existing migrations still
-initialize a fresh PostgreSQL database. No database or installed package is erased
-by catalogue refresh or withdrawal.
+## Published evidence
 
-## Review and approvals
+[Catalogue 2](https://github.com/benchristian88/atlas-connectors/releases/tag/catalogue-000002)
+is immutable and has exactly seven assets: `catalogue-000002.json`,
+`catalogue.sigstore.json`, `current.json`, `current.sigstore.json`, `policy.json`,
+`preflight.json` and `preflight.sigstore.json`.
 
-1. Atlas PR #57 and Connectors PR #48 are merged at the baselines recorded in the
-   preparation report. Review their actual implementation and security remediation
-   evidence; merge status is not genuine successor signing or operational acceptance.
-2. Preserve the explicit ADR 0018 decision: seven immutable assets, 900/300-second
-   bounds, one to eight authenticated Tlog witnesses without a two-log quorum,
-   original-run checks, implementation-enforced same-C/run selection correlation
-   and **disabled cross-job recovery**. The preflight does not directly sign future
-   asset IDs. Native compatibility is mandatory. ADR 0012 remains Proposed overall.
-3. After review, populate the producer's release-owned `SuccessorApproval` and
-   canonical SHA-256 fingerprint with the accepted decision references and exact
-   policy digest. Hash the original policy bytes without reformatting; hash the
-   approval record with the implementation's canonical serializer. Freeze/review
-   that implementation as immutable successor **S**. Record immutable references
-   to the accepted ADR's historical-authorization and selection-binding sections;
-   recovery remains `disabled-pending-permanent-archive-decision`.
-   S is deliberately not embedded in its own approval record: the existing
-   independently reviewed caller/workflow/verifier trust pins authenticate S.
-4. Prepare both inactive workflow outputs using the frozen S:
+| Identity | Exact published value |
+| --- | --- |
+| Sequence / release ID / catalogue asset ID | `2` / `435045367` / `712971861` |
+| Catalogue SHA-256 | `1340146fa9ef10a630a6f6fea86c8f6374acec343ff2dec80f9b738f0f2c6c7c` |
+| Publication source C | `f79f5815501d203b13c9079b9b1e09585a8e87bc` |
+| Frozen signer S | `4be90c5292f931497473595a0958cc5e0f9d1beb` |
+| Original policy SHA-256 | `c9a88eeb6c7e6d0a7f1a08eaa07eeed5ea251449db7104f7757626842cf1bbe9` |
+| Original publication run / attempt | `42009358751` / `1` |
+| GitHub publication timestamp | `2026-11-05T10:18:48Z` |
+| Original current-pointer SHA-256 | `669fc75defe008398ddf017fbb4009c10ae4d57bf686ced59cc74692dbcdb8ce` |
+| Selection commit observed at review | `e8cc0915a67fb3b309aa0b02a2dd10233fec9fe1` |
+| Previous pointer SHA-256 (sequence one) | `a275f63d0ac818a193826478328ee324be62353addc5c97a2ed0a28d217b5372` |
 
-   ```bash
-   .venv/bin/python tools/prepare_evidence_workflow.py --revision REVIEWED_S \
-     --kind publisher --output /tmp/catalogue-publish.review.yml
-   .venv/bin/python tools/prepare_evidence_workflow.py --revision REVIEWED_S \
-     --kind catalogue-build --output /tmp/catalogue-build.review.yml
-   ```
+These sequence/release/asset/content identities are publication evidence only,
+not permanent constraints in either approval. The consumer follows the live,
+authenticated `catalogue-current` pointer and verifies complete contiguous signed
+history to the existing root `a1597730687be993d766ddb465a0d3362aef2d02`.
+Catalogue 1's exact ADR 0013 bootstrap approval and original bytes remain valid;
+its exception never authorises later publications. Retain Proxmox 0.2.0 as withdrawn.
 
-   These commands run in atlas-connectors. Replace `REVIEWED_S` with its actual
-   40-hex SHA; placeholders reject. Review the complete generated workflows, then
-   separately approve adopting them at the existing `catalogue-publish.yml` and
-   `catalogue.yml` paths. Keep the existing isolated reusable signer path/profile;
-   it is pinned at S. The build workflow must build `catalogue/candidate-v2`, matching
-   the driver, rather than the still-preserved active sequence-one registry.
-   Generation now uses byte-pinned historical S4 templates. Review the separate
-   adoption PR's active-control preservation fingerprints deliberately; preserve
-   historical S4 coverage and run the successor-specific security tests for both
-   generated outputs. Do not disable those checks to adopt the workflow.
-5. Separately approve all producer pin/setting changes, including exact equality
-   between workflow implementation S, reusable workflow S, source verifier-trust S
-   and independently administered verifier policy S. Keep
-   `CONNECTOR_PUBLICATION_ENABLED` disabled: Proxmox 0.2.2 is already published and
-   needs no package publication. The proposed new `CATALOGUE_EVIDENCE_ENABLED`
-   must remain unset/false until its separate owner activation; hosted variable
-   state must be independently checked by the operator, not inferred from Git.
-6. Independently populate Atlas `FuturePublicationPolicy` plus its canonical
-   fingerprint: accepted successor S (also the reviewed producer revision), exact
-   policy SHA-256, all numeric identities/rulesets/workflow, explicit time limits
-   and owner decision references. Use Atlas's existing release-owned binary/root
-   pins, never pins fetched with the archive. Approve remote executable eligibility
-   separately using `RemoteInstallationPolicy` plus its own fingerprint, bound to
-   that publication-policy fingerprint and Docker Compose mode.
-7. Run hosted producer Python 3.12 CI/security acceptance and a genuine successor
-   preflight with publication disabled. Check exact certificate/statement identity,
-   isolation and original bytes. A signed `acceptance_only: true` result is never
-   ordinary-publication authority. Obtain independent review before activation.
+Anonymous release metadata and all seven original downloaded hashes were checked.
+The actual pinned offline verifier authenticated the genuine selection and original
+preflight under S, the exact original policy and the 900/300-second historical
+bounds. This is focused original-evidence verification, not a completed Atlas
+refresh or live effective-permissions/isolation qualification. Never substitute
+GitHub transport timestamps for authenticated transparency witnesses.
 
-No S, future run ID, catalogue release ID or approval reference is invented here.
-A future approval is a reviewed change, not an API/env override on Atlas.
+## Approved publication authority
 
-## Deployment compatibility
+`APPROVED_FUTURE_POLICY` in
+`apps/api/app/services/catalogue_future_authorization.py` is exactly:
 
-The supported remote writing mode is Docker Compose, subject to the independent
-approval records above. Native/systemd remote installation is unsupported: the
-API returns `remote_install_requires_docker` before download/store mutation.
-Existing native bundled/operator-staged packages and offline verification retain
-their current contracts.
+```json
+{
+  "expectations": {
+    "consumer_review": {
+      "allowed_maintainer_id": 93822871,
+      "bootstrap": {
+        "pointer_sha256": "a275f63d0ac818a193826478328ee324be62353addc5c97a2ed0a28d217b5372",
+        "sequence": 1
+      },
+      "owner_id": 93822871,
+      "package_environment_id": 24617213627,
+      "policy_id": "single-maintainer-v1",
+      "publication_environment_id": 24999137498,
+      "publisher_app_id": 5422372,
+      "publisher_app_slug": "atlas-catalogue-publisher",
+      "publisher_bot_user_id": 346232650,
+      "repository_id": 1414494920,
+      "reviewed_producer_revision": "4be90c5292f931497473595a0958cc5e0f9d1beb",
+      "schema_version": "1.0",
+      "signing": {
+        "oidc_issuer": "https://token.actions.githubusercontent.com",
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "runner_environment": "github-hosted",
+        "trust_root_id": "sigstore-public-good-2026-10-21",
+        "trust_root_sha256": "3c2cc7f357dc064ec527fdcd78da6e9245c21a381e1abaa0f2b62b186bcac1a1",
+        "verifier_version": "2.102.1"
+      }
+    },
+    "rulesets": {
+      "bootstrap_lock": 25628137,
+      "catalogue_current": 25618684,
+      "history_lock": 25618809,
+      "main": 25618213,
+      "publication_tags": 25618901
+    },
+    "workflow_id": 392548804
+  },
+  "historical_decision": "https://github.com/benchristian88/atlas/blob/76031dc6358a81c3babd15f74d407e22f0778dee/docs/decisions/0018-catalogue-durable-publication-evidence.md#historical-authorization",
+  "policy_sha256": "c9a88eeb6c7e6d0a7f1a08eaa07eeed5ea251449db7104f7757626842cf1bbe9",
+  "publication_seconds": 300,
+  "recovery_decision": "disabled-pending-permanent-archive-decision",
+  "selection_binding_decision": "https://github.com/benchristian88/atlas/blob/76031dc6358a81c3babd15f74d407e22f0778dee/docs/decisions/0018-catalogue-durable-publication-evidence.md#selection-binding",
+  "selection_seconds": 900,
+  "signer_revision": "4be90c5292f931497473595a0958cc5e0f9d1beb",
+  "verification_environment_id": 25016263801
+}
+```
 
-The catalogue, Manifest, package digest/provenance, administrator review, mappings,
-DataSources/credentials and activation audit remain independent of deployment.
-Future native parity must reuse those exact release bytes and PackageStore
-contracts through a separately reviewed privileged staging service or constrained
-systemd operation. Preserve the root-owned native store and unprivileged API and
-runtime. Do not weaken permissions or change publication/Manifest schemas to add
-native staging. The ADR and preparation report define its required security scope;
-no native remote-installation implementation or live acceptance is claimed.
+Its literal `APPROVED_FUTURE_POLICY_SHA256` is:
 
-## Publish after approvals only
+```text
+83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d
+```
 
-In the reviewed atlas-connectors source at final main commit **C**:
+The existing independent Atlas bootstrap review supplies numeric publisher,
+maintainer, repository, environment, workflow, five rulesets and verifier/root
+identities; only its reviewed producer revision is replaced with S in the future
+policy. The bootstrap approval itself is unchanged. Historical and selection
+references are pinned to accepted ADR 0018 at immutable Atlas commit
+`76031dc6358a81c3babd15f74d407e22f0778dee`. Recovery remains
+`disabled-pending-permanent-archive-decision`.
 
-1. Build twice with `tools/build_catalogue_candidate.py --output NEW_DIRECTORY`
-   and compare the exact numbered snapshot digest. Check sequence 2, retained
-   0.2.0 identity with only withdrawal status changed, and published 0.2.2:
-   release `429608780`, package asset `693849044`, source
-   `e58788a667c0c0006477ac149e8ad28aedda0745`, package SHA-256
+## Separate Docker Compose installation authority
+
+`APPROVED_REMOTE_INSTALLATION` in
+`apps/api/app/services/remote_connector_packages.py` is exactly:
+
+```json
+{
+  "approval_reference": "atlas-owner-2026-11-05-official-catalogue-docker-compose-installation",
+  "packaging_mode": "docker_compose",
+  "publication_policy_sha256": "83766234eaf1caa24ad067eae414ca3ab381bdbcf9842b10359e200e9dc7324d"
+}
+```
+
+Its literal `APPROVED_REMOTE_INSTALLATION_SHA256` is:
+
+```text
+a375a626042e7f02c14f0bc2d11b2723263394327888a1d73611ffcaaf1605f5
+```
+
+The approval reference records the explicit owner instruction implemented by this
+change, including the clarification that later catalogues and Connectors use the
+same authority. It does not claim a separate earlier approval event. It approves
+Docker Compose remote installation of individually selected eligible official
+packages under this publication authority, not automatic installation or any
+specific Connector/version. Its binding is the **Atlas publication-policy
+fingerprint**, distinct from the producer's original-policy digest.
+
+Both fingerprints use the existing production
+`sha256(official_catalogue_ingestion.canonical(asdict(policy)))`: sorted JSON keys,
+two-space indentation, UTF-8, `ensure_ascii=False`, `allow_nan=False` and one final
+newline. They are separately pinned literals, never dynamically repaired.
+Reproduce from `apps/api` without provider calls:
+
+```bash
+.venv/bin/python -B - <<'PYCODE'
+from dataclasses import asdict
+from hashlib import sha256
+from app.services import catalogue_future_authorization as future
+from app.services import remote_connector_packages as remote
+from app.services.official_catalogue_ingestion import canonical
+for policy, expected in [
+    (future.approved_future_policy(), future.APPROVED_FUTURE_POLICY_SHA256),
+    (remote.approved_remote_installation(), remote.APPROVED_REMOTE_INSTALLATION_SHA256),
+]:
+    assert sha256(canonical(asdict(policy))).hexdigest() == expected
+    print(canonical(asdict(policy)).decode(), expected)
+PYCODE
+```
+
+## Future catalogues and installation safeguards
+
+Catalogue 3, Catalogue 4 and subsequent properly authenticated releases under the
+same S/policy/identities require no new approval fingerprint or Atlas code change
+merely because sequence, release/asset IDs, content/pointer digest, Connector ID or
+version advances. New active entries become discoverable and eligible for
+individual administrator review. A changed signing authority or publication policy
+still requires independent approval. Existing capacity bounds remain: 32 revisions,
+32 MiB total input, 8 MiB evidence per revision, 240-second retrieval and 300-second
+lease. This change does not remove the documented finite-history capacity limit;
+exceeding it fails closed and requires separate history-capacity work.
+
+The existing Master Administrator permission/global scope, exact
+Connector/version/digest/catalogue/asset confirmation, current-pointer rereads,
+immutable release/asset identity, genuine package hash/Sigstore verification,
+PackageStore safety, mappings, compatibility, independent runtime verification,
+activation audit and local-release restrictions remain enforced. No fallback
+selects an unlisted, withdrawn or different Connector/version. Already installed
+ordinary packages continue to operate offline.
+
+Native/systemd remote installation remains unsupported with
+`remote_install_requires_docker`. Existing operator-staged/bundled native packages
+remain supported. Catalogue, Manifest and immutable package bytes stay independent
+of deployment mode, so future native support needs no package republication.
+
+The labelled synthetic forward-compatibility regression advances full history
+through sequences 3 and 4, changes numeric release/asset identities and introduces
+new versions and a new Connector while holding both approval records/fingerprints
+fixed. Each new selection still requires exact confirmation. Synthetic verifier
+outputs are confined to test fixtures; genuine package verification is separately
+exercised by the existing unchanged signed Proxmox package tests.
+
+## Remaining fresh Docker deployment qualification
+
+The new development LXC is `192.168.3.220`; rebuilding/accessing it requires separate
+operator authorisation. Exclude `atlas-test-docker` from every operation. This is a
+fresh disposable development installation with no historical application-data
+migration requirement. Existing migrations initialise PostgreSQL; none is added.
+
+1. Review/commit this local change through the human PR process and pass GitHub CI.
+   Record the exact approved Atlas build/release identity; it is not yet established.
+2. After separate target/rebuild approval, verify that Atlas release artifact and
+   follow [fresh Docker installation](installation.md). Run
+   `python3 infra/install/compose.py` from its verified package root, retain generated
+   secrets privately and complete initial administrator setup. Verify Compose
+   runtime health and its approved baseline.
+3. As a Master Administrator open Integrations → Catalogue and check the official
+   catalogue. Record the actual current sequence and full accepted history. If
+   current is still Catalogue 2, require the exact identities above, retained
+   sequence-one history, withdrawn 0.2.0 and eligible 0.2.2. Do not force a rollback
+   if a later valid catalogue has become current. Respect provider cooldown/backoff;
+   no token fallback or cooldown bypass is authorised.
+4. Deliberately resolve managed mappings. Do not create taxonomy automatically from
+   downloaded labels. Review and individually confirm the intended package identity.
+   For unchanged [Proxmox 0.2.2](https://github.com/benchristian88/atlas-connectors/releases/tag/proxmox-v0.2.2),
+   the immutable release is `429608780`, tag `proxmox-v0.2.2`, package asset
+   `693849044`, source `e58788a667c0c0006477ac149e8ad28aedda0745`, package SHA-256
    `2d66fc69b9cf9c70d7df117fe41bff3e3e056299f1908cde965e9e3f75e59abf`.
-   Independently reverify immutable release/tag, complete asset inventory and
-   genuine package bundle. Never modify those historical immutable assets.
-2. Require successful required CI at C and no further main changes. Run the
-   existing catalogue build workflow at C/main and retain its actual run ID and
-   genuine build attestation. For example, after explicit authorization:
+   Never rebuild, modify or republish it. Choose **Verify and install** and record
+   genuine package/runtime verification, installed identity and activation audit.
+5. Configure an Integration in its authorised customer/site using normal secret-safe
+   forms and separately authorised real-source credentials. Test connection and
+   perform deliberate read-only discovery. This source qualification remains open.
+6. Under separate operational approval, verify restart continuity, offline installed
+   operation, renewed live currentness after restore, RBAC and retained history.
+   Record Atlas/catalogue/pointer/package identities, audit/results and screenshots.
 
-   ```bash
-   gh workflow run catalogue.yml --ref main
-   gh run watch ACTUAL_BUILD_RUN_ID --exit-status
-   ```
-
-3. After independent live-gate approval set only the reviewed catalogue evidence
-   enable setting. Require a fresh first-attempt human publication dispatch at C:
-
-   ```bash
-   gh workflow run catalogue-publish.yml --ref main \
-     -f operation=publish -F acceptance_only=false
-   gh run watch ACTUAL_PUBLICATION_RUN_ID --exit-status
-   ```
-
-   The driver admits the original signed preflight before write credentials,
-   stages its exact archive first, saves runner-local checkpoints after observed
-   writes, obtains the original selection signature, verifies seven assets,
-   finalizes immutably, rereads identities/bytes and CAS-advances current.
-   It must have at least thirty seconds remaining inside the original publication
-   window immediately before finalization. A provider delay or ambiguous write
-   can still strand an immutable release; failed post-publication verification
-   leaves current unchanged. Stop and preserve evidence for independent review.
-   Do not rerun an ambiguous/expired job, invent a checkpoint or use the frozen
-   four-asset publisher for this release. Cross-job recovery remains disabled.
-4. Anonymous independent GET verification must establish exactly seven immutable
-   assets at `catalogue-000002`, by-ID/by-tag agreement, original selection/build/
-   preflight signatures, exact policy bytes, all temporal constraints, and complete
-   contiguous 1→2 selection history ending at the original pinned root. Record
-   actual numeric release/asset IDs and original-byte hashes. Re-disable the new
-   live catalogue gate after publication under the operator's reviewed procedure.
-
-## New Docker instance, after separate deployment approval
-
-1. Explicitly confirm target `192.168.3.220` and obtain any rebuild approval. Do not
-   select, connect to or reset `atlas-test-docker`. Use the reviewed Atlas build
-   containing both independently approved consumer policies. No existing local
-   signed-release enrollment is transferred or bypassed.
-2. Verify the release artifact and follow [fresh Docker installation](installation.md):
-   from the new verified package root run `python3 infra/install/compose.py`.
-   Keep its generated secret file private; finish initial administrator setup.
-   Use the normal runtime-enabled installation and verify Docker Compose runtime
-   health/baseline. The exact approved Atlas build/release identity is still TBD.
-3. Open Integrations → Catalogue as a global package administrator. Check official
-   catalogue. Confirm accepted sequence 2 and retained sequence-one trust/history;
-   Proxmox 0.2.0 must appear withdrawn and have no install action.
-4. Resolve global mappings for Proxmox 0.2.2. Existing taxonomy may lack Cluster or
-   Member Of records; deliberately create/select suitable managed records using
-   normal administrator controls. Do not auto-create taxonomy from downloaded
-   labels or suppress mapping checks.
-5. Choose **Review installation**, verify 0.2.2 and the exact digest above, check the
-   confirmation and choose **Verify and install**. Confirm the installed identity,
-   independent runtime verification and activation audit. A changed catalogue,
-   withdrawn entry, wrong digest/asset, source conflict, missing approval or failed
-   verification must preserve the previous active package.
-   Fresh refresh plus installation is regression-bounded to forty anonymous REST
-   requests, with asset/CDN transfers counted separately. Shared-IP traffic, retries
-   and secondary limits can still cause rejection; respect the reported backoff.
-   Do not add an administrative-token fallback or repeat refresh during cooldown.
-6. Use Add Integration for the installed Connector, choose the authorized customer/
-   site, configure it through the existing secret-safe forms, test connection and
-   perform a deliberate read-only discovery run. This requires separately approved
-   real-source credentials and operational qualification; none was done here.
-7. Restart services and verify installed package/configuration continuity. Temporarily
-   deny catalogue egress in the approved test environment: previously installed
-   package verification and configured operation must remain available, while new
-   remote install/refresh fails safely. Restore egress and verify unchanged refresh,
-   backup/restore currentness invalidation, RBAC and retained history.
-
-Record exact Atlas build, catalogue/pointer/package identities, screenshots,
-request/audit results and genuine source qualification. Only then assess feature
-closure. Local synthetic/Docker tests do not qualify LXC networking, Proxmox ACLs,
-source compatibility or live successor publication controls.
+Local tests and original-evidence checks do not establish LXC networking, Proxmox
+ACL/source compatibility, deployed ingestion, package installation or operational
+acceptance. Producer gate changes, signing, publication and either LXC are outside
+this local approval change.
