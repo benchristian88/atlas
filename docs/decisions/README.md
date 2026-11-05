@@ -30,7 +30,7 @@ remain understandable after the original implementation discussion is gone.
 - [0009 — Read-only technical discovery for official v1 Connectors](0009-read-only-official-connectors.md).
 
 - [0011 — Pinned offline official provenance verification](0011-offline-official-provenance.md).
-- [0012 — Official catalogue publication authorization](0012-official-catalogue-publication-authorization.md) — **Proposed** for the stronger future-publication evidence contract.
+- [0012 — Official catalogue publication authorization](0012-official-catalogue-publication-authorization.md) — **Proposed** overall; ADR 0018 separately accepts the narrower durable-evidence and historical-authorization contract.
 - [0013 — Exact sequence-one consumer bootstrap trust approval](0013-sequence-one-consumer-bootstrap-approval.md) — **Accepted**; approves the complete fixed consumer pin set and restricted historical exception.
 - [0014 — Instance-bound operator acceptance of signed immutable releases](0014-local-release-acceptance.md) — local installation authority, separate from catalogue eligibility and prerelease qualification.
 - [0015 — Separate local artifact evidence, approval and execution authority](0015-local-release-execution-authority.md) — partially supersedes 0014's authorization, isolation and audit lifecycle after security review.
@@ -38,7 +38,7 @@ remain understandable after the original implementation discussion is gone.
 
 - [0017 — Canonical knowledge serialization and separate acceptance history](0017-reconciliation-knowledge-integrity.md).
 
-- [0018 — Durable original catalogue evidence and separate remote installation approval](0018-catalogue-durable-publication-evidence.md) — **Proposed**; inactive candidate only.
+- [0018 — Durable original catalogue evidence and separate remote installation approval](0018-catalogue-durable-publication-evidence.md) — **Accepted 5 November 2026** for the architectural contract, including native/systemd compatibility; executable trust, workflow adoption and operational activation remain separately gated.
 
 ## ADR maintenance
 

@@ -1,12 +1,16 @@
 # Catalogue 2 review and operator sequence
 
-**Inactive candidate. Do not execute publication, deployment or installation from
+**Accepted architecture; inactive implementation. Do not execute publication, deployment or installation from
 this document without the separately recorded approvals below.** No such action
 was performed during implementation. Neither Docker LXC was accessed.
 
 The [security remediation report](../catalogue2-security-remediation-report.md)
 records request-budget, pre-finalization deadline and generated-workflow corrections.
-Local regression success does not supply any approval listed below.
+Local regression success does not supply executable or operational approval.
+The owner accepted [ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md)
+on 5 November 2026, including native compatibility. The
+[acceptance and preparation report](../catalogue2-adr0018-approval-report.md)
+records exact baseline identities, remaining pins and the successor freeze order.
 
 The new development LXC is `192.168.3.220`. Rebuilding it requires explicit operator
 approval. The historical `atlas-test-docker` instance is excluded from every step.
@@ -16,16 +20,21 @@ by catalogue refresh or withdrawal.
 
 ## Review and approvals
 
-1. Review both uncommitted candidates as two coherent implementation PRs. Preserve
-   Connectors Phase 1 and Atlas's clean `dev` baseline. Do not accept Proposed
-   [ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md) implicitly.
-2. Explicitly accept or reject historical 900/300-second bounds, supported witness
-   semantics and original-run time checks, same-C/run selection binding, the seven
-   assets and **disabled recovery** disposition. If permanent recovery audit is
-   required before publication, that remains an implementation blocker.
+1. Atlas PR #57 and Connectors PR #48 are merged at the baselines recorded in the
+   preparation report. Review their actual implementation and security remediation
+   evidence; merge status is not genuine successor signing or operational acceptance.
+2. Preserve the explicit ADR 0018 decision: seven immutable assets, 900/300-second
+   bounds, one to eight authenticated Tlog witnesses without a two-log quorum,
+   original-run checks, implementation-enforced same-C/run selection correlation
+   and **disabled cross-job recovery**. The preflight does not directly sign future
+   asset IDs. Native compatibility is mandatory. ADR 0012 remains Proposed overall.
 3. After review, populate the producer's release-owned `SuccessorApproval` and
    canonical SHA-256 fingerprint with the accepted decision references and exact
-   policy digest. Freeze/review that implementation as immutable successor **S**.
+   policy digest. Hash the original policy bytes without reformatting; hash the
+   approval record with the implementation's canonical serializer. Freeze/review
+   that implementation as immutable successor **S**. Record immutable references
+   to the accepted ADR's historical-authorization and selection-binding sections;
+   recovery remains `disabled-pending-permanent-archive-decision`.
    S is deliberately not embedded in its own approval record: the existing
    independently reviewed caller/workflow/verifier trust pins authenticate S.
 4. Prepare both inactive workflow outputs using the frozen S:
@@ -52,7 +61,8 @@ by catalogue refresh or withdrawal.
    and independently administered verifier policy S. Keep
    `CONNECTOR_PUBLICATION_ENABLED` disabled: Proxmox 0.2.2 is already published and
    needs no package publication. The proposed new `CATALOGUE_EVIDENCE_ENABLED`
-   remains unset/false until its separate owner activation.
+   must remain unset/false until its separate owner activation; hosted variable
+   state must be independently checked by the operator, not inferred from Git.
 6. Independently populate Atlas `FuturePublicationPolicy` plus its canonical
    fingerprint: accepted successor S (also the reviewed producer revision), exact
    policy SHA-256, all numeric identities/rulesets/workflow, explicit time limits
@@ -67,6 +77,23 @@ by catalogue refresh or withdrawal.
 
 No S, future run ID, catalogue release ID or approval reference is invented here.
 A future approval is a reviewed change, not an API/env override on Atlas.
+
+## Deployment compatibility
+
+The supported remote writing mode is Docker Compose, subject to the independent
+approval records above. Native/systemd remote installation is unsupported: the
+API returns `remote_install_requires_docker` before download/store mutation.
+Existing native bundled/operator-staged packages and offline verification retain
+their current contracts.
+
+The catalogue, Manifest, package digest/provenance, administrator review, mappings,
+DataSources/credentials and activation audit remain independent of deployment.
+Future native parity must reuse those exact release bytes and PackageStore
+contracts through a separately reviewed privileged staging service or constrained
+systemd operation. Preserve the root-owned native store and unprivileged API and
+runtime. Do not weaken permissions or change publication/Manifest schemas to add
+native staging. The ADR and preparation report define its required security scope;
+no native remote-installation implementation or live acceptance is claimed.
 
 ## Publish after approvals only
 

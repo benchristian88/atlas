@@ -1,14 +1,18 @@
 # Official catalogue retrieval and durable trust
 
-The [Catalogue 2 candidate and operator sequence](catalogue2.md) adds separately
-approved future-chain and Docker installation paths. Both Atlas approval records
-remain unset, so the sequence-one production boundary below is unchanged.
+The [Catalogue 2 operator sequence](catalogue2.md) covers the architecture accepted
+in [ADR 0018](../decisions/0018-catalogue-durable-publication-evidence.md), including
+deployment-independent packages and future native compatibility. Both executable
+Atlas approval records remain unset, so the sequence-one production boundary below
+is unchanged. Compose remote writing requires separate approval; native remote
+writing is unsupported and existing operator-staged workflows are preserved.
 
 The existing global refresh API now retrieves and accepts the genuine immutable
 **sequence-one** catalogue under the complete owner-approved policy in
 [Accepted ADR 0013](../decisions/0013-sequence-one-consumer-bootstrap-approval.md).
-Future sequences fail closed pending the stronger publication evidence contract
-in [Proposed ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md).
+Future sequences fail closed pending independent executable pins and genuine
+acceptance of ADR 0018's stronger publication evidence contract. The broader
+[ADR 0012](../decisions/0012-official-catalogue-publication-authorization.md) remains Proposed.
 Remote package installation and automatic refresh remain disabled.
 
 ## Source and trust policy
