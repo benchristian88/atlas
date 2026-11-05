@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import AsyncExitStack
+from typing import Literal
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -26,6 +28,11 @@ class PackageSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
     version: str = Field(min_length=1, max_length=64)
     digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    source: Literal['bootstrap', 'official'] = 'bootstrap'
+    catalogue_sequence: int | None = Field(default=None, ge=2, le=2**53 - 1)
+    catalogue_digest: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    release_asset_id: int | None = Field(default=None, gt=0, le=2**53 - 1)
+    confirm: Literal['install'] | None = None
 
 
 def _id(connector_id: str):
@@ -160,8 +167,18 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
     from app.services.connector_verification import ConnectorPackageError
     require_global(principal, "integration_runtime.manage")
     _id(connector_id)
+    stack = AsyncExitStack()
+    remote_selection = None
     try:
-        package = catalogue.get(connector_id, payload.version)
+        if payload.source == 'official':
+            from app.services.remote_connector_packages import select_remote, require_confirmation, downloaded_package
+            remote_selection = select_remote(db, connector_id, payload.version)
+            require_confirmation(remote_selection, payload)
+            package = remote_selection.package
+        else:
+            if any(value is not None for value in (payload.catalogue_sequence, payload.catalogue_digest, payload.release_asset_id, payload.confirm)):
+                raise HTTPException(422, 'Remote confirmation requires an official package selection')
+            package = catalogue.get(connector_id, payload.version)
         if not package.package_available or package.bundle_digest != "sha256:" + payload.digest:
             raise HTTPException(409, "A verified release bundle is not available for this selection")
         health = await runtime.health()
@@ -170,12 +187,19 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
         result = compatibility(package.manifest, health)
         if result["state"] not in {"compatible", "installable"}:
             raise HTTPException(409, "This Connector requires a compatible Atlas runtime")
+        verifier = catalogue.verifier() if remote_selection is None else None
+        if remote_selection is not None:
+            if health.get('packaging_mode') != 'docker_compose':
+                raise HTTPException(409, {'code': 'remote_install_requires_docker', 'message': 'Remote installation currently supports Docker Compose. Native installations require operator staging.'})
+            package, verifier = await stack.enter_async_context(downloaded_package(remote_selection))
         lifecycle.lock_connector(db, connector_id)
+        if remote_selection is not None:
+            require_confirmation(select_remote(db, connector_id, payload.version, lock=True), payload)
         # Activation validates all live generic owners against the new Manifest.
         # Legacy owners retain the conservative I1 update guard.
         if db.scalar(select(Integration.id).where(Integration.connector_id.is_(None), Integration.plugin_id == connector_id).limit(1)):
             raise lifecycle.ConnectorInUse("Legacy configured connections must be migrated before changing this Connector package")
-        stored = lifecycle.package_store().install(package, catalogue.verifier())
+        stored = lifecycle.package_store().install(package, verifier)
         reference = {"connector_id": stored.connector_id, "version": stored.version, "digest": stored.bundle_digest.removeprefix("sha256:")}
         if (await runtime.verify_connector(reference))["state"] != "verified":
             raise HTTPException(409, "The runtime could not verify this installed package")
@@ -199,6 +223,8 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
     except HTTPException:
         db.rollback()
         raise
+    finally:
+        await stack.aclose()
 
 
 @router.post("/integration-catalogue/{connector_id}/install")

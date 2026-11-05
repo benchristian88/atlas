@@ -67,7 +67,7 @@ async def contents(reader, name, root, expected_blob, maximum):
     value = await reader.selection_metadata(path)
     source.require(type(value) is dict and value.get("type") == "file"
         and value.get("path") == name and value.get("name") == name
-        and value.get("sha") == expected_blob and type(value.get("size")) is int
+        and _sha(value.get("sha")) and (expected_blob is None or value["sha"] == expected_blob) and type(value.get("size")) is int
         and 0 < value["size"] <= maximum and value.get("encoding") == "base64"
         and value.get("url") == source.BASE + path
         and type(value.get("content")) is str
@@ -80,20 +80,40 @@ async def contents(reader, name, root, expected_blob, maximum):
     except ValueError:
         raise source.SourceError("invalid_selection_contents") from None
     source.require(base64.b64encode(raw).decode() == encoded and len(raw) == value["size"]
-        and blob_sha(raw) == expected_blob, "selection_contents_identity_mismatch")
+        and blob_sha(raw) == value["sha"], "selection_contents_identity_mismatch")
     # download_url/html_url/_links are deliberately never routing inputs.
     return raw
 
 
-async def read_root(reader, root):
-    current = await read_ref(reader, CURRENT, expected=root)
+async def read_root(reader, root, *, require_current=True):
+    current = await read_ref(reader, CURRENT, expected=root) if require_current else None
     marker = await read_ref(reader, ROOT_TAG, expected=root)
+    raw, bundle, transport = await read_commit(reader, root, root_only=True)
+    return raw, bundle, {**transport, "current_ref": current, "bootstrap_ref": marker, "root_commit": root}
+
+
+async def read_commit(reader, root, *, root_only=False, derive_tree=False):
     commit = await reader.selection_metadata(f"/git/commits/{root}")
-    source.require(type(commit) is dict and commit.get("sha") == root and commit.get("parents") == []
+    source.require(type(commit) is dict and commit.get("sha") == root and type(commit.get("parents")) is list and len(commit["parents"]) <= 1
+        and (not root_only or commit["parents"] == [])
         and commit.get("url") == f"{source.BASE}/git/commits/{root}"
         and type(commit.get("tree")) is dict and _sha(commit["tree"].get("sha")), "invalid_bootstrap_commit")
+    parents = commit['parents']
+    source.require(all(type(p) is dict and _sha(p.get('sha'))
+        and p.get('url') == f"{source.BASE}/git/commits/{p['sha']}" for p in parents), 'invalid_selection_parent')
     tree_sha = commit["tree"]["sha"]
     source.require(commit["tree"].get("url") == f"{source.BASE}/git/trees/{tree_sha}", "invalid_bootstrap_tree")
+    if derive_tree:
+        # Reconstruct the exact two-regular-file Git tree from checked blob bytes.
+        # Extra entries, different modes/names or substituted contents change its
+        # hash. This proves the same tree without a redundant tree-listing GET.
+        raw = await contents(reader, "current.json", root, None, MAX_POINTER_BYTES)
+        bundle = await contents(reader, "current.sigstore.json", root, None, MAX_BUNDLE_BYTES)
+        files = {"current.json": blob_sha(raw), "current.sigstore.json": blob_sha(bundle)}
+        tree_bytes = b"".join(b"100644 " + name.encode() + b"\0" + bytes.fromhex(sha) for name, sha in sorted(files.items()))
+        source.require(hashlib.sha1(b"tree " + str(len(tree_bytes)).encode() + b"\0" + tree_bytes).hexdigest() == tree_sha,
+                       "invalid_bootstrap_tree")
+        return raw, bundle, {"parents": [p["sha"] for p in parents], "tree_sha": tree_sha, "blobs": files}
     tree = await reader.selection_metadata(f"/git/trees/{tree_sha}")
     source.require(type(tree) is dict and tree.get("sha") == tree_sha and tree.get("truncated") is False
         and tree.get("url") == f"{source.BASE}/git/trees/{tree_sha}"
@@ -110,8 +130,7 @@ async def read_root(reader, root):
                    "invalid_bootstrap_tree")
     raw = await contents(reader, "current.json", root, files["current.json"], MAX_POINTER_BYTES)
     bundle = await contents(reader, "current.sigstore.json", root, files["current.sigstore.json"], MAX_BUNDLE_BYTES)
-    return raw, bundle, {"current_ref": current, "bootstrap_ref": marker, "root_commit": root,
-                         "parents": [], "tree_sha": tree_sha, "blobs": files}
+    return raw, bundle, {"parents": [p["sha"] for p in parents], "tree_sha": tree_sha, "blobs": files}
 
 
 async def release_source(reader, tag, expected):
@@ -129,8 +148,8 @@ async def release_source(reader, tag, expected):
     raise source.SourceError("catalogue_tag_depth")
 
 
-async def selected_release(reader, selection, build_source):
-    value = await reader.selection_metadata(f"/releases/{selection.release_id}")
+async def selected_release(reader, selection, build_source, *, archive_limits=None, metadata=None):
+    value = await reader.selection_metadata(f"/releases/{selection.release_id}") if metadata is None else metadata
     source.require(type(value) is dict and type(value.get("id")) is int and value["id"] == selection.release_id
         and value.get("tag_name") == selection.release_tag
         and value.get("url") == f"{source.BASE}/releases/{selection.release_id}"
@@ -140,11 +159,12 @@ async def selected_release(reader, selection, build_source):
     source.require(value.get("target_commitish") == build_source, "catalogue_release_source_mismatch")
     names = {selection.release_tag + ".json": MAX_CATALOGUE_BYTES, "catalogue.sigstore.json": MAX_BUNDLE_BYTES,
              "current.json": MAX_POINTER_BYTES, "current.sigstore.json": MAX_BUNDLE_BYTES}
-    source.require(type(value.get("assets")) is list and len(value["assets"]) == 4
+    names.update(archive_limits or {})
+    source.require(type(value.get("assets")) is list and len(value["assets"]) == len(names)
         and all(type(a) is dict and type(a.get("name")) is str for a in value["assets"])
         and {a["name"] for a in value["assets"]} == names.keys(), "invalid_selected_asset_inventory")
     assets = {name: reader.asset(value, name, tag=selection.release_tag, maximum=maximum) for name, maximum in names.items()}
-    source.require(len({a["id"] for a in assets.values()}) == 4
+    source.require(len({a["id"] for a in assets.values()}) == len(names)
         and assets[selection.release_tag + ".json"]["id"] == selection.asset_id, "selected_asset_mismatch")
     snapshot = {k: value.get(k) for k in RELEASE_KEYS}
     snapshot["assets"] = {name: {k: a.get(k) for k in ASSET_KEYS} for name, a in assets.items()}

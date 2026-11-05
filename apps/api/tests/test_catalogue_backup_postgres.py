@@ -55,3 +55,25 @@ def test_genuine_evidence_survives_restore_and_requires_fresh_verification(insta
             subject_name="catalogue-000001.json").artifact_sha256 == DIGEST
         assert consumer.refresh(db)["result"] == "unchanged"
         assert db.get(State, 1).last_confirmed_current_at is not None
+
+from tests.test_catalogue_future import future_http, original, approval
+from tests.test_remote_connector_packages import remote_approval
+
+
+def test_future_chain_original_archive_and_high_water_survive_restore(installations, future_http, remote_approval):
+    from app.services import trusted_catalogue as consumer, remote_connector_packages as remote
+    from app.services.catalogue_source import SourceError
+    with Session(installations['source']) as db:
+        assert consumer.refresh(db)['result'] == 'accepted'
+        original_evidence = db.get(Revision, 2).publication_evidence
+        assert db.get(State, 1).highest_sequence == 2
+    archive = portable_backup(installations)
+    restore(installations, archive)
+    with Session(installations['target']) as db:
+        assert db.get(Revision, 2).publication_evidence == original_evidence
+        assert db.get(State, 1).highest_sequence == 2
+        assert db.get(State, 1).last_confirmed_current_at is None
+        with pytest.raises(SourceError, match='confirmation_required'):
+            remote.select_remote(db, 'proxmox', '0.2.2')
+        assert consumer.refresh(db)['result'] == 'unchanged'
+        assert remote.select_remote(db, 'proxmox', '0.2.2').sequence == 2

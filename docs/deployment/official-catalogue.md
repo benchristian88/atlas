@@ -1,5 +1,9 @@
 # Official catalogue retrieval and durable trust
 
+The [Catalogue 2 candidate and operator sequence](catalogue2.md) adds separately
+approved future-chain and Docker installation paths. Both Atlas approval records
+remain unset, so the sequence-one production boundary below is unchanged.
+
 The existing global refresh API now retrieves and accepts the genuine immutable
 **sequence-one** catalogue under the complete owner-approved policy in
 [Accepted ADR 0013](../decisions/0013-sequence-one-consumer-bootstrap-approval.md).

@@ -401,7 +401,8 @@ def mapping_list(connector_id: str, version: str | None = None,
     require_global(principal, "integration_runtime.view")
     from app.services.connector_catalogue import catalogue
     try:
-        manifest = catalogue.get(connector_id, version).manifest
+        from app.services.connector_catalogue import catalogue_manifest
+        manifest = catalogue_manifest(db, connector_id, version)
         return {"connector_id": connector_id, "version": manifest["version"], "mappings": mappings.mapping_state(db, manifest)}
     except (ValueError, OSError):
         raise HTTPException(404, "Connector version not found") from None
@@ -416,7 +417,8 @@ def resolve_mapping(connector_id: str, payload: MappingInput, request: Request,
     if lifecycle.active_connector_runs(db, connector_id):
         raise HTTPException(409, "Wait for active discovery runs to settle before changing mappings")
     try:
-        manifest = catalogue.get(connector_id, payload.version).manifest
+        from app.services.connector_catalogue import catalogue_manifest
+        manifest = catalogue_manifest(db, connector_id, payload.version)
         declared = next((row for kind, row, _ in mappings.declarations(manifest) if kind == payload.kind and row["key"] == payload.source_key), None)
         if declared is None or payload.ignored and (declared["required"] or payload.target_key is not None):
             raise ValueError

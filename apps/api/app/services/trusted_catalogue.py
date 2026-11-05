@@ -23,7 +23,7 @@ from app.services.official_catalogue import parse_official_catalogue
 from app.services.official_provenance import TrustProfile
 from app.utils.json_values import to_json_value
 
-LEASE_SECONDS = 150
+LEASE_SECONDS = 300
 COOLDOWN_SECONDS = 900
 CONFLICTS = {"catalogue_rollback", "catalogue_substitution", "historical_identity_changed",
              "withdrawal_reactivated", "channel_changed", "historical_snapshot_mismatch",
@@ -159,6 +159,30 @@ def _store_revision(db, state, raw, verification, publication, confirmed_at):
 
 
 def _promote(db, state, candidate, *, operation_id=None):
+    from app.services.catalogue_chain import VerifiedCatalogueChain
+    if type(candidate) is VerifiedCatalogueChain:
+        source.require_publication(candidate, operation_id=operation_id)
+        result = "unchanged"
+        for revision in candidate.revisions:
+            if state.highest_sequence and revision.selection.sequence < state.highest_sequence:
+                retained = db.get(Revision, revision.selection.sequence)
+                source.require(retained is not None and retained.content_digest == revision.selection.sha256
+                    and retained.publication_evidence.get("pointer_sha256") == revision.selection.pointer_sha256,
+                    "catalogue_substitution")
+                continue
+            if state.highest_sequence == revision.selection.sequence:
+                retained = db.get(Revision, revision.selection.sequence)
+                source.require(retained is not None
+                    and retained.publication_evidence.get("pointer_sha256") == revision.selection.pointer_sha256,
+                    "catalogue_substitution")
+            stored = _store_revision(db, state, revision.raw, to_json_value({
+                "catalogue": asdict(revision.provenance), "selection": asdict(revision.selection_provenance)}),
+                revision.publication, candidate.confirmed_at)
+            if stored == "accepted":
+                result = "accepted"
+        source.require(state.highest_sequence == candidate.revisions[-1].selection.sequence,
+                       "catalogue_rollback")
+        return result
     # Reparse original bytes, never a mutable caller-owned document. Match the
     # genuine verifier result again at the persistence boundary.
     evidence = candidate.provenance
@@ -187,7 +211,8 @@ def status(db):
             "last_attempt_at", "last_download_at", "last_authenticity_verified_at",
             "last_confirmed_current_at", "last_error_code", "source_conflict", "next_attempt_at")},
         "refresh_state": "in_progress" if running else "failed" if state and state.last_error_code else "idle",
-        "publication_policy": source.POLICY,
+        "publication_policy": "atlas-future-publication-v1" if revision and
+            revision.publication_evidence.get("policy") == "atlas-future-publication-v1" else source.POLICY,
     }
 
 
@@ -222,9 +247,14 @@ def refresh(db, *, actor=None, request=None):
                     # Record rollback/substitution even if publication is also
                     # insufficient; only genuinely verified candidates reach here.
                     document = parse_official_catalogue(candidate.raw).document
-                    transition(document, candidate.provenance.artifact_sha256, state)
-                    history_after(document, state.identity_history)
-                    result = _promote(db, state, candidate, operation_id=operation)
+                    from app.services.catalogue_chain import VerifiedCatalogueChain
+                    if type(candidate) is not VerifiedCatalogueChain:
+                        transition(document, candidate.provenance.artifact_sha256, state)
+                        history_after(document, state.identity_history)
+                    # A chain is one acceptance transaction. A rejected later
+                    # revision must not leave a newly accepted prefix behind.
+                    with db.begin_nested():
+                        result = _promote(db, state, candidate, operation_id=operation)
                 except ConnectorPackageError as failure:
                     error = failure
             for key, stamp in progress.items():
