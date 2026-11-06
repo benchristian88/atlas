@@ -64,10 +64,73 @@ export function officialConnectorMetadata(entry) {
     category: displayText(display.category, "Not specified", 100),
     publisher: displayText(manifest.publisher?.name, "Not specified", 255),
     licence: displayText(manifest.licensing?.licence, "Not specified", 255),
+    source: "official",
+    digest: typeof manifest.distribution?.bundle_digest === "string" ? manifest.distribution.bundle_digest.replace(/^sha256:/, "") : entry.digest,
+    manifest_version: displayText(manifest.manifest_version, "Not specified", 32),
+    verification_status: "metadata_only",
+    supported_actions: [],
+    state: entry.status === "withdrawn" ? "withdrawn" : remoteInstallSelection(entry) ? "installable" : "unavailable",
     withdrawn: entry.status === "withdrawn",
     packageAvailable: entry.package_available === true,
     installSelection: remoteInstallSelection(entry),
   };
+}
+
+// Semantic version precedence, including prereleases. Build metadata does not
+// change precedence; the full version string still identifies the package.
+function compareConnectorVersions(left, right) {
+  const parts = value => /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value || "");
+  const a = parts(left), b = parts(right);
+  if (!a || !b) return String(left || "").localeCompare(String(right || ""), "en");
+  for (let index = 1; index <= 3; index++) {
+    const delta = BigInt(a[index]) - BigInt(b[index]);
+    if (delta) return delta > 0n ? 1 : -1;
+  }
+  if (!a[4] || !b[4]) return a[4] ? -1 : b[4] ? 1 : 0;
+  const ap = a[4].split("."), bp = b[4].split(".");
+  for (let index = 0; index < Math.max(ap.length, bp.length); index++) {
+    if (ap[index] === undefined || bp[index] === undefined) return ap[index] === undefined ? -1 : 1;
+    if (ap[index] === bp[index]) continue;
+    const an = /^\d+$/.test(ap[index]), bn = /^\d+$/.test(bp[index]);
+    if (an && bn) return BigInt(ap[index]) > BigInt(bp[index]) ? 1 : -1;
+    if (an !== bn) return an ? -1 : 1;
+    return ap[index] > bp[index] ? 1 : -1;
+  }
+  return 0;
+}
+
+// A presentation projection only. Never spread a bundled package's digest,
+// verification or supported actions into an official/installed release.
+export function reconcileConnectorCatalogue(localEntries = [], status = null, installedEntries = []) {
+  const groups = new Map();
+  const group = id => {
+    if (!groups.has(id)) groups.set(id, { local: null, installed: null, official: [] });
+    return groups.get(id);
+  };
+  for (const entry of localEntries) group(entry.connector_id).local = { ...entry, source: "bootstrap" };
+  for (const entry of installedEntries) group(entry.connector_id).installed = entry;
+  if (status?.trusted_remote_available) for (const entry of status.entries) group(entry.connector_id).official.push(entry);
+  return [...groups.values()].map(({ local, installed, official }) => {
+    const releases = [...official].sort((a, b) => compareConnectorVersions(b.version, a.version) || String(a.digest).localeCompare(String(b.digest)));
+    const available = releases.find(entry => !entry.withdrawn);
+    const primary = installed || available || local || releases[0];
+    // An older API may report only an installed version. Keep that fact distinct
+    // from the displayed release rather than pretending its Manifest is installed.
+    const installedVersion = installed?.version || local?.installed_version || null;
+    const alreadyInstalled = available && installedVersion === available.version
+      && installed?.digest === available.installSelection?.digest;
+    const installEntry = available?.installSelection && !alreadyInstalled ? available : null;
+    const history = releases.filter(entry => entry !== primary);
+    if (local && local !== primary && local.version) history.push(local);
+    return { ...primary, installed_version: installedVersion, installed,
+      availableRelease: available && available !== primary ? available : null,
+      installEntry, history,
+      // Keep local action authority attached to its exact original identity.
+      localActionEntry: primary === local || primary === installed ? primary : null,
+      state: installed ? "installed" : primary.state,
+      verification_status: primary.verification_status,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name, "en") || a.connector_id.localeCompare(b.connector_id, "en"));
 }
 
 export function readOfficialCatalogueStatus(value, { requireEntries = true } = {}) {

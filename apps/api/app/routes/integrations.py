@@ -97,10 +97,13 @@ def catalogue_entries(db, principal, health):
 
 @router.get("/integration-catalogue")
 async def catalogue_list(principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db)):
-    from app.services.connector_catalogue import catalogue
+    from app.services.connector_catalogue import installed_catalogue_entries
     from app.services.connector_contracts import ConnectorPackageError
     try:
-        return {"entries": catalogue_entries(db, principal, await runtime.health()),
+        # Installed Manifest display is an additive global-view-only projection.
+        # Scoped catalogue access retains its existing bootstrap-only contract.
+        installed_entries = installed_catalogue_entries(_installed(db)) if principal.can("integration_runtime.view") else []
+        return {"entries": catalogue_entries(db, principal, await runtime.health()), "installed_entries": installed_entries,
                 "source": "bootstrap", "checked_at": datetime.now(timezone.utc).isoformat(), "verification_status": "metadata_verified"}
     except ConnectorPackageError:
         raise HTTPException(503, "The packaged Connector catalogue could not be verified") from None

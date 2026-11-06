@@ -4,7 +4,7 @@ const groups = {
   warning: ["permission_limited", "unproven", "partial", "unconfigured", "degraded", "pending", "warning", "unreviewed", "conflicted", "conflicting", "unresolved", "needs_review", "inferred", "medium", "required", "open", "exception", "incomplete", "exception_accepted", "update_available", "update_requires_configuration", "runtime_update_required"],
   danger: ["source_unavailable", "outage", "unavailable", "inactive", "failed", "error", "stale", "rejected", "retracted", "critical", "high", "critical_gaps", "incompatible", "verification_failed", "verification_unavailable", "runtime_unavailable"],
   info: ["maintenance", "observed", "declared", "intended", "current_from_source", "low", "conditional", "recommended", "available", "installable"],
-  neutral: ["planned", "deprecated", "deleted", "draft", "unknown", "superseded", "archived", "historical", "deferred", "not_evaluated", "cancelled", "retired", "disabled", "metadata_only", "bundle_not_released"],
+  neutral: ["planned", "withdrawn", "deprecated", "deleted", "draft", "unknown", "superseded", "archived", "historical", "deferred", "not_evaluated", "cancelled", "retired", "disabled", "metadata_only", "bundle_not_released"],
 };
 const labels = { permission_limited: "Limited", unproven: "Unproven", source_unavailable: "Unavailable" };
 export const STATUS_REGISTRY = Object.freeze(Object.fromEntries(Object.entries(groups).flatMap(([tone, states]) => states.map(value => [value, Object.freeze({ value, label: labels[value] || value.replaceAll("_", " ").replace(/^./, letter => letter.toUpperCase()), tone })]))));

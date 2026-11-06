@@ -134,7 +134,7 @@ try {
             assert.equal(requests.slice(requestStart).some(request => request.path === "/integration-catalogue/status"), false);
           } else {
             assert.equal(await official.count(), 1);
-            assert.equal(await official.getByRole("button", { name: "Check official catalogue", exact: true }).count(), scenario.officialViewer ? 0 : 1);
+            assert.equal(await official.getByRole("button", { name: "Check for catalogue updates", exact: true }).count(), scenario.officialViewer ? 0 : 1);
             assert.equal(requests.slice(requestStart).some(request => request.path === "/integration-catalogue/refresh"), false, "page load must not check GitHub");
             assert.equal(await official.locator('a, img, script, iframe').count(), 0);
             assert.equal(await page.evaluate(() => Boolean(window.executed)), false);
@@ -143,16 +143,16 @@ try {
             if (!scenario.official) assert.match(await official.innerText(), /not yet been checked/);
             else if (["unavailable", "forbidden", "malformed"].includes(scenario.official)) {
               assert.equal(await official.getByRole("alert").count(), 1);
-              assert.equal(await official.getByRole("button", { name: "Check official catalogue" }).isDisabled(), true);
+              assert.equal(await official.getByRole("button", { name: "Check for catalogue updates" }).isDisabled(), true);
             } else {
               assert.match(await official.innerText(), /Sequence 1/);
               if (scenario.official === "optional") assert.match(await official.innerText(), /Last confirmed: Not recorded/);
-              else if (scenario.official === "empty") assert.match(await official.innerText(), /No official connector entries/);
-              else if (scenario.official === "hostile") assert.match(await official.innerText(), /<script>/);
-              else assert.match(await official.innerText(), /Official Proxmox VE/);
-              if (["cooldown", "in-progress", "rate-limited"].includes(scenario.official)) assert.equal(await official.getByRole("button", { name: "Check official catalogue" }).isDisabled(), true);
+              else if (scenario.official === "empty") assert.match(await official.innerText(), /Sequence 1/);
+              else if (scenario.official === "hostile") assert.match(await page.locator("main").innerText(), /<script>/);
+              else assert.match(await page.locator("main").innerText(), /Official Proxmox VE/);
+              if (["cooldown", "in-progress", "rate-limited"].includes(scenario.official)) assert.equal(await official.getByRole("button", { name: "Check for catalogue updates" }).isDisabled(), true);
               if (scenario.official === "accepted") {
-                await official.getByText("Official catalogue technical details", { exact: true }).click();
+                await official.getByText("Publication evidence and diagnostics", { exact: true }).click();
                 assert.match(await official.innerText(), new RegExp(officialDigest));
               }
             }
@@ -180,7 +180,7 @@ try {
     await page.setViewportSize({ width: 390, height: 1000 });
     scenario = { name: "official-refresh", tab: "catalogue", official: "accepted" };
     const official = page.locator("#official-catalogue");
-    const checkButton = official.getByRole("button", { name: "Check official catalogue", exact: true });
+    const checkButton = official.getByRole("button", { name: "Check for catalogue updates", exact: true });
     const postCount = () => requests.filter(request => request.path === "/integration-catalogue/refresh").length;
     const localCount = () => requests.filter(request => request.path === "/integration-catalogue").length;
     for (refreshResult of ["accepted", "unchanged", "failed", "cooldown", "in_progress", "state-unavailable", "unexpected", "missing-status", "network-failure", "followup-unavailable"]) {
@@ -192,8 +192,8 @@ try {
       const before = postCount(), localBefore = localCount(), packageBefore = actions.length;
       const statusBefore = requests.filter(request => request.path === "/integration-catalogue/status").length;
       if (refreshResult === "accepted") {
-        await page.getByRole("button", { name: "Refresh local catalogue", exact: true }).click();
-        await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Refresh local catalogue' && button.disabled));
+        await page.getByRole("button", { name: "Reload displayed catalogue", exact: true }).click();
+        await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'Reload displayed catalogue' && button.disabled));
         assert.equal(postCount(), before);
         let finish;
         releaseRefresh = new Promise(resolve => { finish = resolve; });
@@ -217,17 +217,17 @@ try {
       assert.equal(postCount(), before + 1);
       assert.equal(actions.length, packageBefore);
       assert.equal(localCount(), localBefore + (refreshResult === "accepted" ? 1 : 0));
-      assert.equal(requests.filter(request => request.path === "/integration-catalogue/status").length, statusBefore + (["unexpected", "missing-status", "network-failure"].includes(refreshResult) ? 0 : 1));
-      assert.match(await official.innerText(), /Official Proxmox VE/);
+      assert.equal(requests.filter(request => request.path === "/integration-catalogue/status").length, statusBefore + (refreshResult === "accepted" ? 1 : 0) + (["unexpected", "missing-status", "network-failure"].includes(refreshResult) ? 0 : 1));
+      assert.match(await page.locator("main").innerText(), /Official Proxmox VE/);
       if (refreshResult === "failed") {
         assert.equal(await official.getByRole("alert").count(), 1);
-        await official.getByText("Official catalogue technical details", { exact: true }).click();
+        await official.getByText("Publication evidence and diagnostics", { exact: true }).click();
         assert.ok((await official.innerText()).includes(await page.evaluate(value => new Date(value).toLocaleString(), confirmed)));
       }
       assert.equal(await checkButton.isDisabled(), true);
       if (refreshResult === "accepted") {
         await page.reload();
-        await official.getByText("Official Proxmox VE", { exact: true }).waitFor();
+        await page.getByRole("heading", { name: "Official Proxmox VE", exact: true }).waitFor();
         assert.match(await official.innerText(), /Sequence 1/);
         assert.equal(postCount(), before + 1);
         await page.screenshot({ path: `${output}/official-refreshed-${theme}-${accent || "default"}-390.png`, fullPage: true });
@@ -246,8 +246,9 @@ try {
     await page.getByText("No configured integrations", { exact: true }).waitFor();
     officialState = officialFixture("accepted"); releaseStatus = null;
     await page.getByRole("navigation", { name: "Integration views" }).getByRole("link", { name: "Catalogue", exact: true }).click();
-    await official.getByText("Official Proxmox VE", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Official Proxmox VE", exact: true }).waitFor();
     finishStatus();
+    await official.getByText("Publication evidence and diagnostics", { exact: true }).click();
     await official.getByRole("button", { name: "Reload official status" }).click();
     await page.waitForFunction(() => !document.querySelector('#official-catalogue button[disabled]'));
     assert.match(await official.innerText(), /Sequence 1/);
@@ -261,7 +262,7 @@ try {
     await page.getByRole("heading", { name: "Integration runtime", exact: true }).waitFor();
     finishRefresh(); releaseRefresh = null;
     await page.getByRole("navigation", { name: "Integration views" }).getByRole("link", { name: "Catalogue", exact: true }).click();
-    await official.getByText("Official Proxmox VE", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Official Proxmox VE", exact: true }).waitFor();
     assert.equal(await official.getByText("Official catalogue verified; the accepted catalogue is unchanged.", { exact: true }).count(), 0);
     officialChecks.push({ theme, accent, staleStatusIsolated: true, staleRefreshIsolated: true });
     // Compare the actual composed shared surfaces with the production System

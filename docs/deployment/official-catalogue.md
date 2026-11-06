@@ -171,48 +171,69 @@ packaging. No failure renews currentness; an older confirmation remains historic
 
 ## Integrations catalogue UI
 
-In **Integrations → Catalogue**, the **Official Connector Catalogue** section
-shows accepted remote metadata separately from the existing local package cards.
-The page still requires `integrations.view`. Only a **global**
-`integration_runtime.view` assignment can load or see official status. A global
-`integration_runtime.manage` assignment additionally exposes **Check official
-catalogue**. Customer/site assignments do not grant either global capability.
-The backend continues to enforce these permissions.
+**Integrations → Catalogue** uses one responsive `ConnectorCard` per Connector
+identity. The page requires `integrations.view`. A global
+`integration_runtime.view` assignment additionally loads retained official status
+and locally verified installed Manifest display metadata; scoped assignments do
+not grant this access. A global `integration_runtime.manage` assignment exposes
+catalogue checks and eligible package-management actions. Backend authorization
+remains authoritative.
 
-- **Refresh local catalogue** reloads the existing local list and page data. It
-  never performs an official remote check.
-- **Reload official status** reads retained backend state without contacting
-  GitHub. Use it to see the outcome of another administrator's check or to
-  reread state after a cooldown expires.
-- **Check official catalogue** deliberately invokes the existing refresh API.
-  Opening the page only reads status; it never starts remote verification.
-  Anonymous GitHub access is rate limited, so no automatic retries, polling or
-  periodic checks are introduced.
+The presentation reconciliation layer keeps each package identity intact:
 
-Before the first attempt the section says the catalogue has not yet been
-checked. Accepted metadata shows its sequence and last source confirmation time.
-That timestamp is historical: the UI does not infer that GitHub is unchanged now,
-or invent a freshness expiry. A missing confirmation (including after restore)
-is displayed as **Not recorded**. SHA-256, schema and stage timestamps are in a
-collapsed technical disclosure.
+- Installed packages use their own locally verified Manifest name, description,
+  category, publisher, licence, version and verification state. They remain visible
+  offline, including identities absent from the bundled catalogue. Failed local
+  verification retains the installed identity with an explicit unavailable warning,
+  rather than borrowing another version's metadata.
+- Otherwise, the newest active accepted official release supplies primary metadata,
+  ordered by semantic version precedence. An installed package can show a different
+  available official release separately. No bundled digest, verification state or
+  action eligibility is transferred to an official release.
+- Bundled packages and planned metadata-only Connectors provide the offline fallback.
+  New official identities appear automatically. Withdrawn and other official releases,
+  plus historical bundled packages, remain in expandable per-card release history.
+  A withdrawn-only identity without a fallback is visibly withdrawn and cannot be
+  installed from official history.
 
-An `accepted` refresh confirms verification and acceptance; `unchanged` confirms
-successful live verification of the existing catalogue. A failed application
-result remains a failure even with HTTP 200. Verification warnings retain
-previously accepted metadata and its historical confirmation. Status retrieval
-errors and permission failures are presented separately from verification
-failures, and local package cards remain usable. Permission denial clears the
-official display. Pending checks prevent duplicate submission. Cooldown/rate-limit
-messages show the backend's next permitted time, where available; reload status
-after that time. There is no cooldown bypass.
+The existing `GET /api/integration-catalogue` response retains its `entries` and
+adds `installed_entries`. This display-only projection is populated only for a
+global runtime viewer. It uses existing local PackageStore verification, includes
+only selected Manifest fields, and requires neither remote freshness nor resolved
+mappings. It adds no installation authority or new installation API.
 
-Proxmox **0.2.0** is read-only accepted catalogue metadata, including for administrators;
-its historical mutable package is ineligible
-for remote installation (`package_available: false`, `supported_actions: []`).
-Catalogue acceptance does not establish package eligibility for that withdrawn
-version. No installation or activation actions are created from this historical
-entry. Eligible later entries use the separate installation approval and review
-flow in the linked operator sequence. Local/installed package behavior is preserved.
+- **Reload displayed catalogue** rereads local page data and retained official status.
+  It never starts a remote official check.
+- **Reload official status**, within publication diagnostics (or visible when status
+  cannot load), reads retained backend state without contacting GitHub. Use it after
+  another administrator's check or after a cooldown expires.
+- **Check for catalogue updates** explicitly invokes the existing authenticated
+  remote verification API. Opening the page only reads status. There are no automatic
+  retries, polling or periodic remote checks.
+
+The restrained status area shows the accepted sequence and last successful source
+confirmation. Retained acceptance is labelled previously accepted; only a successful
+`accepted` or `unchanged` result in this session is labelled freshly confirmed by
+that check. Neither establishes that the remote source is still unchanged. A missing
+confirmation (including after restore) is **Not recorded**. Catalogue digest, schema
+and stage timestamps remain in expandable publication evidence and diagnostics.
+
+Verification failures retain accepted metadata and its historical confirmation.
+Request errors remain distinct from verification failures. Permission denial clears
+the official display while bundled cards remain usable. Pending operations suppress
+duplicate remote checks; cooldown/rate-limit messages retain the backend's next
+permitted time. Reload after that time; there is no cooldown bypass.
+
+Official installation requires the backend's separately approved exact selection.
+The administrator reviews Connector identity, version, catalogue sequence/digest,
+package digest and release asset, then explicitly confirms. The unchanged installation
+API independently reselects and revalidates every field, live currentness, provenance,
+compatibility, mappings, dependent configuration and activation/audit. Installed
+packages do not show a redundant review action for the same version and digest.
+Resolve mappings uses the installed version when present. Withdrawn Proxmox 0.2.0
+is historical metadata only; the preserved bundled 0.1.0 package retains its offline
+contract. No version, sequence or Connector-specific eligibility is hardcoded in
+presentation reconciliation.
 
 This UI does not add cryptographic guarantees: verification and trust decisions
 remain backend responsibilities under ADR 0013 and ADR 0018. The future-publication

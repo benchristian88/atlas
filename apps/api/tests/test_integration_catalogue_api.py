@@ -262,3 +262,61 @@ def test_remote_install_without_owner_policy_stops_before_lookup(client, monkeyp
         "release_asset_id": 693849044, "confirm": "install"})
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "future_publication_owner_approval_required"
+
+
+@pytest.mark.parametrize("scope", ["customer", "site"])
+def test_installed_manifest_projection_requires_global_runtime_view(client, monkeypatch, scope):
+    grant("integrations.view", "integration_runtime.view", scope=scope)
+    def forbidden(*_):
+        pytest.fail("Scoped grants must not read installed Manifest metadata")
+    monkeypatch.setattr("app.services.connector_catalogue.installed_catalogue_entries", forbidden)
+    response = client.get("/api/integration-catalogue")
+    assert response.status_code == 200
+    assert response.json()["installed_entries"] == []
+
+
+def test_installed_manifest_projection_is_additive_for_global_view(client, monkeypatch):
+    grant("integrations.view", "integration_runtime.view")
+    expected = [{"connector_id": "new-connector", "version": "1.2.3", "source": "installed"}]
+    monkeypatch.setattr("app.services.connector_catalogue.installed_catalogue_entries", lambda _: expected)
+    response = client.get("/api/integration-catalogue")
+    assert response.status_code == 200
+    assert response.json()["installed_entries"] == expected
+    assert len(response.json()["entries"]) == 3
+
+
+def test_installed_manifest_display_verifies_real_store_offline_without_resolved_mappings(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from app.services.connector_catalogue import installed_catalogue_entries
+    from app.services.connector_store import PackageStore
+    from tests.test_connector_packages import bundle
+    package, verifier, _ = bundle(tmp_path, version="0.2.2",
+        domain_change=lambda manifest: manifest["display"].update(description="Current read-only inventory"))
+    store = PackageStore(tmp_path / "store")
+    store.install(package, verifier)
+    monkeypatch.setattr("app.services.connector_lifecycle.package_store", lambda: store)
+    def forbidden(*_, **__):
+        pytest.fail("Display must not require mappings or use network")
+    monkeypatch.setattr("aiohttp.ClientSession", forbidden)
+    monkeypatch.setattr("app.services.connector_mappings.require_resolved", forbidden)
+    current = SimpleNamespace(connector_id="proxmox", version="0.2.2",
+        bundle_digest=package.bundle_digest[7:], trust_tier="atlas_official")
+    entry = installed_catalogue_entries({"proxmox": current})[0]
+    assert entry["version"] == "0.2.2"
+    assert entry["digest"] == package.bundle_digest[7:]
+    assert entry["description"] == "Current read-only inventory"
+    assert entry["manifest_version"] == package.manifest["manifest_version"]
+    assert entry["capabilities"] == package.manifest["capabilities"]
+    assert entry["verification_status"] == "verified"
+    assert entry["supported_actions"] == ["remove"]
+    assert "connection_fields" not in entry and "distribution" not in entry
+    # Corrupt local content cannot retain a verified label or borrow bootstrap metadata.
+    directory = store.root / "proxmox" / "0.2.2" / current.bundle_digest
+    (directory / "contents" / "NOTICE").chmod(0o600)
+    (directory / "contents" / "NOTICE").write_text("Changed")
+    failed = installed_catalogue_entries({"proxmox": current})[0]
+    assert failed["version"] == "0.2.2" and failed["digest"] == current.bundle_digest
+    assert failed["verification_status"] == "verification_unavailable"
+    assert not failed["package_available"]
+    assert "Current read-only inventory" not in failed["description"]
+    assert str(tmp_path) not in json.dumps(failed)
