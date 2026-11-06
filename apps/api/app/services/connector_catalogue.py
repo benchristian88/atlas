@@ -137,6 +137,47 @@ def catalogue_manifest(db, connector_id, version):
         return select_remote(db, connector_id, version).package.manifest
 
 
+def installed_catalogue_entries(installed):
+    """Display-only installed identities, verified locally without remote freshness.
+
+    Keep this separate from the bootstrap catalogue and installation eligibility.
+    Mapping resolution is deliberately not required to inspect an installed package.
+    Callers must enforce global runtime-view authorization.
+    """
+    from app.services.connector_lifecycle import package_store
+    from app.services.connector_store import _read_regular
+    entries = []
+    for current in installed.values():
+        entry = {"connector_id": current.connector_id, "version": current.version,
+            "digest": current.bundle_digest, "installed_version": current.version,
+            "source": "installed", "state": "installed", "name": current.connector_id,
+            "trust_tier": current.trust_tier, "package_available": False,
+            "verification_status": "verification_unavailable", "supported_actions": ["remove"],
+            "description": "Installed package metadata could not be verified locally.",
+            "message": "Local package verification is unavailable. Reload status after repairing the package."}
+        try:
+            store = package_store()
+            store.verify_connector(current.connector_id, current.version, "sha256:" + current.bundle_digest)
+            directory = store.root / current.connector_id / current.version / current.bundle_digest
+            manifest = validate_manifest(strict_json(_read_regular(directory / "manifest.json", 256 * 1024)))
+            if (manifest["id"] != current.connector_id or manifest["version"] != current.version
+                    or manifest["distribution"]["bundle_digest"] != "sha256:" + current.bundle_digest):
+                raise CatalogueUnavailable("installed_package_mismatch")
+            display = manifest["display"]
+            entry.update(name=display["name"], description=display["description"],
+                category=display["category"], icon_key=display.get("icon_key"),
+                publisher=manifest["publisher"]["name"], licence=manifest["licensing"]["licence"],
+                manifest_version=manifest["manifest_version"], capabilities=manifest["capabilities"],
+                source_versions=manifest["source_versions"], package_available=True,
+                verification_status="verified", message="Installed package verified locally. Available offline.")
+        except (OSError, ValueError):
+            # Retain the installed identity without borrowing another version's
+            # Manifest or disclosing filesystem/verification exception details.
+            pass
+        entries.append(entry)
+    return entries
+
+
 
 class CatalogueService:
     def __init__(self, index_path: Path | None = None, *, expected_digest: str = BOOTSTRAP_DIGEST):
