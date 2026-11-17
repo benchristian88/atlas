@@ -22,7 +22,7 @@ recorded separately.
 | Capability | Status | Repository evidence and boundaries |
 | --- | --- | --- |
 | Scoped inventory and managed taxonomy | Implemented | `apps/api/app/models.py`, Asset/Interface/Network and reference-data routes; corresponding web pages. Customer/site scope enforced by API. |
-| Local authentication and administration | Implemented | Auth, Users, Roles, context and System Settings routes; cookie sessions, permission assignments, profile and audit UI. |
+| Local authentication and administration | Implemented | Auth, Users, Roles, context and System Settings routes; cookie sessions, permission assignments, profile and audit UI. Customer/Site deletion retains unused-record removal and audit snapshots, with non-disclosing scope and dependency/history refusals and separate deletion-error feedback. |
 | Secure first-run setup | Implemented | `routes/setup.py`, singleton installation state, local setup-code tools and `/setup`. No environment-created administrator. |
 | Optional TOTP MFA | Implemented | `services/mfa.py`, MFA routes, encrypted seeds, recovery verifiers, profile enrollment and local reset. No SSO or mandatory enrollment policy. |
 | Services and Business Functions | Implemented | First-class models/routes and catalogue/detail pages. Distinct from Application or legacy Service Assets. |

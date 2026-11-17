@@ -31,6 +31,7 @@ export default function CustomersPage() {
       columns={columns}
       contextReloadKey={reloadKey}
       deleteReason="Customers with sites or infrastructure must be deactivated instead."
+      deleteDisabledReason="You don't have permission to delete this Customer."
       description="Create and maintain organisations whose infrastructure is managed in this workspace."
       emptyValues={{ name: "", description: "", status: "active" }}
       endpoint="/customers"

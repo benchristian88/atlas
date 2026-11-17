@@ -2,7 +2,7 @@
 
 import { IconButton, Button } from "./button";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { DataTable } from "./data-table";
 import { NavigationIcon } from "./navigation-icon.mjs";
@@ -42,6 +42,7 @@ export function CrudScreen({
   canDelete = true,
   deleteLabel,
   deleteReason,
+  deleteDisabledReason,
   contextReloadKey,
   onMutation,
   headingActions,
@@ -61,10 +62,13 @@ export function CrudScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const deleteHelpId = useId();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setDeleteError("");
     try {
       const [items, ...relatedResults] = await Promise.all([
         apiRequest(listEndpoint),
@@ -95,6 +99,7 @@ export function CrudScreen({
   ), [related]);
 
   function openCreate() {
+    setDeleteError("");
     setEditingId(null);
     setForm(emptyValues);
     setFormOpen(true);
@@ -102,6 +107,7 @@ export function CrudScreen({
   }
 
   function openEdit(record) {
+    setDeleteError("");
     setEditingId(record.id);
     setForm(Object.fromEntries(Object.keys(emptyValues).map((key) => {
       const field = fields.find((item) => item.name === key);
@@ -149,13 +155,13 @@ export function CrudScreen({
     const reason = hookValue(deleteReason, record, "This cannot be undone.");
     const reasonText = reason ? ` ${reason}` : "";
     if (!window.confirm(`Delete “${label}”?${reasonText}`)) return;
-    setError("");
+    setDeleteError("");
     try {
       await apiRequest(`${endpoint}/${record.id}`, { method: "DELETE" });
       await load();
       if (onMutation) await onMutation();
     } catch (requestError) {
-      setError(requestError.message);
+      setDeleteError(requestError.message);
     }
   }
 
@@ -189,7 +195,7 @@ export function CrudScreen({
           )}
         </div>}</>} />
 
-      {error && <div className="error-banner" role="alert">{error}</div>}
+      {(deleteError || error) && <div className="error-banner" role="alert">{deleteError || error}</div>}
 
       {formOpen && (
         <section className="form-card">
@@ -308,6 +314,13 @@ export function CrudScreen({
                           <button className="text-button text-danger" onClick={() => remove(record)} type="button">
                             Delete
                           </button>
+                        ) : typeof canDelete === "function" && deleteDisabledReason ? (
+                          <span role="group" aria-label="Delete unavailable" tabIndex={0}
+                            aria-describedby={`${deleteHelpId}-${record.id}`} title={hookValue(deleteDisabledReason, record)}>
+                            <button className="text-button text-danger" disabled type="button"
+                              aria-describedby={`${deleteHelpId}-${record.id}`} title={hookValue(deleteDisabledReason, record)}>Delete</button>
+                            <span className="sr-only" id={`${deleteHelpId}-${record.id}`}>{hookValue(deleteDisabledReason, record)}</span>
+                          </span>
                         ) : typeof canDelete === "function" && deleteReason ? (
                           <button
                             className="text-button text-danger"
