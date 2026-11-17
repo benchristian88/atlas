@@ -22,6 +22,13 @@ def _key(value):
     return json.dumps(to_json_value(value), sort_keys=True, separators=(",", ":"))
 
 
+def knowledge_sources(db, owner, source_ids):
+    """Asset knowledge may attribute local/site-wide sources, never foreign ones."""
+    return {row.id: row for row in db.scalars(select(DataSource).where(
+        DataSource.id.in_(source_ids), DataSource.customer_id == owner.customer_id))
+        if row.site_id in {None, owner.site_id}}
+
+
 class SummaryValues:
     """Batch referenced metadata; never guess canonical identities from names."""
     def __init__(self, db, asset, rows, principal):
@@ -29,8 +36,7 @@ class SummaryValues:
         self.types = {row.key: row.name for row in db.scalars(select(AssetType))}
         self.relationships = {row.key: row.name for row in db.scalars(select(RelationshipType))}
         source_ids = {row.data_source_id for row in rows if row.data_source_id}
-        self.sources = {row.id: row for row in db.scalars(select(DataSource).where(DataSource.id.in_(source_ids)))
-                        if row.customer_id == asset.customer_id and row.site_id in {None, asset.site_id}}
+        self.sources = knowledge_sources(db, asset, source_ids)
         actor_ids = {row.accepted_by_user_id for row in rows if row.accepted_by_user_id}
         self.actors = {row.id: row for row in db.scalars(select(User).where(User.id.in_(actor_ids)))}
         externals = {self.external(row) for row in rows if self.is_relationship(row) and self.external(row)}

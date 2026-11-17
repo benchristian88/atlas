@@ -13,6 +13,16 @@ function render(record = entity, extra = {}) {
   return renderToStaticMarkup(React.createElement(ReconciliationEntityCard, { entity: record, canDecide: true, reviewHref: id => `/reconciliation?entity=${id}`, ...extra }));
 }
 
+test("Interface configuration preview keeps the assigned Network visible without introducing ID fields", () => {
+  const configuration = { ...row, entity_type: "asset_interface", assertion_predicate: "configuration", label: "Interface net0",
+    current: { network: "Curated LAN", vlan_id: 9 },
+    proposed: { asset_id: "internal-owner-uuid", network_id: "internal-network-uuid", network: "Curated LAN", vlan_id: 9, ip_address: "192.0.2.9" } };
+  const html = render({ ...entity, sections: [{ ...entity.sections[0], items: [configuration] }] });
+  assert.equal((html.match(/Curated LAN/g) || []).length, 2);
+  assert.match(html, /192.0.2.9/);
+  assert.doesNotMatch(html, /internal-owner-uuid|internal-network-uuid|Network cleared/);
+});
+
 test("new entity card expands, separates Accept asset and Accept all, and exposes blocked child evidence", () => {
   const html = render();
   assert.match(html, /<details open="">/);

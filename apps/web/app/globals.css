@@ -794,7 +794,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .relationship-row { align-items: center; border-top: 1px solid var(--border); display: flex; font-size: var(--type-compact); gap: 20px; justify-content: space-between; padding: var(--space-3) var(--space-4); }
 .interface-list { border-top: 1px solid var(--border); display: grid; margin-top: 20px; padding-top: 8px; }
 .interface-row { align-items: center; border-bottom: 1px solid var(--border); display: flex; gap: 20px; justify-content: space-between; padding: 12px 4px; }
-.interface-row > div { display: grid; font-size: var(--type-label); gap: 3px; }
+.interface-row > div { display: grid; font-size: var(--type-label); gap: 3px; min-width: 0; overflow-wrap: anywhere; }
 .interface-row span { color: var(--muted); }
 .topology-tree { display: grid; gap: 18px; }
 .topology-customer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); padding: 20px; }

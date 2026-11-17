@@ -194,6 +194,17 @@ def technical_configuration(target):
     return to_json_value({field: getattr(target, field) for field in fields})
 
 
+def interface_configuration_fields(value, *, asset_id, network_id):
+    """Canonical apply/preview fields; caller supplies resolved or retained IDs.
+
+    AIP accepts a nonempty reference or omission, never explicit null. Older
+    Atlas configuration assertions normalize omission to None; neither stored
+    representation is an instruction to clear an operator's Network assignment.
+    """
+    return {**{name: value.get(name) for name in ["name", "ip_address", "mac_address", "is_primary"]},
+            "asset_id": asset_id, "network_id": network_id}
+
+
 def _attach_external_identity(
     db: Session,
     *,
@@ -651,7 +662,7 @@ def accept_item(
         raise HTTPException(409, "This proposal is stale; review the latest observation")
     previous_value = item.current_value_json
     if item.entity_type in {"network", "asset_interface"}:
-        result = _accept_technical(db, item, assertion)
+        result, previous_value = _accept_technical(db, item, assertion)
     elif item.entity_type == "asset" and item.category in {"newly_discovered", "possible_duplicate"}:
         result = _accept_new_asset(db, item)
     elif item.entity_type == "asset" and item.category in {"changed", "contradiction"}:
@@ -692,6 +703,8 @@ def accept_item(
     if item.category != "no_longer_observed":
         name = getattr(result, "name", None) or item.candidate_external_id or item.entity_type
         new_value = canonical_asset_snapshot(item, result) if isinstance(result, Asset) else None
+        if item.entity_type == "asset_interface" and assertion.predicate == "configuration" and assertion.fact_metadata is None:
+            new_value = technical_configuration(result)
         if new_value is None:
             new_value = item.observed_value_json
         change_type = (
@@ -701,8 +714,9 @@ def accept_item(
             if item.category in {"newly_discovered", "possible_duplicate"}
             else "fact_changed"
         )
+        comparison_value = new_value if item.entity_type == "asset_interface" else item.observed_value_json
         if (change_type == "fact_changed" and isinstance(previous_value, dict)
-                and previous_value == item.observed_value_json):
+                and previous_value == comparison_value):
             change_type = "assertion_confirmed"
         record_assertion_change(
             db,
@@ -728,6 +742,7 @@ def _accept_technical(db, item, assertion):
         entity_type=kind, external_id=item.candidate_external_id)
     target_id = (link.network_id if kind == "network" else link.interface_id) if link else None
     target = db.get(Network if kind == "network" else AssetInterface, target_id, with_for_update=True) if target_id else None
+    previous_value = technical_configuration(target) if kind == "asset_interface" and target is not None and assertion.fact_metadata is None else item.current_value_json
     if target is not None:
         owner = db.get(Asset, target.asset_id) if kind == "asset_interface" else target
         if owner is None or (owner.customer_id, owner.site_id) != (item.customer_id, item.site_id):
@@ -760,8 +775,8 @@ def _accept_technical(db, item, assertion):
             site_id=item.site_id, entity_type="network", external_id=value["network_external_id"]) if value.get("network_external_id") else None
         if value.get("network_external_id") and network_link is None:
             raise HTTPException(409, "Accept or link the source Network before its interface")
-        fields = {name: value.get(name) for name in ["name", "ip_address", "mac_address", "is_primary"]}
-        fields.update(asset_id=asset_link.entity_id, network_id=network_link.network_id if network_link else None)
+        fields = interface_configuration_fields(value, asset_id=asset_link.entity_id,
+            network_id=network_link.network_id if network_link else target.network_id if target else None)
         if target is None:
             existing = db.scalar(select(AssetInterface).where(AssetInterface.asset_id == fields["asset_id"], AssetInterface.name == fields["name"]))
             if existing:
@@ -781,7 +796,7 @@ def _accept_technical(db, item, assertion):
             KnowledgeAssertion.subject_type == kind, KnowledgeAssertion.subject_external_id == item.candidate_external_id,
             KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id)):
         claim.subject_id = target.id
-    return target
+    return target, previous_value
 
 
 def link_item_to_technical(db, *, item, target, user, reason=None):

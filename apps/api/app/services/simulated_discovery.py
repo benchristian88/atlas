@@ -595,6 +595,8 @@ def ingest_technical_observation(db, *, run, source, evidence, observation, enti
         network_link = technical_link(db, data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id,
             entity_type="network", external_id=observed["network_external_id"]) if observed["network_external_id"] else None
         current["asset_external_id"] = observed["asset_external_id"] if owner_link and owner_link.entity_id == target.asset_id else None
+        # None here is normalized AIP omission, not a proposed canonical unlink.
+        # Compare only supplied source identity; apply retains locked membership.
         current["network_external_id"] = observed["network_external_id"] if network_link and network_link.network_id == target.network_id else None
     if not assertion.is_accepted or current != observed:
         item, item_created = create_item(db, assertion=assertion,

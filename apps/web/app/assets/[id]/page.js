@@ -14,6 +14,7 @@ import { CompletenessPanel } from "../../../components/completeness-panel";
 import { DependencyAnalysisPanel } from "../../../components/dependency-analysis-panel";
 import { useAuth } from "../../../components/auth-context";
 import { StatusBadge } from "../../../components/status-badge";
+import { InterfaceKnowledge } from "../../../components/interface-knowledge";
 import { TimelineEvent } from "../../../components/timeline-event";
 import { useWorkspaceContext } from "../../../components/workspace-context";
 import { apiRequest } from "../../../lib/api";
@@ -108,7 +109,7 @@ export default function AssetDetailPage() {
         mayViewRelationships ? apiRequest(`/asset-relationships?asset_id=${id}`) : Promise.resolve([]),
         hasPermission("relationship_types.view") ? apiRequest("/relationship-types") : Promise.resolve([]),
         mayViewNetworks ? apiRequest("/networks") : Promise.resolve([]),
-        mayViewNetworks ? apiRequest(`/asset-interfaces?asset_id=${id}`) : Promise.resolve([]),
+        mayViewNetworks ? apiRequest(`/asset-interfaces?asset_id=${id}&include_knowledge=true`) : Promise.resolve([]),
         apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
         apiRequest(`/assets/${id}/fact-history`),
         apiRequest(`/assets/${id}/knowledge-summary`),
@@ -136,7 +137,6 @@ export default function AssetDetailPage() {
   useEffect(() => { load(); }, [load]);
   const assetTypesByKey = useMemo(() => Object.fromEntries(assetTypes.map((type) => [type.key, type])), [assetTypes]);
   const assetsById = useMemo(() => Object.fromEntries(assets.map((item) => [item.id, item])), [assets]);
-  const networksById = useMemo(() => Object.fromEntries(networks.map((item) => [item.id, item])), [networks]);
   if (!canView) return <AccessDenied />;
   if (loading) return <div className="status-banner" role="status">Loading asset…</div>;
   if (!asset) return <div className="error-banner" role="alert">{error || "Asset not found."}</div>;
@@ -272,7 +272,7 @@ export default function AssetDetailPage() {
 
       {canViewNetworks && <section className="form-card"><div className="form-card-header"><h2>Interfaces and networks</h2>{canCreateInterface && !showInterfaceForm && <Button variant="primary" onClick={() => setShowInterfaceForm(true)} type="button">Add interface</Button>}</div>
         {showInterfaceForm && <form onSubmit={createInterface}><div className="form-grid"><label className="field"><span>Interface name *</span><input required value={interfaceForm.name} onChange={(event) => setInterfaceForm({ ...interfaceForm, name: event.target.value })} /></label><label className="field"><span>Network / VLAN</span><select value={interfaceForm.network_id} onChange={(event) => setInterfaceForm({ ...interfaceForm, network_id: event.target.value })}><option value="">Unassigned</option>{availableNetworks.map((network) => <option key={network.id} value={network.id}>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}</option>)}</select></label><label className="field"><span>IP address</span><input value={interfaceForm.ip_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, ip_address: event.target.value })} /></label><label className="field"><span>MAC address</span><input value={interfaceForm.mac_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, mac_address: event.target.value })} /></label><label className="field checkbox-field"><input checked={interfaceForm.is_primary} onChange={(event) => setInterfaceForm({ ...interfaceForm, is_primary: event.target.checked })} type="checkbox" /><span>Primary interface</span></label><label className="field field-wide"><span>Notes</span><textarea value={interfaceForm.notes} onChange={(event) => setInterfaceForm({ ...interfaceForm, notes: event.target.value })} /></label></div><div className="form-actions"><Button variant="secondary" onClick={() => setShowInterfaceForm(false)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">Add interface</Button></div></form>}
-        <div className="interface-list">{interfaces.length === 0 ? <p className="secondary-text">No interfaces yet.</p> : interfaces.map((item) => <div className="interface-row" key={item.id}><div><strong>{item.name}{item.is_primary ? " · Primary" : ""}</strong><span>{item.ip_address || "No IP"}{item.mac_address ? ` · ${item.mac_address}` : ""}</span><span>{networksById[item.network_id]?.name || "Unassigned network"}</span></div>{canDeleteInterface && <button className="text-button text-danger" onClick={() => removeInterface(item)} type="button">Delete</button>}</div>)}</div>
+        <div className="interface-list">{interfaces.length === 0 ? <p className="secondary-text">No interfaces yet.</p> : interfaces.map((item) => <div className="interface-row" key={item.id}><div><strong>{item.name}{item.is_primary ? " · Primary" : ""}</strong><span>{item.ip_address || "No IP"}{item.mac_address ? ` · ${item.mac_address}` : ""}</span><InterfaceKnowledge item={item} /></div>{canDeleteInterface && <button className="text-button text-danger" onClick={() => removeInterface(item)} type="button">Delete</button>}</div>)}</div>
       </section>}
 
       {canViewRelationships && <><section className="form-card"><div className="form-card-header"><h2>Relationships</h2>{canCreateRelationship && relationshipTypes.length > 0 && !showRelationshipForm && <Button variant="primary" onClick={() => setShowRelationshipForm(true)} type="button">Add relationship</Button>}</div>

@@ -328,11 +328,6 @@ class EntityReview:
             interface = self.target(item, claim, identifier=item.entity_id or claim.subject_id)
             name = interface.name if interface else _name(_object(config[1].value_json).get("name"), "Interface") if config else "Interface"
             label = f"{name} · {label}" if claim.fact_metadata is not None else f"Interface {name}"
-            if claim.fact_metadata is None and isinstance(proposed, dict):
-                proposed = dict(proposed)
-                if proposed.get("network_external_id"):
-                    key = self.identity_key(item, claim, "network", proposed["network_external_id"])
-                    proposed["network"] = self.display(key)["name"]
         elif item.category in {"newly_discovered", "possible_duplicate"}:
             label = "New asset" if item.entity_type == "asset" else "New network"
         elif isinstance(proposed, dict) and "field" in proposed:
@@ -351,6 +346,22 @@ class EntityReview:
                     network = self.networks[target.network_id]
                     current["network"] = network.name
                     current["vlan_id"] = network.vlan_id
+            if item.entity_type == "asset_interface":
+                from app.services.reconciliation import interface_configuration_fields
+                value = _object(claim.value_json)
+                owner = self.target(item, claim, "asset", value.get("asset_external_id"))
+                network = self.target(item, claim, "network", value.get("network_external_id")) if value.get("network_external_id") else None
+                network_id = network.id if network else target.network_id if target else None
+                proposed = interface_configuration_fields(value, asset_id=owner.id if owner else None, network_id=network_id)
+                assigned = self.networks.get(network_id)
+                if assigned:
+                    proposed.update(network=assigned.name, vlan_id=assigned.vlan_id)
+                if value.get("network_external_id"):
+                    proposed["network_external_id"] = value["network_external_id"]
+                    if network is None:
+                        # A blocked reference cannot preview a Network-cleared
+                        # configuration. Keep the canonical assignment visible.
+                        proposed["network_reference_status"] = "Unresolved; acceptance blocked"
         if item.entity_type == "asset_relationship" and isinstance(current, dict):
             managed = self.relationship_types.get(current.get("relationship_type"))
             try:
