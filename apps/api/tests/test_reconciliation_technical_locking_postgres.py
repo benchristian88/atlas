@@ -183,7 +183,11 @@ def test_technical_ingestion_acceptance_lock_graph(committed, kind, first):
         assert db.scalar(select(func.count()).select_from(KnowledgeChange).where(
             KnowledgeChange.reconciliation_item_id == case.item_id)) == 1
         change = db.scalar(select(KnowledgeChange).where(KnowledgeChange.reconciliation_item_id == case.item_id))
-        assert change.previous_value_json == change.new_value_json == case.config
+        if kind == "asset_interface":
+            from app.services.reconciliation import technical_configuration
+            assert change.previous_value_json == change.new_value_json == technical_configuration(db.get(AssetInterface, case.target.id))
+        else:
+            assert change.previous_value_json == change.new_value_json == case.config
         audit = db.scalar(select(AuditEvent).where(AuditEvent.target_id == case.item_id,
             AuditEvent.event_type == "reconciliation.accepted"))
         assert audit.success and audit.user_id == s.principal.user.id

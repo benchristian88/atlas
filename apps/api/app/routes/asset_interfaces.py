@@ -10,7 +10,7 @@ from app.authorization import Principal, RequestContext, require_permission, req
 from app.database import get_db
 from app.models import Asset, AssetInterface, Network
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
-from app.schemas import AssetInterfaceCreate, AssetInterfaceResponse, AssetInterfaceUpdate
+from app.schemas import AssetInterfaceCreate, AssetInterfaceReadResponse, AssetInterfaceResponse, AssetInterfaceUpdate
 
 router = APIRouter(prefix="/asset-interfaces", tags=["asset interfaces"])
 
@@ -47,16 +47,19 @@ def _scoped_interface_query(principal: Principal, permission: str):
     )
 
 
-@router.get("", response_model=list[AssetInterfaceResponse])
+@router.get("", response_model=list[AssetInterfaceReadResponse], response_model_exclude_unset=True)
 def list_asset_interfaces(
     context: RequestContext,
     principal: Principal = Depends(require_permission("networks.view")),
     asset_id: uuid.UUID | None = None,
+    include_knowledge: bool = False,
     limit: int = Query(default=500, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
     query = _scoped_interface_query(principal, "networks.view")
+    if include_knowledge and asset_id is None:
+        raise HTTPException(422, "Interface knowledge requires an Asset")
     if asset_id is not None:
         asset = db.get(Asset, asset_id)
         if asset is None:
@@ -64,14 +67,18 @@ def list_asset_interfaces(
         require_scope(
             principal, "networks.view", asset.customer_id, asset.site_id, hide_existence=True
         )
+        if include_knowledge:
+            require_scope(principal, "assets.view", asset.customer_id, asset.site_id, hide_existence=True)
         query = query.where(AssetInterface.asset_id == asset_id)
     if context.customer_id is not None:
         query = query.where(Asset.customer_id == context.customer_id)
     if context.site_id is not None:
         query = query.where(Asset.site_id == context.site_id)
-    return list(
-        db.scalars(query.order_by(AssetInterface.name).limit(limit).offset(offset))
-    )
+    interfaces = list(db.scalars(query.order_by(AssetInterface.name, AssetInterface.id).limit(limit).offset(offset)))
+    if include_knowledge:
+        from app.services.interface_knowledge import interface_details
+        return interface_details(db, asset, interfaces, principal)
+    return interfaces
 
 
 @router.post("", response_model=AssetInterfaceResponse, status_code=status.HTTP_201_CREATED)

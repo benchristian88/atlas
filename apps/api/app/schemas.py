@@ -485,6 +485,26 @@ class AssetInterfaceResponse(ORMResponse):
     updated_at: datetime
 
 
+class InterfaceObservedFactResponse(BaseModel):
+    predicate: Literal["proxmox.vlan_tag", "proxmox.bridge_name"]
+    value: int | str
+    is_accepted: bool
+    source_name: str | None
+    last_observed_at: datetime
+    accepted_at: datetime | None
+
+
+class InterfaceAssignedNetworkResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    vlan_id: int | None
+
+
+class AssetInterfaceReadResponse(AssetInterfaceResponse):
+    assigned_network: InterfaceAssignedNetworkResponse | None = None
+    observed_facts: list[InterfaceObservedFactResponse] = Field(default_factory=list)
+
+
 class AssetCategoryCreate(BaseModel):
     icon_key: PresentationIcon = "infrastructure"
     accent_key: PresentationAccent = "slate"
