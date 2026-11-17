@@ -119,3 +119,10 @@ indexes to exclude tombstones. Existing rows are not rewritten. Business
 Function archived-name uniqueness is unchanged. Downgrade works while no
 tombstones exist and fails transactionally once any exist, preserving state
 instead of silently resurrecting records.
+
+## Asset boundary
+
+Assets reuse their existing `retired` status and reconciliation disposition. Their
+[retirement visibility and source-link deletion guards](../admin/asset-retirement.md)
+are separate from the Service/Business Function tombstone policy above. No Asset
+`tombstone` field or independent Interface archive lifecycle is introduced.

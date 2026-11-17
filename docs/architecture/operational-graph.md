@@ -215,3 +215,10 @@ depth/result bounds, cycles, duplicate suppression, deterministic ordering,
 temporal boundaries, unauthorized focus, hidden endpoints, tenant isolation,
 metadata non-disclosure, compatibility adapters and representative query efficiency.
 Analysis tests separately verify dependency evaluation and explanation safety.
+
+## Retired Assets
+
+Current views exclude `status=retired` Assets and incident edges. Explicit
+`include_retired=true` preserves scope and enables retained-record browsing.
+See the [Asset retirement API and operator contract](../admin/asset-retirement.md)
+for counts, focus, Interfaces and the separate dependency-analysis boundary.

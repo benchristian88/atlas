@@ -26,9 +26,10 @@ def get_landscape(
     context: RequestContext,
     principal: Principal = Depends(require_any_permission("assets.view", "services.view", "business_functions.view")),
     db: Session = Depends(get_db),
+    include_retired: bool = False,
 ):
     try:
-        return OperationalGraphBuilder(db, principal).landscape(context)
+        return OperationalGraphBuilder(db, principal).landscape(context, include_retired=include_retired)
     except GraphFocusNotFound as exc:
         raise HTTPException(status_code=404, detail="Record not found") from exc
 
@@ -49,6 +50,7 @@ def get_operational_graph(
         )
     ),
     db: Session = Depends(get_db),
+    include_retired: bool = False,
 ):
     if site_viewpoint and context.customer_id is None:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -67,6 +69,7 @@ def get_operational_graph(
         return OperationalGraphBuilder(db, principal).build(
             GraphProjectionRequest(
                 focus_type=focus_type,
+                include_retired=include_retired,
                 focus_id=focus_id,
                 max_depth=max_depth,
                 direction=direction,

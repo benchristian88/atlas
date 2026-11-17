@@ -35,6 +35,7 @@ function TopologyWorkbench() {
   const { hasPermissionInContext } = useAuth();
   const workspace = useWorkspaceContext();
   const canView = hasPermissionInContext("assets.view", workspace.customerId, workspace.siteId);
+  const [includeRetired, setIncludeRetired] = useState(false);
   const [data, setData] = useState(null), [error, setError] = useState("");
   const [reload, setReload] = useState(0), [tab, setTab] = useState("overview");
   const [classChoices, setClassChoices] = useState({});
@@ -54,9 +55,9 @@ function TopologyWorkbench() {
     if (!canView) return;
     let active = true;
     setError("");
-    apiRequest("/topology").then(value => { if (active) setData(value); }).catch(e => { if (active) setError(e.message || "Unable to load topology."); });
+    apiRequest(`/topology?include_retired=${includeRetired}`).then(value => { if (active) setData(value); }).catch(e => { if (active) setError(e.message || "Unable to load topology."); });
     return () => { active = false; };
-  }, [canView, workspace.reloadKey, reload]);
+  }, [canView, workspace.reloadKey, reload, includeRetired]);
   const { enabled, changedCount } = useMemo(() => topologyCategorySelection(data?.categories || [], choices), [data, choices]);
   const view = useMemo(() => data ? topologyPresentation(data, enabled) : null, [data, enabled]);
   const searchable = useMemo(() => data ? topologyPresentation(data, new Set(data.categories.map(c => c.id))) : null, [data]);
@@ -66,7 +67,7 @@ function TopologyWorkbench() {
   const classSelection = useMemo(() => topologyClassSelection(classChoices), [classChoices]);
   const classKey = [...classSelection.enabled].sort().join(",");
   const categoryKey = [...enabled].sort().join(",");
-  const graphKey = `${actualFocus}/${hops}/${showNetworks}/${categoryKey}/${classKey}`;
+  const graphKey = `${includeRetired}/${actualFocus}/${hops}/${showNetworks}/${categoryKey}/${classKey}`;
   const currentGraph = graph?.requestKey === graphKey && graph.nodes.every(node =>
     node.entity_type === "asset" ? view?.byId[node.entity_id] : view?.networkById[node.entity_id]) ? graph : null;
   useEffect(() => {
@@ -74,6 +75,7 @@ function TopologyWorkbench() {
     let active = true;
     setGraphError("");
     const params = new URLSearchParams({ [networkFocus ? "focus_network_id" : "focus_asset_id"]: networkFocus ? actualFocus.slice(8) : actualFocus, hops: String(hops), show_networks: String(showNetworks) });
+    params.set("include_retired", String(includeRetired));
     params.set("topology_classes", classKey);
     categoryKey.split(",").filter(Boolean).forEach(id => params.append("category_ids", id));
     apiRequest(`/topology/connectivity?${params}`).then(value => { if (active) setGraph({ ...value, requestKey: graphKey }); }).catch(e => { if (active) setGraphError(e.message || "Unable to load connectivity."); });
@@ -124,7 +126,7 @@ function TopologyWorkbench() {
   return <div className="operations-page infrastructure-topology">
     <PageHeader variant="canvas" eyebrow="Knowledge" title="Infrastructure Topology" description="Visualise your infrastructure, networks and connectivity." />
     <ExpandedGraphSurface title="Infrastructure Topology" expanded={supportsFullscreen && expanded} onClose={() => { setExpanded(false); setHops(n => Math.min(n, 2)); }} returnFocus={expandButton} scrollPosition={scrollPosition}>
-      <div className="topology-toolbar" ref={toolbar}>
+      <div className="topology-toolbar" ref={toolbar}><label><input type="checkbox" checked={includeRetired} onChange={event => { setIncludeRetired(event.target.checked); setData(null); setGraph(null); }} /> Include retired</label>
         <div className="lens-selector" aria-label="Topology views">{Object.entries(tabs).map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} className={`button selector-control-text ${tab === key ? "button-primary" : "button-secondary"}`} onClick={() => { if (key !== tab) enterView(key); }}>{label}</button>)}</div>
         {tab !== "showcase" && <div className="row-actions"><TopologyCategoryFilter
           categories={data?.categories || []} enabled={enabled}

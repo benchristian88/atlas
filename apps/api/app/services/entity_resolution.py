@@ -45,6 +45,10 @@ def ensure_asset_link(
     source = db.get(DataSource, data_source_id, with_for_update={"key_share": True})
     if source is None:
         raise HTTPException(status_code=409, detail="The data source no longer exists")
+    # Source then canonical Asset: serialize linking with hard deletion.
+    asset = db.get(Asset, asset.id, with_for_update=True, populate_existing=True)
+    if asset is None:
+        raise HTTPException(409, "The target asset no longer exists; refresh before linking")
     if source.customer_id != asset.customer_id or source.site_id not in {
         None,
         asset.site_id,

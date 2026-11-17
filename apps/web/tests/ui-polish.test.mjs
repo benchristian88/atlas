@@ -61,6 +61,7 @@ test("Asset Type counts are ordered deterministically and filters compose in the
     completeness: "incomplete",
     search: "docker",
     offset: 30,
+    includeRetired: false,
   });
 });
 
@@ -70,7 +71,7 @@ test("Assets exposes ten direct selectors, accessible More, and scoped summary d
     readFile(new URL("../app/topology/page.js", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /apiRequest\("\/assets\/summary"\)/);
+  assert.match(page, /apiRequest\(`\/assets\/summary\?include_retired=/);
   assert.match(page, /typeCounts\.slice\(0, 10\)/);
   assert.match(page, /typeCounts\.slice\(10\)/);
   assert.match(page, /aria-pressed/);
@@ -91,4 +92,11 @@ test("System navigation retires Administration while preserving deep links", asy
   assert.match(navigation, /href: "\/admin\/system-settings"/);
   assert.match(landing, /router\.replace\(destination\)/);
   assert.doesNotMatch(landing, /Open section/);
+});
+
+test("Include retired survives Asset filter navigation and reset", () => {
+  const filters = parseAssetListFilters(new URLSearchParams("include_retired=true&search=old&offset=30"));
+  assert.equal(filters.includeRetired, true);
+  assert.match(assetListFiltersHref(filters), /include_retired=true/);
+  assert.equal(parseAssetListFilters(new URLSearchParams()).includeRetired, false);
 });

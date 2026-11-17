@@ -60,12 +60,15 @@ class DependencyAnalysisEngine:
         builder = OperationalGraphBuilder(
             self.builder.db, self.builder.principal, clock=lambda: analysis_time
         )
+        # Display retirement filters must not erase recorded dependency providers.
         focus_graph = builder.build(GraphProjectionRequest(
             focus_type=request.focus_type, focus_id=request.focus_id,
+            include_retired=True,
             max_depth=0, context=context,
         ))
         projection = builder.build_dependency_projection(GraphProjectionRequest(
             focus_type=request.focus_type, focus_id=request.focus_id,
+            include_retired=True,
             direction="incoming", max_depth=GRAPH_DEPTH,
             node_limit=GRAPH_NODES, edge_limit=GRAPH_EDGES,
             complete_service_dependencies=True, edge_families=DEPENDENCY_FAMILIES,

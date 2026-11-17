@@ -23,6 +23,7 @@ function KnowledgeGraph() {
   const params = useSearchParams();
   const workspace = useWorkspaceContext();
   const { hasAnyPermission, hasPermission } = useAuth();
+  const [includeRetired, setIncludeRetired] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [detailsHidden, setDetailsHidden] = useState(false);
   const expandButton = useRef(null);
@@ -58,12 +59,13 @@ function KnowledgeGraph() {
     let active = true;
     setGraph(null); setError("");
     const [type, id] = state.focus.split(":");
-    const path = state.focus ? `/operational-graph?focus_type=${type}&focus_id=${id}&max_depth=${state.depth}&site_viewpoint=true` : "/operational-graph/landscape";
+    const basePath = state.focus ? `/operational-graph?focus_type=${type}&focus_id=${id}&max_depth=${state.depth}&site_viewpoint=true` : "/operational-graph/landscape";
+    const path = `${basePath}${basePath.includes("?") ? "&" : "?"}include_retired=${includeRetired}`;
     const cached = graphCache.current.get(path);
     if (cached) { setGraph(cached); return () => { active = false; }; }
     apiRequest(path).then((value) => { if (active) { graphCache.current.set(path, value); setGraph(value); } }).catch((e) => { if (active) setError(e.message || "Atlas could not load the graph."); });
     return () => { active = false; };
-  }, [canView, state.focus, state.depth, workspace.customerId, workspace.siteId, retry]);
+  }, [canView, state.focus, state.depth, workspace.customerId, workspace.siteId, retry, includeRetired]);
   useEffect(() => {
     let active = true;
     setAnalysis(null); setAnalysisError("");
@@ -81,7 +83,7 @@ function KnowledgeGraph() {
       try {
         const sources = [["asset", "/assets", "assets.view"], ["service", "/services", "services.view"], ["business_function", "/business-functions", "business_functions.view"]].filter(([, , permission]) => hasPermission(permission));
         const lists = await Promise.all(sources.map(async ([type, path]) => {
-          const records = await apiRequest(`${path}?search=${encodeURIComponent(search.trim())}&limit=8&active_only=true`, { omitContext: true, headers: { "X-Atlas-Customer-ID": workspace.customerId } });
+          const records = await apiRequest(`${path}?search=${encodeURIComponent(search.trim())}&limit=8&active_only=true&include_retired=${includeRetired}`, { omitContext: true, headers: { "X-Atlas-Customer-ID": workspace.customerId } });
           return records.map((r) => ({ key: `${type}:${r.id}`, entity_id: r.id, entity_type: type, name: r.name }));
         }));
         if (active) setResults(lists.flat());
@@ -89,7 +91,7 @@ function KnowledgeGraph() {
       finally { if (active) setSearching(false); }
     }, 250);
     return () => { active = false; clearTimeout(timer); };
-  }, [search, workspace.customerId, hasPermission]);
+  }, [search, workspace.customerId, hasPermission, includeRetired]);
   const displayed = useMemo(() => analysisOverlay(graph || {}, analysis), [graph, analysis]);
   const visibleGraph = useMemo(() => projectVisibleGraph(displayed, { types: state.types, families: state.families, focus: state.focus, analysis: Boolean(analysis) }), [displayed, state.types, state.families, state.focus, analysis]);
   const localMatches = useMemo(() => search.trim() ? visibleGraph.nodes.filter(node => node.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) : [], [visibleGraph, search]);
@@ -104,7 +106,7 @@ function KnowledgeGraph() {
   if (!canView) return <AccessDenied />;
   return <div className="operations-page"><PageHeader variant="canvas" title="Knowledge Graph" description="Why it matters, what delivers it, and what implements it." />
     {!workspace.customerId || !workspace.siteId ? <p className="ops-card">Select a Customer and Site to explore recorded knowledge.</p> : <ExpandedGraphSurface expanded={expanded} onClose={closeExpanded} returnFocus={expandButton} scrollPosition={expansionScroll}>
-      <div className="graph-toolbar" aria-label="Knowledge Graph controls">
+      <div className="graph-toolbar" aria-label="Knowledge Graph controls"><label><input type="checkbox" checked={includeRetired} onChange={event => { setIncludeRetired(event.target.checked); setGraph(null); setAnalysis(null); update({ analysis: false }); }} /> Include retired</label>
         <div className="ops-segments" aria-label="Graph mode"><button type="button" aria-pressed={!state.focus} onClick={() => update({ focus: "", analysis: false })}>Overview</button><button type="button" aria-pressed={Boolean(state.focus)} disabled={!selectedNode} onClick={() => focusNode(selectedNode)}>Focus</button></div>
         <div className="graph-find"><label className="sr-only" htmlFor="graph-find">Find in graph</label><input id="graph-find" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find in graph…" type="search" aria-controls="graph-search-results" />{search.trim() && <div id="graph-search-results" className="graph-search-results"><ul aria-label="Matches in visible graph">{localMatches.map(node => <li key={node.key}><button type="button" onClick={() => { selectNode(node); setLocateRequest({ key: node.key }); setSearch(""); }}>{node.name}<small>Locate in current graph</small></button></li>)}</ul><p className="ops-meta">Focus another entity: authorized matches in this Customer; up to 8 of each type. Refine your search for more.</p>{searching && <p role="status">Searching…</p>}{searchError && <p role="alert">{searchError}</p>}{!searching && !searchError && !results.length && !localMatches.length && <p role="status">No matches.</p>}<ul>{results.map((node) => <li key={node.key}><button type="button" onClick={() => focusNode(node)}>{node.name}<small>{node.entity_type.replaceAll("_", " ")}</small></button></li>)}</ul></div>}</div>
         {state.focus && <div className="ops-segments" aria-label="Focus depth">{(expanded ? [1, 2, 3] : [1, 2]).map((depth) => <button type="button" key={depth} aria-label={`Depth ${depth}`} aria-pressed={state.depth === depth} onClick={() => update({ depth })}>{depth}</button>)}</div>}

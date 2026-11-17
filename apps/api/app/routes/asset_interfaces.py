@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
@@ -193,7 +194,13 @@ def delete_asset_interface(
         request=request,
     )
     db.delete(interface)
-    flush(db, "Asset interface")
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == "fk_entity_source_links_interface_owner":
+            raise HTTPException(409, "This interface is linked to retained discovery history and cannot be deleted. If its asset is out of service, use Retire in reconciliation when available. Retirement preserves history and does not enable interface deletion.") from exc
+        raise HTTPException(409, "Asset interface conflicts with an existing record or dependency") from exc
     from app.services.knowledge_completeness import evaluate_asset_safely
     evaluate_asset_safely(db, asset, trigger_context="asset_interface_deleted", actor_user_id=principal.user.id)
     commit(db, "Asset interface")

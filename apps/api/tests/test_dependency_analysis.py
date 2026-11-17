@@ -427,3 +427,15 @@ def test_partial_groups_preserve_only_defensible_conclusions(strategy, expected)
     assert "incomplete_group_keys" not in result.model_dump_json()
     assert str(hidden.id) not in result.model_dump_json()
     assert_paths(result)
+
+
+def test_retired_provider_remains_in_analysis_dependency_sets():
+    t = Topology()
+    dependent = t.service('Retained dependency')
+    t.dependency(dependent, t.focus)
+    before = t.analyze()
+    t.focus.status = 'retired'
+    after = t.analyze()
+    assert by_name(after)['Retained dependency'].state == by_name(before)['Retained dependency'].state
+    assert by_name(after)['Retained dependency'].state == 'unavailable'
+    assert_paths(after)
