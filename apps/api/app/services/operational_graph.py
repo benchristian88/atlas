@@ -89,6 +89,7 @@ class GraphProjectionRequest:
     edge_families: frozenset[str] = EDGE_FAMILIES
     context: ActiveContext | None = None
     include_inactive_focus: bool = False
+    include_retired: bool = False
     # Compatibility routes can retain their C1 expansion shape while using the
     # same authorization, temporal, identity, and metadata implementation.
     edge_families_by_depth: tuple[frozenset[str], ...] | None = None
@@ -132,7 +133,7 @@ class OperationalGraphBuilder:
     def build_dependency_projection(self, request: GraphProjectionRequest) -> DependencyGraphProjection:
         return self._build(request)
 
-    def landscape(self, context: ActiveContext, *, node_limit: int = 500) -> OperationalGraphResponse:
+    def landscape(self, context: ActiveContext, *, node_limit: int = 500, include_retired: bool = False) -> OperationalGraphResponse:
         """One batched Site-viewpoint read, using the focused projection loaders.
 
         Seed local/customer-wide knowledge; expand only Service relationships
@@ -148,12 +149,14 @@ class OperationalGraphBuilder:
                 or_(model.site_id == context.site_id, model.site_id.is_(None)),
                 scope_condition(self.principal, NODE_PERMISSIONS[entity_type], model.customer_id, model.site_id),
             )
+            if entity_type == "asset" and not include_retired:
+                query = query.where(Asset.status != "retired")
             if entity_type == "service":
                 query = query.where(Service.archived_at.is_(None))
             if entity_type == "business_function":
                 query = query.where(BusinessFunction.active.is_(True))
             for item in self.db.scalars(query.order_by(model.id).limit(node_limit + 1)):
-                if not self._node_is_viewable(entity_type, item, context):
+                if not self._node_is_viewable(entity_type, item, context, include_retired=include_retired):
                     continue
                 if len(objects) >= node_limit:
                     truncated = True
@@ -175,8 +178,8 @@ class OperationalGraphBuilder:
             source_key, target_key = graph_node_key(*source_ref), graph_node_key(*target_ref)
             source, target = objects.get(source_key), objects.get(target_key)
             if (source is None or target is None
-                or not self._node_is_viewable(source_ref[0], source, customer_context)
-                or not self._node_is_viewable(target_ref[0], target, customer_context)
+                or not self._node_is_viewable(source_ref[0], source, customer_context, include_retired=include_retired)
+                or not self._node_is_viewable(target_ref[0], target, customer_context, include_retired=include_retired)
                 or not self._edge_is_viewable(family, row, source, target)):
                 continue
             new_keys = {source_key, target_key} - members
@@ -201,6 +204,7 @@ class OperationalGraphBuilder:
             focus,
             request.context,
             allow_inactive=request.include_inactive_focus,
+            include_retired=request.include_retired,
         ):
             raise GraphFocusNotFound
 
@@ -269,6 +273,7 @@ class OperationalGraphBuilder:
                         source_ref[0],
                         source,
                         request.context,
+                        include_retired=request.include_retired,
                         allow_inactive=(
                             request.include_inactive_focus and source_key == focus_key
                         ),
@@ -277,6 +282,7 @@ class OperationalGraphBuilder:
                         target_ref[0],
                         target,
                         request.context,
+                        include_retired=request.include_retired,
                         allow_inactive=(
                             request.include_inactive_focus and target_key == focus_key
                         ),
@@ -363,7 +369,10 @@ class OperationalGraphBuilder:
         context: ActiveContext | None,
         *,
         allow_inactive: bool = False,
+        include_retired: bool = False,
     ) -> bool:
+        if entity_type == "asset" and not include_retired and item.status == "retired":
+            return False
         if entity_type in {"service", "business_function"} and item.deleted_at is not None:
             return False
         if (

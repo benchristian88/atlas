@@ -55,7 +55,7 @@ export default function AssetsPage() {
     setError("");
     try {
       const [assetSummary, typeRecords, fieldRecords, categoryRecords] = await Promise.all([
-        apiRequest("/assets/summary"),
+        apiRequest(`/assets/summary?include_retired=${filters.includeRetired}`),
         hasPermission("asset_types.view") ? apiRequest("/asset-types") : Promise.resolve([]),
         hasPermission("custom_fields.view") ? apiRequest("/custom-fields?active_only=true") : Promise.resolve([]),
         hasPermission("asset_types.view") ? apiRequest("/asset-categories") : Promise.resolve([]),
@@ -63,6 +63,7 @@ export default function AssetsPage() {
       if (requestId.current !== currentRequest) return;
       const validType = assetSummary.by_asset_type.find((item) => item.asset_type_id === filters.assetTypeId);
       const parameters = new URLSearchParams({ limit: String(PAGE_SIZE + 1), offset: String(filters.offset) });
+      parameters.set("include_retired", String(filters.includeRetired));
       if (validType) parameters.set("asset_type_id", validType.asset_type_id);
       if (filters.categoryId) parameters.set("category_id", filters.categoryId);
       if (filters.search) parameters.set("search", filters.search);
@@ -88,7 +89,7 @@ export default function AssetsPage() {
     } finally {
       if (requestId.current === currentRequest) setLoading(false);
     }
-  }, [canView, filterKey, filters.assetTypeId, filters.categoryId, filters.completeness, filters.offset, filters.search, hasPermission, workspace.reloadKey]);
+  }, [canView, filterKey, filters.includeRetired, filters.assetTypeId, filters.categoryId, filters.completeness, filters.offset, filters.search, hasPermission, workspace.reloadKey]);
 
   useEffect(() => {
     load();
@@ -106,7 +107,7 @@ export default function AssetsPage() {
   const creatableCustomerIds = new Set(creatableSites.map((site) => site.customer_id));
   const creatableCustomers = workspace.customers.filter((customer) => creatableCustomerIds.has(customer.id));
   const ready = loadedKey === filterKey;
-  const activeFilterCount = [selectedType, filters.categoryId, filters.completeness].filter(Boolean).length;
+  const activeFilterCount = [selectedType, filters.categoryId, filters.completeness, filters.includeRetired].filter(Boolean).length;
 
   if (!canView) return <AccessDenied />;
 
@@ -154,7 +155,7 @@ export default function AssetsPage() {
     <CatalogueFilters label="Search assets" search={search} activeCount={activeFilterCount} onClear={() => { search.reset(); router.push("/assets"); }} quickFilters={
       <div className="asset-type-filters" aria-label="Filter by asset type"><button aria-pressed={!selectedType} className={`asset-type-filter selector-control-text${!selectedType ? " active" : ""}`} onClick={() => updateFilters({ assetTypeId: "" })} type="button"><span>All assets</span><strong>{summary.total}</strong></button>{directTypeCounts.map((item) => <button aria-pressed={selectedType?.asset_type_id === item.asset_type_id} className={`asset-type-filter selector-control-text${selectedType?.asset_type_id === item.asset_type_id ? " active" : ""}`} key={item.asset_type_id} onClick={() => updateFilters({ assetTypeId: item.asset_type_id })} type="button"><span>{item.asset_type_name}</span><strong>{item.count}</strong></button>)}{additionalTypeCounts.length > 0 && <label className={`asset-type-more${selectedAdditionalType ? " active" : ""}`}><span className="sr-only">More asset types</span><select aria-label="More asset types" className="selector-control-text" onChange={(event) => updateFilters({ assetTypeId: event.target.value })} value={selectedAdditionalType?.asset_type_id || ""}><option value="">More…</option>{additionalTypeCounts.map((item) => <option key={item.asset_type_id} value={item.asset_type_id}>{item.asset_type_name} ({item.count})</option>)}</select></label>}</div>
     } primary={<label className="field"><span className="sr-only">Asset type</span><select value={selectedType?.asset_type_id || ""} onChange={event => updateFilters({ assetTypeId: event.target.value })}><option value="">All types</option>{typeCounts.map(item => <option key={item.asset_type_id} value={item.asset_type_id}>{item.asset_type_name}</option>)}</select></label>}>
-      <div className="catalogue-advanced-grid"><label className="field"><span>Asset Category</span><select aria-label="Asset Category" value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></label>{hasPermission("knowledge_gaps.view") && <label className="field"><span>Completeness</span><select onChange={(event) => updateFilters({ completeness: event.target.value })} value={filters.completeness}><option value="">All completeness states</option><option value="has_critical_gaps">Has critical gaps</option><option value="has_open_knowledge_gaps">Has open gaps</option><option value="critical_gaps">Critical gaps status</option><option value="incomplete">Incomplete</option><option value="operationally_complete">Operationally complete</option><option value="complete">Complete</option><option value="exception_accepted">Exception accepted</option><option value="not_evaluated">Not evaluated</option></select></label>}</div>
+      <div className="catalogue-advanced-grid"><label><input type="checkbox" checked={filters.includeRetired} onChange={event => updateFilters({ includeRetired: event.target.checked })} /> Include retired</label><label className="field"><span>Asset Category</span><select aria-label="Asset Category" value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></label>{hasPermission("knowledge_gaps.view") && <label className="field"><span>Completeness</span><select onChange={(event) => updateFilters({ completeness: event.target.value })} value={filters.completeness}><option value="">All completeness states</option><option value="has_critical_gaps">Has critical gaps</option><option value="has_open_knowledge_gaps">Has open gaps</option><option value="critical_gaps">Critical gaps status</option><option value="incomplete">Incomplete</option><option value="operationally_complete">Operationally complete</option><option value="complete">Complete</option><option value="exception_accepted">Exception accepted</option><option value="not_evaluated">Not evaluated</option></select></label>}</div>
     </CatalogueFilters>
     <EntityCatalogue label="Assets" count={assets.length} loading={loading} error={ready ? error : ""} onRefresh={load} empty="No assets match the current filters.">
       {assets.map(asset => <AssetCatalogueRow key={asset.id} asset={asset} assetType={assetTypesByKey[asset.asset_type]} category={categories.find(category => category.id === assetTypesByKey[asset.asset_type]?.category_id)} customer={workspace.customers.find(item => item.id === asset.customer_id)} site={workspace.sites.find(item => item.id === asset.site_id)} canViewCompleteness={hasPermission("knowledge_gaps.view")} actions={<>

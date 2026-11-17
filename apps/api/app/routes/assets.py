@@ -19,6 +19,7 @@ from app.models import (
     AssetInterface,
     AssetRelationship,
     AssetType,
+    EntitySourceLink,
     Customer,
     KnowledgeCompletenessSummary,
     KnowledgeGap,
@@ -97,6 +98,7 @@ def list_assets(
     asset_type_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     search: str | None = None,
+    include_retired: bool = False,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -133,6 +135,8 @@ def list_assets(
         query = query.where(Asset.customer_id == customer_id)
     if site_id is not None:
         query = query.where(Asset.site_id == site_id)
+    if not include_retired:
+        query = query.where(Asset.status != "retired")
     if asset_type_id is not None:
         asset_type_key = db.scalar(select(AssetType.key).where(AssetType.id == asset_type_id))
         if asset_type_key is None:
@@ -178,6 +182,7 @@ def asset_summary(
     context: RequestContext,
     principal: Principal = Depends(require_permission("assets.view")),
     db: Session = Depends(get_db),
+    include_retired: bool = False,
 ):
     customer_id = context.customer_id
     site_id = context.site_id
@@ -190,6 +195,8 @@ def asset_summary(
     if site_id is not None:
         conditions.append(Asset.site_id == site_id)
 
+    if not include_retired:
+        conditions.append(Asset.status != "retired")
     total = int(
         db.scalar(select(func.count()).select_from(Asset).where(*conditions)) or 0
     )
@@ -445,7 +452,7 @@ def delete_asset(
     principal: Principal = Depends(require_permission("assets.delete")),
     db: Session = Depends(get_db),
 ) -> Response:
-    asset = db.get(Asset, asset_id)
+    asset = db.get(Asset, asset_id, with_for_update=True, populate_existing=True)
     if asset is None:
         raise not_found("Asset")
     require_scope(
@@ -466,6 +473,12 @@ def delete_asset(
             status_code=409,
             detail="Delete this asset's relationships before deleting the asset",
         )
+    # FOR UPDATE above excludes concurrent source-link FK insertion. Check after
+    # acquiring the lock so a link committed while we waited is visible.
+    if db.scalar(select(EntitySourceLink.id).where(
+        or_(EntitySourceLink.entity_id == asset.id, EntitySourceLink.interface_owner_id == asset.id)
+    ).limit(1)) is not None:
+        raise HTTPException(409, "This asset has retained discovery history and cannot be deleted. Use Retire in reconciliation when available; retirement preserves history.")
     add_audit_event(
         db,
         action="asset.deleted",

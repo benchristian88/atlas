@@ -20,6 +20,7 @@ def get_topology(
     context: RequestContext,
     principal: Principal = Depends(require_permission("assets.view")),
     db: Session = Depends(get_db),
+    include_retired: bool = False,
 ):
     customer_query = select(Customer).where(
         scope_condition(principal, "customers.view", Customer.id)
@@ -30,6 +31,8 @@ def get_topology(
     asset_query = select(Asset).where(
         scope_condition(principal, "assets.view", Asset.customer_id, Asset.site_id)
     )
+    if not include_retired:
+        asset_query = asset_query.where(Asset.status != "retired")
     network_query = select(Network).where(
         scope_condition(principal, "networks.view", Network.customer_id, Network.site_id)
     )
@@ -132,10 +135,11 @@ def get_connectivity(
     limit: int = Query(MAX_CONNECTIVITY_NODES, ge=1, le=MAX_CONNECTIVITY_NODES),
     principal: Principal = Depends(require_permission("assets.view")),
     db: Session = Depends(get_db),
+    include_retired: bool = False,
 ):
     if (focus_asset_id is None) == (focus_network_id is None):
         raise HTTPException(422, "Choose exactly one Asset or Network focus")
-    topology = get_topology(context, principal, db)
+    topology = get_topology(context, principal, db, include_retired=include_retired)
     classes = None if topology_classes is None else topology_classes.split(",") if topology_classes else []
     return connectivity(
         topology, focus_asset_id, hops, category_ids, show_networks, limit, focus_network_id,

@@ -387,3 +387,10 @@ removes its grid track while retaining selection and the mounted graph. Existing
 ResizeObserver updates canvas dimensions; hiding/showing does not change query
 inputs. Closing expanded mode restores the embedded inspector. Knowledge Graph
 and the shared expanded surface behavior are unchanged.
+
+## Retired Assets
+
+Current views exclude `status=retired` Assets and incident edges. Explicit
+`include_retired=true` preserves scope and enables retained-record browsing.
+See the [Asset retirement API and operator contract](../admin/asset-retirement.md)
+for counts, focus, Interfaces and the separate dependency-analysis boundary.

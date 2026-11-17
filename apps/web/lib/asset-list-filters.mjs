@@ -25,11 +25,13 @@ export function parseAssetListFilters(searchParams, pageSize = 30) {
     completeness: ASSET_COMPLETENESS_FILTERS.includes(completeness) ? completeness : "",
     search: (searchParams.get("search") || "").trim().slice(0, 255),
     offset,
+    includeRetired: searchParams.get("include_retired") === "true",
   };
 }
 
 export function assetListFiltersHref(filters) {
   const params = new URLSearchParams();
+  if (filters.includeRetired) params.set("include_retired", "true");
   if (filters.categoryId) params.set("category_id", filters.categoryId);
   if (filters.assetTypeId) params.set("asset_type_id", filters.assetTypeId);
   if (filters.completeness) params.set("completeness", filters.completeness);
