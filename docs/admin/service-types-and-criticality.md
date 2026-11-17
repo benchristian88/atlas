@@ -4,6 +4,15 @@ Service Types and Criticality are managed reference data under **System → Refe
 Users need `service_types.manage` or `criticality_levels.manage` to change them;
 view-only users can still read active definitions used by Services.
 
+The `in_use_count` returned by `/api/service-types` and `/api/criticality-levels`
+counts only Services the requester can read, within the selected Customer/Site
+context when supplied. Archived Services still use their definitions; deleted
+Service tombstones are excluded. A user who can read definitions but cannot
+read Services sees the same definitions with zero usage. These counts are not
+instance-wide totals or deletion eligibility checks.
+An unavailable selected operational context yields zero usage while the global
+definitions remain readable.
+
 ## Service Types
 
 Service Types classify an operational Service. Atlas seeds Application,
