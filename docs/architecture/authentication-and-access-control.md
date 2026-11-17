@@ -240,6 +240,19 @@ Administration routes use the same policy layer as inventory routes:
   last-master invariant cannot be bypassed with direct IDs.
 - Customer/site deletion is allowed only when no dependent records would be
   orphaned. Used records are deactivated instead of cascaded away.
+  DELETE returns the same `404 {"detail":"Record not found"}` for missing and
+  out-of-scope targets; missing manage permission still returns `403`. Existing
+  guards and restricting parent foreign keys return the same non-disclosing
+  `409` explanation: other records or retained history depend on the Customer or
+  Site, and **Status → Inactive** preserves it. Dependency categories, names,
+  counts and identifiers are not disclosed. The database remains the final
+  safeguard against a dependency committed after the application checks;
+  refusal rolls back the deletion and its audit event. Other database errors
+  retain their existing handling. Internal retained Service/Business Function
+  reference checks run before deletion's audit-FK cleanup can encounter a
+  tombstone immutability trigger; these references already block deletion in
+  PostgreSQL. Successful unused-record deletion remains
+  `204`, with audit snapshots retained and no dependency cleanup or cascade.
 - Audit APIs are read-only and require `audit.view`.
 - Sensitive system-setting values are redacted on read, require global
   `system_settings.manage` to change, and produce a safe audit summary.

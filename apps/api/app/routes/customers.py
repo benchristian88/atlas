@@ -8,10 +8,15 @@ from app.audit import add_audit_event
 from app.authorization import Principal, require_global, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.models import AccessAssignment, Asset, Customer, Integration, Network, Site, Workspace
-from app.routes.crud_helpers import apply_changes, commit, flush, not_found
+from app.routes.crud_helpers import apply_changes, commit, flush, has_retained_context_reference, not_found
 from app.schemas import CustomerCreate, CustomerResponse, CustomerUpdate
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+
+DELETE_DEPENDENCY_DETAIL = (
+    "This Customer can't be deleted because other records or retained history depend on it. "
+    "To stop using it, set its status to Inactive."
+)
 
 
 @router.get("", response_model=list[CustomerResponse])
@@ -125,7 +130,7 @@ def delete_customer(
 ) -> Response:
     customer = db.get(Customer, customer_id)
     if customer is None:
-        raise not_found("Customer")
+        raise HTTPException(status_code=404, detail="Record not found")
     require_scope(principal, "customers.manage", customer.id, hide_existence=True)
     dependencies = {
         "sites": (Site, Site.customer_id),
@@ -139,12 +144,10 @@ def delete_customer(
         for label, (model, column) in dependencies.items()
         if db.scalar(select(func.count()).select_from(model).where(column == customer.id))
     ]
-    if used_by:
+    if used_by or has_retained_context_reference(db, "customer", customer.id):
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Customer is in use by " + ", ".join(used_by) + ". Deactivate it instead."
-            ),
+            detail=DELETE_DEPENDENCY_DETAIL,
         )
     add_audit_event(
         db,
@@ -158,5 +161,5 @@ def delete_customer(
         request=request,
     )
     db.delete(customer)
-    commit(db, "Customer")
+    commit(db, "Customer", parent_dependency=(Customer.__table__, DELETE_DEPENDENCY_DETAIL))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

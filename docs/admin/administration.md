@@ -9,6 +9,16 @@ Roles & permissions, Customers and Sites. Built-in role definitions are protecte
 Atlas blocks removing or disabling the final usable global Master Administrator.
 Passwords and MFA secrets are never readable through administration.
 
+Customers and Sites can be deleted when unused. Deletion retains creation and
+deletion audit snapshots. Other records or retained history can prevent deletion,
+including access assignments and history retained after a Service or Business
+Function is deleted. The refusal gives one explanation without identifying
+dependencies the operator might not be allowed to read. Use **Edit → Status →
+Inactive** to stop using a record while preserving its dependencies and history;
+Inactive does not make a used record deletable. A disabled Delete action explains
+missing permission. A refused deletion keeps the loaded rows and shows an action
+error rather than reporting a failed table load.
+
 **System → Reference Data** holds managed taxonomy, custom fields and knowledge
 profiles. Deactivate used definitions to retire them while retaining history.
 See [Service Types and Criticality](service-types-and-criticality.md),

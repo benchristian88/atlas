@@ -8,10 +8,15 @@ from app.audit import add_audit_event
 from app.authorization import Principal, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.models import AccessAssignment, Asset, Customer, Integration, Network, Site
-from app.routes.crud_helpers import apply_changes, commit, flush, not_found
+from app.routes.crud_helpers import apply_changes, commit, flush, has_retained_context_reference, not_found
 from app.schemas import SiteCreate, SiteResponse, SiteUpdate
 
 router = APIRouter(prefix="/sites", tags=["sites"])
+
+DELETE_DEPENDENCY_DETAIL = (
+    "This Site can't be deleted because other records or retained history depend on it. "
+    "To stop using it, set its status to Inactive."
+)
 
 
 def _dependent_count(db: Session, site_id: uuid.UUID) -> int:
@@ -144,12 +149,12 @@ def delete_site(
 ) -> Response:
     site = db.get(Site, site_id)
     if site is None:
-        raise not_found("Site")
+        raise HTTPException(status_code=404, detail="Record not found")
     require_scope(principal, "sites.manage", site.customer_id, site.id, hide_existence=True)
-    if _dependent_count(db, site.id):
+    if _dependent_count(db, site.id) or has_retained_context_reference(db, "site", site.id):
         raise HTTPException(
             status_code=409,
-            detail="Site is in use. Deactivate it instead of deleting it.",
+            detail=DELETE_DEPENDENCY_DETAIL,
         )
     customer = db.get(Customer, site.customer_id)
     add_audit_event(
@@ -165,5 +170,5 @@ def delete_site(
         request=request,
     )
     db.delete(site)
-    commit(db, "Site")
+    commit(db, "Site", parent_dependency=(Site.__table__, DELETE_DEPENDENCY_DETAIL))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

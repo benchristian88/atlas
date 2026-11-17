@@ -43,6 +43,7 @@ export default function SitesPage() {
       dependencies={hasPermission("customers.view") ? dependencies : []}
       description="Create and maintain physical or logical locations for each customer."
       deleteReason="Sites with assets, networks, integrations, or access assignments must be deactivated instead."
+      deleteDisabledReason="You don't have permission to delete this Site."
       emptyValues={{ customer_id: customerId || "", name: "", address: "", notes: "", status: "active" }}
       endpoint="/sites"
       eyebrow="Locations"
