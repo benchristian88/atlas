@@ -5,10 +5,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
 from app.authorization import (
+    ActiveContext,
     Principal,
     require_global,
     require_permission,
@@ -20,6 +21,8 @@ from app.models import (
     AssetCategory,
     AssetRelationship,
     AssetType,
+    BusinessFunction,
+    Service,
     TopologyPosition,
     CustomFieldAssetType,
     RelationshipType,
@@ -37,6 +40,8 @@ from app.schemas import (
     RelationshipTypeUpdate,
 )
 from app.routes.crud_helpers import commit, flush
+from app.routes.asset_relationships import _scoped_relationship_query
+from app.services.reference_data_usage import ReferenceUsageContext
 from app.services.knowledge_requirement_references import (
     invalidate_referencing_requirements,
     requirements_referencing,
@@ -107,59 +112,82 @@ def _asset_type_response(
     )
 
 
-def _relationship_type_response(
-    db: Session, item: RelationshipType, principal: Principal
-) -> RelationshipTypeResponse:
-    source = aliased(Asset)
-    target = aliased(Asset)
-    asset_count = int(
-        db.scalar(
-            select(func.count())
-            .select_from(AssetRelationship)
-            .join(source, source.id == AssetRelationship.source_asset_id)
-            .join(target, target.id == AssetRelationship.target_asset_id)
-            .where(
-                AssetRelationship.relationship_type == item.key,
-                scope_condition(
-                    principal,
-                    "relationships.view",
-                    source.customer_id,
-                    source.site_id,
-                ),
-                scope_condition(
-                    principal,
-                    "relationships.view",
-                    target.customer_id,
-                    target.site_id,
-                ),
-            )
-        )
-        or 0
+def _relationship_usage_counts(
+    db: Session, principal: Principal, context: ActiveContext | None,
+    type_id: uuid.UUID | None = None,
+) -> dict[uuid.UUID, int]:
+    """Aggregate each family after authorizing the edge and both endpoints.
+
+    Scope predicates use OR/IN, never joins to grants, so overlapping assignments
+    cannot multiply a relationship. Current typed links retain valid_to IS NULL
+    eligibility from their operational lists; no history is removed.
+    """
+    if context is None:
+        return {}
+    asset_query, source, target = _scoped_relationship_query(principal, "relationships.view")
+    asset_query = asset_query.with_only_columns(
+        AssetRelationship.relationship_type, func.count().label("usage_count"),
+    ).where(
+        scope_condition(principal, "assets.view", source.customer_id, source.site_id),
+        scope_condition(principal, "assets.view", target.customer_id, target.site_id),
     )
-    typed_count = int(db.scalar(
-        select(func.count()).select_from(ServiceAssetDependency).where(
-            ServiceAssetDependency.relationship_type_id == item.id,
-            ServiceAssetDependency.valid_to.is_(None),
+    if context.customer_id is not None:
+        asset_query = asset_query.where(source.customer_id == context.customer_id, target.customer_id == context.customer_id)
+    if context.site_id is not None:
+        asset_query = asset_query.where(source.site_id == context.site_id, target.site_id == context.site_id)
+    asset_counts = asset_query.group_by(AssetRelationship.relationship_type).subquery()
+    query = select(RelationshipType.id, asset_counts.c.usage_count).join(
+        asset_counts, asset_counts.c.relationship_type == RelationshipType.key,
+    )
+    if type_id is not None:
+        query = query.where(RelationshipType.id == type_id)
+    counts = dict(db.execute(query).all())
+
+    for model, source_model, source_id, target_model, target_id, permission, source_permission, target_permission in (
+        (ServiceAssetDependency, Service, ServiceAssetDependency.service_id, Asset, ServiceAssetDependency.asset_id,
+         "service_dependencies.view", "services.view", "assets.view"),
+        (ServiceDependency, Service, ServiceDependency.source_service_id, Service, ServiceDependency.target_service_id,
+         "service_dependencies.view", "services.view", "services.view"),
+        (ServiceBusinessFunction, Service, ServiceBusinessFunction.service_id, BusinessFunction, ServiceBusinessFunction.business_function_id,
+         "business_functions.view", "services.view", "business_functions.view"),
+    ):
+        # Entity subqueries also inherit the shared tombstone read policy.
+        # Keep Services unaliased: the Session's loader criteria apply to the
+        # mapped entity, including scalar-ID selects.
+        visible_sources = select(source_model.id).where(scope_condition(
+            principal, source_permission, source_model.customer_id, source_model.site_id,
+        ))
+        visible_targets = select(target_model.id).where(scope_condition(
+            principal, target_permission, target_model.customer_id, target_model.site_id,
+        ))
+        query = select(model.relationship_type_id, func.count()).select_from(model).where(
+            model.valid_to.is_(None),
+            scope_condition(principal, permission, model.customer_id, model.site_id),
+            source_id.in_(visible_sources),
+            target_id.in_(visible_targets),
         )
-    ) or 0) + int(db.scalar(
-        select(func.count()).select_from(ServiceDependency).where(
-            ServiceDependency.relationship_type_id == item.id,
-            ServiceDependency.valid_to.is_(None),
-        )
-    ) or 0) + int(db.scalar(
-        select(func.count()).select_from(ServiceBusinessFunction).where(
-            ServiceBusinessFunction.relationship_type_id == item.id,
-            ServiceBusinessFunction.valid_to.is_(None),
-        )
-    ) or 0)
-    applicability = list(db.scalars(
-        select(RelationshipTypeApplicability).where(
-            RelationshipTypeApplicability.relationship_type_id == item.id
-        ).order_by(
-            RelationshipTypeApplicability.source_entity_type,
-            RelationshipTypeApplicability.target_entity_type,
-        )
-    ))
+        if type_id is not None:
+            query = query.where(model.relationship_type_id == type_id)
+        for relationship_type_id, count in db.execute(query.group_by(model.relationship_type_id)):
+            counts[relationship_type_id] = counts.get(relationship_type_id, 0) + count
+    return counts
+
+
+def _relationship_type_response(
+    db: Session, item: RelationshipType, principal: Principal,
+    context: ActiveContext | None = ActiveContext(None, None), *, counts=None, applicability=None,
+) -> RelationshipTypeResponse:
+    if counts is None:
+        counts = _relationship_usage_counts(db, principal, context, item.id)
+    if applicability is None:
+        applicability = list(db.scalars(
+            select(RelationshipTypeApplicability).where(
+                RelationshipTypeApplicability.relationship_type_id == item.id
+            ).order_by(
+                RelationshipTypeApplicability.source_entity_type,
+                RelationshipTypeApplicability.target_entity_type,
+            )
+        ))
     return RelationshipTypeResponse.model_validate(
         {
             "id": item.id,
@@ -177,7 +205,7 @@ def _relationship_type_response(
             "allowed_source_asset_type_keys": item.allowed_source_asset_type_keys or [],
             "allowed_target_asset_type_keys": item.allowed_target_asset_type_keys or [],
             "applicability": applicability,
-            "in_use_count": asset_count + typed_count,
+            "in_use_count": counts.get(item.id, 0),
             "created_at": item.created_at,
             "updated_at": item.updated_at,
         }
@@ -341,6 +369,7 @@ def delete_asset_type(
 
 @relationship_types_router.get("", response_model=list[RelationshipTypeResponse])
 def list_relationship_types(
+    context: ReferenceUsageContext,
     principal: Principal = Depends(require_permission("relationship_types.view")),
     active_only: bool = Query(default=False),
     source_entity_type: str | None = Query(default=None),
@@ -361,8 +390,16 @@ def list_relationship_types(
         if target_entity_type:
             applicability_query = applicability_query.where(RelationshipTypeApplicability.target_entity_type == target_entity_type)
         query = query.where(RelationshipType.id.in_(applicability_query))
+    counts = _relationship_usage_counts(db, principal, context)
+    applicability_by_type = {}
+    for row in db.scalars(select(RelationshipTypeApplicability).order_by(
+        RelationshipTypeApplicability.source_entity_type,
+        RelationshipTypeApplicability.target_entity_type,
+    )):
+        applicability_by_type.setdefault(row.relationship_type_id, []).append(row)
     return [
-        _relationship_type_response(db, item, principal)
+        _relationship_type_response(db, item, principal, context, counts=counts,
+            applicability=applicability_by_type.get(item.id, []))
         for item in db.scalars(query)
     ]
 
@@ -373,6 +410,7 @@ def list_relationship_types(
 def create_relationship_type(
     payload: RelationshipTypeCreate,
     request: Request,
+    context: ReferenceUsageContext,
     principal: Principal = Depends(require_permission("relationship_types.manage")),
     db: Session = Depends(get_db),
 ):
@@ -410,7 +448,7 @@ def create_relationship_type(
             status_code=409, detail="Relationship type key and name must be unique"
         ) from exc
     db.refresh(item)
-    return _relationship_type_response(db, item, principal)
+    return _relationship_type_response(db, item, principal, context)
 
 
 @relationship_types_router.patch(
@@ -420,6 +458,7 @@ def update_relationship_type(
     type_id: uuid.UUID,
     payload: RelationshipTypeUpdate,
     request: Request,
+    context: ReferenceUsageContext,
     principal: Principal = Depends(require_permission("relationship_types.manage")),
     db: Session = Depends(get_db),
 ):
@@ -480,7 +519,7 @@ def update_relationship_type(
         db.rollback()
         raise HTTPException(status_code=409, detail="Relationship type could not be updated") from exc
     db.refresh(item)
-    return _relationship_type_response(db, item, principal)
+    return _relationship_type_response(db, item, principal, context)
 
 
 @relationship_types_router.delete(

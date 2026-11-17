@@ -259,6 +259,19 @@ Administration routes use the same policy layer as inventory routes:
 
 ## Managed types and lifecycle
 
+Global Service Type, Criticality and Relationship Type definitions retain their
+definition-view permissions. Their API `in_use_count` fields aggregate only
+operational rows authorised by the requester's read permissions and
+Customer/Site grants, before counting in SQL. Service usage follows the Service
+list's active-context restrictions, including its customer-wide Service rule;
+archived Services retain usage and deleted tombstones are excluded. Relationship
+usage requires the family's read permission and both endpoints' entity-read
+permissions. Typed relationships also require access to the relationship's own
+Customer/Site scope. Overlapping grants do not multiply usage. Definition-only
+readers receive zero counts without needing operational context access.
+An unavailable selected context yields zero usage without hiding the global
+definitions; context validation on operational routes remains unchanged.
+
 Asset and relationship types are global reference data in the beta. Their
 stable `key` is stored by existing inventory and does not change when an
 administrator edits the display name. A type can be deleted only when it is
