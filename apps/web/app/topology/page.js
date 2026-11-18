@@ -20,6 +20,7 @@ import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
 import { TOPOLOGY_CLASSES, topologyClassSelection, topologyCategorySelection, topologyPresentation, platformMatches, platformCardFacts, matchesSearch, CATEGORY_PREVIEW_COUNT, CONNECTIVITY_NODE_WIDTH, CONNECTIVITY_NODE_HEIGHT, connectivityLayout, connectivityPositionGroups, connectivityPreview, connectivityRoutes, connectivityBounds, connectivityFit } from "../../lib/infrastructure-topology.mjs";
+import { CONNECTIVITY_CONTINUATION_HEIGHT } from "../../lib/topology-geometry.mjs";
 
 import { PresentationIdentity, PresentationIcon } from "../../components/presentation-identity.mjs";
 import { presentationAttributes } from "../../lib/presentation.mjs";
@@ -44,11 +45,13 @@ function TopologyWorkbench() {
   const [networkId, setNetworkId] = useState(""), [parentId, setParentId] = useState("");
   const [expandedParents, setExpandedParents] = useState({});
   const [focusId, setFocusId] = useState(""), [hops, setHops] = useState(1), [showNetworks, setShowNetworks] = useState(true);
+  const [previousFocusId, setPreviousFocusId] = useState("");
   const [graph, setGraph] = useState(null), [graphError, setGraphError] = useState("");
   const supportsFullscreen = tab === "connectivity";
   const [expanded, setExpanded] = useState(false), [detailsHidden, setDetailsHidden] = useState(false);
   const [expandedConnectivityHosts, setExpandedConnectivityHosts] = useState({});
   const toolbar = useRef(null);
+  const focusControl = useRef(null), backButton = useRef(null);
   const expandButton = useRef(null), scrollPosition = useRef({ left: 0, top: 0 });
 
   useEffect(() => {
@@ -64,6 +67,8 @@ function TopologyWorkbench() {
   const networkFocus = Boolean(view?.assets.length) && showNetworks && focusId.startsWith("network:") && view?.networks.some(n => `network:${n.id}` === focusId);
   const actualFocus = networkFocus || searchable?.byId[focusId] ? focusId : view?.assets[0]?.id || "";
   const focusHidden = Boolean(searchable?.byId[actualFocus] && !view?.byId[actualFocus]);
+  const previousFocus = actualFocus && previousFocusId !== actualFocus && (view?.byId[previousFocusId] ||
+    (showNetworks && previousFocusId.startsWith("network:") && view?.networkById[previousFocusId.slice(8)]));
   const classSelection = useMemo(() => topologyClassSelection(classChoices), [classChoices]);
   const classKey = [...classSelection.enabled].sort().join(",");
   const categoryKey = [...enabled].sort().join(",");
@@ -83,6 +88,9 @@ function TopologyWorkbench() {
   }, [tab, actualFocus, hops, showNetworks, categoryKey, classKey, graphKey, data, networkFocus]);
 
   useEffect(() => { setExpandedConnectivityHosts({}); }, [actualFocus]);
+  useLayoutEffect(() => {
+    if (previousFocusId) backButton.current?.focus({ preventScroll: true });
+  }, [previousFocusId]);
 
   if (!canView) return <AccessDenied />;
   // Selection is inspection state, independent of the Connectivity query.
@@ -94,13 +102,18 @@ function TopologyWorkbench() {
   const selectedKey = selected ? `asset:${selected.id}` : inspectedNetwork ? `network:${inspectedNetwork.id}` : "";
   const select = asset => setSelectedId(asset.id);
   // In-view refocus preserves controls; enterView below initializes a different tab.
-  const refocusConnectivity = id => {
+  const refocusConnectivity = (id, previousId = "") => {
     const asset = data?.assets.find(a => a.id === id);
     const network = id.startsWith("network:") && data?.networks.find(n => `network:${n.id}` === id);
     if (!asset && !network) return;
     if (network && !showNetworks) setShowNetworks(true);
+    setPreviousFocusId(previousId);
     setSelectedId(id);
     setFocusId(id);
+  };
+  const restoreConnectivityFocus = () => {
+    refocusConnectivity(previousFocusId);
+    focusControl.current?.focus({ preventScroll: true });
   };
   const network = view?.networks.find(n => n.id === networkId) || view?.networks[0];
   // Enter a fresh projection. Explicit navigation may supply a new initial focus;
@@ -115,6 +128,7 @@ function TopologyWorkbench() {
     setNetworkId(initial.networkId || ""); // Empty uses first Network in byNetwork order.
     setParentId(""); setExpandedParents({}); setExpandedConnectivityHosts({});
     setFocusId(initial.focusId || ""); // Empty uses first visible Asset in byName order.
+    setPreviousFocusId("");
     setHops(1); setShowNetworks(true); setGraph(null); setGraphError("");
     if (destination !== "connectivity") setExpanded(false);
     setTab(destination);
@@ -149,13 +163,17 @@ function TopologyWorkbench() {
           <>
             <div className="topology-connectivity-controls" role="group" aria-label="Connectivity controls">
               <ConnectivityAssetSearch assets={searchable.assets} types={searchable.types} value={search} onChange={setSearch} onSelect={refocusConnectivity} disabled={Boolean(error)} />
-              <label className="field topology-focus-control"><span>Focus</span><select aria-label="Focus" value={actualFocus} onChange={e => refocusConnectivity(e.target.value)}>{searchable.assets.filter(a => a.id === actualFocus || view.byId[a.id]).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}{showNetworks && view.networks.map(n => <option key={`network:${n.id}`} value={`network:${n.id}`}>{n.name} (Network)</option>)}</select></label>
+              <label className="field topology-focus-control"><span>Focus</span><select ref={focusControl} aria-label="Focus" value={actualFocus} onChange={e => refocusConnectivity(e.target.value)}>{searchable.assets.filter(a => a.id === actualFocus || view.byId[a.id]).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}{showNetworks && view.networks.map(n => <option key={`network:${n.id}`} value={`network:${n.id}`}>{n.name} (Network)</option>)}</select></label>
               <div className="row-actions" aria-label="Hops">{(expanded ? [1, 2, 3] : [1, 2]).map(n => <button type="button" key={n} aria-pressed={hops === n} className={`button ${hops === n ? "button-primary" : "button-secondary"}`} onClick={() => setHops(n)}>{n} {n === 1 ? "hop" : "hops"}</button>)}</div>
               <label className="topology-networks-control"><input type="checkbox" checked={showNetworks} onChange={e => setShowNetworks(e.target.checked)} /> Networks</label>
+              {previousFocus && <Button ref={backButton} variant="quiet" className="topology-back-focus" onClick={restoreConnectivityFocus}>Back to {previousFocus.name}</Button>}
             </div>
             {focusHidden && <p role="status">The focused Asset’s category is hidden. Enable it in Filters to show connectivity.</p>}
             {graphError && <p className="error-banner" role="alert">{graphError}</p>}
-            {!actualFocus ? <p className="empty-state">Enable a category with Assets to explore connectivity.</p> : focusHidden ? null : !currentGraph && !graphError ? <p role="status">Loading recorded connectivity…</p> : currentGraph && <div className={`graph-workspace${detailsHidden ? " topology-details-hidden" : ""}`}><Connectivity branches={expandedConnectivityHosts} onExpandBranch={(key, stage) => setExpandedConnectivityHosts(current => ({ ...current, [key]: stage }))} key={actualFocus} expanded={expanded} graph={currentGraph} view={view} selectedKey={selectedKey} onSelect={setSelectedId} onFocus={refocusConnectivity} />{!(detailsHidden) && (inspectedNetwork ? <NetworkInspector network={inspectedNetwork} view={view} onOpen={() => openNetwork(inspectedNetwork.id)} onFocus={actualFocus === `network:${inspectedNetwork.id}` ? null : () => refocusConnectivity(`network:${inspectedNetwork.id}`)} /> : <Inspector asset={selected} view={view} sites={data.sites} select={select} onFocus={selected?.id === actualFocus ? null : a => refocusConnectivity(a.id)} />)}</div>}
+            {!actualFocus ? <p className="empty-state">Enable a category with Assets to explore connectivity.</p> : focusHidden ? null : !currentGraph && !graphError ? <p role="status">Loading recorded connectivity…</p> : currentGraph && <div className={`graph-workspace${detailsHidden ? " topology-details-hidden" : ""}`}>
+              <Connectivity branches={expandedConnectivityHosts} onExpandBranch={(key, stage) => setExpandedConnectivityHosts(current => ({ ...current, [key]: stage }))} key={actualFocus} expanded={expanded} graph={currentGraph} view={view} selectedKey={selectedKey} onSelect={setSelectedId} onFocus={refocusConnectivity} onContinue={id => refocusConnectivity(id, actualFocus)} />
+              {!(detailsHidden) && (inspectedNetwork ? <NetworkInspector network={inspectedNetwork} view={view} onOpen={() => openNetwork(inspectedNetwork.id)} onFocus={actualFocus === `network:${inspectedNetwork.id}` ? null : () => refocusConnectivity(`network:${inspectedNetwork.id}`)} /> : <Inspector asset={selected} view={view} sites={data.sites} select={select} onFocus={selected?.id === actualFocus ? null : a => refocusConnectivity(a.id)} />)}
+            </div>}
           </>}
         </TopologyPanel>
         {view.assets.length === 0 && tab !== "connectivity" && <p className="empty-state">No Assets match the enabled categories. Use Filters to include other categories, or <Link href="/assets">open Assets</Link> to curate your infrastructure.</p>}
@@ -198,7 +216,7 @@ function Networks({ view, network, search, onNetwork, select, sites }) {
   return <div className="topology-network-layout"><nav className="ops-card topology-network-list" aria-label="Networks">{networks.map(n => <button key={n.id} type="button" aria-current={selected?.id === n.id ? "true" : undefined} className="topology-network-row" {...presentationAttributes(n)} onClick={() => onNetwork(n.id)}><strong><PresentationIdentity record={n} fallback="network" /></strong><span>{[n.vlan_id != null ? `VLAN ${n.vlan_id}` : null, n.cidr].filter(Boolean).join(" · ")}</span><small>{view.interfaces.filter(i => i.network_id === n.id).length} interfaces</small></button>)}{!networks.length && <p>No matching Networks.</p>}</nav><section className="ops-card topology-network-detail">{selected ? <><h2 className="topology-network-heading" {...presentationAttributes(selected)}><PresentationIdentity record={selected} fallback="network" /></h2>{selected.purpose && <p>{selected.purpose}</p>}<dl className="ops-definition">{selected.vlan_id != null && <><dt>VLAN</dt><dd>{selected.vlan_id}</dd></>}{selected.cidr && <><dt>CIDR</dt><dd>{selected.cidr}</dd></>}{selected.gateway && <><dt>Gateway</dt><dd>{selected.gateway}</dd></>}{sites.find(s => s.id === selected.site_id) && <><dt>Site</dt><dd>{sites.find(s => s.id === selected.site_id).name}</dd></>}<dt>Interfaces</dt><dd>{members.length}</dd><dt>Connected Assets</dt><dd>{new Set(members.map(i => i.asset_id)).size}</dd></dl><h3>Connected Assets</h3><div className="table-scroll"><table><thead><tr><>{columns.map(([key, label]) => <th key={key} aria-sort={sort.key === key ? sort.direction === 1 ? "ascending" : "descending" : "none"}><button className="text-button" type="button" onClick={() => setSort(previous => ({ key, direction: previous.key === key ? -previous.direction : 1 }))}>{label}{sort.key === key ? <NavigationIcon name={sort.direction === 1 ? "arrow-up" : "arrow-down"} /> : ""}</button></th>)}</></tr></thead><tbody>{members.map(i => <tr key={i.id}><td><Identity compact asset={view.byId[i.asset_id]} view={view} select={select} /></td><td>{i.name}</td><td>{i.ip_address || "—"}</td><td>{i.mac_address || "—"}</td><td><StatusIndicator state={view.byId[i.asset_id].status} /></td></tr>)}</tbody></table></div>{!members.length && <p>No visible interface memberships recorded.</p>}</> : <p>Select a recorded Network.</p>}</section></div>;
 }
 
-function Connectivity({ graph, view, selectedKey, onSelect, onFocus, expanded, branches, onExpandBranch }) {
+function Connectivity({ graph, view, selectedKey, onSelect, onFocus, onContinue, expanded, branches, onExpandBranch }) {
   const viewport = useRef(null);
   const pan = useRef({ x: 0, y: 0 }), placedScroll = useRef({ left: 0, top: 0 });
   const [height, setHeight] = useState(480), [width, setWidth] = useState(700);
@@ -280,7 +298,12 @@ function Connectivity({ graph, view, selectedKey, onSelect, onFocus, expanded, b
         aria-label={`Show ${disclosure.hiddenCount} child Assets for ${node.name}`}
         style={{ left: node.x + extentX + CONNECTIVITY_NODE_WIDTH / 2 - 18, top: node.y + extentY + CONNECTIVITY_NODE_HEIGHT / 2 - 18 }}
         onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
-        onClick={event => { event.stopPropagation(); onExpandBranch(node.key, "preview"); }}>+{disclosure.hiddenCount}</button>}</Fragment>;
+        onClick={event => { event.stopPropagation(); onExpandBranch(node.key, "preview"); }}>+{disclosure.hiddenCount}</button>}
+        {node.has_downstream_continuation && <IconButton className="topology-hop-chevron" icon="chevron-down"
+          label={`Focus ${node.name} to see more downstream connections`}
+          style={{ left: node.x + extentX, top: node.y + extentY + CONNECTIVITY_NODE_HEIGHT / 2, height: CONNECTIVITY_CONTINUATION_HEIGHT }}
+          onClick={() => onContinue(node.entity_type === "asset" ? node.entity_id : node.key)} />}
+      </Fragment>;
     })}
   </div></div></div></section>;
 }

@@ -50,6 +50,10 @@ live monitoring or freshness estimate is implied.
   selection clears search and closes its popup. If the focused Asset’s category
   is hidden, enable it in Filters to show its connectivity. The inspector action
   is hidden for the current focus. Network detail is available from its inspector.
+  A down chevron below a card marks a branch with more connections beyond the
+  selected hop limit. Click, tap, or use Enter or Space on the chevron to focus
+  that Asset or Network. **Back to [previous focus]** restores the prior focus
+  with the current hops and filters.
   **Fit** restores fitted zoom and clears pan, centring the graph horizontally
   near the top with roughly 28px below the internal toolbar. Automatic Fit uses
   the same placement. Zoom buttons and canvas scrolling support closer inspection.

@@ -223,3 +223,53 @@ def test_three_hops_remain_bounded_filtered_and_cycle_safe():
     assert len(nodes) == len({n["key"] for n in nodes})
     with pytest.raises(HTTPException):
         connectivity(data, "AdGuard", hops=4)
+
+
+def test_hop_continuation_follows_the_boundary_and_refocusing_reveals_the_child():
+    data = fixture_topology()
+    focus, rack, office, host, child, dead_end = names = (
+        "USW-Aggregation", "Rack switch", "Office switch", "Proxmox", "Atlas VM", "Dead end"
+    )
+    data["assets"] = [{"id": name, "name": name, "asset_type": "custom"} for name in names]
+    data["relationships"] = [
+        {"id": str(i), "source_asset_id": source, "target_asset_id": target, "relationship_type": kind}
+        for i, (source, target, kind) in enumerate([
+            (focus, rack, "custom_link"), (rack, office, "custom_link"),
+            (office, host, "custom_link"), (child, host, "runs_on"), (focus, dead_end, "custom_link"),
+        ])
+    ]
+
+    for hops, boundary in enumerate((rack, office, host), start=1):
+        graph = connectivity(data, focus, hops=hops)
+        assert {n["name"] for n in graph["nodes"]} == {*names[:hops + 1], dead_end}
+        assert {n["name"] for n in graph["nodes"] if n["has_downstream_continuation"]} == {boundary}
+        assert not graph["truncated"]
+
+    refocused = connectivity(data, host, hops=3)
+    assert next(n for n in refocused["nodes"] if n["name"] == child)["distance"] == 1
+
+    assert not any(n["has_downstream_continuation"] for n in connectivity(data, focus, hops=3, limit=5)["nodes"])
+    assert not any(n["has_downstream_continuation"] for n in connectivity(data, focus, hops=3, topology_classes={"physical_network"})["nodes"])
+    data["assets"][4]["asset_type"] = "other"
+    assert not any(n["has_downstream_continuation"] for n in connectivity(data, focus, hops=3)["nodes"])
+    assert next(n for n in connectivity(data, focus, hops=3, category_ids=["custom", "uncategorized"])["nodes"]
+                if n["name"] == host)["has_downstream_continuation"]
+
+
+def test_hop_continuation_respects_arrival_rules_and_nodes_already_in_the_graph():
+    data, _ = homelab_topology()
+    graph = connectivity(data, "AdGuard", hops=1)
+    assert {n["key"] for n in graph["nodes"] if n["has_downstream_continuation"]} == {"asset:PVE1"}
+
+    # Make the host's only outward technical neighbours visible via the focus.
+    # Its hosted siblings and the Network's peer members are arrival-pruned.
+    for key in ("PVE2", "USW-16-poe"):
+        data["relationships"].append({"id": key, "source_asset_id": "AdGuard", "target_asset_id": key,
+                                      "relationship_type": "connects_to"})
+    assert not any(n["has_downstream_continuation"] for n in connectivity(data, "AdGuard", hops=1)["nodes"])
+
+    # A parallel technical arrival can expand the same host's branch.
+    data["relationships"].append({"id": "parallel", "source_asset_id": "AdGuard", "target_asset_id": "PVE1",
+                                  "relationship_type": "connects_to"})
+    graph = connectivity(data, "AdGuard", hops=1, show_networks=False)
+    assert {n["key"] for n in graph["nodes"] if n["has_downstream_continuation"]} == {"asset:PVE1"}

@@ -301,3 +301,49 @@ def test_connectivity_api_capacity_and_child_counts_respect_scope(client, db, ch
     assert len(whole_site["assets"]) == child_count + 1
     assert len([e for e in whole_site["structural_edges"] if e["kind"] == "relationship"]) == child_count
     assert all(str(a.id) not in str(whole_site["structural_edges"]) for a in assets[2:])
+
+
+@pytest.mark.parametrize("scope", ["context", "assets.view", "relationships.view"])
+def test_connectivity_hidden_neighbours_do_not_change_the_hop_continuation(client, db, scope):
+    sites, assets, _ = seed_scope(db)
+    site = sites[0]
+    owner = {"customer_id": site.customer_id, "site_id": site.id}
+    focus, boundary, retired = [Asset(workspace_id=assets[0].workspace_id, **owner,
+        asset_type="server", name=name, status=status)
+        for name, status in (("Focus switch", "operational"), ("Boundary switch", "operational"), ("Retired host", "retired"))]
+    db.add_all([focus, boundary, retired]); db.flush()
+    db.add(AssetRelationship(**owner, source_asset_id=focus.id, target_asset_id=boundary.id, relationship_type="connects_to"))
+    db.flush()
+
+    headers = {}
+    if scope == "context":
+        actor = make_principal("assets.view", "relationships.view", "customers.view", "sites.view")
+        headers = {"X-Atlas-Customer-ID": str(site.customer_id), "X-Atlas-Site-ID": str(site.id)}
+    else:
+        global_permission = "relationships.view" if scope == "assets.view" else "assets.view"
+        actor = make_principal(global_permission)
+        scoped = ScopeGrant(assignment_id=uuid.uuid4(), role_id=uuid.uuid4(), role_name="Site",
+            scope_type="site", **owner, permissions=frozenset({scope}))
+        actor = Principal(actor.user, (*actor.grants, scoped))
+    app.dependency_overrides[get_principal] = lambda: actor
+    url = f"/api/topology/connectivity?focus_asset_id={focus.id}&hops=1&show_networks=false"
+    response = client.get(url, headers=headers)
+    assert response.status_code == 200, response.text
+    baseline = response.json()
+    assert {n["name"]: n["has_downstream_continuation"] for n in baseline["nodes"]} == {
+        focus.name: False, boundary.name: False,
+    }
+
+    db.add_all([AssetRelationship(**owner, source_asset_id=boundary.id, target_asset_id=neighbour.id,
+        relationship_type="connects_to", legacy_cross_context=neighbour.site_id != site.id)
+        for neighbour in (*assets[2:], retired)])
+    db.flush()
+    response = client.get(url, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json() == baseline
+
+    response = client.get(url + "&include_retired=true", headers=headers)
+    assert response.status_code == 200, response.text
+    assert {n["name"]: n["has_downstream_continuation"] for n in response.json()["nodes"]} == {
+        focus.name: False, boundary.name: True,
+    }

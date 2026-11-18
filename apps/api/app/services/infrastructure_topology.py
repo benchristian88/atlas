@@ -129,16 +129,27 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
     queue = deque([(focus, None, 0)])
     visited = {(focus, None)}
     tree_pairs = set()
+    next_hop = set()
+    continuations = set()
     truncated = False
     while queue:
         current, arrival, depth = queue.popleft()
-        if depth >= hops:
-            continue
+        if depth == hops and len(distances) == limit:
+            break
         for key, edge in sorted(adjacency[current], key=lambda item: (nodes[item[0]]["name"], item[0], item[1]["key"])):
             parent = parents.get(edge["key"])
             if arrival == "parent" and parent == current:
                 continue
             if arrival == "network" and edge["kind"] == "membership":
+                continue
+            if depth == hops:
+                # BFS has finished selecting visible nodes. Check only the next
+                # frontier in the same order and within the same node budget.
+                if key not in distances:
+                    if len(distances) + len(next_hop) < limit:
+                        next_hop.add(key)
+                    if key in next_hop and distances[current] == hops:
+                        continuations.add(current)
                 continue
             next_arrival = "network" if edge["kind"] == "membership" and nodes[key]["entity_type"] == "network" else "parent" if parent == key else None
             if key not in distances:
@@ -171,6 +182,7 @@ def connectivity(topology, focus_id, hops=1, category_ids=None, show_networks=Tr
         if parent:
             returned_children[parent].add(edge["target_key"] if edge["source_key"] == parent else edge["source_key"])
     return {"focus_key": focus, "nodes": [{**nodes[k], "distance": depth, "parent_key": branches[k],
-                "eligible_child_count": len(eligible_children[k]), "returned_child_count": len(returned_children[k])}
+                "eligible_child_count": len(eligible_children[k]), "returned_child_count": len(returned_children[k]),
+                "has_downstream_continuation": k in continuations}
                 for k, depth in distances.items()],
             "edges": returned_edges, "truncated": truncated, **limits}
