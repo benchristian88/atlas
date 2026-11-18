@@ -20,6 +20,12 @@ const planned = [
   { connector_id: "unifi-network", name: "UniFi Network", category: "networking", description: "Network device inventory." },
 ].map(entry => ({ ...entry, publisher: "Atlas Impact", trust_tier: "atlas_official", version: null, package_available: false, verification_status: "metadata_only", supported_actions: [], state: "unavailable" }));
 const installedEntry = { connector_id: manifest.id, version: manifest.version, installed_version: manifest.version, name: manifest.display.name, description: manifest.display.description, category: manifest.display.category, publisher: manifest.publisher.name, licence: manifest.licensing.licence, trust_tier: "atlas_official", digest, source: "installed", state: "installed", package_available: true, verification_status: "verified", supported_actions: ["remove"], message: "Installed package verified locally. Available offline." };
+const unverifiedEntry = { ...installedEntry, connector_id: "zulu-storage", name: "zulu-storage", description: "Installed package metadata could not be verified locally.", package_available: false, verification_status: "verification_unavailable", message: "Local package verification is unavailable." };
+const localNetwork = { ...bundled, connector_id: "yankee-network", name: "Yankee Network" };
+const networkRelease = (connector_id, name, eligible_for_install) => release("1.0.0", {
+  connector_id, eligible_for_install,
+  manifest: { ...manifest, id: connector_id, version: "1.0.0", display: { name, description: "Network inventory.", category: "networking" } },
+});
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
 const errors = [], requests = [], checks = [];
 const modes = ["installed", "future", "installable", "failure", "withdrawn", "unaccepted", "unavailable", "offline-installed", "stale", "cooldown", "viewer", "scoped", "forbidden", "malformed"];
@@ -35,6 +41,7 @@ try {
         refresh_state: mode === "stale" ? "failed" : "idle", last_error_code: mode === "stale" ? "source_rate_limited" : null,
         next_attempt_at: mode === "cooldown" ? "2099-01-01T00:00:00Z" : null,
         entries: [release("0.2.0", { status: "withdrawn", eligible_for_install: false }), ...(mode === "withdrawn" ? [] : [release()]),
+          ...(mode === "ordering" ? [networkRelease("bravo-network", "Bravo Network", false), release("0.10.0"), networkRelease("atlas-switch", "Atlas Switch", true)] : []),
           ...(mode === "future" ? [release("0.10.0"), release("1.0.0", { connector_id: "future-platform", manifest: { ...manifest, id: "future-platform", version: "1.0.0", display: { ...manifest.display, name: "Future Platform", description: "A newly published Connector with a long description that must wrap correctly across desktop, tablet and mobile layouts." } } })] : [])] };
     }
     await page.route("**/api/**", async route => {
@@ -45,7 +52,9 @@ try {
       if (path === "/setup/status") body = { state: "INITIALISED" };
       else if (path === "/auth/me") body = { id: "00000000-0000-4000-8000-000000000090", email: "operator@example.test", display_name: "Test operator", theme_mode: theme, accent_colour: accent, permissions: allowed, assignments: [{ scope_type: mode === "scoped" ? "customer" : "global", customer_id: "00000000-0000-4000-8000-000000000001", permissions: allowed, role_name: "Administrator" }] };
       else if (path === "/context") body = { global_access: mode !== "scoped", customers: [{ id: "00000000-0000-4000-8000-000000000001", name: "Home lab" }], sites: [] };
-      else if (path === "/integration-catalogue") body = { source: "bootstrap", entries: [...(mode === "withdrawn" ? [] : [{ ...bundled, installed_version: active ? manifest.version : null }]), ...planned], installed_entries: active && mode !== "scoped" ? [installedEntry] : [] };
+      else if (path === "/integration-catalogue") body = { source: "bootstrap",
+        entries: [...(mode === "withdrawn" ? [] : [{ ...bundled, installed_version: active ? manifest.version : null }]), ...planned, ...(mode === "ordering" ? [localNetwork] : [])],
+        installed_entries: mode === "ordering" ? [unverifiedEntry, installedEntry] : active && mode !== "scoped" ? [installedEntry] : [] };
       else if (path === "/integration-runtime") body = { status: "healthy", packaging_mode: "docker_compose" };
       else if (path === "/integration-catalogue/status") {
         body = mode === "malformed" ? { trusted_remote_available: true } : statusBody();
@@ -87,6 +96,7 @@ try {
         assert.equal(requests.slice(before).some(request => request.path === "/integration-catalogue/status"), false);
         assert.equal(await card.locator("button, a").count(), 0);
       } else if (["installed", "offline-installed", "stale", "cooldown", "viewer"].includes(mode)) {
+        assert.equal(await page.locator("[data-connector-id]").first().getAttribute("data-connector-id"), manifest.id, mode);
         assert.match(await card.innerText(), /0\.2\.2.*Installed/);
         assert.match(await card.innerText(), /Verified/);
         assert.ok((await card.innerText()).includes(manifest.display.description));
@@ -141,6 +151,42 @@ try {
       await focus.focus();
       assert.equal(await focus.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
       if (accent === null && [1440, 390].includes(width) && ["installed", "future", "offline-installed"].includes(mode)) await page.screenshot({ path: `${output}/${width}-${theme}-${mode}.png`, fullPage: true });
+      checks.push({ theme, accent, width, mode });
+    }
+    if (theme === "light" && accent === null) for (const width of [1440, 390]) {
+      mode = "ordering"; active = true; statusOverride = null;
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto(`${origin}/integrations?tab=catalogue`);
+      const cards = page.locator("[data-connector-id]");
+      const card = id => page.locator(`[data-connector-id="${id}"]`);
+      const ids = () => cards.evaluateAll(nodes => nodes.map(node => node.dataset.connectorId));
+      const expected = [manifest.id, "zulu-storage", "atlas-switch", "yankee-network", "bravo-network", "docker", "unifi-network"];
+      const review = card("atlas-switch").getByRole("button", { name: "Review installation" });
+      await review.waitFor();
+      await card("zulu-storage").waitFor();
+      assert.deepEqual(await ids(), expected, `${width}: DOM order`);
+      assert.deepEqual(await cards.evaluateAll(nodes => nodes.map(node => {
+        const { top, left } = node.getBoundingClientRect();
+        return { top, left, id: node.dataset.connectorId };
+      }).sort((a, b) => a.top - b.top || a.left - b.left).map(({ id }) => id)), expected, `${width}: visual order`);
+      assert.equal(await card(manifest.id).getByRole("button", { name: "Review package change" }).isEnabled(), true);
+      assert.match(await card("zulu-storage").innerText(), /Verification unavailable/i);
+      assert.equal(await card("bravo-network").getByText("Unavailable", { exact: true }).count(), 1);
+      assert.equal(await card("bravo-network").getByRole("button").count(), 0);
+      await card("zulu-storage").getByRole("button", { name: "Remove package" }).focus();
+      await page.keyboard.press("Tab");
+      assert.equal(await review.evaluate(button => button === document.activeElement), true, `${width}: keyboard order`);
+
+      await page.getByRole("searchbox", { name: "Search Connectors" }).fill("network");
+      await page.waitForFunction(() => document.querySelectorAll("[data-connector-id]").length === 5);
+      assert.deepEqual(await ids(), [manifest.id, "atlas-switch", "yankee-network", "bravo-network", "unifi-network"]);
+      await page.getByText("Filters", { exact: true }).click();
+      await page.getByRole("combobox", { name: "Package state" }).selectOption("installable");
+      assert.deepEqual(await ids(), ["atlas-switch", "yankee-network"]);
+      assert.equal(await review.isEnabled(), true);
+      assert.equal(await card("yankee-network").getByRole("button", { name: "Install Connector" }).isEnabled(), true);
+      await page.getByRole("button", { name: "Clear filters" }).click();
+      assert.deepEqual(await ids(), expected);
       checks.push({ theme, accent, width, mode });
     }
     // Real React search/filter and mapping navigation remain tied to exact versions.

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { connectorActions, connectorState, filterConnectors, integrationTab, formatIntegrationTime, runtimeErrorMessage, runtimeOperations, readOfficialCatalogueStatus, officialConnectorMetadata, formatOfficialCatalogueTime, officialCatalogueBlocked, officialCatalogueSummary, officialCatalogueDiagnostic, officialCatalogueRequestError, reconcileConnectorCatalogue } from "../lib/integrations.mjs";
+import { connectorActions, connectorState, filterConnectors, integrationTab, formatIntegrationTime, runtimeErrorMessage, runtimeOperations, readOfficialCatalogueStatus, officialConnectorMetadata, formatOfficialCatalogueTime, officialCatalogueBlocked, officialCatalogueSummary, officialCatalogueDiagnostic, officialCatalogueRequestError, orderConnectorCards, reconcileConnectorCatalogue } from "../lib/integrations.mjs";
 import { resolveStatus } from "../lib/status.mjs";
 import { loadComponent } from "./helpers/components.mjs";
 const components = loadComponent(new URL("../components/integration-panels.js", import.meta.url));
@@ -225,6 +225,52 @@ test("new connector identities appear automatically and unaccepted metadata is i
   assert.deepEqual(reconcileConnectorCatalogue(local, { ...status, trusted_remote_available: false }).map(entry => entry.connector_id), ["docker", "proxmox"]);
   const stale = reconcileConnectorCatalogue(local, { ...status, last_confirmed_current_at: null, refresh_state: "failed", last_error_code: "source_rate_limited" });
   assert.equal(stale.at(-1).version, "0.2.2");
+});
+
+test("catalogue card ordering is stable and retains search results, state filters and actions", () => {
+  const published = (connector_id, name, eligible_for_install) => officialRelease("1.0.0", {
+    connector_id, eligible_for_install, manifest: { display: { name, category: "Network" } },
+  });
+  const status = official({ sequence: 2, entries: [
+    published("official-network", "Alpha Network", true),
+    published("pending-network", "Beta Network", false),
+    officialRelease("0.3.0"),
+  ] });
+  const planned = { version: null, package_available: false, verification_status: "metadata_only", state: "unavailable" };
+  const local = [
+    { ...planned, connector_id: "planned-network", name: "Delta Network" },
+    { ...bundled, connector_id: "local-network", name: "Echo Network" },
+    { ...planned, connector_id: "planned-compute", name: "Foxtrot Compute" },
+  ];
+  const installed = [installedRelease, {
+    ...installedRelease, connector_id: "unverified-network", name: "Zulu Network",
+    package_available: false, verification_status: "verification_unavailable",
+  }];
+  const ids = entries => entries.map(entry => entry.connector_id);
+  const entries = Object.freeze(reconcileConnectorCatalogue(local, status, installed));
+  assert.deepEqual(ids(entries), ["official-network", "pending-network", "planned-network", "local-network", "planned-compute", "proxmox", "unverified-network"]);
+  const ordered = orderConnectorCards(entries);
+  assert.deepEqual(ids(ordered), ["proxmox", "unverified-network", "official-network", "local-network", "pending-network", "planned-network", "planned-compute"]);
+  assert.deepEqual(ids(orderConnectorCards([...entries].reverse())), ["unverified-network", "proxmox", "local-network", "official-network", "pending-network", "planned-compute", "planned-network"]);
+  const matching = (query, state) => orderConnectorCards(filterConnectors(entries, query, state));
+  assert.deepEqual(ids(matching(" NETWORK ")), ["unverified-network", "official-network", "local-network", "pending-network", "planned-network"]);
+  assert.deepEqual(ids(matching("network", "installable")), ["official-network", "local-network"]);
+  assert.deepEqual(ids(matching("network", "unavailable")), ["pending-network"]);
+  assert.deepEqual(ids(matching("network", "bundle_not_released")), ["planned-network"]);
+  assert.deepEqual(ids(matching("network", "installed")), ["unverified-network"]);
+  const card = entry => render("ConnectorCard", { entry, canManage: true });
+  assert.match(card(ordered[0]), /Review package change/);
+  assert.match(card(ordered[1]), /Verification unavailable.*Remove package/);
+  assert.match(card(ordered[2]), /Review installation/);
+  assert.match(card(ordered[3]), /Install Connector/);
+  assert.doesNotMatch(card(ordered[4]), /Review installation|Install Connector/);
+  assert.doesNotMatch(card(ordered[5]), /Review installation|Install Connector/);
+
+  // An older API can report an installed version through an update card only.
+  const legacyUpdate = { ...bundled, installed_version: "0.0.1", state: "update_available", supported_actions: ["update"] };
+  const offline = orderConnectorCards(reconcileConnectorCatalogue([...local, legacyUpdate], null, [installed[1]]));
+  assert.deepEqual(ids(offline), ["proxmox", "unverified-network", "local-network", "planned-network", "planned-compute"]);
+  assert.match(card(offline[0]), /Update available.*Update package/);
 });
 
 test("offline and verification failures retain installed-only identities without borrowed metadata", () => {

@@ -16,6 +16,18 @@ export function filterConnectors(entries = [], search = "", state = "") {
   return entries.filter(entry => (!state || connectorState(entry) === state) && (!query || [entry.name, entry.description, entry.publisher, entry.category, entry.connector_id].filter(Boolean).join(" ").toLowerCase().includes(query)));
 }
 
+function connectorCardRank(entry) {
+  if (entry.installed || entry.installed_version) return 0;
+  const state = connectorState(entry);
+  if (state === "installable") return 1;
+  if (state === "bundle_not_released") return 3;
+  return 2;
+}
+
+export function orderConnectorCards(entries) {
+  return [...entries].sort((left, right) => connectorCardRank(left) - connectorCardRank(right));
+}
+
 // Actions are based on backend-approved identities, never a user-supplied URL or path.
 export function connectorActions(entry, canManage = false) {
   if (!canManage || !Array.isArray(entry?.supported_actions)) return [];
