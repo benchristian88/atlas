@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "../lib/api";
-import { connectorState, filterConnectors, officialCatalogueBlocked, officialCatalogueDiagnostic, officialCatalogueRequestError, readOfficialCatalogueStatus, reconcileConnectorCatalogue } from "../lib/integrations.mjs";
+import { connectorState, filterConnectors, officialCatalogueBlocked, officialCatalogueDiagnostic, officialCatalogueRequestError, orderConnectorCards, readOfficialCatalogueStatus, reconcileConnectorCatalogue } from "../lib/integrations.mjs";
 import { resolveStatus } from "../lib/status.mjs";
 import { Button } from "./button";
 import { ConnectorCard, OfficialCataloguePanel } from "./integration-panels";
@@ -25,7 +25,7 @@ export function OfficialCatalogue({ canViewOfficial, canManage, styles, catalogu
   const [state, setState] = useState("");
   const search = useCatalogueSearch(query, setQuery);
   const entries = reconcileConnectorCatalogue(catalogue?.entries, canViewOfficial ? status : null, canViewOfficial ? catalogue?.installed_entries : []);
-  const visible = filterConnectors(entries, query, state);
+  const visible = orderConnectorCards(filterConnectors(entries, query, state));
   const states = [...new Set(entries.map(connectorState))];
 
   const reload = useCallback(async () => {
