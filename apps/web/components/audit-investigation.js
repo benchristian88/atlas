@@ -1,9 +1,39 @@
 import { Fragment } from "react";
 import { auditDetails, auditValue } from "../lib/audit-details.mjs";
 
-export function AuditInvestigation({ event, timestamp }) {
+export function AuditTarget({ object }) {
+  if (!object.name) return object.type || "—";
+  const context = [object.type, object.isCurrent && "current name"].filter(Boolean).join(" · ");
+  return <div className="table-cell-identity prose-content">
+    <span className="primary-cell">{object.name}</span>
+    {context && <small className="secondary-text">{context}</small>}
+  </div>;
+}
+
+function AuditReference({ reference }) {
+  const { id, name, type, isCurrent } = reference;
+  const identifier = [type, id].filter(Boolean).join(" · ");
+  if (!name) return identifier;
+  return <div className="table-cell-identity">
+    <span>{name}{isCurrent && <small className="secondary-text"> (current name)</small>}</span>
+    {identifier && <small className="secondary-text">{identifier}</small>}
+  </div>;
+}
+
+export function AuditInvestigation({ event, references, timestamp }) {
   const { changes, facts } = auditDetails(event.metadata);
-  const context = [["Timestamp", timestamp(event.created_at)], ["Actor", event.actor_snapshot || "System"], ["Action", event.event_type], ["Object", [event.target_type, event.target_id].filter(Boolean).join(" · ")], ["Customer", event.customer_id], ["Site", event.site_id], ["Workspace", event.workspace_id], ["Source IP", event.source_ip], ["Request", event.request_id]];
+  const { object, customer, site } = references;
+  const context = [
+    ["Timestamp", timestamp(event.created_at)],
+    ["Actor", event.actor_snapshot || "System"],
+    ["Action", event.event_type],
+    ["Object", (object.name || object.type || object.id) && <AuditReference reference={object} />],
+    ["Customer", (customer.name || customer.id) && <AuditReference reference={customer} />],
+    ["Site", (site.name || site.id) && <AuditReference reference={site} />],
+    ["Workspace", event.workspace_id],
+    ["Source IP", event.source_ip],
+    ["Request", event.request_id],
+  ];
   return <section className="audit-investigation" tabIndex={0} aria-label="Audit investigation" id={`audit-${event.id}`}>
     <dl>{context.filter(([, value]) => value).map(([label, value]) => <Fragment key={label}><dt>{label}</dt><dd>{value}</dd></Fragment>)}</dl>
     <h3>What changed</h3>
