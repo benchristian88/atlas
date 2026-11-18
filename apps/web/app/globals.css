@@ -1334,6 +1334,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-focus-control select { width: 240px; min-width: 0; }
 .topology-networks-control { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: var(--type-compact); }
 .topology-connectivity-controls :is(input[type="search"], select, button) { height: 38px; }
+.topology-connectivity-controls .topology-back-focus { height: auto; min-height: 38px; overflow-wrap: anywhere; }
 .connectivity-asset-search { position: relative; flex: 1 1 280px; max-width: 360px; min-width: 0; }
 .connectivity-asset-search input { width: 100%; }
 .connectivity-search-popup { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 100%; max-height: 320px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); box-shadow: 0 8px 24px rgb(0 0 0 / 15%); }
@@ -1357,12 +1358,20 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-graph-node > span:last-child { min-width: 0; }
 .topology-graph-node strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--type-label); line-height: 1.2; overflow-wrap: anywhere; }
 .topology-graph-node small { display: block; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 10px; margin-top: 4px; }
+.topology-hop-chevron.icon-button { position: absolute; transform: translateX(-50%); width: 56px; min-height: 0; padding: 0; background: transparent; }
+.topology-hop-chevron.icon-button:hover, .topology-hop-chevron.icon-button:focus-visible { color: var(--text); }
+.operations-page .topology-hop-chevron:focus-visible { outline-offset: -3px; }
 .topology-detail-inspector { margin-top: 20px; }
 .topology-detail-inspector .graph-inspector { position: static; max-height: none; }
 .infrastructure-topology .is-expanded .topology-network-list { max-height: 75vh; }
 .infrastructure-topology .is-expanded :is(.topology-toolbar, .topology-search, .topology-connectivity-controls) { margin-top: 0; margin-bottom: 0; flex-shrink: 0; }
 
 .infrastructure-topology .is-expanded .graph-inspector { max-height: 75vh; }
+@media (max-width: 760px) {
+  /* Keep graph controls inside the canvas when the inspector is stacked below. */
+  .is-expanded .topology-connectivity { display: flex; flex-direction: column; }
+  .is-expanded .topology-connectivity-viewport { min-height: 0; }
+}
 @media (max-width: 1000px) {
   .infrastructure-topology .graph-workspace { grid-template-columns: minmax(0, 1fr); }
   .topology-overview-columns { grid-template-columns: minmax(0, 1fr); }

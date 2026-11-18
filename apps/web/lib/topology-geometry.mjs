@@ -3,6 +3,7 @@
 export const CONNECTIVITY_NODE_WIDTH = 180;
 export const CONNECTIVITY_NODE_HEIGHT = 88;
 export const CONNECTIVITY_RAIL_GAP = 16;
+export const CONNECTIVITY_CONTINUATION_HEIGHT = 32;
 
 export const CONNECTIVITY_METRICS = Object.freeze({ nodeWidth: 180, nodeHeight: 88,
   columnGap: 32, rowGap: 32, railGap: 16, groupTop: 20, groupBottom: 48,
@@ -19,7 +20,13 @@ export function connectivityLayout(graph) {
   return graph.nodes.some(n => n.key === graph.focus_key) ? calculateTopologyGeometry(graph) : [];
 }
 export function connectivityRoutes(nodes, edges, groups) { return routeTopologyEdges(nodes, edges, groups); }
-export function connectivityBounds(nodes, routes, groups) { return topologyBounds(nodes, routes, groups); }
+export function connectivityBounds(nodes, routes, groups) {
+  const bounds = topologyBounds(nodes, routes, groups);
+  // Include the cue in Fit and scroll bounds without moving cards or edges.
+  const bottom = Math.max(bounds.minY + bounds.height, ...nodes.filter(n => n.has_downstream_continuation)
+    .map(n => n.y + CONNECTIVITY_NODE_HEIGHT / 2 + CONNECTIVITY_CONTINUATION_HEIGHT));
+  return { ...bounds, height: bottom - bounds.minY };
+}
 
 export function topologyGraphEligibility(graph, includeNetworks = true) {
   const nodes = graph.nodes.filter(n => includeNetworks || n.entity_type === "asset");

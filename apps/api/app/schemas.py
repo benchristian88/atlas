@@ -2124,6 +2124,7 @@ class TopologyPlatformLink(BaseModel):
 class ConnectivityNode(BaseModel):
     eligible_child_count: int = 0
     returned_child_count: int = 0
+    has_downstream_continuation: bool = False
     topology_position: TopologyPositionSummary | None = None
     parent_key: str | None = None
     key: str

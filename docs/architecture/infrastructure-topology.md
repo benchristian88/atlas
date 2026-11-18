@@ -74,6 +74,11 @@ Edges retain recorded direction even when traversed backwards. Nodes use
 `interface:<UUID>`. Network membership comes only from `AssetInterface.network_id`.
 The server owns the 100-node / 500-edge safety policy; the UI uses its default.
 The response reports `node_limit`, `edge_limit` and truthful `truncated` status.
+`has_downstream_continuation` is true for a node at the requested hop boundary
+when the next traversal step can reach a node outside the current response under
+the same authorization, filters, arrival rules and remaining node budget. The
+lookahead returns a boolean on the boundary node. The current traversal supplies
+the response's nodes, edges and `truncated` status.
 Asset nodes include deduplicated `eligible_child_count` after authorization and
 category/class filtering, and `returned_child_count` from returned edges. Eligible
 children can be outside the hop/arrival policy or safety budget; only returned
@@ -274,6 +279,9 @@ from focus, including Network inspectors; an already-focused selection has no
 refocus action. Node buttons retain native Enter/Space selection, with the
 inspector action providing keyboard refocus. Connectivity is keyed by focus so
 navigation fits a fresh viewport, while selection and expand retain the canvas.
+The visible hop-boundary chevron uses that same refocus flow. It records one
+previous focus for **Back to [previous focus]**, available while that focus is
+visible under the current filters. Both actions retain the view controls.
 
 The topology route currently has no URL/query-state or Asset-detail deep-link contract; this
 polish does not add one. Existing `/knowledge-graph?focus=…&depth=1` inspector links

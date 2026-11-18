@@ -50,6 +50,108 @@ print(json.dumps(connectivity(**payload)))
 `], { cwd: api, encoding: "utf8", input: JSON.stringify({ topology: data, topology_classes: params.has("topology_classes") ? params.get("topology_classes").split(",").filter(Boolean) : null, focus_id: params.get("focus_asset_id"), focus_network_id: params.get("focus_network_id"), hops: Number(params.get("hops")), show_networks: params.get("show_networks") === "true", category_ids: params.getAll("category_ids") }) }));
 }
 
+function addHopContinuationFixture(data) {
+  const branch = [
+    [1600, "USW-Aggregation", "aggregation_network"], [1601, "Rack switch", "access_network"],
+    [1602, "Office switch", "access_network"], [1603, "Proxmox", "platform"],
+    [1604, "Atlas VM", "workload"], [1605, "Dead end", "routing"],
+  ];
+  for (const [n, name, positionKey] of branch) {
+    const key = `hop_fixture_${n}`;
+    data.asset_types.push({ id: id(n + 20), key, name: "Fixture Asset", category_id: id(3),
+      topology_position_id: position(positionKey).id, active: true });
+    data.assets.push({ id: id(n), name, asset_type: key, customer_id: customer.id, site_id: site.id, status: "operational" });
+  }
+  for (const [i, [source, target, relationship_type]] of [
+    [1600, 1601, "connects_to"], [1601, 1602, "connects_to"], [1602, 1603, "connects_to"],
+    [1604, 1603, "runs_on"], [1600, 1605, "connects_to"],
+  ].entries()) {
+    data.relationships.push({ id: id(1650 + i), source_asset_id: id(source), target_asset_id: id(target), relationship_type });
+  }
+  data.platform_links.push({ relationship_id: id(1653), parent_id: id(1603), child_id: id(1604) });
+}
+
+async function checkHopContinuation(page, requests, theme, width) {
+  const button = name => page.getByRole("button", { name, exact: true });
+  const card = n => page.locator(`[data-node-key="asset:${id(n)}"]`);
+  const cues = page.locator(".topology-hop-chevron");
+  const cue = name => button(`Focus ${name} to see more downstream connections`);
+  const focus = page.getByLabel("Focus", { exact: true });
+  const back = button("Back to USW-Aggregation");
+  const query = () => new URL(requests.findLast(url => url.startsWith("/api/topology/connectivity?")), base).searchParams;
+
+  await page.goto(`${base}/topology`);
+  await button("Connectivity").click();
+  await button("Filters").click();
+  await page.getByLabel("Logical / operational", { exact: true }).check();
+  await page.getByLabel("Uncategorized", { exact: true }).check();
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Networks", { exact: true }).uncheck();
+  await focus.selectOption(id(1600));
+  await cue("Rack switch").waitFor();
+  await card(1605).waitFor();
+  assert.equal(await cues.count(), 1, "The other branch is a dead end");
+  await button("2 hops").click();
+  await cue("Office switch").waitFor();
+  assert.equal(await cues.count(), 1);
+  await button("Expand Infrastructure Topology").click();
+  await button("3 hops").click();
+  const more = cue("Proxmox");
+  await more.waitFor();
+  assert.equal(await cues.count(), 1);
+  assert.equal(await card(1604).count(), 0);
+  assert.equal(await page.locator("[data-disclosure-parent]").count(), 0, "The hidden child is outside the graph response");
+  assert.equal(await card(1603).getByText("1 child Asset", { exact: true }).count(), 1);
+  assert.equal(await more.getAttribute("title"), "Focus Proxmox to see more downstream connections");
+  const initialQuery = query();
+  await card(1603).click();
+  assert.equal(await focus.inputValue(), id(1600));
+  assert.equal(await card(1603).getAttribute("aria-pressed"), "true");
+  assert.deepEqual([...query()], [...initialQuery]);
+  await card(1600).click();
+  await more.scrollIntoViewIfNeeded();
+  const { x, y, width: targetWidth, height: targetHeight } = await more.boundingBox();
+  const host = await card(1603).boundingBox();
+  const icon = await more.locator("svg").boundingBox();
+  const canvasCard = await page.locator(".topology-connectivity").boundingBox();
+  assert.ok(Math.abs(x + targetWidth / 2 - (host.x + host.width / 2)) < 1, "Centred under Proxmox");
+  assert.ok(Math.abs(y - (host.y + host.height)) < 1, "The target starts at the card's bottom edge");
+  assert.ok(targetWidth > icon.width * 3 && targetHeight > icon.height * 1.7, "The button extends beyond the icon within the gap");
+  assert.ok(targetWidth >= 36 && targetHeight >= (width === 390 ? 22 : 30), `Fitted target is ${targetWidth}×${targetHeight}`);
+  assert.ok(y + targetHeight <= canvasCard.y + canvasCard.height, "The entire cue stays inside the graph panel");
+  await page.screenshot({ path: `${output}/hop-chevron-${theme}-${width}.png` });
+
+  const verifyRefocusAndBack = async () => {
+    await card(1604).waitFor();
+    assert.equal(await focus.inputValue(), id(1603));
+    assert.equal(await card(1603).getAttribute("aria-pressed"), "true");
+    assert.equal(await button("3 hops").getAttribute("aria-pressed"), "true");
+    for (const param of ["hops", "show_networks", "topology_classes", "category_ids", "include_retired"]) {
+      assert.deepEqual(query().getAll(param), initialQuery.getAll(param), `${param} survives refocus`);
+    }
+    assert.equal(await back.evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press("Enter");
+    await more.waitFor();
+    assert.equal(await focus.inputValue(), id(1600));
+    assert.equal(await focus.evaluate(el => el === document.activeElement), true);
+    assert.equal(await card(1604).count(), 0);
+    assert.equal(await back.count(), 0);
+    assert.deepEqual([...query()], [...initialQuery]);
+  };
+
+  const position = { x: 3, y: targetHeight - 3 };
+  if (width === 390) await more.tap({ position });
+  else await more.click({ position });
+  await verifyRefocusAndBack();
+  for (const key of ["Space", "Enter"]) {
+    await card(1603).focus();
+    await page.keyboard.press("Tab");
+    assert.equal(await more.evaluate(el => el === document.activeElement && el.matches(":focus-visible")), true);
+    await page.keyboard.press(key);
+    await verifyRefocusAndBack();
+  }
+}
+
 async function checkIdentityContrast(page, selector = ".infrastructure-topology .presentation-icon") {
   const colours = await page.locator(selector).evaluateAll(els=>els.map(el=>{
     const style=getComputedStyle(el);
@@ -1159,12 +1261,13 @@ async function checkConnectivitySearch(page, data, requests, theme, width) {
   await search.click(); await page.keyboard.press("Escape");
   assert.equal(await button("Close expanded Infrastructure Topology").count(),0,"Empty search does not swallow modal Escape");
   const failTopology = route => route.fulfill({status:503,json:{detail:"Topology temporarily unavailable"}});
-  await page.route("**/api/topology", failTopology);
+  const topologyRequest = url => url.pathname === "/api/topology";
+  await page.route(topologyRequest, failTopology);
   await button("Refresh").click();
   await page.getByRole("alert").filter({hasText:"Topology temporarily unavailable"}).waitFor();
   assert.equal(await search.isDisabled(),true);
   assert.equal(await focus.inputValue(),id(100));
-  await page.unroute("**/api/topology", failTopology);
+  await page.unroute(topologyRequest, failTopology);
   await Promise.all([page.waitForResponse(r=>r.url().includes('/api/topology/connectivity?')),button("Refresh").click()]);
   assert.equal(await search.isDisabled(),false);
   await button("Platform").click(); await button("Connectivity").click(); await focused(100).waitFor();
@@ -1187,14 +1290,16 @@ async function checkConnectivitySearch(page, data, requests, theme, width) {
 const browser = await chromium.launch({ executablePath: process.env.ATLAS_CHROME_PATH, headless: true });
 let checks = 0;
 try {
-  for (const theme of ["light", "dark"]) for (const width of [1440, 1100, 800]) {
+  const hopChevronOnly = Boolean(process.env.ATLAS_HOP_CHEVRON_ONLY);
+  for (const theme of ["light", "dark"]) for (const width of hopChevronOnly ? [1440, 390] : [1440, 1100, 800]) {
     const data = fixture();
+    if (hopChevronOnly) addHopContinuationFixture(data);
     data.topology_positions = positionSeeds.map(position);
     resolvePositions(data);
     const serviceType = { id: id(880), key: "application_service", name: "Application Service", active: true, requires_asset_dependency: true, sort_order: 10, in_use_count: 1, system_defined: true };
     data.categories.slice(0,2).forEach(c=>{ c.icon_key="infrastructure"; c.accent_key="slate"; });
     data.networks.slice(0,6).forEach(n=>{ n.accent_key="blue"; });
-    const context = await browser.newContext({ viewport: { width, height: 1000 }, colorScheme: theme, reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width, height: 1000 }, colorScheme: theme, reducedMotion: "reduce", hasTouch: width === 390 });
     const page = await context.newPage(), errors = [], requests = [];
     page.setDefaultTimeout(10000);
     page.on("pageerror",e=>{ errors.push(e.message); console.error(e.message); });
@@ -1277,7 +1382,8 @@ try {
       data.topology_positions.forEach(p=>p.asset_types_count=data.asset_types.filter(t=>t.topology_position_id===p.id).length);
       resolvePositions(data);
       let body = [];
-      if (url.pathname === "/api/auth/me") body = { id: id(999), display_name: "Topology fixture", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
+      if (url.pathname === "/api/setup/status") body = { state: "INITIALISED" };
+      else if (url.pathname === "/api/auth/me") body = { id: id(999), display_name: "Topology fixture", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
       else if (url.pathname === "/api/context") body = { customers: [customer], sites: [site], global_access: true, selected_customer_id: customer.id, selected_site_id: site.id };
       else if (url.pathname === "/api/relationship-types") body = data.relationship_types;
       else if (url.pathname === "/api/service-types") body = [serviceType];
@@ -1293,6 +1399,12 @@ try {
       else if (url.pathname === "/api/assets") body = data.assets.filter(a=> !url.searchParams.get("category_id") || data.asset_types.find(t=>t.key===a.asset_type)?.category_id === url.searchParams.get("category_id")).slice(0,31);
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
+    if (hopChevronOnly) {
+      await checkHopContinuation(page, requests, theme, width);
+      assert.deepEqual(errors, []);
+      console.log(`Passed hop continuation: ${theme} ${width}px`);
+      checks++; await context.close(); continue;
+    }
     if (process.env.ATLAS_POSITIONS_ONLY) {
       await checkLocalPositions(page, data, requests, theme, width);
       assert.deepEqual(errors,[]);
@@ -1725,7 +1837,8 @@ try {
     console.log(`Passed topology and relationship classes: ${theme} ${width}px`);
     checks++; await context.close();
   }
-  if (process.env.ATLAS_ORTHOGONAL_ONLY) console.log(`Passed ${checks} orthogonal scenarios.`);
+  if (hopChevronOnly) console.log(`Passed ${checks} hop continuation scenarios.`);
+  else if (process.env.ATLAS_ORTHOGONAL_ONLY) console.log(`Passed ${checks} orthogonal scenarios.`);
   else if (process.env.ATLAS_POSITIONS_ONLY) console.log(`Passed ${checks} local position scenarios.`);
   else if (process.env.ATLAS_DISCLOSURE_ONLY) console.log(`Passed ${checks} branch disclosure scenarios.`);
   else if (process.env.ATLAS_SEARCH_ONLY) console.log(`Passed ${checks} Connectivity search scenarios: pointer hit-testing, keyboard, interface IP, hostname, no matches, ten-result bound, preserved controls, hidden category focus, refresh, expanded details, desktop row and narrow wrapping.`);
