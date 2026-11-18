@@ -11,33 +11,39 @@ import { useWorkspaceContext } from "../../../components/workspace-context";
 import { apiRequest } from "../../../lib/api";
 import { auditReferences, needsIntegrationName } from "../../../lib/audit-details.mjs";
 
+const PAGE_SIZE = 30;
+const EMPTY_FILTERS = { actor: "", action: "", entity_type: "", date_from: "", date_to: "" };
+
 function timestamp(value) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(value));
 }
 
 export default function AuditAdminPage() {
   const { hasPermission, hasPermissionInContext } = useAuth();
-  const { customerId, siteId, customers, sites } = useWorkspaceContext();
+  const { customerId, siteId, customers, sites, reloadKey } = useWorkspaceContext();
   const loadGeneration = useRef(0);
-  const [events, setEvents] = useState([]);
+  const [result, setResult] = useState(null);
   const [integrations, setIntegrations] = useState([]);
   const [expanded, setExpanded] = useState({});
-  const [filters, setFilters] = useState({ actor: "", action: "", entity_type: "", date_from: "", date_to: "" });
-  const [appliedFilters, setAppliedFilters] = useState(filters);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [view, setView] = useState({ filters: EMPTY_FILTERS, scope: reloadKey, offset: 0 });
   const canView = hasPermission("audit.view");
   const canViewIntegrations = hasPermissionInContext("integrations.view", customerId, siteId);
+
+  if (view.scope !== reloadKey) {
+    setView({ ...view, scope: reloadKey, offset: 0 });
+    setExpanded({});
+  }
 
   const load = useCallback(async () => {
     if (!canView) return;
     const generation = ++loadGeneration.current;
-    setLoading(true);
-    setError("");
+    setResult(null);
     setIntegrations([]);
     try {
-      const query = new URLSearchParams({ limit: "200" });
-      for (const [key, value] of Object.entries(appliedFilters)) {
+      // The extra authorised match indicates whether another page is available.
+      const query = new URLSearchParams({ limit: String(PAGE_SIZE + 1), offset: String(view.offset) });
+      for (const [key, value] of Object.entries(view.filters)) {
         if (!value) continue;
         query.set(key, key.startsWith("date_") ? new Date(value).toISOString() : value);
       }
@@ -45,19 +51,23 @@ export default function AuditAdminPage() {
       if (siteId) query.set("site_id", siteId);
       const rows = await apiRequest(`/audit-events?${query}`);
       if (generation !== loadGeneration.current) return;
-      setEvents(rows);
-      if (canViewIntegrations && rows.some(needsIntegrationName)) {
-        // The scoped list is bounded and optional. Missing names keep their audit fallback.
+      const events = rows.slice(0, PAGE_SIZE);
+      setResult({ view, events, hasNext: rows.length > PAGE_SIZE, error: "" });
+      const integrationIds = new Set(events.filter(needsIntegrationName).map(event => event.target_id));
+      if (canViewIntegrations && integrationIds.size) {
+        // Keep only relevant names from the existing bounded, workspace-scoped list.
         apiRequest("/integrations").catch(() => []).then((visibleIntegrations) => {
-          if (generation === loadGeneration.current && Array.isArray(visibleIntegrations)) setIntegrations(visibleIntegrations);
+          if (generation === loadGeneration.current && Array.isArray(visibleIntegrations)) {
+            setIntegrations(visibleIntegrations.filter(integration => integrationIds.has(integration.id)));
+          }
         });
       }
     } catch (requestError) {
-      if (generation === loadGeneration.current) setError(requestError.message || "Atlas could not load the audit log.");
-    } finally {
-      if (generation === loadGeneration.current) setLoading(false);
+      if (generation === loadGeneration.current) {
+        setResult({ view, events: [], hasNext: false, error: requestError.message || "Atlas could not load the audit log." });
+      }
     }
-  }, [appliedFilters, canView, canViewIntegrations, customerId, siteId]);
+  }, [view, canView, canViewIntegrations, customerId, siteId]);
 
   useEffect(() => {
     load();
@@ -65,15 +75,19 @@ export default function AuditAdminPage() {
   }, [load]);
   if (!canView) return <AccessDenied />;
 
-  function submit(event) {
-    event.preventDefault();
-    setAppliedFilters(filters);
+  const loading = result?.view !== view;
+  const { events, hasNext, error } = loading ? { events: [], hasNext: false, error: "" } : result;
+  const { offset } = view;
+
+  function updateView(appliedFilters, offset = 0) {
+    setView({ ...view, filters: appliedFilters, offset });
+    setExpanded({});
   }
 
   return (
     <>
       <PageHeader eyebrow="System" title="Audit log" description="Review security-sensitive and administrative changes within your authorised scope." />
-      <form className="filter-card" onSubmit={submit}>
+      <form className="filter-card" onSubmit={(event) => { event.preventDefault(); updateView(filters); }}>
         <div className="form-grid audit-filter-grid">
           <label className="field"><span>Actor</span><input onChange={(event) => setFilters({ ...filters, actor: event.target.value })} placeholder="Email or display name" value={filters.actor} /></label>
           <label className="field"><span>Action</span><input onChange={(event) => setFilters({ ...filters, action: event.target.value })} placeholder="asset.updated" value={filters.action} /></label>
@@ -81,13 +95,13 @@ export default function AuditAdminPage() {
           <label className="field"><span>From</span><input onChange={(event) => setFilters({ ...filters, date_from: event.target.value })} type="datetime-local" value={filters.date_from} /></label>
           <label className="field"><span>To</span><input onChange={(event) => setFilters({ ...filters, date_to: event.target.value })} type="datetime-local" value={filters.date_to} /></label>
         </div>
-        <div className="form-actions"><Button variant="secondary" onClick={() => { const empty = { actor: "", action: "", entity_type: "", date_from: "", date_to: "" }; setFilters(empty); setAppliedFilters(empty); }} type="button">Clear</Button><Button variant="primary" disabled={loading} type="submit">Apply filters</Button></div>
+        <div className="form-actions"><Button variant="secondary" onClick={() => { setFilters(EMPTY_FILTERS); updateView(EMPTY_FILTERS); }} type="button">Clear</Button><Button variant="primary" disabled={loading} type="submit">Apply filters</Button></div>
       </form>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <section className="table-card" aria-label="Audit events">
-        <div className="table-meta"><span>{loading ? "Loading…" : `${events.length} events`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>
+        <div className="table-meta"><span role="status">{loading ? "Loading audit events…" : !error && `${events.length} ${events.length === 1 ? "event" : "events"} on this page`}</span><button className="text-button" disabled={loading} onClick={load} type="button">Refresh</button></div>
         <div className="table-scroll"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Result</th><th>Summary</th><th>Details</th></tr></thead><tbody>
-          {!loading && events.length === 0 && <tr><td className="empty-state" colSpan="7">No audit events match these filters.</td></tr>}
+          {!loading && !error && events.length === 0 && <tr><td className="empty-state" colSpan="7">{offset ? "No audit events on this page." : "No audit events match these filters."}</td></tr>}
           {events.map((event) => {
             const references = auditReferences(event, { customers, sites, integrations: canViewIntegrations ? integrations : [] });
             const isExpanded = Boolean(expanded[event.id]);
@@ -106,6 +120,11 @@ export default function AuditAdminPage() {
           })}
         </tbody></table></div>
       </section>
+      {!loading && (offset > 0 || hasNext) && <nav className="pagination" aria-label="Audit log pages">
+        <Button variant="secondary" disabled={offset === 0} onClick={() => updateView(view.filters, offset - PAGE_SIZE)} type="button">Previous</Button>
+        {events.length > 0 && <span>Events {offset + 1}–{offset + events.length}</span>}
+        <Button variant="secondary" disabled={!hasNext} onClick={() => updateView(view.filters, offset + PAGE_SIZE)} type="button">Next</Button>
+      </nav>}
     </>
   );
 }
