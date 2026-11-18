@@ -27,20 +27,27 @@ operational status. Save, then refresh topology to see the changes.
 
 ## Interface observations and assignment
 
-Asset detail shows **Assigned Network** and its **Canonical VLAN** separately
-from **Observed VLAN** (`proxmox.vlan_tag`) and **Observed bridge**
-(`proxmox.bridge_name`). An unlinked Interface says **No Network assigned** even
-when it has an accepted observed tag. Differing observed and canonical VLANs stay
-visible; neither value is automatically changed. Topology membership continues
-to use only the canonical Interface → Network link. `contextual_vlan` in graph
-responses remains derived from that link.
+The **Networking** card on Asset detail shows the recorded **Hostname** for
+Asset readers. Manage it through **Edit asset**. When an evaluated required
+Hostname gap is visible to the viewer, a missing value reads **Required, not
+recorded**. Viewing the **Interfaces** subsection requires Network access.
 
-Each displayed observation has its own acceptance state, authorised source name
-and last-observed time. The view selects at most one accepted and one latest
-unaccepted observation for each of these two facts. Acceptance does not mean a
-fact was observed again: a later run omitting a fact leaves its original timestamp
-and retained knowledge intact. This view does not claim current confirmation or
-fact withdrawal, and does not show full history or raw evidence.
+**Assigned Atlas Network** shows the Network name and canonical VLAN or **Not
+assigned**. **Observed Proxmox attachment** shows the latest recorded bridge
+(`proxmox.bridge_name`) and VLAN tag (`proxmox.vlan_tag`) independently. The
+assigned VLAN and observed tag can differ. Topology membership and the graph's
+`contextual_vlan` use the canonical Interface → Network link.
+
+Expand **Discovery details** to see each observation's acceptance state,
+authorised source name, last-observed time and acceptance time when recorded.
+The view selects at most one accepted and one latest unaccepted observation per
+fact. A later run omitting a fact leaves its original timestamp and retained
+knowledge intact. The observations represent recorded evidence at those times.
+
+Users with scoped `networks.edit` can use **Edit** on the Interface row. The
+editor updates the name, IP, MAC, primary flag, notes or assigned Network.
+Choose **Unassigned** and save to unlink an existing assignment. Observed
+bridge, VLAN tag and evidence are read-only in this editor.
 
 Whole-Interface configuration acceptance preserves the current Network assignment
 when the source omits `network_external_id`; other accepted configuration fields

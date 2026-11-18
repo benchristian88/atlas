@@ -10,11 +10,11 @@ import { EntityDetailHeader, EntitySection } from "../../../components/entity-de
 import { StatusIndicator } from "../../../components/status-indicator";
 import { AssertionsPanel } from "../../../components/assertions-panel";
 import { AssetKnowledgeSummary } from "../../../components/asset-knowledge-summary";
+import { AssetNetworking } from "../../../components/asset-networking";
 import { CompletenessPanel } from "../../../components/completeness-panel";
 import { DependencyAnalysisPanel } from "../../../components/dependency-analysis-panel";
 import { useAuth } from "../../../components/auth-context";
 import { StatusBadge } from "../../../components/status-badge";
-import { InterfaceKnowledge } from "../../../components/interface-knowledge";
 import { TimelineEvent } from "../../../components/timeline-event";
 import { useWorkspaceContext } from "../../../components/workspace-context";
 import { apiRequest } from "../../../lib/api";
@@ -78,13 +78,12 @@ export default function AssetDetailPage() {
   const [completeness, setCompleteness] = useState(null);
   const [knowledgeTab, setKnowledgeTab] = useState("summary");
   const [relationshipForm, setRelationshipForm] = useState({ target_asset_id: "", relationship_type: "", notes: "" });
-  const [interfaceForm, setInterfaceForm] = useState({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: true, notes: "" });
   const [showRelationshipForm, setShowRelationshipForm] = useState(false);
-  const [showInterfaceForm, setShowInterfaceForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const canView = hasPermission("assets.view");
+  const interfaceListPath = `/asset-interfaces?asset_id=${id}&include_knowledge=true`;
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -109,7 +108,7 @@ export default function AssetDetailPage() {
         mayViewRelationships ? apiRequest(`/asset-relationships?asset_id=${id}`) : Promise.resolve([]),
         hasPermission("relationship_types.view") ? apiRequest("/relationship-types") : Promise.resolve([]),
         mayViewNetworks ? apiRequest("/networks") : Promise.resolve([]),
-        mayViewNetworks ? apiRequest(`/asset-interfaces?asset_id=${id}&include_knowledge=true`) : Promise.resolve([]),
+        mayViewNetworks ? apiRequest(interfaceListPath) : Promise.resolve([]),
         apiRequest(`/assertions?subject_type=asset&subject_id=${id}&current_only=false`),
         apiRequest(`/assets/${id}/fact-history`),
         apiRequest(`/assets/${id}/knowledge-summary`),
@@ -132,7 +131,7 @@ export default function AssetDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, hasPermission, hasPermissionForObject, id]);
+  }, [canView, hasPermission, hasPermissionForObject, id, interfaceListPath]);
 
   useEffect(() => { load(); }, [load]);
   const assetTypesByKey = useMemo(() => Object.fromEntries(assetTypes.map((type) => [type.key, type])), [assetTypes]);
@@ -179,6 +178,11 @@ export default function AssetDetailPage() {
     asset.customer_id,
     asset.site_id,
   );
+  const canEditInterface = hasPermissionForObject(
+    "networks.edit",
+    asset.customer_id,
+    asset.site_id,
+  );
   const canDeleteInterface = hasPermissionForObject(
     "networks.delete",
     asset.customer_id,
@@ -214,23 +218,11 @@ export default function AssetDetailPage() {
     catch (requestError) { setError(requestError.message); }
   }
 
-  async function createInterface(event) {
-    event.preventDefault();
-    setSaving(true);
-    setError("");
-    try {
-      await apiRequest("/asset-interfaces", { method: "POST", body: JSON.stringify({ asset_id: asset.id, network_id: interfaceForm.network_id || null, name: interfaceForm.name, ip_address: interfaceForm.ip_address || null, mac_address: interfaceForm.mac_address || null, is_primary: interfaceForm.is_primary, notes: interfaceForm.notes || null }) });
-      setInterfaceForm({ name: "eth0", network_id: "", ip_address: "", mac_address: "", is_primary: false, notes: "" });
-      setShowInterfaceForm(false);
-      await load();
-    } catch (requestError) { setError(requestError.message || "Atlas could not create this interface."); }
-    finally { setSaving(false); }
-  }
-
-  async function removeInterface(item) {
-    if (!window.confirm(`Delete interface “${item.name}”?`)) return;
-    try { await apiRequest(`/asset-interfaces/${item.id}`, { method: "DELETE" }); await load(); }
-    catch (requestError) { setError(requestError.message); }
+  async function refreshNetworking() {
+    await Promise.all([
+      apiRequest(interfaceListPath).then(setInterfaces),
+      completeness ? refreshCompleteness() : null,
+    ]);
   }
 
   async function refreshAssertions() {
@@ -260,7 +252,7 @@ export default function AssetDetailPage() {
       {error && <div className="error-banner" role="alert">{error}</div>}
       <EntitySection title="Asset details"><div className="detail-grid">
         <div><span>Status</span><strong><StatusIndicator state={asset.status} /></strong></div><div><span>Type</span><strong>{assetType?.name || asset.asset_type}</strong></div><div><span>Source</span><strong>{asset.source}</strong></div>
-        <div><span>Vendor</span><strong>{asset.vendor || "—"}</strong></div><div><span>Model</span><strong>{asset.model || "—"}</strong></div><div><span>Hostname</span><strong>{asset.hostname || "—"}</strong></div>
+        <div><span>Vendor</span><strong>{asset.vendor || "—"}</strong></div><div><span>Model</span><strong>{asset.model || "—"}</strong></div>
         <div><span>Management</span><strong>{managementUrl ? <a className="card-link" href={managementUrl} rel="noreferrer" target="_blank">Open management URL</a> : "—"}</strong></div><div><span>Tags</span><strong>{(asset.metadata?.tags || []).join(", ") || "—"}</strong></div>
         <div className="detail-span"><span>Description</span><strong>{asset.description || "—"}</strong></div>
       </div></EntitySection>
@@ -270,10 +262,12 @@ export default function AssetDetailPage() {
       {hasPermissionForObject("service_dependencies.view", asset.customer_id, asset.site_id) && <DependencyAnalysisPanel focusType="asset" focusId={asset.id} />}
       {completeness && <CompletenessPanel assetId={asset.id} canDefer={hasPermissionForObject("knowledge_gaps.defer", asset.customer_id, asset.site_id)} canEvaluate={hasPermissionForObject("knowledge_completeness.evaluate", asset.customer_id, asset.site_id)} canExcept={hasPermissionForObject("knowledge_gaps.exception", asset.customer_id, asset.site_id)} completeness={completeness} onChanged={refreshCompleteness} />}
 
-      {canViewNetworks && <section className="form-card"><div className="form-card-header"><h2>Interfaces and networks</h2>{canCreateInterface && !showInterfaceForm && <Button variant="primary" onClick={() => setShowInterfaceForm(true)} type="button">Add interface</Button>}</div>
-        {showInterfaceForm && <form onSubmit={createInterface}><div className="form-grid"><label className="field"><span>Interface name *</span><input required value={interfaceForm.name} onChange={(event) => setInterfaceForm({ ...interfaceForm, name: event.target.value })} /></label><label className="field"><span>Network / VLAN</span><select value={interfaceForm.network_id} onChange={(event) => setInterfaceForm({ ...interfaceForm, network_id: event.target.value })}><option value="">Unassigned</option>{availableNetworks.map((network) => <option key={network.id} value={network.id}>{network.vlan_id !== null ? `VLAN ${network.vlan_id} — ` : ""}{network.name}</option>)}</select></label><label className="field"><span>IP address</span><input value={interfaceForm.ip_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, ip_address: event.target.value })} /></label><label className="field"><span>MAC address</span><input value={interfaceForm.mac_address} onChange={(event) => setInterfaceForm({ ...interfaceForm, mac_address: event.target.value })} /></label><label className="field checkbox-field"><input checked={interfaceForm.is_primary} onChange={(event) => setInterfaceForm({ ...interfaceForm, is_primary: event.target.checked })} type="checkbox" /><span>Primary interface</span></label><label className="field field-wide"><span>Notes</span><textarea value={interfaceForm.notes} onChange={(event) => setInterfaceForm({ ...interfaceForm, notes: event.target.value })} /></label></div><div className="form-actions"><Button variant="secondary" onClick={() => setShowInterfaceForm(false)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">Add interface</Button></div></form>}
-        <div className="interface-list">{interfaces.length === 0 ? <p className="secondary-text">No interfaces yet.</p> : interfaces.map((item) => <div className="interface-row" key={item.id}><div><strong>{item.name}{item.is_primary ? " · Primary" : ""}</strong><span>{item.ip_address || "No IP"}{item.mac_address ? ` · ${item.mac_address}` : ""}</span><InterfaceKnowledge item={item} /></div>{canDeleteInterface && <button className="text-button text-danger" onClick={() => removeInterface(item)} type="button">Delete</button>}</div>)}</div>
-      </section>}
+      <AssetNetworking
+        assetId={asset.id} canCreateInterface={canCreateInterface} canDeleteInterface={canDeleteInterface}
+        canEditInterface={canEditInterface} canViewNetworks={canViewNetworks} completeness={completeness}
+        hostname={asset.hostname} interfaces={interfaces} key={asset.id} networks={availableNetworks}
+        onChanged={refreshNetworking}
+      />
 
       {canViewRelationships && <><section className="form-card"><div className="form-card-header"><h2>Relationships</h2>{canCreateRelationship && relationshipTypes.length > 0 && !showRelationshipForm && <Button variant="primary" onClick={() => setShowRelationshipForm(true)} type="button">Add relationship</Button>}</div>
         {showRelationshipForm && <form onSubmit={createRelationship}><div className="form-grid"><label className="field"><span>Source</span><input disabled value={asset.name} /></label><label className="field"><span>Target asset *</span><select required value={relationshipForm.target_asset_id} onChange={(event) => setRelationshipForm({ ...relationshipForm, target_asset_id: event.target.value, relationship_type: "" })}><option value="">Select same-site asset</option>{sameSiteAssets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="field"><span>Relationship type *</span><select required value={relationshipForm.relationship_type} onChange={(event) => setRelationshipForm({ ...relationshipForm, relationship_type: event.target.value })}><option value="">Select relationship</option>{allowedRelationshipTypes.map((type) => <option key={type.key} value={type.key}>{type.name}</option>)}</select></label><label className="field field-wide"><span>Notes</span><textarea value={relationshipForm.notes} onChange={(event) => setRelationshipForm({ ...relationshipForm, notes: event.target.value })} /></label></div><div className="form-actions"><Button variant="secondary" onClick={() => setShowRelationshipForm(false)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">Add relationship</Button></div></form>}

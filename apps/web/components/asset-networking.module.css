@@ -1,0 +1,118 @@
+.card h2,
+.interfacesHeader h3 {
+  margin: 0;
+}
+
+.hostname,
+.attachments {
+  display: grid;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.hostname {
+  align-items: baseline;
+  grid-template-columns: minmax(0, 100px) minmax(0, 1fr);
+  margin-top: var(--space-3);
+}
+
+.card dt,
+.rowHeader p {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.interfacesHeader,
+.rowHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.interfacesHeader {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+
+.hostname + .interfacesHeader {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+
+.list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.row {
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) 0;
+}
+
+.row:last-child {
+  padding-bottom: 0;
+}
+
+.rowHeader {
+  align-items: flex-start;
+}
+
+.rowHeader > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rowHeader strong {
+  font-size: var(--type-title);
+  font-weight: var(--weight-semibold);
+}
+
+.rowHeader p {
+  margin: var(--space-1) 0 0;
+}
+
+.actions {
+  display: flex;
+}
+
+.attachments {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: var(--space-2);
+}
+
+.attachments dd {
+  margin-top: var(--space-1);
+}
+
+.row code {
+  background: var(--surface-muted);
+  border-radius: var(--radius-control);
+  font-size: var(--type-compact);
+  padding: 0 var(--space-1);
+}
+
+.form {
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.fields {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+@media (max-width: 600px) {
+  .attachments {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
