@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AccountMenu } from "./account-menu";
 import { authenticatedHome, useAuth } from "./auth-context";
 import { AtlasBrand } from "./atlas-brand.mjs";
+import { useBuildInfo } from "./build-info-context";
 import { ContextSelector } from "./context-selector";
 import { Navigation } from "./navigation";
 import { useWorkspaceContext } from "./workspace-context";
@@ -14,6 +15,7 @@ import { accentThemeStyle } from "../lib/accent-theme.mjs";
 export function AppShell({ children }) {
   const router = useRouter();
   const { user, resolvedThemeMode } = useAuth();
+  const version = useBuildInfo()?.version;
   const workspace = useWorkspaceContext();
   const [logoutError, setLogoutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
@@ -38,9 +40,7 @@ export function AppShell({ children }) {
       <aside className="sidebar">
         <AtlasBrand href={authenticatedHome(user)} variant={sidebarBrandVariant} />
         <Navigation />
-        <div className="sidebar-footer">
-          Atlas Impact
-        </div>
+        {version && <div className="sidebar-footer">Atlas {version}</div>}
       </aside>
       <div className="content">
         <header className="topbar">

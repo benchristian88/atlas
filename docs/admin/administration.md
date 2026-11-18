@@ -24,12 +24,13 @@ profiles. Deactivate used definitions to retire them while retaining history.
 See [Service Types and Criticality](service-types-and-criticality.md),
 [Asset Types](asset-types.md) and [Knowledge profiles](knowledge-profiles.md).
 
-Global System Settings administrators manage session lifetime and view installed
-version/channel/build identity. Global Master Administrators can use encrypted
-Backup & Restore. The Updates card checks release availability and links to
-manual upgrade guidance. About shows installed identity, licence and project
-links. See [backup/restore](../deployment/backup-restore.md) and
-[upgrades](../deployment/upgrades.md).
+Global System Settings administrators manage session lifetime and can see the
+installed version in the navigation footer when available. The Updates card
+shows installed version, channel, build and installation method, checks release
+availability and links to manual upgrade guidance. About opens the page with a
+product overview, licence and project links. Global Master Administrators can
+use encrypted Backup & Restore. See [backup/restore](../deployment/backup-restore.md)
+and [upgrades](../deployment/upgrades.md).
 
 **System → Audit Log** is read-only and permission-filtered. **Changes** presents
 meaningful knowledge changes separately. Account preferences, password changes,

@@ -12,6 +12,7 @@ import {
   publicSessionState,
 } from "../lib/session-state.mjs";
 import { AppShell } from "./app-shell";
+import { BuildInfoProvider } from "./build-info-context";
 import { useResolvedThemeMode } from "./theme-mode";
 import {
   authenticatedHome,
@@ -139,9 +140,11 @@ export function RootShell({ children }) {
   }
   return (
     <AuthContext.Provider value={authValue}>
-      <WorkspaceContextProvider user={authState.user}>
-        <AppShell>{children}</AppShell>
-      </WorkspaceContextProvider>
+      <BuildInfoProvider key={authState.user.id}>
+        <WorkspaceContextProvider user={authState.user}>
+          <AppShell>{children}</AppShell>
+        </WorkspaceContextProvider>
+      </BuildInfoProvider>
     </AuthContext.Provider>
   );
 }

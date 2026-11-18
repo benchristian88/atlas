@@ -21,9 +21,10 @@ credential group is read anymore.
 
 The canonical application version/channel lives in `apps/api/app/release.json`.
 Builds carry `ATLAS_BUILD_ID` when available and need no runtime Git. The
-protected `/api/system-settings/build-info` endpoint and About display version,
-channel, build ID and installation method (`docker_compose`, `systemd`, or
-`development`). Frontend package versions are tooling metadata, not a separate
+protected `/api/system-settings/build-info` endpoint provides version, channel,
+build ID and installation method (`docker_compose`, `systemd`, or `development`)
+to the Updates card and supplies the version for the authenticated navigation
+footer. Frontend package versions are tooling metadata, not a separate
 application identity. See [release packages and update awareness](release-distribution.md).
 Packaged commit/method identity wins over preserved environment build IDs.
 

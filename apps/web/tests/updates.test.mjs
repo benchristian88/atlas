@@ -21,7 +21,12 @@ test("guidance is installation-specific with backup and preserved configuration"
 test("Updates composes the adjacent System Settings card and shared controls", async () => {
   const page = await readFile(new URL("../app/admin/system-settings/page.js", import.meta.url), "utf8");
   const card = await readFile(new URL("../components/updates.js", import.meta.url), "utf8");
+  assert.match(page, /const buildInfo = useBuildInfo\(\)/);
   assert.match(page, /<Updates buildInfo=\{buildInfo\}/);
+  assert.doesNotMatch(page, /system-settings\/build-info/);
+  for (const field of ["version", "release_channel", "build_id", "install_method"]) {
+    assert.ok(card.includes(`identity.${field}`));
+  }
   assert.match(card, /className="ops-card system-settings-section"/);
   assert.match(card, /aria-labelledby="settings-updates"/);
   assert.match(card, /role="status" aria-live="polite"/);

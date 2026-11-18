@@ -93,8 +93,10 @@ try {
         });
         assert.deepEqual(comparison, { same: true, headings: true });
         const about = page.getByRole("region", { name: "About", exact: true });
-        assert.match(await about.innerText(), /Atlas Impact.*Version.*0\.1\.0.*Licence.*AGPL-3\.0-only/s);
-        for (const name of ["Source repository", "Operator and developer guides", "Security reporting policy", "Commercial licensing information"]) {
+        assert.match(await about.innerText(), /Atlas Impact is an infrastructure knowledge.*one model\./s);
+        assert.equal(await page.locator(".system-settings-section > h2").first().innerText(), "About");
+        await page.getByText(`Atlas ${info.current_version}`, { exact: true }).waitFor();
+        for (const name of ["AGPL-3.0-only licence", "Source code", "Operator and developer guides", "Security reporting policy", "Commercial licensing information"]) {
           const link = about.getByRole("link", { name, exact: true });
           assert.match(await link.getAttribute("href"), /^https:\/\/github\.com\/benchristian88\/atlas(?:\/|$)/);
           assert.equal(await link.getAttribute("rel"), "noopener noreferrer");
