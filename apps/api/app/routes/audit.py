@@ -59,7 +59,9 @@ def list_audit_events(
         query = query.where(AuditEvent.site_id == site_id)
     return list(
         db.scalars(
-            query.order_by(AuditEvent.created_at.desc()).limit(limit).offset(offset)
+            query.order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
     )
 

@@ -32,8 +32,15 @@ product overview, licence and project links. Global Master Administrators can
 use encrypted Backup & Restore. See [backup/restore](../deployment/backup-restore.md)
 and [upgrades](../deployment/upgrades.md).
 
-**System → Audit Log** is read-only and permission-filtered. **Changes** presents
-meaningful knowledge changes separately. Account preferences, password changes,
-appearance and optional MFA are under **My profile**. See
+**System → Audit Log** is read-only and permission-filtered. Use **Previous**
+and **Next** below the table to browse up to 30 events per page, newest first.
+The count above the table is for the current page, and the footer shows
+the position of those events among the matches.
+Applying or clearing filters, or changing the workspace customer or site,
+returns to the first page. Expand an event to see its recorded details and
+identifiers.
+
+**Changes** presents meaningful knowledge changes separately. Account preferences,
+password changes, appearance and optional MFA are under **My profile**. See
 [local MFA](../deployment/mfa.md) and
 [authentication/access architecture](../architecture/authentication-and-access-control.md).
