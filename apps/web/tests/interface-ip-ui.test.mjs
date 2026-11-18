@@ -19,11 +19,11 @@ test("Asset create and edit share a form with no legacy IP state, field or paylo
 test("Asset detail displays Interface addresses without a legacy summary or fallback", async () => {
   const page = await source("../app/assets/[id]/page.js");
   assert.doesNotMatch(page, /asset\.ip_address|Primary IP/);
-  assert.match(page, /Interfaces and networks/);
+  assert.match(page, /<AssetNetworking/);
   assert.match(page, /group.predicate !== "ip_address"/);
   assert.match(page, /<AssetKnowledgeSummary groups=\{knowledgeGroups\}/);
   assert.match(await source("../components/asset-knowledge-summary.js"), /groups.map/);
-  assert.match(page, /item\.ip_address \|\| "No IP"/);
+  assert.match(await source("../components/asset-networking.js"), /item\.ip_address \|\| "IP not recorded"/);
 });
 
 test("AdGuard interface summary and search ignore stale Asset IP even without interfaces", () => {

@@ -216,10 +216,11 @@ interfaces; legacy Asset IPs no longer supply search matches.
 ## Record an IP address
 
 IP addresses belong to Asset Interfaces. Create the Asset with its identity and
-inventory details, then open its detail page and use **Interfaces and networks →
-Add interface**. Enter the interface name, IP address and optional Network. Mark
-an interface primary when appropriate. Asset editing does not change interface
-addresses. Assets without an Interface IP show no address in topology.
+inventory details, then open its detail page and use **Add interface** under
+**Networking → Interfaces**. Enter the interface name, IP address and optional
+Network. Mark an interface primary when appropriate. Use **Edit** on the interface
+row to update its address. Assets without an Interface IP show no address in
+topology.
 
 Platform, Network & VLAN and Connectivity share a persistent right-hand Asset
 inspector with **Open Asset** and **Hide/Show details panel**. Selection survives

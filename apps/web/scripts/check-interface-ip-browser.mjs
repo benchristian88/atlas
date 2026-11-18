@@ -29,7 +29,8 @@ try {
     await page.route("**/api/**", async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/api/, "");
       let body = [], status = 200;
-      if (path === "/auth/me") body = { id: id(99), display_name: "Fixture operator", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
+      if (path === "/setup/status") body = { state: "INITIALISED" };
+      else if (path === "/auth/me") body = { id: id(99), display_name: "Fixture operator", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
       else if (path === "/context") body = { global_access: true, customers: [customer], sites: [site] };
       else if (path === "/asset-types") body = data.asset_types;
       else if (path === "/asset-categories") body = data.categories;
@@ -77,28 +78,28 @@ try {
     assert.doesNotMatch(await page.locator("body").innerText(), /192\.0\.2\.254|Primary IP/);
     // An interface without an IP must also leave the legacy value hidden.
     data.asset_interfaces.push({ id: id(10), asset_id: id(4), network_id: null, name: "empty0", ip_address: null });
-    await page.reload(); await page.getByText("No IP", { exact: true }).waitFor();
+    await page.reload(); await page.getByText("IP not recorded", { exact: true }).waitFor();
     assert.doesNotMatch(await page.locator("body").innerText(), /192\.0\.2\.254/);
     await page.goto(`${base}/topology`);
     await page.getByRole("button", { name: "Platform", exact: true }).click();
     assert.match(await page.locator(`[data-platform-id="${asset.id}"]`).innerText(), /192\.168\.99\.5 \+1/);
     assert.doesNotMatch(await page.locator(`[data-platform-id="${id(4)}"]`).innerText(), /192\.0\.2\.254|No IP/);
     await page.getByRole("button", { name: "Connectivity", exact: true }).click();
-    await page.getByLabel("Focus Asset or Network", { exact: true }).selectOption(asset.id);
+    await page.getByLabel("Focus", { exact: true }).selectOption(asset.id);
     const node = page.locator(`[data-node-key="asset:${asset.id}"]`);
     await node.waitFor();
     assert.match(await node.innerText(), /192\.168\.99\.5 \+1/);
     assert.doesNotMatch(await node.innerText(), /192\.0\.2\.254/);
-    await page.getByLabel("Focus Asset or Network", { exact: true }).selectOption(id(4));
+    await page.getByLabel("Focus", { exact: true }).selectOption(id(4));
     const emptyNode = page.locator(`[data-node-key="asset:${id(4)}"]`);
     await emptyNode.waitFor();
     assert.doesNotMatch(await emptyNode.innerText(), /192\.0\.2\.254|No IP/);
     await page.goto(`${base}/assets`);
-    await page.locator("table").getByText("AdGuard Home", { exact: true }).waitFor();
-    assert.doesNotMatch((await page.getByRole("columnheader").allTextContents()).join(" "), /\bIP\b/);
-    assert.doesNotMatch(await page.locator("table").innerText(), /192\.0\.2\.254/);
+    const assets = page.getByRole("region", { name: "Assets", exact: true });
+    await assets.getByText("AdGuard Home", { exact: true }).waitFor();
+    assert.doesNotMatch(await assets.innerText(), /\bIP\b|192\.0\.2\.254|192\.168\.99\.5|192\.168\.5\.5/);
     assert.deepEqual(errors, []);
     await context.close();
-    console.log(`PASS ${theme} ${width}: create/edit payloads, detail, empty interfaces, Platform, Connectivity, Assets table`);
+    console.log(`PASS ${theme} ${width}: create/edit payloads, detail, empty interfaces, Platform, Connectivity, Assets list`);
   }
 } finally { await browser.close(); }
