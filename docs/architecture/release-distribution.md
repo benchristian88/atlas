@@ -23,10 +23,12 @@ one tag cannot identify two releases. Beta maps to GitHub `prerelease: true`;
 stable maps to false. The developer changes metadata deliberately before tagging.
 
 System Settings owns informational update awareness. The global
-`system_settings.manage` boundary protects the normalized API; About retains
-installed identity. The server reads only the fixed official repository's
-public release list, without tokens, tenant data, redirects or ambient proxy
-credentials. Stable selects stable releases only. Beta selects supported beta
+`system_settings.manage` boundary protects the normalized API and the installed
+identity in the Updates card. The authenticated navigation footer uses the same
+build-info response to show the version when available. The server reads only
+the fixed official repository's public release list, without tokens, tenant
+data, redirects or ambient proxy credentials. Stable selects stable releases
+only. Beta selects supported beta
 or stable releases by semantic precedence, then channel precedence. Drafts,
 unsupported prereleases and malformed records are excluded. No release body
 or remote commands reach the browser. No package download or host control exists.

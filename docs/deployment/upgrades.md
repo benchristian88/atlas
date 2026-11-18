@@ -113,9 +113,10 @@ new package. No `down -v`, setup-code reset, secret rotation or restore is part
 of a normal upgrade. Do not override project identity between old/new commands.
 Do not run two application stacks against the same database during migration.
 
-Check `/api/health`, normal/MFA login and System Settings About/Updates. The
-artifact-carried SHA takes precedence over the old `ATLAS_BUILD_ID` retained in
-`.env`. The [single-origin](single-origin.md) gateway/NPM contract is unchanged.
+Check `/api/health`, normal/MFA login and installed identity under System
+Settings → Updates. The artifact-carried SHA takes precedence over the old
+`ATLAS_BUILD_ID` retained in `.env`. The [single-origin](single-origin.md)
+gateway/NPM contract is unchanged.
 
 ## Native/systemd upgrade
 
@@ -196,8 +197,8 @@ Stable considers stable releases only; beta considers supported beta and stable
 releases by SemVer, with stable winning at equal version. Drafts and invalid
 versions/URLs are ignored. A locally newer build displays ahead-of-release.
 Network/DNS/TLS/rate-limit/malformed-response failures show “Update information
-is currently unavailable.” Atlas remains operational offline. About stays
-focused on installed identity. `GET /api/system-settings/updates` and
+is currently unavailable.” Atlas remains operational offline.
+`GET /api/system-settings/updates` and
 `POST /api/system-settings/updates/check` require the existing global
 `system_settings.manage` boundary and return normalized fields only.
 

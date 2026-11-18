@@ -10,7 +10,7 @@ development workflow or wait for the packaged beta.
 `apps/api/app/release.json` is the application version/channel authority. The
 checked-in version is `0.1.0` in the `beta` channel. Packages also carry their
 commit/build identity and installation method. View installed identity in
-System Settings → About. Tooling package versions are not a separate Atlas release.
+System Settings → Updates. Tooling package versions are not a separate Atlas release.
 
 Stable installations consider stable releases; beta installations consider beta
 and stable versions using semantic version ordering. Build identifiers do not
