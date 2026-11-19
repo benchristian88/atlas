@@ -59,6 +59,23 @@ constraint](../deployment/local-release-acceptance.md#reconciliation-fix-build-t
 before planning any deployment. Updating the enrolled live instance is separate
 from reviewing this workflow.
 
+## Proxmox guest identity review
+
+Open **Reconciliation** in the guest's customer and site. An **Identity review**
+appears when a successful Proxmox discovery reports a guest key bound to a
+retired Asset. It can also appear when a run reports only a dependent Interface
+or relationship. Compare **Retired Asset at first hold** with **Latest source
+evidence**. **Evidence and details** identifies the source, external key and
+review record. Use the name, Interface slots, MAC addresses and placement for
+comparison. The comparison leaves the guest's identity unresolved.
+
+The case stays open while Atlas retains the observations for a dedicated
+identity decision. Ordinary Accept, Accept all and Link cannot apply them.
+Subsequent successful runs may update the evidence and the review version.
+Manual Asset edits remain available to authorized users and preserve an
+existing hold. Explicit reactivation and replacement are pending follow-up
+work. Review observed and assigned Networks as separate values.
+
 ## Reading Asset knowledge after linking
 
 The **Summary** tab separates **Accepted Atlas value**, **Operational Atlas value**

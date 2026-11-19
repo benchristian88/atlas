@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, tuple_
+from sqlalchemy import or_, select, tuple_
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
@@ -76,6 +76,9 @@ from app.services.knowledge_changes import record_assertion_change
 from app.utils.json_values import to_json_value
 from app.services.reconciliation_listing import filtered_items, initial_fact_context, page_rows
 from app.services.reconciliation_entities import EntityReview, entity_page, item_version, SECTION_LIMIT
+from app.services.proxmox_guest_identity import (
+    PRESENCE_PREDICATE, REVIEW_LABEL, REVIEW_REQUIRED, REVIEW_TYPE, proposal_guest_keys, review_snapshot,
+)
 
 router = APIRouter(tags=["knowledge"])
 
@@ -180,7 +183,7 @@ def assertion_response(
     return to_json_value(result)
 
 
-def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
+def reconciliation_response(db: Session, item: ReconciliationItem, principal: Principal) -> dict:
     result = ReconciliationItemResponse.model_validate(item).model_dump()
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     result["source_name"] = _source_name(db, assertion.data_source_id) if assertion else None
@@ -209,6 +212,9 @@ def reconciliation_response(db: Session, item: ReconciliationItem) -> dict:
             "missing_since_at": assertion.first_observed_at if assertion and item.category == "no_longer_observed" else None,
         }
     )
+    if item.entity_type == REVIEW_TYPE:
+        result.update(entity_name=REVIEW_LABEL, blocked_reason=REVIEW_REQUIRED,
+                      current_value_json=review_snapshot(principal, item))
     if item.entity_type == "asset_relationship" and assertion is not None:
         resolution = relationship_resolution(db, item, persist_links=False)
         for field in (
@@ -508,7 +514,7 @@ def simulate_discovery(
             "assertions_created": assertion_count,
             "reconciliation_items_created": len(items),
             "reconciliation_items": [
-                reconciliation_response(db, item) for item in items
+                reconciliation_response(db, item, principal) for item in items
             ],
             "baseline_run_id": snapshot.baseline_run_id,
             "observed_count": len(payload.observations),
@@ -538,7 +544,9 @@ def list_assertions(
     db: Session = Depends(get_db),
 ):
     query = select(KnowledgeAssertion).where(
-        scope_condition(principal, "assets.view", KnowledgeAssertion.customer_id, KnowledgeAssertion.site_id)
+        scope_condition(principal, "assets.view", KnowledgeAssertion.customer_id, KnowledgeAssertion.site_id),
+        or_(KnowledgeAssertion.subject_type != REVIEW_TYPE, scope_condition(
+            principal, "reconciliation.view", KnowledgeAssertion.customer_id, KnowledgeAssertion.site_id))
     )
     if context.customer_id is not None:
         query = query.where(KnowledgeAssertion.customer_id == context.customer_id)
@@ -555,7 +563,7 @@ def list_assertions(
 
 
 def _lifecycle_assertion(
-    db: Session, principal: Principal, assertion_id: uuid.UUID, permission: str
+    db: Session, principal: Principal, assertion_id: uuid.UUID, permission: str, context=None,
 ) -> KnowledgeAssertion:
     assertion = db.get(KnowledgeAssertion, assertion_id)
     if assertion is None:
@@ -567,6 +575,12 @@ def _lifecycle_assertion(
         assertion.site_id,
         hide_existence=True,
     )
+    if assertion.subject_type == REVIEW_TYPE and assertion.predicate == PRESENCE_PREDICATE:
+        if context and ((context.customer_id and context.customer_id != assertion.customer_id)
+                        or (context.site_id and context.site_id != assertion.site_id)):
+            raise not_found("Assertion")
+        for view_permission in ("assets.view", "reconciliation.view"):
+            require_scope(principal, view_permission, assertion.customer_id, assertion.site_id, hide_existence=True)
     if assertion.data_source_id:
         db.get(DataSource, assertion.data_source_id, with_for_update={"key_share": True})
     lock_subjects(db, {assertion.subject_type: {assertion.subject_id}})
@@ -609,8 +623,9 @@ def get_assertion(
     assertion_id: uuid.UUID,
     principal: Principal = Depends(require_permission("assets.view")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    assertion = _lifecycle_assertion(db, principal, assertion_id, "assets.view")
+    assertion = _lifecycle_assertion(db, principal, assertion_id, "assets.view", context)
     return assertion_response(db, assertion)
 
 
@@ -620,14 +635,16 @@ def remove_assertion(
     request: Request,
     principal: Principal = Depends(require_permission("assertions.delete")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    assertion = _lifecycle_assertion(db, principal, assertion_id, "assertions.delete")
+    assertion = _lifecycle_assertion(db, principal, assertion_id, "assertions.delete", context)
     safety = can_delete_assertion(db, assertion)
     if not safety.allowed:
         return JSONResponse(
             status_code=409,
             content=safety.conflict_payload(
-                "Assertion cannot be deleted because it supports accepted knowledge"
+                REVIEW_REQUIRED if assertion.subject_type == REVIEW_TYPE and assertion.predicate == PRESENCE_PREDICATE
+                else "Assertion cannot be deleted because it supports accepted knowledge"
             ),
         )
     try:
@@ -662,8 +679,9 @@ def retract_knowledge_assertion(
     request: Request,
     principal: Principal = Depends(require_permission("assertions.retract")),
     db: Session = Depends(get_db),
+    context: RequestContext = None,
 ):
-    assertion = _lifecycle_assertion(db, principal, assertion_id, "assertions.retract")
+    assertion = _lifecycle_assertion(db, principal, assertion_id, "assertions.retract", context)
     try:
         provenance_gap = retract_assertion(
             db,
@@ -734,7 +752,7 @@ def list_reconciliation_items(
     query = filtered_items(context, principal, item_status=item_status, category=category,
                            source_id=source_id, run_id=run_id, entity_type=entity_type)
     items = db.scalars(query.order_by(ReconciliationItem.created_at.desc(), ReconciliationItem.id.desc()).limit(limit))
-    return [reconciliation_response(db, item) for item in items]
+    return [reconciliation_response(db, item, principal) for item in items]
 
 
 @router.get("/reconciliation-items/page", response_model=ReconciliationItemPageResponse)
@@ -754,9 +772,9 @@ def list_reconciliation_item_page(
                            source_id=source_id, run_id=run_id, entity_type=entity_type)
     items, total, next_cursor = page_rows(db, query, limit=limit, cursor=cursor)
     grouping, related = initial_fact_context(db, context, principal, items)
-    return {"items": [{**reconciliation_response(db, item), "initial_entity_item_id": grouping.get(item.id)}
+    return {"items": [{**reconciliation_response(db, item, principal), "initial_entity_item_id": grouping.get(item.id)}
                       for item in items], "total": total, "limit": limit, "next_cursor": next_cursor,
-            "related_new_entities": [reconciliation_response(db, item) for item in related]}
+            "related_new_entities": [reconciliation_response(db, item, principal) for item in related]}
 
 
 @router.get("/reconciliation-items/summary", response_model=ReconciliationSummaryResponse)
@@ -765,18 +783,7 @@ def reconciliation_summary(
     principal: Principal = Depends(require_permission("reconciliation.view")),
     db: Session = Depends(get_db),
 ):
-    query = select(ReconciliationItem).where(
-        scope_condition(
-            principal,
-            "reconciliation.view",
-            ReconciliationItem.customer_id,
-            ReconciliationItem.site_id,
-        )
-    )
-    if context.customer_id is not None:
-        query = query.where(ReconciliationItem.customer_id == context.customer_id)
-    if context.site_id is not None:
-        query = query.where(ReconciliationItem.site_id == context.site_id)
+    query = filtered_items(context, principal, item_status=None)
     rows = list(db.scalars(query))
     by_status: dict[str, int] = {}
     by_category: dict[str, int] = {}
@@ -811,6 +818,8 @@ def _lock_decision_targets(db, items, *, asset_id=None, technical_id=None):
         targets[item.entity_type].add(item.entity_id)
         targets[claim.subject_type].add(claim.subject_id)
         targets[claim.object_type].add(claim.object_id)
+        if item.entity_type == REVIEW_TYPE:
+            targets["asset"].add(item.entity_id)
         if asset_id:
             targets["asset"].add(asset_id)
         if technical_id:
@@ -822,6 +831,8 @@ def _lock_decision_targets(db, items, *, asset_id=None, technical_id=None):
                                ("network", value.get("network_external_id"))):
             if claim.data_source_id and kind and external:
                 aliases.add((claim.data_source_id, kind, external))
+        if claim.data_source_id:
+            aliases.update((claim.data_source_id, "asset", key) for key in proposal_guest_keys(item, claim))
     if aliases:
         for link in db.scalars(select(EntitySourceLink).where(tuple_(EntitySourceLink.data_source_id,
                 EntitySourceLink.entity_type, EntitySourceLink.external_id).in_(aliases))):
@@ -840,6 +851,9 @@ def _decision_item(db: Session, principal: Principal, item_id: uuid.UUID, expect
     if item is None:
         raise not_found("Reconciliation item")
     require_scope(principal, "reconciliation.decide", item.customer_id, item.site_id, hide_existence=True)
+    if item.entity_type == REVIEW_TYPE:
+        require_scope(principal, "assets.view", item.customer_id, item.site_id, hide_existence=True)
+        require_scope(principal, "reconciliation.view", item.customer_id, item.site_id, hide_existence=True)
     if context and ((context.customer_id and context.customer_id != item.customer_id)
                     or (context.site_id and context.site_id != item.site_id)):
         raise not_found("Reconciliation item")
@@ -953,7 +967,7 @@ def accept_reconciliation_item(
         return JSONResponse(status_code=409, content=exc.payload)
     commit(db, "Reconciliation decision")
     db.refresh(item)
-    return reconciliation_response(db, item)
+    return reconciliation_response(db, item, principal)
 
 
 @router.post(
@@ -992,7 +1006,7 @@ def link_reconciliation_asset(
     _audit_decision(db, request=request, principal=principal, item=item, action="linked")
     commit(db, "Asset identity link")
     db.refresh(item)
-    return reconciliation_response(db, item)
+    return reconciliation_response(db, item, principal)
 
 
 @router.post("/reconciliation-items/{item_id}/link-technical", response_model=ReconciliationItemResponse)
@@ -1010,7 +1024,7 @@ def link_reconciliation_technical(item_id: uuid.UUID, payload: ReconciliationLin
     link_item_to_technical(db, item=item, target=target, user=principal.user, reason=payload.reason)
     _audit_decision(db, request=request, principal=principal, item=item, action="linked")
     commit(db, "Technical source identity link")
-    return reconciliation_response(db, item)
+    return reconciliation_response(db, item, principal)
 
 
 @router.post("/reconciliation-items/{item_id}/reject", response_model=ReconciliationItemResponse)
@@ -1028,7 +1042,7 @@ def reject_reconciliation_item(
     _audit_decision(db, request=request, principal=principal, item=item, action="rejected")
     commit(db, "Reconciliation decision")
     db.refresh(item)
-    return reconciliation_response(db, item)
+    return reconciliation_response(db, item, principal)
 
 
 @router.post("/reconciliation-items/{item_id}/defer", response_model=ReconciliationItemResponse)
@@ -1046,7 +1060,7 @@ def defer_reconciliation_item(
     _audit_decision(db, request=request, principal=principal, item=item, action="deferred")
     commit(db, "Reconciliation decision")
     db.refresh(item)
-    return reconciliation_response(db, item)
+    return reconciliation_response(db, item, principal)
 
 
 @router.get("/reconciliation-entities", response_model=ReconciliationEntityPageResponse)

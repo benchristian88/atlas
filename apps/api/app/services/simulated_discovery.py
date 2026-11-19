@@ -29,6 +29,7 @@ from app.services.entity_resolution import (
 from app.services.data_sources import manual_inventory_source
 from app.services.knowledge_assertions import accept_assertion, confirm, record_assertion
 from app.services.knowledge_locks import lock_ingestion_subjects
+from app.services.proxmox_guest_identity import simulation_hold_keys
 from app.services.discovery_observations import (
     SnapshotReconciliation,
     default_coverage_key,
@@ -134,10 +135,12 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
         external_ids.update(relationship.target_external_id for relationship in observation.relationships)
     for relationship, _, external_id in relationship_observations:
         external_ids.update((external_id, relationship.target_external_id))
+    positive_ids = external_ids.copy()
     if finalise and run.is_complete_snapshot:
         external_ids.update(snapshot_asset_external_ids(db, run))
     lock_ingestion_subjects(db, source_id=source.id, customer_id=payload.customer_id,
         site_id=payload.site_id, references={("asset", external) for external in external_ids})
+    held_asset_keys = simulation_hold_keys(db, run, positive_ids) if finalise and source.source_type == "connector" else frozenset()
     now = observed_at
     memberships = memberships or {}
     namespaced_facts = namespaced_facts or {}
@@ -544,6 +547,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
         run=run,
         user_id=user_id,
         observed_at=run.finished_at,
+        held_asset_keys=held_asset_keys,
     )
     items.extend(snapshot.items)
     run.summary = to_json_value({

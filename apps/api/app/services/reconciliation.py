@@ -33,6 +33,7 @@ from app.services.entity_resolution import (
 )
 from app.services.knowledge_assertions import accept_assertion, confirm, reject
 from app.services.knowledge_changes import record_assertion_change
+from app.services.proxmox_guest_identity import require_applicable_proposal, require_ordinary_item
 from app.services.predicate_definitions import ASSET_FIELD_PREDICATES
 from app.utils.json_values import to_json_value
 
@@ -658,6 +659,7 @@ def accept_item(
     assertion = _assertion_for_item(db, item)
     if (assertion.customer_id, assertion.site_id) != (item.customer_id, item.site_id):
         raise HTTPException(409, "The source assertion context does not match")
+    require_applicable_proposal(db, item, assertion)
     if assertion.retracted_at or assertion.superseded_by_id or assertion.is_source_current is False:
         raise HTTPException(409, "This proposal is stale; review the latest observation")
     previous_value = item.current_value_json
@@ -806,6 +808,7 @@ def link_item_to_technical(db, *, item, target, user, reason=None):
     if item.entity_type not in {"network", "asset_interface"}:
         raise HTTPException(422, "This item cannot link a technical identity")
     assertion = _current_link_assertion(db, item)
+    require_applicable_proposal(db, item, assertion)
     source = db.get(DataSource, assertion.data_source_id)
     if (source is None or assertion.predicate != "configuration" or assertion.fact_metadata is not None
             or not isinstance(target, Network if item.entity_type == "network" else AssetInterface)):
@@ -852,6 +855,7 @@ def link_item_to_asset(
     user: User,
     reason: str | None,
 ) -> Asset:
+    require_ordinary_item(item)
     if item.status not in {"open", "deferred"}:
         raise HTTPException(status_code=409, detail="This item has already been decided")
     if item.entity_type != "asset" or item.category not in {
@@ -862,6 +866,7 @@ def link_item_to_asset(
     if asset.customer_id != item.customer_id or asset.site_id != item.site_id:
         raise HTTPException(status_code=422, detail="The asset must be in the same customer and site")
     assertion = _current_link_assertion(db, item)
+    require_applicable_proposal(db, item, assertion)
     _attach_external_identity(db, item=item, assertion=assertion, asset=asset)
     item.status = "accepted"
     item.decision_reason = reason or "Linked discovered identity to existing asset"
@@ -922,6 +927,7 @@ def link_item_to_asset(
 
 
 def reject_item(db: Session, item: ReconciliationItem, user: User, reason: str | None) -> None:
+    require_ordinary_item(item)
     if item.status not in {"open", "deferred"}:
         raise HTTPException(status_code=409, detail="This item has already been decided")
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
@@ -960,6 +966,7 @@ def reject_item(db: Session, item: ReconciliationItem, user: User, reason: str |
 
 
 def defer_item(db: Session, item: ReconciliationItem, user: User, reason: str | None) -> None:
+    require_ordinary_item(item)
     if item.status != "open":
         raise HTTPException(status_code=409, detail="Only open items can be deferred")
     item.status = "deferred"

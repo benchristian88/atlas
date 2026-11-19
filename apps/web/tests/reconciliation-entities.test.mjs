@@ -77,6 +77,29 @@ test("read only review has evidence and no decisions", () => {
   assert.match(html, /Evidence and details/);
 });
 
+test("retired guest identity review labels retained configuration and new evidence and has no decisions", () => {
+  const hold = { ...parent, entity_type: "source_identity", label: "Identity review",
+    can_accept: false, can_reject: false, can_defer: false, blocked_reason: "This source key requires a guest identity decision",
+    current: { name: "old-guest", lifecycle_status: "retired", interfaces: [
+      { name: "net0", mac_address: "02:00:00:00:00:0a", assigned_network: "Curated LAN" },
+    ], relationships: [{ type: "Runs on", target: "node-a" }] },
+    proposed: { name: "new-guest", interfaces: [
+      { external_id: "guest/lxc/1029/interface/net0", name: "net0", mac_address: "02:00:00:00:00:0b",
+        network_external_id: "network/node-b/vmbr0" },
+    ], relationships: [{ external_id: "relationship/id", relationship_class: "proxmox.runs_on",
+      source: { external_id: "guest/lxc/1029" }, target: { external_id: "node/node-b" } }] } };
+  const html = render({ ...entity, entity_type: "source_identity", name: "new-guest", type_label: "Identity review",
+    parent: hold, sections: [], decision_items: [], accept_all_available: false });
+  assert.match(html, /Retired Asset at first hold/);
+  assert.match(html, /old-guest · retired/);
+  assert.match(html, /02:00:00:00:00:0a · Assigned Network Curated LAN/);
+  assert.match(html, /Runs on → node-a/);
+  assert.match(html, /Latest source evidence/);
+  assert.match(html, /02:00:00:00:00:0b · Observed Network network\/node-b\/vmbr0/);
+  assert.match(html, /guest\/lxc\/1029 → runs on → node\/node-b/);
+  assert.doesNotMatch(html, /<button|Link an existing asset/);
+});
+
 test("grouped queries retain status, category, search, section and cursor", () => {
   const path = reconciliationEntityPagePath(reconciliationQueueFromValue("changed"), { cursor: "opaque", search: "Workload", section: "facts" });
   const url = new URL(path, "https://atlas.test");

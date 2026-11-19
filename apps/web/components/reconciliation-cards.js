@@ -101,12 +101,40 @@ function ReviewProvenance({ item }) {
     <dl className="review-fields">
       <div><dt>Source</dt><dd>{item.source_name || "Unknown source"}</dd></div>
       {item.last_observed_at && <div><dt>Last observed</dt><dd>{new Date(item.last_observed_at).toLocaleString()}</dd></div>}
-      <div><dt>Source key</dt><dd><code>{item.assertion_predicate}</code></dd></div>
+      {item.entity_type === "source_identity" ? item.discovery_run_id && <div><dt>Discovery run</dt><dd><code>{item.discovery_run_id}</code></dd></div>
+        : <div><dt>Source key</dt><dd><code>{item.assertion_predicate}</code></dd></div>}
       <div><dt>External identity</dt><dd><code>{item.candidate_external_id || "—"}</code></dd></div>
       <div><dt>Reconciliation record</dt><dd><code>{item.id}</code></dd></div>
     </dl>
-    <div className="reconciliation-values"><div><span>Current</span><code>{value(item.current_value_json)}</code></div><div><span>Observed</span><code>{value(item.observed_value_json)}</code></div></div>
+    {item.entity_type !== "source_identity" && <div className="reconciliation-values"><div><span>Current</span><code>{value(item.current_value_json)}</code></div><div><span>Observed</span><code>{value(item.observed_value_json)}</code></div></div>}
   </details>;
+}
+
+function GuestIdentityEvidence({ item }) {
+  const prior = item.current;
+  const observed = item.proposed;
+  return <div className="reconciliation-values review-identity-evidence">
+    <div>
+      <h3>Retired Asset at first hold</h3>
+      <p>{prior.name} · {prior.lifecycle_status}</p>
+      {prior.interfaces?.length > 0 && <ul>{prior.interfaces.map((nic, index) =>
+        <li key={index}>{[nic.name, nic.mac_address, nic.ip_address, nic.assigned_network && `Assigned Network ${nic.assigned_network}`].filter(Boolean).join(" · ")}</li>)}</ul>}
+      {prior.more_interfaces && <p>Additional accepted Interfaces appear on the Asset detail page.</p>}
+      {prior.relationships?.length > 0 && <ul>{prior.relationships.map((edge, index) =>
+        <li key={index}>{edge.type} → {edge.target}</li>)}</ul>}
+      {prior.more_relationships && <p>Additional accepted relationships appear on the Asset detail page.</p>}
+    </div>
+    <div>
+      <h3>Latest source evidence</h3>
+      <p>{observed.name || "Only Interface or relationship evidence was received for this key."}</p>
+      {observed.interfaces.length > 0 && <ul>{observed.interfaces.map(nic =>
+        <li key={nic.external_id}>{[nic.name, nic.mac_address, nic.ip_address, nic.network_external_id && `Observed Network ${nic.network_external_id}`].filter(Boolean).join(" · ")}</li>)}</ul>}
+      {observed.relationships.length > 0 && <ul>{observed.relationships.map(edge =>
+        <li key={edge.external_id}>{edge.source.external_id} → {edge.relationship_class.split(".").pop().replaceAll("_", " ")} → {edge.target.external_id}</li>)}</ul>}
+      {observed.asset_interface_count > observed.interfaces.length && <p>{observed.asset_interface_count} held Interface observations.</p>}
+      {observed.relationship_count > observed.relationships.length && <p>{observed.relationship_count} held relationship observations.</p>}
+    </div>
+  </div>;
 }
 
 export function TechnicalIdentityLink({ item, busy, technicalChoices = {}, loadTechnicalChoices, linkSelections = {}, setLinkSelections, linkTechnical }) {
@@ -160,12 +188,13 @@ function ReviewSection({ entity, section, ...actions }) {
 
 export function ReconciliationEntityCard({ entity, focused = false, canDecide, busy, acceptAll, assets = [], linkSelections = {}, setLinkSelections, linkAsset, ...actions }) {
   const parent = entity.parent;
+  const identityReview = parent?.entity_type === "source_identity";
   const candidates = assets.filter(asset => asset.customer_id === entity.customer_id && asset.site_id === entity.site_id);
   const blocked = entity.sections.reduce((count, section) => count + section.blocked_count, 0);
   return <article id={`entity-${entity.id}`} tabIndex={-1} className={`detail-card review-entity${focused ? " review-entity-focused" : ""}`} aria-label={`Review ${entity.name}`}>
     <details open={focused || entity.default_expanded}>
       <summary className="review-entity-heading">
-        <EntityIdentity type={entity.entity_type === "asset" ? "asset" : "network"} record={entity} />
+        <EntityIdentity type={["asset", "source_identity"].includes(entity.entity_type) ? "asset" : "network"} record={entity} />
         <span className="review-identity"><span className="review-entity-name" role="heading" aria-level={2}>{entity.name}</span><span className="secondary-text">{entity.type_label} · {entity.matching_record_count} {entity.matching_record_count === 1 ? "record" : "records"}</span></span>
         {parent ? <StatusBadge status={parent.status} /> : <span className="secondary-text">{entity.matching_record_count} changes</span>}
         {blocked > 0 && <span className="review-warning">{blocked} waiting</span>}
@@ -173,9 +202,10 @@ export function ReconciliationEntityCard({ entity, focused = false, canDecide, b
         <span className="review-chevron"><NavigationIcon name="chevron-down" /></span>
       </summary>
       <div className="review-entity-body">
-        {parent && <section className="review-parent" aria-label="Entity decision">
-          <div className="review-row-heading"><h3>{parent.label}</h3><StatusBadge status={parent.status} /></div>
+        {parent && <section className="review-parent" aria-label={identityReview ? "Identity review" : "Entity decision"}>
+          {!identityReview && <div className="review-row-heading"><h3>{parent.label}</h3><StatusBadge status={parent.status} /></div>}
           {parent.warning && <p className="review-warning">{parent.warning}</p>}
+          {identityReview && <GuestIdentityEvidence item={parent} />}
           <ReviewBlockers item={parent} reviewHref={actions.reviewHref} />
           {canDecide && <ReviewActions item={parent} parent busy={busy} decide={actions.decide} />}
           <TechnicalIdentityLink item={parent} busy={busy} {...actions} linkSelections={linkSelections} setLinkSelections={setLinkSelections} />

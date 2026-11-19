@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Set
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -219,6 +220,7 @@ def reconcile_complete_snapshot(
     run: DiscoveryRun,
     user_id: uuid.UUID,
     observed_at: datetime | None = None,
+    held_asset_keys: Set[str] = frozenset(),
 ) -> SnapshotReconciliation:
     """Compare one successful complete run to its matching complete baseline."""
 
@@ -239,7 +241,7 @@ def reconcile_complete_snapshot(
         )
     )
     current_ids = {row.external_id for row in current_rows}
-    for external_id in current_ids:
+    for external_id in current_ids - held_asset_keys:
         _resolve_reobservation(
             db,
             run=run,
@@ -262,7 +264,7 @@ def reconcile_complete_snapshot(
         )
     )
     for prior in baseline_rows:
-        if prior.external_id in current_ids:
+        if prior.external_id in current_ids or prior.external_id in held_asset_keys:
             continue
         existing_state = _current_observation_state(
             db, run=run, external_id=prior.external_id

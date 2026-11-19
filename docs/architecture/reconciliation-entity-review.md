@@ -5,6 +5,9 @@ its independent records, assertions, evidence, Changes or audit history. This is
 a read-only projection over PostgreSQL; it adds no persistent grouping state and
 requires no migration. Existing granular listing/decision routes remain compatible.
 
+See the [Proxmox guest identity containment requirements](proxmox-guest-identity-containment.md)
+for retirement and subsequent observations at an existing source binding.
+
 ## Ownership and identity
 
 The backend groups accepted entities by their durable type and ID. Unresolved

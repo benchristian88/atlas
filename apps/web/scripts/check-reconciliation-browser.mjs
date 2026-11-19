@@ -67,6 +67,23 @@ try {
       const records = [...sections.flatMap(section => section.items), ...(parent.status === "open" ? [parent] : [])];
       return { id: parent.id, customer_id: customer.id, site_id: site.id, name: host ? "Host" : "Workload", type_label: "Virtual Machine", entity_type: "asset", entity_id: parentAccepted && !host ? id(50) : null, asset_type: "virtual_machine", icon_key: "server", accent_key: "teal", parent, default_expanded: parent.status === "open", matching_record_count: records.length, status_counts: { open: records.length }, sections, accept_all_available: true, decision_items: records.map(row => ({ id: row.id, version: row.version })), bulk_limit: 1000 };
     }
+    function identityGroup() {
+      const previous = { name: "Retired guest A", lifecycle_status: "retired", interfaces: [
+        { name: "net0", mac_address: "02:00:00:00:00:0a", assigned_network: "Atlas LAN" },
+      ], relationships: [{ type: "Runs on", target: "node-a" }] };
+      const evidence = { name: "Observed guest B", interfaces: [
+        { external_id: "guest/lxc/1029/interface/net0", name: "net0", mac_address: "02:00:00:00:00:0b",
+          network_external_id: "network/node-b/vmbr1" },
+      ], relationships: [{ external_id: "relationship/key", relationship_class: "proxmox.runs_on",
+        source: { external_id: "guest/lxc/1029" }, target: { external_id: "node/node-b" } }] };
+      const parent = { ...base, id: id(12), entity_type: "source_identity", category: "possible_duplicate",
+        label: "Identity review", candidate_external_id: "guest/lxc/1029", assertion_predicate: "source_key_present",
+        current: previous, proposed: evidence, can_reject: false, can_defer: false,
+        blocked_reason: "This source key requires a guest identity decision" };
+      return { ...group(), id: parent.id, name: evidence.name, entity_type: "source_identity",
+        type_label: "Identity review", parent, sections: [], default_expanded: true, matching_record_count: 1, decision_items: [],
+        accept_all_available: false };
+    }
     await page.route("**/api/**", async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/api/, "");
       requests.push({ path, query: url.search, method: request.method() });
@@ -98,11 +115,15 @@ try {
       }
       else if (path === "/reconciliation-entities") {
         let entities = [group()];
-        if (url.searchParams.get("search")?.toLowerCase() === "host") entities = [group(true)];
+        if (url.searchParams.get("search") === "Observed guest B") entities = [identityGroup()];
+        else if (url.searchParams.get("search")?.toLowerCase() === "host") entities = [group(true)];
         else if (url.searchParams.get("search") && !"workload".includes(url.searchParams.get("search").toLowerCase())) entities = [];
         const section = url.searchParams.get("section");
         if (section) entities = entities.filter(entity => entity.sections.some(candidate => candidate.key === section)).map(entity => ({ ...entity, sections: entity.sections.filter(candidate => candidate.key === section) }));
-        body = { entities, entity_total: entities.length ? 2 : 0, record_total: childrenAccepted ? 2 : parentAccepted ? 10 : 11, limit: 50, next_cursor: null, by_status: {}, by_category: {} };
+        const identitySearch = url.searchParams.get("search") === "Observed guest B";
+        body = { entities, entity_total: identitySearch ? 1 : entities.length ? 2 : 0,
+          record_total: identitySearch ? 1 : childrenAccepted ? 2 : parentAccepted ? 10 : 11,
+          limit: 50, next_cursor: null, by_status: {}, by_category: {} };
       }
       else if (path === `/reconciliation-entities/${id(11)}`) body = group(true);
       else if (path === `/reconciliation-entities/${id(10)}`) body = group();
@@ -232,6 +253,18 @@ try {
       checks.push({ surface: "canonical-review", mode, theme, accent });
     }
     snapshotMode = false;
+    await page.goto(`${origin}/reconciliation?search=Observed+guest+B`);
+    const identity = page.getByRole("article", { name: "Review Observed guest B", exact: true });
+    await identity.getByRole("region", { name: "Identity review" }).waitFor();
+    await identity.getByText("Retired guest A · retired", { exact: true }).waitFor();
+    await identity.getByText("Latest source evidence", { exact: true }).waitFor();
+    assert.equal(await identity.getByRole("button").count(), 0);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      if (accent === null) await identity.screenshot({ path: `${output}/identity-review-${theme}-${width}.png` });
+      checks.push({ surface: "identity-review", theme, accent, width });
+    }
     await page.goto(`${origin}/assets/${id(70)}`);
     const typeKnowledge = page.getByRole("article", { name: "Asset Type knowledge", exact: true });
     await typeKnowledge.getByText("Not selected", { exact: true }).waitFor();

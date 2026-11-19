@@ -14,8 +14,9 @@ from app.authorization import (
     scope_condition,
 )
 from app.database import get_db
-from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, Site
+from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, Service, ServiceAssetDependency, Site
 from app.schemas import ContextResponse, DashboardSummaryResponse
+from app.services.reconciliation_listing import filtered_items
 
 router = APIRouter(tags=["context"])
 
@@ -104,23 +105,7 @@ def dashboard_summary(
         scope_condition(principal, "business_functions.view", BusinessFunction.customer_id, BusinessFunction.site_id),
         BusinessFunction.active.is_(True),
     )
-    reconciliation_base = select(func.count()).select_from(ReconciliationItem).where(
-        scope_condition(
-            principal,
-            "reconciliation.view",
-            ReconciliationItem.customer_id,
-            ReconciliationItem.site_id,
-        )
-    )
-    open_items_query = select(ReconciliationItem).where(
-        scope_condition(
-            principal,
-            "reconciliation.view",
-            ReconciliationItem.customer_id,
-            ReconciliationItem.site_id,
-        ),
-        ReconciliationItem.status == "open",
-    )
+    open_items_query = filtered_items(context, principal, item_status="open")
     changes_query = select(func.count()).select_from(KnowledgeChange).where(
         scope_condition(
             principal,
@@ -160,12 +145,6 @@ def dashboard_summary(
         service_query = service_query.where(Service.customer_id == context.customer_id)
         service_records_query = service_records_query.where(Service.customer_id == context.customer_id)
         business_function_query = business_function_query.where(BusinessFunction.customer_id == context.customer_id)
-        reconciliation_base = reconciliation_base.where(
-            ReconciliationItem.customer_id == context.customer_id
-        )
-        open_items_query = open_items_query.where(
-            ReconciliationItem.customer_id == context.customer_id
-        )
         changes_query = changes_query.where(KnowledgeChange.customer_id == context.customer_id)
         relationship_query = relationship_query.where(
             source.customer_id == context.customer_id,
@@ -182,10 +161,6 @@ def dashboard_summary(
         service_query = service_query.where(or_(Service.site_id == context.site_id, Service.site_id.is_(None)))
         service_records_query = service_records_query.where(or_(Service.site_id == context.site_id, Service.site_id.is_(None)))
         business_function_query = business_function_query.where(or_(BusinessFunction.site_id == context.site_id, BusinessFunction.site_id.is_(None)))
-        reconciliation_base = reconciliation_base.where(
-            ReconciliationItem.site_id == context.site_id
-        )
-        open_items_query = open_items_query.where(ReconciliationItem.site_id == context.site_id)
         changes_query = changes_query.where(KnowledgeChange.site_id == context.site_id)
         relationship_query = relationship_query.where(
             source.site_id == context.site_id,
@@ -222,9 +197,7 @@ def dashboard_summary(
         "assets": asset_count_value,
         "networks": int(db.scalar(network_query) or 0),
         "relationships": int(db.scalar(relationship_query) or 0),
-        "reconciliation": int(
-            db.scalar(reconciliation_base.where(ReconciliationItem.status == "open")) or 0
-        ),
+        "reconciliation": len(open_items),
         "open_reconciliation_count": len(open_items),
         "newly_discovered_count": category_counts["newly_discovered"],
         "changed_count": category_counts["changed"],
