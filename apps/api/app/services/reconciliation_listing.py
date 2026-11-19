@@ -12,7 +12,8 @@ from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.orm import aliased
 
 from app.authorization import scope_condition
-from app.models import KnowledgeAssertion, ReconciliationItem
+from app.models import DataSource, KnowledgeAssertion, ReconciliationItem
+from app.services.proxmox_guest_bindings import GuestBindings
 from app.services.proxmox_guest_identity import REVIEW_TYPE
 
 
@@ -41,6 +42,25 @@ def filtered_items(context, principal, *, item_status="open", category=None,
         if run_id:
             query = query.where(KnowledgeAssertion.discovery_run_id == run_id)
     return query
+
+
+def stale_identity_item_ids(db, scoped_query):
+    """Preserve historical rows while excluding them from open-work counts and pages."""
+    candidates = db.execute(select(ReconciliationItem, KnowledgeAssertion)
+        .join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id)
+        .join(DataSource, DataSource.id == KnowledgeAssertion.data_source_id)
+        .where(ReconciliationItem.id.in_(scoped_query.with_only_columns(ReconciliationItem.id)),
+               ReconciliationItem.status.in_(("open", "deferred")), ReconciliationItem.entity_type != REVIEW_TYPE,
+               KnowledgeAssertion.customer_id == ReconciliationItem.customer_id,
+               KnowledgeAssertion.site_id == ReconciliationItem.site_id, DataSource.identity_epoch > 0))
+    stale, by_scope = set(), {}
+    for item, claim in candidates:
+        scope = (item.customer_id, item.site_id, claim.data_source_id)
+        if scope not in by_scope:
+            by_scope[scope] = GuestBindings.for_scope(db, item, claim.data_source_id)
+        if (bindings := by_scope[scope]) and bindings.stale(claim, item=item):
+            stale.add(item.id)
+    return stale
 
 
 def _position(item):

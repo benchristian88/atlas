@@ -21,6 +21,7 @@ from app.models import (
 from app.services.knowledge_assertions import confirm, record_assertion
 from app.services.knowledge_changes import record_assertion_change
 from app.services.reconciliation import create_item
+from app.services.proxmox_guest_bindings import GuestBindings
 
 
 @dataclass
@@ -67,7 +68,9 @@ def record_observed_entity(
     return row
 
 
-def _previous_complete_run(db: Session, run: DiscoveryRun) -> DiscoveryRun | None:
+def _previous_complete_run(db: Session, run: DiscoveryRun, *, live_proxmox=False) -> DiscoveryRun | None:
+    provenance = [DiscoveryRun.execution_provenance["connector_id"].astext == "proxmox",
+                  DiscoveryRun.finalisation_hash.is_not(None)] if live_proxmox else []
     return db.scalar(
         select(DiscoveryRun)
         .where(
@@ -79,6 +82,7 @@ def _previous_complete_run(db: Session, run: DiscoveryRun) -> DiscoveryRun | Non
             DiscoveryRun.status == "completed",
             DiscoveryRun.is_complete_snapshot.is_(True),
             DiscoveryRun.completeness_status == "complete",
+            *provenance,
         )
         .order_by(DiscoveryRun.finished_at.desc(), DiscoveryRun.started_at.desc())
         .limit(1)
@@ -86,7 +90,7 @@ def _previous_complete_run(db: Session, run: DiscoveryRun) -> DiscoveryRun | Non
 
 
 def _current_observation_state(
-    db: Session, *, run: DiscoveryRun, external_id: str
+    db: Session, *, run: DiscoveryRun, external_id: str, guest_bindings=None
 ) -> KnowledgeAssertion | None:
     candidates = db.scalars(
         select(KnowledgeAssertion).where(
@@ -99,7 +103,7 @@ def _current_observation_state(
             KnowledgeAssertion.is_source_current.is_(True),
         )
     )
-    return next(iter(candidates), None)
+    return next((claim for claim in candidates if not guest_bindings or not guest_bindings.stale(claim)), None)
 
 
 def snapshot_asset_external_ids(db: Session, run: DiscoveryRun) -> set[str]:
@@ -109,7 +113,13 @@ def snapshot_asset_external_ids(db: Session, run: DiscoveryRun) -> set[str]:
     before technical entities or assertions, rather than late in finalisation.
     """
     baseline = _previous_complete_run(db, run)
-    run_ids = [run.id, *([baseline.id] if baseline else [])]
+    run_ids = {run.id}
+    if baseline:
+        run_ids.add(baseline.id)
+    if (run.execution_provenance or {}).get("connector_id") == "proxmox":
+        live = _previous_complete_run(db, run, live_proxmox=True)
+        if live:
+            run_ids.add(live.id)
     return set(db.scalars(select(RunObservedEntity.external_id).where(
         RunObservedEntity.discovery_run_id.in_(run_ids),
         RunObservedEntity.customer_id == run.customer_id,
@@ -125,6 +135,7 @@ def _asset_link(db: Session, *, run: DiscoveryRun, external_id: str) -> EntitySo
             EntitySourceLink.site_id == run.site_id,
             EntitySourceLink.entity_type == "asset",
             EntitySourceLink.external_id == external_id,
+            EntitySourceLink.ended_epoch.is_(None),
         )
     )
 
@@ -137,8 +148,9 @@ def _resolve_reobservation(
     user_id: uuid.UUID,
     observed_at: datetime,
     result: SnapshotReconciliation,
+    guest_bindings: GuestBindings | None,
 ) -> None:
-    previous = _current_observation_state(db, run=run, external_id=external_id)
+    previous = _current_observation_state(db, run=run, external_id=external_id, guest_bindings=guest_bindings)
     if previous is None or not isinstance(previous.value_json, dict):
         return
     if previous.value_json.get("state") != "not_observed":
@@ -157,18 +169,25 @@ def _resolve_reobservation(
         data_source_id=run.data_source_id,
         discovery_run_id=run.id,
         observed_at=observed_at,
+        guest_bindings=guest_bindings, identity_epoch=run.identity_epoch,
     )
     confirm(assertion)
-    for item in db.scalars(
-        select(ReconciliationItem)
+    for item, claim in db.execute(
+        select(ReconciliationItem, KnowledgeAssertion)
         .join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id)
         .where(
             ReconciliationItem.category == "no_longer_observed",
             ReconciliationItem.status.in_(("open", "deferred")),
+            ReconciliationItem.customer_id == run.customer_id,
+            ReconciliationItem.site_id == run.site_id,
+            KnowledgeAssertion.customer_id == run.customer_id,
+            KnowledgeAssertion.site_id == run.site_id,
             KnowledgeAssertion.data_source_id == run.data_source_id,
             KnowledgeAssertion.subject_external_id == external_id,
         )
     ):
+        if guest_bindings and guest_bindings.stale(claim, item=item):
+            continue
         item.status = "accepted"
         item.decision_reason = "Automatically resolved because the entity was observed again"
         item.decided_by_user_id = user_id
@@ -198,6 +217,7 @@ def _resolve_reobservation(
             data_source_id=run.data_source_id,
             discovery_run_id=run.id,
             observed_at=observed_at,
+            guest_bindings=guest_bindings, identity_epoch=run.identity_epoch,
         )
         item, created = create_item(
             db,
@@ -221,6 +241,7 @@ def reconcile_complete_snapshot(
     user_id: uuid.UUID,
     observed_at: datetime | None = None,
     held_asset_keys: Set[str] = frozenset(),
+    guest_bindings: GuestBindings | None = None,
 ) -> SnapshotReconciliation:
     """Compare one successful complete run to its matching complete baseline."""
 
@@ -236,12 +257,24 @@ def reconcile_complete_snapshot(
         db.scalars(
             select(RunObservedEntity).where(
                 RunObservedEntity.discovery_run_id == run.id,
+                RunObservedEntity.data_source_id == run.data_source_id,
+                RunObservedEntity.customer_id == run.customer_id,
+                RunObservedEntity.site_id == run.site_id,
                 RunObservedEntity.entity_type == "asset",
             )
         )
     )
     current_ids = {row.external_id for row in current_rows}
-    for external_id in current_ids - held_asset_keys:
+    decided = {key: guest_bindings.latest({("asset", key)}) for kind, key in guest_bindings.boundaries
+               if kind == "asset"} if guest_bindings else {}
+    for row in current_rows:
+        external_id = row.external_id
+        if external_id in held_asset_keys:
+            continue
+        if external_id in decided:
+            link = guest_bindings.current(("asset", external_id))
+            if not link or row.entity_id != link.entity_id or run.identity_epoch < decided[external_id]:
+                continue
         _resolve_reobservation(
             db,
             run=run,
@@ -249,25 +282,32 @@ def reconcile_complete_snapshot(
             user_id=user_id,
             observed_at=observed_at,
             result=result,
+            guest_bindings=guest_bindings,
         )
 
     baseline = _previous_complete_run(db, run)
     if baseline is None:
         return result
     result.baseline_run_id = baseline.id
-    baseline_rows = list(
-        db.scalars(
-            select(RunObservedEntity).where(
-                RunObservedEntity.discovery_run_id == baseline.id,
-                RunObservedEntity.entity_type == "asset",
-            )
-        )
-    )
+    live_baseline = _previous_complete_run(db, run, live_proxmox=True) if decided else None
+    runs = {prior_run.id: prior_run for prior_run in (baseline, live_baseline) if prior_run}
+    baseline_rows = db.scalars(select(RunObservedEntity).where(
+        RunObservedEntity.discovery_run_id.in_(runs), RunObservedEntity.data_source_id == run.data_source_id,
+        RunObservedEntity.customer_id == run.customer_id, RunObservedEntity.site_id == run.site_id,
+        RunObservedEntity.entity_type == "asset"))
     for prior in baseline_rows:
         if prior.external_id in current_ids or prior.external_id in held_asset_keys:
             continue
+        prior_run = runs[prior.discovery_run_id]
+        if prior.external_id in decided:
+            link = guest_bindings.current(("asset", prior.external_id))
+            if (prior_run != live_baseline or prior_run.identity_epoch < decided[prior.external_id]
+                    or not link or prior.entity_id != link.entity_id):
+                continue
+        elif prior_run != baseline:
+            continue
         existing_state = _current_observation_state(
-            db, run=run, external_id=prior.external_id
+            db, run=run, external_id=prior.external_id, guest_bindings=guest_bindings
         )
         if (
             existing_state is not None
@@ -287,13 +327,14 @@ def reconcile_complete_snapshot(
             predicate="observation_state",
             value={
                 "state": "not_observed",
-                "baseline_run_id": baseline.id,
+                "baseline_run_id": prior_run.id,
                 "missing_since_run_id": run.id,
                 "last_observed_at": prior.observed_at,
             },
             data_source_id=run.data_source_id,
             discovery_run_id=run.id,
             observed_at=observed_at,
+            guest_bindings=guest_bindings, identity_epoch=run.identity_epoch,
         )
         item, created = create_item(
             db,
@@ -305,7 +346,7 @@ def reconcile_complete_snapshot(
             current_value={
                 "status": asset.status if asset else None,
                 "last_observed_at": prior.observed_at,
-                "baseline_run_id": baseline.id,
+                "baseline_run_id": prior_run.id,
             },
             observed_value=assertion.value_json,
             recommended_action="Review whether this asset is missing, inactive, retired, or excepted",
@@ -324,6 +365,6 @@ def reconcile_complete_snapshot(
             actor_user_id=user_id,
             previous_value={"state": "observed", "last_observed_at": prior.observed_at},
             new_value=assertion.value_json,
-            metadata={"baseline_run_id": baseline.id},
+            metadata={"baseline_run_id": prior_run.id},
         )
     return result

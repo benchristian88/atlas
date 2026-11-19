@@ -44,6 +44,7 @@ try {
     page.on("pageerror", error => errors.push(error.message));
     let parentAccepted = false, childrenAccepted = false, interfaceLinked = false, linkAttempts = 0;
     let snapshotMode = false, snapshotRevision = 3, snapshotAccepted = false;
+    let identityRevision = 5, identityOutcome = null, relationshipOnly = false;
     function snapshotGroup() {
       const current = snapshotRevision === 3 ? "Curated" : "New manual value";
       const fact = { ...base, id: id(20), label: "Name", assertion_predicate: "name", current, proposed: "Observed",
@@ -71,7 +72,8 @@ try {
       const previous = { name: "Retired guest A", lifecycle_status: "retired", interfaces: [
         { name: "net0", mac_address: "02:00:00:00:00:0a", assigned_network: "Atlas LAN" },
       ], relationships: [{ type: "Runs on", target: "node-a" }] };
-      const evidence = { name: "Observed guest B", interfaces: [
+      const evidence = { name: relationshipOnly ? null : identityRevision === 5 ? "Observed guest B" : "Newer guest evidence",
+        guest_observed: !relationshipOnly, interfaces: [
         { external_id: "guest/lxc/1029/interface/net0", name: "net0", mac_address: "02:00:00:00:00:0b",
           network_external_id: "network/node-b/vmbr1" },
       ], relationships: [{ external_id: "relationship/key", relationship_class: "proxmox.runs_on",
@@ -79,8 +81,12 @@ try {
       const parent = { ...base, id: id(12), entity_type: "source_identity", category: "possible_duplicate",
         label: "Identity review", candidate_external_id: "guest/lxc/1029", assertion_predicate: "source_key_present",
         current: previous, proposed: evidence, can_reject: false, can_defer: false,
+        status: identityOutcome ? "accepted" : "open",
+        identity_review: { expected_version: String(identityRevision).repeat(64), current_asset_status: "retired",
+          observed_at: "2026-11-01T00:00:00Z", outcome: identityOutcome, withheld: {},
+          actions: { reactivate: null, replace: relationshipOnly ? "Run discovery with this guest included to review it as a replacement." : null } },
         blocked_reason: "This source key requires a guest identity decision" };
-      return { ...group(), id: parent.id, name: evidence.name, entity_type: "source_identity",
+      return { ...group(), id: parent.id, name: "Observed guest B", entity_type: "source_identity",
         type_label: "Identity review", parent, sections: [], default_expanded: true, matching_record_count: 1, decision_items: [],
         accept_all_available: false };
     }
@@ -97,6 +103,17 @@ try {
         if (fresh) snapshotAccepted = true;
         if (bulk) body = { accepted: fresh ? [{ id: id(20), label: "Name" }] : [], failed: fresh ? [] : [{ id: id(20), label: "Name", reason: "This proposal changed; refresh before deciding" }], blocked: [], already_resolved: [] };
         else { status = fresh ? 200 : 409; body = fresh ? {} : { detail: "This proposal changed; refresh before deciding" }; }
+      }
+      else if (path === `/reconciliation-items/${id(12)}/identity-decision`) {
+        const payload = request.postDataJSON();
+        assert.ok(payload.reason.trim());
+        if (payload.expected_version !== String(identityRevision).repeat(64)) {
+          status = 409;
+          body = { detail: "This identity review changed; refresh and review the comparison before deciding." };
+        } else {
+          identityOutcome = payload.outcome;
+          body = { id: id(12), status: "accepted", outcome: identityOutcome };
+        }
       }
       else if (path === "/setup/status") body = { state: "INITIALISED" };
       else if (path === "/auth/me") body = { id: id(90), email: "reviewer@example.test", display_name: "Acceptance reviewer", theme_mode: theme, accent_colour: accent, permissions, assignments: [{ scope_type: "global", permissions, role_name: "Reviewer" }] };
@@ -258,13 +275,48 @@ try {
     await identity.getByRole("region", { name: "Identity review" }).waitFor();
     await identity.getByText("Retired guest A · retired", { exact: true }).waitFor();
     await identity.getByText("Latest source evidence", { exact: true }).waitFor();
-    assert.equal(await identity.getByRole("button").count(), 0);
-    for (const width of [1440, 390]) {
+    await identity.getByText("First-hold snapshot", { exact: true }).waitFor();
+    await identity.getByText("Current Asset status").waitFor();
+    assert.equal(await identity.getByRole("button", { name: "Accept all", exact: true }).count(), 0);
+    for (const width of [1440, 1024, 800, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (accent === null) await identity.screenshot({ path: `${output}/identity-review-${theme}-${width}.png` });
       checks.push({ surface: "identity-review", theme, accent, width });
     }
+    await identity.getByRole("button", { name: "Reactivate existing Asset" }).click();
+    assert.equal(await identity.getByRole("button", { name: "Confirm same guest" }).isDisabled(), true);
+    await identity.getByLabel("Reason").fill("   ");
+    assert.equal(await identity.getByRole("button", { name: "Confirm same guest" }).isDisabled(), true);
+    await identity.getByLabel("Reason").fill("Verified synthetic guest identity");
+    const writes = () => requests.filter(request => request.path.endsWith("/identity-decision")).length;
+    const previousWrites = writes();
+    await identity.getByRole("button", { name: "Leave pending" }).click();
+    assert.equal(writes(), previousWrites);
+    await identity.getByRole("button", { name: "Accept as replacement" }).click();
+    await identity.getByLabel("Reason").fill("Verified replacement guest");
+    if (accent === null) await identity.screenshot({ path: `${output}/identity-confirmation-${theme}-390.png` });
+    identityRevision = 6;
+    await identity.getByRole("button", { name: "Confirm replacement" }).click();
+    await page.getByText("Review the refreshed identity comparison before confirming again.").waitFor();
+    await identity.getByText("Newer guest evidence", { exact: true }).waitFor();
+    assert.equal(await identity.getByLabel("Reason").count(), 0);
+    await identity.getByRole("button", { name: "Accept as replacement" }).click();
+    await identity.getByLabel("Reason").fill("Reviewed the refreshed comparison");
+    await identity.getByRole("button", { name: "Confirm replacement" }).click();
+    await identity.getByText("Accepted as a replacement", { exact: true }).waitFor();
+    assert.equal(identityOutcome, "replace");
+    identityOutcome = null;
+    relationshipOnly = true;
+    await page.reload();
+    await identity.getByText("This run did not include a guest payload.").waitFor();
+    assert.equal(await identity.getByRole("button", { name: "Accept as replacement" }).count(), 0);
+    await identity.getByRole("button", { name: "Reactivate existing Asset" }).click();
+    await identity.getByLabel("Reason").fill("Confirmed the same guest from source context");
+    await identity.getByRole("button", { name: "Confirm same guest" }).click();
+    await identity.getByText("Confirmed as the same guest", { exact: true }).waitFor();
+    assert.equal(identityOutcome, "reactivate");
+    checks.push({ surface: "identity-confirmation", theme, accent });
     await page.goto(`${origin}/assets/${id(70)}`);
     const typeKnowledge = page.getByRole("article", { name: "Asset Type knowledge", exact: true });
     await typeKnowledge.getByText("Not selected", { exact: true }).waitFor();

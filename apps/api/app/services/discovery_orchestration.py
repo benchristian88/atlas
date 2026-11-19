@@ -8,7 +8,7 @@ from sqlalchemy import or_, select
 
 from atlas_connector_sdk.aip import body_hash
 from atlas_connector_sdk.configuration import validate_configuration, visible
-from app.models import DiscoveryRun, Integration
+from app.models import DataSource, DiscoveryRun, Integration
 from app.services.connector_contracts import SDK_VERSION
 from app.services.connector_catalogue import compatibility
 from app.services.connector_mappings import require_resolved
@@ -23,6 +23,8 @@ QUEUE = "atlas:discovery:dispatch:v1"
 MAX_ATTEMPTS = 3
 JOB_SECONDS = 600
 REQUIRED_OPERATIONS = {"run_discovery", "get_job", "cancel_job"}
+IDENTITY_EPOCH_CHANGED = "identity_epoch_changed"
+IDENTITY_RETRY_MESSAGE = "Identity changed during this run. Run discovery again."
 
 
 class DiscoveryEligibilityError(ValueError):
@@ -115,7 +117,11 @@ async def create_run(db, row, *, trigger="manual", user_id=None):
         from app.services.local_release_authority import execution_context
         provenance["local_execution"] = execution_context(record)
     created = utcnow()
+    source = db.get(DataSource, row.data_source_id, with_for_update={"key_share": True}, populate_existing=True)
+    if source is None or (source.customer_id, source.site_id) != (row.customer_id, row.site_id):
+        raise DiscoveryEligibilityError("integration_configuration_changed")
     run = DiscoveryRun(id=uuid.uuid4(), integration_id=row.id, data_source_id=row.data_source_id,
+        identity_epoch=source.identity_epoch,
         customer_id=row.customer_id, site_id=row.site_id, status="pending", started_at=created, created_at=created,
         created_by_user_id=user_id, coverage_key=coverage["key"], is_complete_snapshot=coverage["snapshot_mode"] == "full",
         completeness_status="unknown", execution_provenance=provenance, dispatch_state="pending",
@@ -177,13 +183,19 @@ def fail_run(run, row, code):
         return
     run.status, run.completeness_status = "failed", "failed"
     run.finished_at = run.completed_at = utcnow()
-    run.error_message = code
+    run.error_message = IDENTITY_RETRY_MESSAGE if code == IDENTITY_EPOCH_CHANGED else code
     run.ingestion_generation = None
     row.last_error_code = code
     # Runtime cleanup is reconciled separately; no snapshot absence call here.
     if run.dispatch_state == "pending":
         run.dispatch_state = "settled"
     logger.info("discovery run=%s integration=%s state=failed category=%s", run.id, row.id, code)
+
+
+def lock_proxmox_run_source(db, run):
+    if (run.execution_provenance or {}).get("connector_id") == "proxmox":
+        return db.get(DataSource, run.data_source_id, with_for_update={"key_share": True}, populate_existing=True)
+    return None
 
 
 async def dispatch(db, run_id):
@@ -193,6 +205,11 @@ async def dispatch(db, run_id):
     row = db.scalar(select(Integration).where(Integration.id == identity.integration_id).with_for_update())
     run = db.scalar(select(DiscoveryRun).where(DiscoveryRun.id == run_id).with_for_update(key_share=True).execution_options(populate_existing=True))
     if run.status != "pending" or run.dispatch_state != "pending" or run.dispatch_after and run.dispatch_after > utcnow():
+        return
+    source = lock_proxmox_run_source(db, run)
+    if source is not None and run.identity_epoch != source.identity_epoch:
+        fail_run(run, row, IDENTITY_EPOCH_CHANGED)
+        db.commit()
         return
     if run.created_at < utcnow() - timedelta(minutes=15):
         fail_run(run, row, "dispatch_expired")

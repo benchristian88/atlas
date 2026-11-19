@@ -62,6 +62,7 @@ def ensure_asset_link(
             EntitySourceLink.data_source_id == data_source_id,
             EntitySourceLink.entity_type == "asset",
             EntitySourceLink.external_id == external_id,
+            EntitySourceLink.ended_epoch.is_(None),
         )
     )
     if link is not None:
@@ -92,7 +93,8 @@ def ensure_asset_link(
 
 def scoped_source_links(*, data_source_id, customer_id, site_id):
     return select(EntitySourceLink).where(EntitySourceLink.data_source_id == data_source_id,
-        EntitySourceLink.customer_id == customer_id, EntitySourceLink.site_id == site_id)
+        EntitySourceLink.customer_id == customer_id, EntitySourceLink.site_id == site_id,
+        EntitySourceLink.ended_epoch.is_(None))
 
 
 def technical_link(db, *, data_source_id, customer_id, site_id, entity_type, external_id):
@@ -119,16 +121,25 @@ def ensure_technical_link(db, *, source, target, entity_type, external_id, obser
     if source.customer_id != customer_id or source.site_id not in {None, site_id} or site_id is None:
         raise HTTPException(409, "Source and target must share the customer and site")
     link = db.scalar(select(EntitySourceLink).where(EntitySourceLink.data_source_id == source.id,
-        EntitySourceLink.entity_type == entity_type, EntitySourceLink.external_id == external_id))
+        EntitySourceLink.entity_type == entity_type, EntitySourceLink.external_id == external_id,
+        EntitySourceLink.ended_epoch.is_(None)))
     if link is not None:
         if ((link.customer_id, link.site_id) != (customer_id, site_id) or
                 (link.entity_id, link.network_id, link.interface_id, link.interface_owner_id) != (owner_id, network_id, interface_id, interface_owner_id)):
             raise HTTPException(409, "The technical source identity already has a target")
         link.last_observed_at = observed_at
         return link
+    opened_epoch = 0
+    if entity_type == "asset_interface" and source.identity_epoch:
+        from app.services.proxmox_guest_bindings import GuestBindings
+        bindings = GuestBindings.for_scope(db, owner, source.id)
+        if bindings:
+            aliases = bindings.guest_aliases_by_asset.get(owner.id, set()) | {(entity_type, external_id)}
+            opened_epoch = bindings.latest(aliases)
     link = EntitySourceLink(data_source_id=source.id, customer_id=customer_id, site_id=site_id,
         entity_type=entity_type, external_id=external_id, entity_id=owner_id, network_id=network_id,
-        interface_id=interface_id, interface_owner_id=interface_owner_id, first_observed_at=observed_at, last_observed_at=observed_at)
+        interface_id=interface_id, interface_owner_id=interface_owner_id, opened_epoch=opened_epoch,
+        first_observed_at=observed_at, last_observed_at=observed_at)
     db.add(link)
     db.flush()
     return link
@@ -158,6 +169,7 @@ def resolve_asset_identity(
             EntitySourceLink.data_source_id == data_source_id,
             EntitySourceLink.entity_type == "asset",
             EntitySourceLink.external_id == external_id,
+            EntitySourceLink.ended_epoch.is_(None),
         )
     )
     if link is not None:

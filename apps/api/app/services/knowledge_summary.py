@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import select
 
 from app.models import Asset, AssetType, DataSource, EntitySourceLink, KnowledgeAssertion, RelationshipType, User
+from app.services.proxmox_guest_bindings import historical_relationship_link
 from app.services.predicate_definitions import ASSET_FIELD_PREDICATES, predicate_cardinality, predicate_label
 from app.utils.json_values import to_json_value
 
@@ -32,7 +33,7 @@ def knowledge_sources(db, owner, source_ids):
 class SummaryValues:
     """Batch referenced metadata; never guess canonical identities from names."""
     def __init__(self, db, asset, rows, principal):
-        self.asset, self.principal = asset, principal
+        self.asset, self.principal, self.db = asset, principal, db
         self.types = {row.key: row.name for row in db.scalars(select(AssetType))}
         self.relationships = {row.key: row.name for row in db.scalars(select(RelationshipType))}
         source_ids = {row.data_source_id for row in rows if row.data_source_id}
@@ -40,10 +41,12 @@ class SummaryValues:
         actor_ids = {row.accepted_by_user_id for row in rows if row.accepted_by_user_id}
         self.actors = {row.id: row for row in db.scalars(select(User).where(User.id.in_(actor_ids)))}
         externals = {self.external(row) for row in rows if self.is_relationship(row) and self.external(row)}
-        self.links = {(row.data_source_id, row.external_id): row.entity_id for row in db.scalars(select(EntitySourceLink).where(
+        self.links = {}
+        for row in db.scalars(select(EntitySourceLink).where(
             EntitySourceLink.customer_id == asset.customer_id, EntitySourceLink.site_id == asset.site_id,
             EntitySourceLink.entity_type == "asset", EntitySourceLink.data_source_id.in_(source_ids),
-            EntitySourceLink.external_id.in_(externals)))}
+            EntitySourceLink.external_id.in_(externals))):
+            self.links.setdefault((row.data_source_id, row.external_id), []).append(row)
         identifiers = {self.identifier(row) for row in rows if self.is_relationship(row)} - {None}
         self.targets = {row.id: row for row in db.scalars(select(Asset).where(Asset.id.in_(identifiers),
             Asset.customer_id == asset.customer_id, Asset.site_id.is_not_distinct_from(asset.site_id)))
@@ -69,7 +72,9 @@ class SummaryValues:
         for field in ("target_asset_id", "resolved_target_asset_id", "target_id"):
             if value.get(field):
                 return _uuid(value[field])
-        return self.links.get((row.data_source_id, self.external(row)))
+        links = self.links.get((row.data_source_id, self.external(row)), ())
+        link = historical_relationship_link(self.db, row, links)
+        return link.entity_id if link else None
 
     def relationship(self, row):
         if not self.is_relationship(row):

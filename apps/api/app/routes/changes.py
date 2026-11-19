@@ -38,6 +38,11 @@ router = APIRouter(tags=["changes"])
 
 def _change_response(db: Session, change: KnowledgeChange) -> dict:
     result = KnowledgeChangeResponse.model_validate(change).model_dump()
+    metadata = result["metadata_json"]
+    if metadata and metadata.get("origin") == "proxmox_guest_identity":
+        # The Identity card authorizes detail per observation and endpoint.
+        result["metadata_json"] = {key: value for key, value in metadata.items()
+            if key not in {"released_evidence_ids", "withheld_evidence", "ended_binding_ids"}}
     source = db.get(DataSource, change.data_source_id) if change.data_source_id else None
     run = db.get(DiscoveryRun, change.discovery_run_id) if change.discovery_run_id else None
     item = db.get(ReconciliationItem, change.reconciliation_item_id) if change.reconciliation_item_id else None

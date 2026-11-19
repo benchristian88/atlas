@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    FetchedValue,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -1031,6 +1032,7 @@ class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "data_sources"
     __table_args__ = (
         UniqueConstraint("id", "customer_id", "site_id", name="uq_data_sources_identity_scope"),
+        CheckConstraint("identity_epoch >= 0", name="identity_epoch"),
         CheckConstraint(
             "source_type IN ('manual', 'simulated_discovery', 'proxmox', 'pbs', "
             "'docker', 'unifi', 'netbox', 'imported_file', 'generated_inference', 'connector')",
@@ -1054,6 +1056,7 @@ class DataSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(50), nullable=False, server_default="active", index=True
     )
     trust_level: Mapped[str | None] = mapped_column(String(50))
+    identity_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
@@ -1071,11 +1074,38 @@ class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_entity_source_links_interface_owner", ondelete="RESTRICT"),
         ForeignKeyConstraint(["interface_owner_id", "customer_id", "site_id"], ["assets.id", "assets.customer_id", "assets.site_id"],
             name="fk_entity_source_links_interface_context", ondelete="RESTRICT"),
+        CheckConstraint("opened_epoch >= 0", name="opened_epoch"),
+        CheckConstraint("ended_epoch IS NULL OR ended_epoch > opened_epoch", name="ended_epoch"),
+        Index(
+            "uq_entity_source_links_current_source_type_external",
+            "data_source_id",
+            "entity_type",
+            "external_id",
+            unique=True,
+            postgresql_where=text("ended_epoch IS NULL"),
+        ),
         UniqueConstraint(
             "data_source_id",
             "entity_type",
             "external_id",
-            name="uq_entity_source_links_source_type_external",
+            "opened_epoch",
+            name="uq_entity_source_links_source_type_external_epoch",
+        ),
+        Index(
+            "ix_entity_source_links_current_interface_owner",
+            "data_source_id",
+            "customer_id",
+            "site_id",
+            "interface_owner_id",
+            postgresql_where=text("entity_type = 'asset_interface' AND ended_epoch IS NULL"),
+        ),
+        ForeignKeyConstraint(
+            ["data_source_id", "ended_epoch"],
+            ["proxmox_guest_identity_decisions.data_source_id", "proxmox_guest_identity_decisions.identity_epoch"],
+            name="fk_entity_source_links_ended_decision",
+            deferrable=True,
+            initially="DEFERRED",
+            use_alter=True,
         ),
         ForeignKeyConstraint(
             ["entity_id", "customer_id", "site_id"],
@@ -1105,6 +1135,8 @@ class EntitySourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     interface_owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     external_id: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
     external_type: Mapped[str | None] = mapped_column(String(100), index=True)
+    opened_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    ended_epoch: Mapped[int | None] = mapped_column(BigInteger)
     first_observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -1120,6 +1152,7 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("uq_discovery_runs_active_integration", "integration_id", unique=True,
             postgresql_where=text("execution_provenance IS NOT NULL AND (status IN ('pending', 'running') OR dispatch_state != 'settled')")),
         CheckConstraint("dispatch_attempts >= 0 AND dispatch_attempts <= 3", name="dispatch_attempts"),
+        CheckConstraint("identity_epoch >= 0", name="identity_epoch"),
         CheckConstraint("dispatch_state IN ('pending', 'dispatching', 'running', 'settled')", name="dispatch_state"),
         ForeignKeyConstraint(["integration_id", "customer_id", "site_id"],
             ["integrations.id", "integrations.customer_id", "integrations.site_id"],
@@ -1146,6 +1179,7 @@ class DiscoveryRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     data_source_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("data_sources.id", ondelete="RESTRICT"), index=True
     )
+    identity_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -1312,6 +1346,7 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="valid_confirmation_status",
         ),
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="valid_confidence"),
+        CheckConstraint("identity_epoch >= 0", name="identity_epoch"),
         ForeignKeyConstraint(
             ["customer_id", "site_id"],
             ["sites.customer_id", "sites.id"],
@@ -1362,6 +1397,7 @@ class KnowledgeAssertion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     evidence_record_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("evidence_records.id", ondelete="SET NULL"), index=True
     )
+    identity_epoch: Mapped[int | None] = mapped_column(BigInteger)
     confidence: Mapped[Decimal] = mapped_column(
         Numeric(5, 4), nullable=False, server_default="1.0"
     )
@@ -1447,6 +1483,46 @@ class ReconciliationItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProxmoxGuestIdentityDecision(Base):
+    __tablename__ = "proxmox_guest_identity_decisions"
+    __table_args__ = (
+        UniqueConstraint("data_source_id", "identity_epoch", name="uq_proxmox_identity_decision_source_epoch"),
+        CheckConstraint("identity_epoch > 0", name="identity_epoch"),
+        CheckConstraint("retirement_revision >= 0", name="retirement_revision"),
+        CheckConstraint(
+            "(outcome = 'reactivate' AND replacement_binding_id IS NULL) OR "
+            "(outcome = 'replace' AND replacement_binding_id IS NOT NULL AND replacement_binding_id <> old_binding_id)",
+            name="outcome",
+        ),
+        Index("ix_proxmox_identity_decision_binding_epoch", "old_binding_id", text("identity_epoch DESC")),
+        Index("ix_proxmox_identity_decision_replacement", "replacement_binding_id"),
+        Index("ix_proxmox_identity_decision_assertion", "reviewed_assertion_id"),
+    )
+
+    reconciliation_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("reconciliation_items.id", name="fk_proxmox_identity_decision_item", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", name="fk_proxmox_identity_decision_source", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    identity_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    old_binding_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entity_source_links.id", name="fk_proxmox_identity_decision_old_binding", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    replacement_binding_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("entity_source_links.id", name="fk_proxmox_identity_decision_replacement", ondelete="RESTRICT")
+    )
+    reviewed_assertion_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_assertions.id", name="fk_proxmox_identity_decision_assertion", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    retirement_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
 
 
 class KnowledgeChange(UUIDPrimaryKeyMixin, Base):
@@ -1704,6 +1780,7 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         Index("ix_assets_customer_type", "customer_id", "asset_type"),
+        CheckConstraint("identity_retirement_revision >= 0", name="identity_retirement_revision"),
     )
 
     workspace_id: Mapped[uuid.UUID] = mapped_column(
@@ -1732,6 +1809,9 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="active", index=True
+    )
+    identity_retirement_revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0", server_onupdate=FetchedValue()
     )
     description: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str] = mapped_column(

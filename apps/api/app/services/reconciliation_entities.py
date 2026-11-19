@@ -20,13 +20,18 @@ from fastapi import HTTPException
 from sqlalchemy import select, tuple_
 
 from app.authorization import scope_condition
-from app.models import (Asset, AssetInterface, AssetType, DataSource, EntitySourceLink,
+from app.models import (Asset, AssetInterface, AssetType, DataSource, EntitySourceLink, Integration,
                         KnowledgeAssertion, Network, ReconciliationItem, RelationshipType)
 from app.schemas import ReconciliationItemResponse
 from app.services.predicate_definitions import predicate_label
 from app.services.asset_icons import icon_fields
 from app.services.reconciliation_listing import filtered_items
-from app.services.proxmox_guest_identity import REVIEW_LABEL, REVIEW_REQUIRED, REVIEW_TYPE, proposal_guest_keys, review_snapshot
+from app.services.proxmox_guest_bindings import (
+    STALE_PROPOSAL, GuestBindings, attribution_epoch, historical_link,
+    historical_relationship_link, recorded_relationship_endpoint,
+)
+from app.services.proxmox_guest_identity import REVIEW_LABEL, REVIEW_REQUIRED, REVIEW_TYPE, proposal_guest_keys
+from app.services.proxmox_identity_decisions import IdentityReview
 from app.utils.json_values import to_json_value
 
 ACTIVE = {"open", "deferred"}
@@ -129,15 +134,25 @@ class EntityReview:
             refs = [(claim.subject_type, claim.subject_external_id or item.candidate_external_id),
                     (claim.object_type, claim.object_external_id)]
             if item.entity_type == "asset_relationship":
-                refs.extend([("asset", value.get("source_external_id")), ("asset", value.get("target_external_id"))])
+                for side in ("source", "target"):
+                    external, identifier = self.relationship_endpoint(item, claim, side)
+                    refs.append(("asset", external))
+                    if identifier:
+                        identifiers["asset"].add(identifier)
             if item.entity_type == "asset_interface" and claim.predicate == "configuration":
                 for configuration in (value, _object(claim.value_json)):
                     refs.extend([("asset", configuration.get("asset_external_id")), ("network", configuration.get("network_external_id"))])
-            aliases.update((claim.data_source_id, kind, external) for kind, external in refs if claim.data_source_id and kind and external)
-        self.links = {self.alias(row.customer_id, row.site_id, row.data_source_id, row.entity_type, row.external_id): row
-                      for row in db.scalars(scoped(EntitySourceLink).where(tuple_(
-                          EntitySourceLink.data_source_id, EntitySourceLink.entity_type, EntitySourceLink.external_id).in_(aliases)))}
-        for link in self.links.values():
+            aliases.update(self.alias(item.customer_id, item.site_id, claim.data_source_id, kind, external)
+                           for kind, external in refs if claim.data_source_id and kind and external)
+        self.link_history = defaultdict(list)
+        self.links = {}
+        for link in db.scalars(scoped(EntitySourceLink).where(tuple_(EntitySourceLink.customer_id,
+                EntitySourceLink.site_id, EntitySourceLink.data_source_id, EntitySourceLink.entity_type,
+                EntitySourceLink.external_id).in_(aliases)).execution_options(populate_existing=True)):
+            alias = self.alias(link.customer_id, link.site_id, link.data_source_id, link.entity_type, link.external_id)
+            self.link_history[alias].append(link)
+            if link.ended_epoch is None:
+                self.links[alias] = link
             for kind, identifier in (("asset", link.entity_id), ("asset", link.interface_owner_id),
                                      ("network", link.network_id), ("asset_interface", link.interface_id)):
                 if identifier:
@@ -149,9 +164,33 @@ class EntityReview:
         identifiers["network"].update(row.network_id for row in self.interfaces.values() if row.network_id)
         self.assets = {row.id: row for row in db.scalars(scoped(Asset).where(Asset.id.in_(identifiers["asset"])).execution_options(populate_existing=True))}
         self.networks = {row.id: row for row in db.scalars(scoped(Network).where(Network.id.in_(identifiers["network"])).execution_options(populate_existing=True))}
-        self.sources = {row.id: row for row in db.scalars(scoped(DataSource).where(DataSource.id.in_(source_ids)))}
-        # Eight SELECTs independent of card count. Evidence, receipts, diagnostic
-        # payloads, Integration configuration and credentials are never loaded.
+        is_proxmox = select(Integration.id).where(
+            Integration.data_source_id == DataSource.id, Integration.customer_id == DataSource.customer_id,
+            Integration.site_id == DataSource.site_id, Integration.connector_id == "proxmox").exists()
+        self.sources, self.proxmox_relationship_scopes = {}, set()
+        for source, proxmox in db.execute(scoped(DataSource).add_columns(is_proxmox).where(
+                DataSource.id.in_(source_ids)).execution_options(populate_existing=True)):
+            self.sources[source.id] = source
+            if proxmox:
+                self.proxmox_relationship_scopes.add((source.customer_id, source.site_id, source.id))
+        self.bindings = {}
+        self.stale_items = set()
+        for item, claim in self.rows:
+            source = self.sources.get(claim.data_source_id)
+            if source is None or item.entity_type == REVIEW_TYPE:
+                continue
+            retirement_candidate = any(
+                (link := self.links.get(self.alias(item.customer_id, item.site_id, source.id, "asset", key)))
+                and (asset := self.assets.get(link.entity_id)) and asset.identity_retirement_revision
+                for key in proposal_guest_keys(item, claim))
+            if not source.identity_epoch and not retirement_candidate:
+                continue
+            scope = (item.customer_id, item.site_id, source.id)
+            if scope not in self.bindings:
+                self.bindings[scope] = GuestBindings.for_scope(db, item, source.id)
+            bindings = self.bindings[scope]
+            if bindings and bindings.stale(claim, item=item):
+                self.stale_items.add(item.id)
         self.types = {row.key: row for row in db.scalars(select(AssetType))}
         self.relationship_types = {row.key: row for row in db.scalars(select(RelationshipType))}
         self.configurations = {}
@@ -164,7 +203,7 @@ class EntityReview:
                 scope = (item.customer_id, item.site_id, claim.data_source_id)
                 self.held_keys[scope].add(item.candidate_external_id)
                 self.held_owners[scope].add(item.entity_id)
-            if claim.predicate == "configuration" and claim.fact_metadata is None:
+            if claim.predicate == "configuration" and claim.fact_metadata is None and item.id not in self.stale_items:
                 self.configurations[alias] = (item, claim)
             if item.entity_type in {"asset", "network", "asset_interface", REVIEW_TYPE} and item.category in {"newly_discovered", "possible_duplicate"}:
                 previous = self.parents.get(alias)
@@ -190,7 +229,7 @@ class EntityReview:
                     self.parents_by_key[key] = parent
 
     def parent_priority(self, item):
-        return (item.status in ACTIVE, item.status == "accepted", self.claims[item.id].is_source_current,
+        return (item.id not in self.stale_items, item.status in ACTIVE, item.status == "accepted", self.claims[item.id].is_source_current,
                 item.created_at, item.id)
 
     @staticmethod
@@ -201,13 +240,31 @@ class EntityReview:
         return self.alias(item.customer_id, item.site_id, claim.data_source_id, item.entity_type,
                           claim.subject_external_id or item.candidate_external_id)
 
+    @staticmethod
+    def relationship_endpoint(item, claim, side):
+        value = _object(item.observed_value_json)
+        external = claim.subject_external_id if side == "source" else claim.object_external_id
+        return external or value.get(f"{side}_external_id"), recorded_relationship_endpoint(claim, value, side)
+
     def target(self, item, claim, kind=None, external=None, identifier=None):
         kind = kind or item.entity_type
-        external = external if external is not None else claim.subject_external_id or item.candidate_external_id
+        relationship = kind == "asset" and item.entity_type == "asset_relationship"
+        if not relationship and external is None:
+            external = claim.subject_external_id or item.candidate_external_id
         alias = self.alias(item.customer_id, item.site_id, claim.data_source_id, kind, external)
-        link = self.links.get(alias)
-        if link:
-            identifier = {"asset": link.entity_id, "network": link.network_id, "asset_interface": link.interface_id}.get(kind)
+        proxmox = relationship and alias[:3] in self.proxmox_relationship_scopes
+        if proxmox and not self.principal.can("assets.view", item.customer_id, item.site_id):
+            return None
+        if identifier is None:
+            links = self.link_history.get(alias, ())
+            if relationship:
+                link = historical_relationship_link(self.db, claim, links, proxmox=proxmox)
+            else:
+                link = historical_link(links, None)
+                if link is None and links:
+                    link = historical_link(links, attribution_epoch(self.db, claim))
+            if link:
+                identifier = {"asset": link.entity_id, "network": link.network_id, "asset_interface": link.interface_id}.get(kind)
         collections = {"asset": self.assets, "network": self.networks, "asset_interface": self.interfaces}
         result = collections.get(kind, {}).get(identifier)
         if kind == "asset_interface" and result:
@@ -225,15 +282,16 @@ class EntityReview:
         return item_version(item, claim, self.target(item, claim, identifier=item.entity_id or claim.subject_id))
 
     def owner_key(self, item, claim):
-        value = _object(item.observed_value_json)
         if item.entity_type == "asset_relationship":
-            return self.identity_key(item, claim, "asset", claim.subject_external_id or value.get("source_external_id"), claim.subject_id)
+            return self.identity_key(item, claim, "asset", *self.relationship_endpoint(item, claim, "source"))
         if item.entity_type == "asset_interface":
             interface = self.target(item, claim, identifier=item.entity_id or claim.subject_id)
             if interface:
                 return (item.customer_id, item.site_id, None, "asset", interface.asset_id)
-            config = self.configurations.get(self.alias_for(item, claim))
-            owner = _object(config[1].value_json).get("asset_external_id") if config else None
+            owner = _object(claim.value_json).get("asset_external_id")
+            if owner is None and item.id not in self.stale_items:
+                config = self.configurations.get(self.alias_for(item, claim))
+                owner = _object(config[1].value_json).get("asset_external_id") if config else None
             if owner:
                 return self.identity_key(item, claim, "asset", owner)
         return self.identity_key(item, claim, item.entity_type,
@@ -273,8 +331,7 @@ class EntityReview:
         value = _object(item.observed_value_json)
         dependencies = []
         if item.entity_type == "asset_relationship":
-            dependencies = [("asset", claim.subject_external_id or value.get("source_external_id"), claim.subject_id),
-                            ("asset", claim.object_external_id or value.get("target_external_id"), claim.object_id)]
+            dependencies = [("asset", *self.relationship_endpoint(item, claim, side)) for side in ("source", "target")]
         elif item.entity_type in {"asset", "network", "asset_interface"}:
             if claim.fact_metadata is not None or (item.entity_type == "asset" and item.category not in {"newly_discovered", "possible_duplicate"}):
                 dependencies = [(item.entity_type, claim.subject_external_id or item.candidate_external_id, item.entity_id or claim.subject_id)]
@@ -289,6 +346,10 @@ class EntityReview:
                 continue
             alias = self.alias(item.customer_id, item.site_id, claim.data_source_id, kind, external)
             parent = self.parents.get(alias)
+            if (item.entity_type == "asset_relationship" and alias[:3] in self.proxmox_relationship_scopes
+                    and (identifier or self.link_history.get(alias) or item.id in self.stale_items
+                         or not self.principal.can("assets.view", item.customer_id, item.site_id))):
+                parent = None
             key = self.group_for_item.get(parent.id) if parent else None
             name = self.display(key)["name"] if key else kind.replace("_", " ").title()
             result.append({"item_id": parent.id if parent else None,
@@ -307,6 +368,8 @@ class EntityReview:
             reason = "This item has already been decided"
         elif not self.principal.can("reconciliation.decide", item.customer_id, item.site_id):
             reason = "Permission required to decide this item"
+        elif item.id in self.stale_items:
+            reason = STALE_PROPOSAL
         elif claim.retracted_at or claim.superseded_by_id or claim.is_source_current is False:
             reason = "This proposal is stale; review the latest observation"
         elif self.held_proposal(item, claim):
@@ -322,16 +385,21 @@ class EntityReview:
             if not self.principal.can(permission, item.customer_id, item.site_id):
                 reason = "Permission required to accept network information"
         return {"can_accept": reason is None, "blocked_reason": reason, "blockers": blockers,
-                "can_reject": item.status in ACTIVE and self.principal.can("reconciliation.decide", item.customer_id, item.site_id),
-                "can_defer": item.status == "open" and self.principal.can("reconciliation.decide", item.customer_id, item.site_id)}
+                "can_reject": item.id not in self.stale_items and item.status in ACTIVE and self.principal.can("reconciliation.decide", item.customer_id, item.site_id),
+                "can_defer": item.id not in self.stale_items and item.status == "open" and self.principal.can("reconciliation.decide", item.customer_id, item.site_id)}
 
     def held_proposal(self, item, claim):
         scope = (item.customer_id, item.site_id, claim.data_source_id)
         keys = self.held_keys.get(scope)
-        if not keys:
-            return False
-        if keys & proposal_guest_keys(item, claim):
+        proposal_keys = proposal_guest_keys(item, claim)
+        if keys and keys & proposal_keys:
             return True
+        bindings = self.bindings.get(scope)
+        for key in proposal_keys:
+            guest_link = self.links.get(self.alias(*scope, "asset", key))
+            asset = self.assets.get(guest_link.entity_id) if guest_link else None
+            if asset and bindings and bindings.needs_review(asset, guest_link):
+                return True
         if item.entity_type == "asset_interface":
             link = self.links.get(self.alias_for(item, claim))
             return link is not None and link.interface_owner_id in self.held_owners[scope]
@@ -349,10 +417,13 @@ class EntityReview:
         elif item.entity_type == "asset_relationship":
             value = _object(item.observed_value_json)
             managed = self.relationship_types.get(value.get("relationship_type"))
-            key = self.identity_key(item, claim, "asset", claim.object_external_id or value.get("target_external_id"), claim.object_id)
+            key = self.identity_key(item, claim, "asset", *self.relationship_endpoint(item, claim, "target"))
             label = (managed.name if managed else "Relationship") + " → " + self.display(key)["name"]
         elif item.entity_type == "asset_interface":
-            config = self.configurations.get(self.alias_for(item, claim))
+            if item.id in self.stale_items:
+                config = (item, claim) if claim.predicate == "configuration" else None
+            else:
+                config = self.configurations.get(self.alias_for(item, claim))
             interface = self.target(item, claim, identifier=item.entity_id or claim.subject_id)
             name = interface.name if interface else _name(_object(config[1].value_json).get("name"), "Interface") if config else "Interface"
             label = f"{name} · {label}" if claim.fact_metadata is not None else f"Interface {name}"
@@ -361,8 +432,11 @@ class EntityReview:
         elif isinstance(proposed, dict) and "field" in proposed:
             label, proposed = fact_label(proposed["field"], claim.fact_metadata), proposed.get("value")
         current = item.current_value_json
+        comparison = None
         if item.entity_type == REVIEW_TYPE:
-            current = review_snapshot(self.principal, item)
+            comparison = IdentityReview(self.db, item, claim).present(self.principal)
+            current = comparison["current"]
+            proposed = comparison["observed"]
         from app.services.reconciliation import canonical_asset_snapshot, canonical_asset_field
         snapshot = canonical_asset_snapshot(item, self.target(item, claim, identifier=item.entity_id or claim.subject_id))
         if canonical_asset_field(item):
@@ -404,8 +478,19 @@ class EntityReview:
         if isinstance(current, dict) and "field" in current:
             current = current.get("value")
         result = ReconciliationItemResponse.model_validate(item).model_dump()
+        if item.entity_type == "asset_relationship" and (
+                item.customer_id, item.site_id, claim.data_source_id) in self.proxmox_relationship_scopes:
+            proposed = dict(_object(proposed))
+            endpoints = {side: self.target(item, claim, "asset", *self.relationship_endpoint(item, claim, side))
+                         for side in ("source", "target")}
+            for side, asset in endpoints.items():
+                proposed[f"resolved_{side}_asset_id"] = asset.id if asset else None
+                proposed[f"resolved_{side}_name"] = asset.name if asset else None
+            if not all(endpoints.values()):
+                current = result["current_value_json"] = proposed["current_relationship_id"] = None
+            result["observed_value_json"] = proposed
         if item.entity_type == REVIEW_TYPE:
-            result["current_value_json"] = current
+            result.update(current_value_json=current, observed_value_json=proposed, identity_review=comparison["review"])
         if canonical_asset_field(item):
             result["current_value_json"] = snapshot
         technical_identity = (item.entity_type in {"network", "asset_interface"}
@@ -418,6 +503,8 @@ class EntityReview:
             elif not all(self.principal.can(permission, item.customer_id, item.site_id)
                          for permission in ("reconciliation.decide", "networks.view", "networks.edit")):
                 link_reason = "Permission required to link network information"
+            elif item.id in self.stale_items:
+                link_reason = STALE_PROPOSAL
             elif claim.retracted_at or claim.superseded_by_id or claim.is_source_current is False:
                 link_reason = "This proposal is stale; review the latest observation"
             elif self.held_proposal(item, claim):
@@ -430,7 +517,8 @@ class EntityReview:
                               "technical_identity": technical_identity,
                               "can_link_technical": technical_identity and link_reason is None,
                               "link_asset_id": owner.id if owner else None, "link_blocked_reason": link_reason,
-                              "data_source_id": claim.data_source_id, "discovery_run_id": claim.discovery_run_id,
+                              "data_source_id": claim.data_source_id,
+                              "discovery_run_id": comparison["discovery_run_id"] if comparison else claim.discovery_run_id,
                               "assertion_predicate": claim.predicate, "label": label, "proposed": proposed,
                               "last_observed_at": claim.last_observed_at,
                               "current": current, "version": self.version(item),
@@ -440,6 +528,8 @@ class EntityReview:
 
     def matches(self, item, filters):
         status = filters.get("item_status", "open")
+        if status in ACTIVE and item.id in self.stale_items and not filters.get("run_id"):
+            return False
         if status == "resolved":
             if item.status not in {"accepted", "rejected"}:
                 return False
@@ -471,8 +561,7 @@ class EntityReview:
                 if blocker["entity_id"] in self.keys_by_id:
                     needs[owner].add(self.keys_by_id[blocker["entity_id"]])
             if item.entity_type == "asset_relationship":
-                value = _object(item.observed_value_json)
-                target = self.identity_key(item, claim, "asset", claim.object_external_id or value.get("target_external_id"), claim.object_id)
+                target = self.identity_key(item, claim, "asset", *self.relationship_endpoint(item, claim, "target"))
                 if target in needs:
                     needs[owner].add(target)
             if item.entity_type == "asset_interface" and claim.predicate == "configuration":

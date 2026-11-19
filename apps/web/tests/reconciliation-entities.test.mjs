@@ -77,9 +77,11 @@ test("read only review has evidence and no decisions", () => {
   assert.match(html, /Evidence and details/);
 });
 
-test("retired guest identity review labels retained configuration and new evidence and has no decisions", () => {
+test("guest identity review shows current status, retained configuration and server decision eligibility", () => {
   const hold = { ...parent, entity_type: "source_identity", label: "Identity review",
     can_accept: false, can_reject: false, can_defer: false, blocked_reason: "This source key requires a guest identity decision",
+    identity_review: { current_asset_status: "active", expected_version: "a".repeat(64), actions: { reactivate: null,
+      replace: "This Asset is active. Confirm the same guest, or review its lifecycle before choosing a replacement." } },
     current: { name: "old-guest", lifecycle_status: "retired", interfaces: [
       { name: "net0", mac_address: "02:00:00:00:00:0a", assigned_network: "Curated LAN" },
     ], relationships: [{ type: "Runs on", target: "node-a" }] },
@@ -90,14 +92,20 @@ test("retired guest identity review labels retained configuration and new eviden
       source: { external_id: "guest/lxc/1029" }, target: { external_id: "node/node-b" } }] } };
   const html = render({ ...entity, entity_type: "source_identity", name: "new-guest", type_label: "Identity review",
     parent: hold, sections: [], decision_items: [], accept_all_available: false });
-  assert.match(html, /Retired Asset at first hold/);
+  assert.match(html, /First-hold snapshot/);
+  assert.match(html, /Current Asset status/);
   assert.match(html, /old-guest · retired/);
   assert.match(html, /02:00:00:00:00:0a · Assigned Network Curated LAN/);
   assert.match(html, /Runs on → node-a/);
   assert.match(html, /Latest source evidence/);
   assert.match(html, /02:00:00:00:00:0b · Observed Network network\/node-b\/vmbr0/);
   assert.match(html, /guest\/lxc\/1029 → runs on → node\/node-b/);
-  assert.doesNotMatch(html, /<button|Link an existing asset/);
+  assert.match(html, />Reactivate existing Asset<\/button>/);
+  assert.match(html, /This Asset is active/);
+  assert.doesNotMatch(html, />Accept as replacement<\/button>|Accept all|Link an existing asset/);
+  const readOnly = render({ ...entity, parent: { ...hold, identity_review: { ...hold.identity_review,
+    actions: { reactivate: "Permission required", replace: "Permission required" } } }, sections: [], decision_items: [] });
+  assert.doesNotMatch(readOnly, /<button/);
 });
 
 test("grouped queries retain status, category, search, section and cursor", () => {

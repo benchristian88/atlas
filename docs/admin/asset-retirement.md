@@ -10,8 +10,13 @@ retirement action.
 For Proxmox LXC and QEMU, a later successful run can report the source key bound
 to a retired Asset. Reconciliation opens an **Identity review** and holds that
 guest's Interface and relationship evidence with it. The historical Asset,
-assigned Networks and history remain available. See the
-[identity review procedure](cross-source-reconciliation.md#proxmox-guest-identity-review).
+assigned Networks and history remain available. A manual activation updates
+lifecycle status and leaves the retirement unacknowledged for this binding.
+Use **Reactivate existing Asset** in Identity review to confirm it is the same
+guest. A later retirement has its own revision. **Accept as replacement** leaves
+the original Asset retired and creates a new Asset for future discovery at that
+slot. Retained source bindings still protect historical records from deletion.
+See the [identity review procedure](cross-source-reconciliation.md#proxmox-guest-identity-review).
 
 Asset lists (under Filters), Infrastructure Topology and Knowledge Graph offer
 **Include retired**. It includes retained records in that view; it is not a

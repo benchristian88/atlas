@@ -176,7 +176,13 @@ class KnowledgeSession:
                         == expected
                     ]
                 elif rows and hasattr(rows[0], attribute):
-                    rows = [row for row in rows if getattr(row, attribute, None) == expected]
+                    if f"{entity.__tablename__}.{attribute} IN (" in statement_sql:
+                        rows = [
+                            row for row in rows
+                            if (actual := getattr(row, attribute, None)) is not None and actual in expected
+                        ]
+                    else:
+                        rows = [row for row in rows if getattr(row, attribute, None) == expected]
         sql = statement_sql
         if entity is KnowledgeAssertion:
             if "knowledge_assertions.is_source_current IS true" in sql:
@@ -207,7 +213,65 @@ class KnowledgeSession:
         return rows[0] if rows else None
 
     def scalars(self, statement):
-        return self._matching(statement)
+        rows = self._matching(statement)
+        columns = statement.column_descriptions
+        if len(columns) == 1 and columns[0]["expr"] is RunObservedEntity.external_id:
+            return [row.external_id for row in rows]
+        return rows
+
+    def execute(self, statement):
+        from sqlalchemy import Select, select
+        from sqlalchemy.sql import operators
+
+        item, claim = ReconciliationItem, KnowledgeAssertion
+        fixture_id = uuid.UUID(int=0)
+        joined = select(item, claim).join(claim, claim.id == item.assertion_id)
+        related_assets = joined.where(
+            item.customer_id == fixture_id,
+            item.site_id == fixture_id,
+            item.entity_type == "asset",
+            item.candidate_external_id == "",
+            item.entity_id.is_(None),
+            claim.data_source_id == fixture_id,
+        )
+        reobserved_items = joined.where(
+            item.category == "no_longer_observed",
+            item.status.in_(("open", "deferred")),
+            item.customer_id == fixture_id,
+            item.site_id == fixture_id,
+            claim.customer_id == fixture_id,
+            claim.site_id == fixture_id,
+            claim.data_source_id == fixture_id,
+            claim.subject_external_id == "",
+        )
+        # Require one of the complete query shapes before applying its bound filters.
+        if not isinstance(statement, Select) or not any(
+            statement.compare(query, compare_values=False) for query in (related_assets, reobserved_items)
+        ):
+            raise NotImplementedError(f"Unsupported KnowledgeSession.execute query: {statement}")
+
+        matches = {
+            operators.eq: lambda value, expected: value is not None and value == expected,
+            operators.is_: lambda value, expected: value is expected,
+            operators.in_op: lambda value, expected: value is not None and value in expected,
+        }
+        rows = []
+        for candidate in self.records:
+            if not isinstance(candidate, item) or candidate.assertion_id is None:
+                continue
+            assertion = self.get(claim, candidate.assertion_id)
+            if assertion is None:
+                continue
+            pair = {item.__tablename__: candidate, claim.__tablename__: assertion}
+            if all(
+                matches[condition.operator](
+                    getattr(pair[condition.left.table.name], condition.left.key),
+                    getattr(condition.right, "value", None),
+                )
+                for condition in statement.whereclause.clauses
+            ):
+                rows.append((candidate, assertion))
+        return rows
 
 
 def context_records():

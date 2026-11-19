@@ -239,8 +239,10 @@ async def _ingest(run_id, request, db, operation):
             orchestration.fail_run(run, row, code)
         db.commit()
         status = 401 if code == "token_expired" else 413 if code in {"payload_limit", "metadata_too_large"} else 409 if code in {
-            "conflicting_receipt", "conflicting_completion", "incomplete_receipts", "run_finalised"} else 422
-        raise HTTPException(status, {"code": code, "message": "Discovery payload was not accepted."},
+            "conflicting_receipt", "conflicting_completion", "incomplete_receipts", "run_finalised",
+            orchestration.IDENTITY_EPOCH_CHANGED} else 422
+        message = orchestration.IDENTITY_RETRY_MESSAGE if code == orchestration.IDENTITY_EPOCH_CHANGED else "Discovery payload was not accepted."
+        raise HTTPException(status, {"code": code, "message": message},
             headers={"Cache-Control": "no-store"}) from None
 
 

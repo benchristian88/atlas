@@ -123,6 +123,34 @@ export default function ReconciliationPage() {
     finally { if (activeLoadKey.current === actionKey) setDeciding(""); }
   }
 
+  async function decideIdentity(item, outcome, reason) {
+    const actionKey = loadKey;
+    setDeciding(item.id);
+    setError("");
+    setNotice("");
+    setOutcome(null);
+    try {
+      await apiRequest(`/reconciliation-items/${item.id}/identity-decision`, {
+        method: "POST",
+        body: JSON.stringify({ outcome, expected_version: item.identity_review.expected_version, reason }),
+      });
+      if (activeLoadKey.current === actionKey) {
+        await load();
+        if (activeLoadKey.current === actionKey) setNotice(outcome === "replace" ? "Replacement Asset created." : "Same guest confirmed.");
+      }
+      return true;
+    } catch (requestError) {
+      if (activeLoadKey.current !== actionKey) return true;
+      if (requestError.status === 409) {
+        await load();
+        if (activeLoadKey.current === actionKey) setNotice("Review the refreshed identity comparison before confirming again.");
+        return true;
+      }
+      setError(requestError.message || "Atlas could not decide this identity review.");
+      return false;
+    } finally { if (activeLoadKey.current === actionKey) setDeciding(""); }
+  }
+
   async function acceptAll(entity) {
     const actionKey = loadKey;
     setDeciding(entity.id);
@@ -233,7 +261,7 @@ export default function ReconciliationPage() {
     {!queueReady || loading ? <div className="status-banner" role="status">Loading entity reviews…</div> : page && <section className={`knowledge-list ${styles.list}`}>
       <div className="timeline-summary" role="status">{page.record_total} reconciliation records grouped into {page.entity_total} entities · {entities.length} {entities.length === 1 ? "entity" : "entities"} on this page</div>
       {focusedEntity && <p className="secondary-text">Reviewing a prerequisite and its unresolved changes. Return to continue your previous review.</p>}
-      {displayed.length === 0 ? <div className="empty-state detail-card">No reconciliation items in this queue.</div> : displayed.map(entity => <ReconciliationEntityCard key={entity.id} entity={entity} focused={focusId === entity.id} assets={assets} canDecide={canDecide} busy={busy} linkSelections={linkSelections} setLinkSelections={setLinkSelections} linkAsset={linkAsset} technicalChoices={technicalChoices} loadTechnicalChoices={loadTechnicalChoices} linkTechnical={linkTechnical} decide={decide} acceptAll={acceptAll} loadSection={loadSection} reviewHref={target => reconciliationReviewHref(paramsString, target, entity.id)} />)}
+      {displayed.length === 0 ? <div className="empty-state detail-card">No reconciliation items in this queue.</div> : displayed.map(entity => <ReconciliationEntityCard key={entity.id} entity={entity} focused={focusId === entity.id} assets={assets} canDecide={canDecide} busy={busy} linkSelections={linkSelections} setLinkSelections={setLinkSelections} linkAsset={linkAsset} technicalChoices={technicalChoices} loadTechnicalChoices={loadTechnicalChoices} linkTechnical={linkTechnical} decide={decide} decideIdentity={decideIdentity} acceptAll={acceptAll} loadSection={loadSection} reviewHref={target => reconciliationReviewHref(paramsString, target, entity.id)} />)}
     </section>}
     {queueReady && !loading && page && <ReconciliationPagination pageIndex={pageIndex} hasMore={Boolean(page.next_cursor)} busy={busy} onPrevious={previousPage} onNext={nextPage} />}
   </>;

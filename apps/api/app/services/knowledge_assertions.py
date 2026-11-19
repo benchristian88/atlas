@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models import KnowledgeAssertion
 from app.services.predicate_definitions import predicate_cardinality
 from app.services.knowledge_locks import lock_subject
+from app.services.proxmox_guest_bindings import GuestBindings
 from app.utils.json_values import to_json_value
 
 
@@ -96,13 +97,21 @@ def record_assertion(
     confidence: float = 1.0,
     observed_at: datetime | None = None,
     fact_metadata: dict | None = None,
+    guest_bindings: GuestBindings | None = None,
+    identity_epoch: int = 0,
+    owner_external_id: str | None = None,
+    reviewed_release: bool = False,
+    coalesce: bool = True,
 ) -> tuple[KnowledgeAssertion, bool]:
     """Record a current assertion, coalescing identical observations from one source."""
 
     observed_at = observed_at or datetime.now(timezone.utc)
     value = to_json_value(value)
     cardinality = predicate_cardinality(predicate, object_type=object_type)
-    current = list(
+    aliases = guest_bindings.aliases(subject_type=subject_type, subject_external_id=subject_external_id,
+        object_type=object_type, object_external_id=object_external_id,
+        owner_external_id=owner_external_id, epoch=identity_epoch) if guest_bindings else set()
+    current = [] if reviewed_release else list(
         db.scalars(
             select(KnowledgeAssertion).where(
                 KnowledgeAssertion.customer_id == customer_id,
@@ -116,7 +125,13 @@ def record_assertion(
             )
         )
     )
-    for assertion in current:
+    if aliases and object_type is not None:
+        current = [claim for claim in current if (claim.object_type, claim.object_id, claim.object_external_id) ==
+                   (object_type, object_id, object_external_id)]
+    if aliases:
+        current = [claim for claim in current if not guest_bindings.crossed(
+            aliases | guest_bindings.claim_aliases(claim, claim.identity_epoch or 0), claim.identity_epoch or 0, identity_epoch)]
+    for assertion in current if coalesce else ():
         if (_same_claim(assertion, value, object_external_id) and assertion.fact_metadata == fact_metadata
                 and assertion.retracted_at is None and assertion.superseded_by_id is None
                 and assertion.confirmation_status != "superseded"):
@@ -124,6 +139,8 @@ def record_assertion(
             assertion.discovery_run_id = discovery_run_id
             assertion.evidence_record_id = evidence_record_id
             assertion.confidence = Decimal(str(confidence))
+            if aliases:
+                assertion.identity_epoch = identity_epoch
             return assertion, False
 
     assertion = KnowledgeAssertion(
@@ -143,6 +160,7 @@ def record_assertion(
         data_source_id=data_source_id,
         discovery_run_id=discovery_run_id,
         evidence_record_id=evidence_record_id,
+        identity_epoch=identity_epoch if aliases else None,
         confidence=Decimal(str(confidence)),
         first_observed_at=observed_at,
         last_observed_at=observed_at,
@@ -157,8 +175,9 @@ def record_assertion(
         for previous in current:
             mark_superseded(previous, assertion, observed_at)
 
-    conflicting = db.scalar(
-        select(KnowledgeAssertion).where(
+    conflicting = None
+    if cardinality == "single" and not reviewed_release:
+        candidates = db.scalars(select(KnowledgeAssertion).where(
             KnowledgeAssertion.customer_id == customer_id,
             KnowledgeAssertion.site_id == site_id,
             KnowledgeAssertion.subject_type == subject_type,
@@ -167,8 +186,12 @@ def record_assertion(
             KnowledgeAssertion.predicate == predicate,
             KnowledgeAssertion.data_source_id != data_source_id,
             KnowledgeAssertion.is_source_current.is_(True),
-        )
-    )
+        ))
+        for candidate in candidates:
+            bindings = GuestBindings.for_scope(db, candidate, candidate.data_source_id)
+            if not bindings or not bindings.stale(candidate):
+                conflicting = candidate
+                break
     if (
         cardinality == "single"
         and conflicting is not None

@@ -27,12 +27,12 @@ from app.services.knowledge_assertions import record_assertion
 from app.services.reconciliation import create_item
 from tests.i3_fixtures import message
 from tests.test_i3_discovery import configured, new_run
-from tests.test_knowledge_integrity_migration import migrated_history, HEAD, pytestmark
+from tests.test_knowledge_integrity_migration import migrated_history, pytestmark
 
 
 @pytest.fixture
 def db(migrated_history):
-    migrated_history.migrate("upgrade", HEAD)
+    migrated_history.migrate("upgrade", "head")
     with SessionLocal(bind=migrated_history.engine) as session:
         yield session
 

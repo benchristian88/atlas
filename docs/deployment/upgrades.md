@@ -63,6 +63,36 @@ round-trip losslessly; downgrade is **not generally reversible**. For unsupporte
 cases keep 0032 or recover a verified backup with its matching code. No parallel
 history store, fabricated edge or silent history deletion is introduced.
 
+## Proxmox guest identity migration 0033
+
+`20261119_0033` extends `20261101_0032` with retained source binding intervals,
+run epochs, retirement revisions and identity decision history. The preflight
+checks scoped links, open cases and evidence membership. Conflicting scope or
+duplicate open cases abort the transaction. A legacy case with incomplete
+proof stays pending until a fresh successful discovery provides eligible evidence.
+Existing link UUIDs, cases, observations and history carry forward.
+
+1. Schedule a maintenance outage. Stop discovery admission, settle or cancel
+   active runs and hold callbacks. Stop the old API, worker and all other writers.
+2. Take a verified [encrypted backup](backup-restore.md) and retain the matching
+   pre-upgrade build. Run the supported upgrade with a populated rehearsal first.
+   The migration uses a five-second lock timeout per acquisition and takes strong
+   PostgreSQL locks while validating data and building indexes. Local synthetic
+   test timing does not size a deployment window.
+3. Verify revision `20261119_0033` and matching upgraded API and worker builds
+   before reopening admission and callbacks. Old processes cannot safely read or
+   write retained binding intervals. Keep the installed signed Connector and
+   Catalogue 2 artifacts in place.
+
+If migration fails, its transaction leaves the previous schema available for its
+matching build. A guarded schema downgrade is limited to the pre-decision
+boundary before reopening service, or when retirement revision history can be
+reconstructed. Once an identity decision exists, recover forward on a compatible
+build or restore a verified backup on its matching build. Restoring the
+pre-upgrade backup rolls back every write made after that backup across the
+installation. Treat cross-version restore as outside this procedure.
+See [ADR 0019](../decisions/0019-proxmox-guest-identity-resolution.md#migration-deployment-and-recovery).
+
 ## Before every upgrade
 
 An enrolled local signed-release acceptance instance has a separate exact-build

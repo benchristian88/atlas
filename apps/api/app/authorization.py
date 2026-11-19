@@ -75,6 +75,7 @@ class ScopeGrant:
 class Principal:
     user: User
     grants: tuple[ScopeGrant, ...]
+    database_backed: bool = False
 
     @property
     def permissions(self) -> frozenset[str]:
@@ -155,6 +156,7 @@ def _load_principal(user: User, db: Session) -> Principal:
             Role.active.is_(True),
         )
         .order_by(Role.sort_order, Role.name)
+        .execution_options(populate_existing=True)
     ).all()
     role_ids = {role.id for _, role in assignment_rows}
     permissions_by_role: dict[uuid.UUID, set[str]] = {
@@ -179,7 +181,17 @@ def _load_principal(user: User, db: Session) -> Principal:
         )
         for assignment, role in assignment_rows
     )
-    return Principal(user=user, grants=grants)
+    return Principal(user=user, grants=grants, database_backed=True)
+
+
+def refresh_principal(principal: Principal, db: Session) -> Principal:
+    """Read current user and grants after a write request has waited for locks."""
+    if not principal.database_backed:
+        return principal
+    user = db.get(User, principal.user.id, populate_existing=True)
+    if user is None or not user.is_active:
+        raise forbidden()
+    return _load_principal(user, db)
 
 
 def get_principal(user: CurrentUser, db: Session = Depends(get_db)) -> Principal:

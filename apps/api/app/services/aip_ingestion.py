@@ -13,9 +13,11 @@ from app.schemas import SimulationObservation, SimulationRelationship
 from app.services.discovery_observations import record_observed_entity, reconcile_complete_snapshot, snapshot_asset_external_ids
 from app.services.entity_resolution import scoped_source_links
 from app.services.knowledge_locks import lock_ingestion_subjects
-from app.services.proxmox_guest_identity import classify_guest_holds, interface_guest, record_guest_holds
+from app.services.proxmox_guest_identity import classify_guest_holds, record_guest_holds
+from app.services.proxmox_guest_bindings import GuestBindings, interface_guest
 from app.services.simulated_discovery import ingest_observations, ingest_technical_observation
 from app.services.connector_contracts import SDK_VERSION
+from app.services.discovery_orchestration import IDENTITY_EPOCH_CHANGED, lock_proxmox_run_source
 
 MAX_BODY = 1024 * 1024
 MAX_BATCHES = 256
@@ -179,6 +181,14 @@ def _validate_references(db, run, messages, links, held):
                 raise IngestionError("invalid_interface_binding")
             if row.get("network_external_id") and row["network_external_id"] not in networks and ("network", row["network_external_id"]) not in links:
                 raise IngestionError("invalid_interface_binding")
+            identity = ("asset_interface", row["external_id"])
+            if run.execution_provenance["connector_id"] == "proxmox" and identity not in held.observations:
+                slot = interface_guest(row["external_id"])
+                existing = links.get(identity)
+                owner = links.get(("asset", row["asset_external_id"]))
+                if ((slot and slot != row["asset_external_id"])
+                        or (existing and (not owner or existing.interface_owner_id != owner.entity_id))):
+                    raise IngestionError("invalid_interface_binding")
         for row in message["relationships"]:
             declaration = declarations[row["relationship_class"]]
             for side in ["source", "target"]:
@@ -195,6 +205,9 @@ def _validate_references(db, run, messages, links, held):
                         EvidenceRecord.customer_id == run.customer_id, EvidenceRecord.site_id == run.site_id,
                         EvidenceRecord.entity_kind == "asset", EvidenceRecord.external_id == identity,
                         KnowledgeAssertion.subject_type == "asset", KnowledgeAssertion.is_accepted.is_(True),
+                        KnowledgeAssertion.subject_id == link.entity_id,
+                        KnowledgeAssertion.data_source_id == run.data_source_id,
+                        KnowledgeAssertion.customer_id == run.customer_id, KnowledgeAssertion.site_id == run.site_id,
                         KnowledgeAssertion.retracted_at.is_(None))
                         .order_by(EvidenceRecord.observed_at.desc(), EvidenceRecord.created_at.desc(), EvidenceRecord.id).limit(1))
                     # A typed Proxmox slot can validate this endpoint for evidence
@@ -218,6 +231,9 @@ def finalise(db, run, row, message, *, failure=False):
         return {"run_id": str(run.id), "status": run.status, "replayed": True}
     if run.status not in {"pending", "running"} or run.cancellation_requested_at:
         raise IngestionError("run_finalised", fatal=False)
+    source = lock_proxmox_run_source(db, run)
+    if source is not None and run.identity_epoch != source.identity_epoch:
+        raise IngestionError(IDENTITY_EPOCH_CHANGED)
     receipts = list(db.scalars(select(DiscoveryBatchReceipt).where(DiscoveryBatchReceipt.discovery_run_id == run.id)
         .order_by(DiscoveryBatchReceipt.sequence)))
     if [receipt.sequence for receipt in receipts] != list(range(1, message["last_sequence"] + 1)):
@@ -261,7 +277,8 @@ def finalise(db, run, row, message, *, failure=False):
                     target_external_id=target_id, truth_classification=relationship["truth_classification"],
                     confidence=relationship["confidence"]), evidence[("relationship", relationship["external_id"])], source_id))
         memberships = {(record.entity_type, record.external_id): record for record in db.scalars(select(RunObservedEntity).where(RunObservedEntity.discovery_run_id == run.id))}
-        source = db.get(DataSource, run.data_source_id, with_for_update={"key_share": True})
+        if source is None:
+            source = db.get(DataSource, run.data_source_id, with_for_update={"key_share": True})
         # One transaction spans all batches/domains. Prelock the entire known
         # set in canonical model/UUID order BEFORE any Asset or technical claims.
         # Per-observation locking alone can invert two Networks, or take an
@@ -284,7 +301,8 @@ def finalise(db, run, row, message, *, failure=False):
             site_id=run.site_id, references=references)
         links = {(link.entity_type, link.external_id): link for link in db.scalars(
             scoped_source_links(data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id))}
-        held = classify_guest_holds(db, run, links, evidence)
+        bindings = GuestBindings(db, run, source.id) if run.execution_provenance["connector_id"] == "proxmox" else None
+        held = classify_guest_holds(db, run, links, evidence, bindings=bindings)
         _validate_references(db, run, messages, links, held)
         record_guest_holds(db, run, held, evidence)
         payload = SimpleNamespace(customer_id=run.customer_id, site_id=run.site_id,
@@ -293,7 +311,8 @@ def finalise(db, run, row, message, *, failure=False):
             if ("relationship", row[1].external_id) not in held.observations]
         _, _, assertions, items = ingest_observations(db, payload=payload, user_id=run.created_by_user_id,
             source=source, run=run, observed_at=datetime.now(timezone.utc), evidence_by_identity=evidence,
-            memberships=memberships, namespaced_facts=facts, relationship_observations=relationship_rows)
+            memberships=memberships, namespaced_facts=facts, relationship_observations=relationship_rows,
+            guest_bindings=bindings)
         summary["assertions_created"] += assertions + held.assertions_created
         summary["reconciliation_items_created"] += len(items) + held.items_created
         for batch in messages:
@@ -303,7 +322,7 @@ def finalise(db, run, row, message, *, failure=False):
                         continue
                     assertions, count, target_id = ingest_technical_observation(db, run=run, source=source,
                         evidence=evidence[(kind, observation["external_id"])], observation=observation,
-                        entity_type=kind, user_id=run.created_by_user_id)
+                        entity_type=kind, user_id=run.created_by_user_id, guest_bindings=bindings)
                     memberships[(kind, observation["external_id"])].entity_id = target_id
                     summary["assertions_created"] += assertions
                     summary["reconciliation_items_created"] += count
@@ -323,7 +342,7 @@ def finalise(db, run, row, message, *, failure=False):
     if not failure:
         db.flush()
         snapshot = reconcile_complete_snapshot(db, run=run, user_id=run.created_by_user_id,
-            observed_at=now, held_asset_keys=held.cases)
+            observed_at=now, held_asset_keys=held.cases, guest_bindings=bindings)
         summary.update(baseline_run_id=str(snapshot.baseline_run_id) if snapshot.baseline_run_id else None,
             no_longer_observed_count=snapshot.no_longer_observed_count, reobserved_count=snapshot.reobserved_count)
         row.last_success_at = source.last_success_at = now
