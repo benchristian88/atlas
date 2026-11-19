@@ -18,6 +18,7 @@ from app.models import (
     ReconciliationItem,
     User,
 )
+from app.services.proxmox_guest_identity import PRESENCE_PREDICATE, REVIEW_REQUIRED, REVIEW_TYPE
 from app.utils.json_values import to_json_value
 
 ACCEPTED_RECONCILIATION_STATUSES = ("accepted", "merged", "exception")
@@ -311,6 +312,9 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
         "history_references": history_references,
     }
     reasons = []
+    identity_evidence = assertion.subject_type == REVIEW_TYPE and assertion.predicate == PRESENCE_PREDICATE
+    if identity_evidence:
+        reasons.append(REVIEW_REQUIRED)
     if assertion.is_accepted:
         reasons.append("The assertion is accepted Atlas knowledge")
     if assertion.confirmation_status not in DELETABLE_ASSERTION_STATUSES:
@@ -332,7 +336,7 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
             "discovery_run_id": assertion.discovery_run_id,
             "evidence_record_id": assertion.evidence_record_id,
         },
-        recommended_alternative="retract" if reasons else None,
+        recommended_alternative="retract" if reasons and not identity_evidence else None,
     )
 
 
@@ -359,6 +363,8 @@ def retract_assertion(
     reason: str,
     confirm_provenance_gap: bool,
 ) -> bool:
+    if assertion.subject_type == REVIEW_TYPE and assertion.predicate == PRESENCE_PREDICATE:
+        raise ValueError(REVIEW_REQUIRED)
     if assertion.retracted_at is not None:
         raise ValueError("Assertion is already retracted")
     provenance_gap = assertion_has_provenance_gap(db, assertion)

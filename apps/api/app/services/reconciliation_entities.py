@@ -26,6 +26,7 @@ from app.schemas import ReconciliationItemResponse
 from app.services.predicate_definitions import predicate_label
 from app.services.asset_icons import icon_fields
 from app.services.reconciliation_listing import filtered_items
+from app.services.proxmox_guest_identity import REVIEW_LABEL, REVIEW_REQUIRED, REVIEW_TYPE, proposal_guest_keys, review_snapshot
 from app.utils.json_values import to_json_value
 
 ACTIVE = {"open", "deferred"}
@@ -155,11 +156,17 @@ class EntityReview:
         self.relationship_types = {row.key: row for row in db.scalars(select(RelationshipType))}
         self.configurations = {}
         self.parents = {}
+        self.held_keys = defaultdict(set)
+        self.held_owners = defaultdict(set)
         for item, claim in self.rows:
             alias = self.alias_for(item, claim)
+            if item.entity_type == REVIEW_TYPE and item.status == "open":
+                scope = (item.customer_id, item.site_id, claim.data_source_id)
+                self.held_keys[scope].add(item.candidate_external_id)
+                self.held_owners[scope].add(item.entity_id)
             if claim.predicate == "configuration" and claim.fact_metadata is None:
                 self.configurations[alias] = (item, claim)
-            if item.entity_type in {"asset", "network", "asset_interface"} and item.category in {"newly_discovered", "possible_duplicate"}:
+            if item.entity_type in {"asset", "network", "asset_interface", REVIEW_TYPE} and item.category in {"newly_discovered", "possible_duplicate"}:
                 previous = self.parents.get(alias)
                 if previous is None or self.parent_priority(item) > self.parent_priority(previous):
                     self.parents[alias] = item
@@ -247,9 +254,11 @@ class EntityReview:
         type_key = target.asset_type if isinstance(target, Asset) else proposal.get("asset_type")
         managed = self.types.get(type_key)
         icons = icon_fields(target, managed) if isinstance(target, Asset) else {}
-        return {"name": target.name if target else _name(proposal.get("name"), key[3].replace("_", " ").title()),
+        type_label = REVIEW_LABEL if key[3] == REVIEW_TYPE else key[3].replace("_", " ").title()
+        fallback_name = key[4] if key[3] == REVIEW_TYPE else type_label
+        return {"name": target.name if target else _name(proposal.get("name"), fallback_name),
                 "entity_type": key[3], "entity_id": target.id if target else None,
-                "asset_type": type_key, "type_label": managed.name if managed else key[3].replace("_", " ").title(),
+                "asset_type": type_key, "type_label": managed.name if managed else type_label,
                 "icon_key": managed.category_record.icon_key if managed and managed.category_record else None,
                 "accent_key": managed.category_record.accent_key if managed and managed.category_record else None,
                 "cached_icon_url": icons.get("cached_icon_url"),
@@ -289,6 +298,9 @@ class EntityReview:
 
     def eligibility(self, item):
         claim = self.claims[item.id]
+        if item.entity_type == REVIEW_TYPE:
+            return {"can_accept": False, "blocked_reason": REVIEW_REQUIRED, "blockers": [],
+                    "can_reject": False, "can_defer": False}
         blockers = self.prerequisites(item)
         reason = None
         if item.status not in ACTIVE:
@@ -297,6 +309,8 @@ class EntityReview:
             reason = "Permission required to decide this item"
         elif claim.retracted_at or claim.superseded_by_id or claim.is_source_current is False:
             reason = "This proposal is stale; review the latest observation"
+        elif self.held_proposal(item, claim):
+            reason = REVIEW_REQUIRED
         elif blockers:
             reason = "; ".join(row["reason"] for row in blockers)
         elif item.category == "no_longer_observed":
@@ -311,6 +325,18 @@ class EntityReview:
                 "can_reject": item.status in ACTIVE and self.principal.can("reconciliation.decide", item.customer_id, item.site_id),
                 "can_defer": item.status == "open" and self.principal.can("reconciliation.decide", item.customer_id, item.site_id)}
 
+    def held_proposal(self, item, claim):
+        scope = (item.customer_id, item.site_id, claim.data_source_id)
+        keys = self.held_keys.get(scope)
+        if not keys:
+            return False
+        if keys & proposal_guest_keys(item, claim):
+            return True
+        if item.entity_type == "asset_interface":
+            link = self.links.get(self.alias_for(item, claim))
+            return link is not None and link.interface_owner_id in self.held_owners[scope]
+        return False
+
     def present_item(self, item):
         claim = self.claims[item.id]
         source = self.sources.get(claim.data_source_id)
@@ -318,7 +344,9 @@ class EntityReview:
             source = None
         label = fact_label(claim.predicate, claim.fact_metadata)
         proposed = claim.value_json if claim.fact_metadata is not None else item.observed_value_json
-        if item.entity_type == "asset_relationship":
+        if item.entity_type == REVIEW_TYPE:
+            label = REVIEW_LABEL
+        elif item.entity_type == "asset_relationship":
             value = _object(item.observed_value_json)
             managed = self.relationship_types.get(value.get("relationship_type"))
             key = self.identity_key(item, claim, "asset", claim.object_external_id or value.get("target_external_id"), claim.object_id)
@@ -333,6 +361,8 @@ class EntityReview:
         elif isinstance(proposed, dict) and "field" in proposed:
             label, proposed = fact_label(proposed["field"], claim.fact_metadata), proposed.get("value")
         current = item.current_value_json
+        if item.entity_type == REVIEW_TYPE:
+            current = review_snapshot(self.principal, item)
         from app.services.reconciliation import canonical_asset_snapshot, canonical_asset_field
         snapshot = canonical_asset_snapshot(item, self.target(item, claim, identifier=item.entity_id or claim.subject_id))
         if canonical_asset_field(item):
@@ -374,6 +404,8 @@ class EntityReview:
         if isinstance(current, dict) and "field" in current:
             current = current.get("value")
         result = ReconciliationItemResponse.model_validate(item).model_dump()
+        if item.entity_type == REVIEW_TYPE:
+            result["current_value_json"] = current
         if canonical_asset_field(item):
             result["current_value_json"] = snapshot
         technical_identity = (item.entity_type in {"network", "asset_interface"}
@@ -388,6 +420,8 @@ class EntityReview:
                 link_reason = "Permission required to link network information"
             elif claim.retracted_at or claim.superseded_by_id or claim.is_source_current is False:
                 link_reason = "This proposal is stale; review the latest observation"
+            elif self.held_proposal(item, claim):
+                link_reason = REVIEW_REQUIRED
             elif item.entity_type == "asset_interface":
                 owner = self.target(item, claim, "asset", _object(claim.value_json).get("asset_external_id"))
                 if owner is None:
@@ -400,7 +434,8 @@ class EntityReview:
                               "assertion_predicate": claim.predicate, "label": label, "proposed": proposed,
                               "last_observed_at": claim.last_observed_at,
                               "current": current, "version": self.version(item),
-                              "warning": item.category.replace("_", " ").capitalize() if item.category in {"contradiction", "possible_duplicate"} else None,
+                              "warning": item.category.replace("_", " ").capitalize()
+                              if item.entity_type != REVIEW_TYPE and item.category in {"contradiction", "possible_duplicate"} else None,
                               **self.eligibility(item)})
 
     def matches(self, item, filters):
@@ -483,8 +518,8 @@ class EntityReview:
                              "blocked_count": len(blocked), "warnings": sorted(set(blocked + [row.category.replace("_", " ").capitalize() for row in rows if row.category in {"contradiction", "possible_duplicate"}])),
                              "items": [self.present_item(row) for row in rows[:SECTION_LIMIT]],
                              "next_offset": SECTION_LIMIT if len(rows) > SECTION_LIMIT else None})
-        decisions = [row for row in matching if row.status in ACTIVE]
-        if parent and parent.status in ACTIVE and parent.id not in {row.id for row in decisions}:
+        decisions = [row for row in matching if row.status in ACTIVE and row.entity_type != REVIEW_TYPE]
+        if parent and parent.status in ACTIVE and parent.entity_type != REVIEW_TYPE and parent.id not in {row.id for row in decisions}:
             decisions.insert(0, parent)
         return to_json_value({"id": self.anchors[key], "customer_id": key[0], "site_id": key[1],
                               **self.display(key), "parent": self.present_item(parent) if parent else None,

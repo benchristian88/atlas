@@ -42,6 +42,11 @@ remain understandable after the original implementation discussion is gone.
 
 ## ADR maintenance
 
+The [Proxmox guest identity handoff](../architecture/proxmox-guest-identity-containment.md#deferred-decisions)
+records proposed Reactivate and replacement semantics for owner review.
+Pass 1 uses the existing ADR 0017 lock order. Temporal source bindings and
+identity resolution require a separate decision.
+
 Create or supersede an ADR when a change affects any of the following:
 
 - the durable system of record;

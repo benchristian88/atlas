@@ -105,6 +105,11 @@ missing item, and records `entity_reobserved`. Missing or inactive assets get a
 reviewable proposal to return to active. Retired assets remain retired until a
 human explicitly changes them.
 
+For a Proxmox guest key bound to a retired Asset, the
+[source identity hold](proxmox-guest-identity-containment.md) retains positive
+evidence before canonical attribution. These keys do not generate normal
+re-observation Changes while the identity review is pending.
+
 Every absence acceptance requires the refreshed `expected_version`; a legacy
 versionless request returns 409. The reviewed status and Asset update timestamp
 are validated after locking/reloading the canonical Asset, detecting intervening

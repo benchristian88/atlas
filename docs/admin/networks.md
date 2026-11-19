@@ -61,6 +61,11 @@ Network assignment workflow (`PATCH /api/asset-interfaces/{id}` with
 `network_id: null`). No new unlink action is introduced. AIP explicit null is
 invalid; older Atlas assertions normalised omission to null internally.
 
+Proxmox guest Interface observations held for an
+[identity review](cross-source-reconciliation.md#proxmox-guest-identity-review)
+remain source evidence. The existing Interface UUID and assigned Network belong
+to the retained Asset while the review is pending.
+
 The additive Asset-detail read is
 `GET /api/asset-interfaces?asset_id={id}&include_knowledge=true`. It retains the
 existing limit/offset bounds (default 500, maximum 1,000 Interfaces), adding

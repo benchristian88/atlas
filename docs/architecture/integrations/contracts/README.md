@@ -127,6 +127,11 @@ completeness require additive extensions later; this contract makes no claim tha
 the current service already supports them. Any incomplete enabled domain makes
 this aggregate run partial, including permission-limited visibility.
 
+Atlas holds successful positive observations at Proxmox guest keys bound to
+retired Assets before attributing them to canonical knowledge. A pending case
+keeps source-key presence distinct from confirmed Asset re-observation.
+See the [containment contract](../../proxmox-guest-identity-containment.md).
+
 ## Canonical observations and facts
 
 Source object classes are declared by the Manifest with `kind=asset/network/interface`.

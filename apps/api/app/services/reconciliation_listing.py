@@ -13,12 +13,15 @@ from sqlalchemy.orm import aliased
 
 from app.authorization import scope_condition
 from app.models import KnowledgeAssertion, ReconciliationItem
+from app.services.proxmox_guest_identity import REVIEW_TYPE
 
 
 def filtered_items(context, principal, *, item_status="open", category=None,
                    source_id=None, run_id=None, entity_type=None):
     query = select(ReconciliationItem).where(scope_condition(
-        principal, "reconciliation.view", ReconciliationItem.customer_id, ReconciliationItem.site_id))
+        principal, "reconciliation.view", ReconciliationItem.customer_id, ReconciliationItem.site_id),
+        or_(ReconciliationItem.entity_type != REVIEW_TYPE, scope_condition(
+            principal, "assets.view", ReconciliationItem.customer_id, ReconciliationItem.site_id)))
     if context.customer_id is not None:
         query = query.where(ReconciliationItem.customer_id == context.customer_id)
     if context.site_id is not None:

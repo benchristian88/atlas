@@ -7,6 +7,12 @@ status declaration, Change and audit remain authoritative. Re-observation does
 not automatically reactivate a retired Asset. There is no separate Interface
 retirement action.
 
+For Proxmox LXC and QEMU, a later successful run can report the source key bound
+to a retired Asset. Reconciliation opens an **Identity review** and holds that
+guest's Interface and relationship evidence with it. The historical Asset,
+assigned Networks and history remain available. See the
+[identity review procedure](cross-source-reconciliation.md#proxmox-guest-identity-review).
+
 Asset lists (under Filters), Infrastructure Topology and Knowledge Graph offer
 **Include retired**. It includes retained records in that view; it is not a
 historical point-in-time reconstruction. Retired Asset detail, facts, Changes,

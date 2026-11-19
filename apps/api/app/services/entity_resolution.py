@@ -90,10 +90,14 @@ def ensure_asset_link(
     return link
 
 
+def scoped_source_links(*, data_source_id, customer_id, site_id):
+    return select(EntitySourceLink).where(EntitySourceLink.data_source_id == data_source_id,
+        EntitySourceLink.customer_id == customer_id, EntitySourceLink.site_id == site_id)
+
+
 def technical_link(db, *, data_source_id, customer_id, site_id, entity_type, external_id):
-    return db.scalar(select(EntitySourceLink).where(EntitySourceLink.data_source_id == data_source_id,
-        EntitySourceLink.customer_id == customer_id, EntitySourceLink.site_id == site_id,
-        EntitySourceLink.entity_type == entity_type, EntitySourceLink.external_id == external_id))
+    return db.scalar(scoped_source_links(data_source_id=data_source_id, customer_id=customer_id, site_id=site_id)
+        .where(EntitySourceLink.entity_type == entity_type, EntitySourceLink.external_id == external_id))
 
 
 def ensure_technical_link(db, *, source, target, entity_type, external_id, observed_at):

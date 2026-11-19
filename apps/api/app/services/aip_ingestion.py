@@ -8,10 +8,12 @@ from sqlalchemy import select
 from atlas_connector_sdk.aip import body_hash, validate_batch
 from atlas_connector_sdk.configuration import source_compatibility
 from app.models import (DataSource, DiscoveryBatchReceipt, EvidenceRecord, RunObservedEntity,
-    EntitySourceLink, AssetType, RelationshipType, KnowledgeAssertion)
+    AssetType, RelationshipType, KnowledgeAssertion)
 from app.schemas import SimulationObservation, SimulationRelationship
 from app.services.discovery_observations import record_observed_entity, reconcile_complete_snapshot, snapshot_asset_external_ids
+from app.services.entity_resolution import scoped_source_links
 from app.services.knowledge_locks import lock_ingestion_subjects
+from app.services.proxmox_guest_identity import classify_guest_holds, interface_guest, record_guest_holds
 from app.services.simulated_discovery import ingest_observations, ingest_technical_observation
 from app.services.connector_contracts import SDK_VERSION
 
@@ -167,12 +169,9 @@ def accept_batch(db, run, message):
     return {"sequence": sequence, "accepted": True, "replayed": False}
 
 
-def _references(db, run, messages):
+def _validate_references(db, run, messages, links, held):
     assets = {row["external_id"]: row for message in messages for row in message["assets"]}
     networks = {row["external_id"] for message in messages for row in message["networks"]}
-    links = {(row.entity_type, row.external_id): row for row in db.scalars(select(EntitySourceLink).where(
-        EntitySourceLink.data_source_id == run.data_source_id, EntitySourceLink.customer_id == run.customer_id,
-        EntitySourceLink.site_id == run.site_id))}
     declarations = {row["key"]: row for row in run.execution_provenance["manifest"]["relationship_classes"]}
     for message in messages:
         for row in message["interfaces"]:
@@ -198,8 +197,13 @@ def _references(db, run, messages):
                         KnowledgeAssertion.subject_type == "asset", KnowledgeAssertion.is_accepted.is_(True),
                         KnowledgeAssertion.retracted_at.is_(None))
                         .order_by(EvidenceRecord.observed_at.desc(), EvidenceRecord.created_at.desc(), EvidenceRecord.id).limit(1))
-                    endpoint = evidence.payload_json if evidence else {}
-                if endpoint.get("object_class") not in declaration[side + "_object_classes"]:
+                    # A typed Proxmox slot can validate this endpoint for evidence
+                    # retention only when the locked hold covers this relationship.
+                    object_class = (evidence.payload_json.get("object_class") if evidence is not None
+                                    else held.relationship_endpoint_class(row["external_id"], identity))
+                else:
+                    object_class = endpoint.get("object_class")
+                if object_class not in declaration[side + "_object_classes"]:
                     raise IngestionError("invalid_relationship_binding")
 
 
@@ -229,7 +233,6 @@ def finalise(db, run, row, message, *, failure=False):
     summary = {"observations": run.observation_count, "evidence_records_created": run.observation_count,
         "assertions_created": 0, "reconciliation_items_created": 0, "warnings": sorted(set(warnings))}
     if not failure:
-        _references(db, run, messages)
         mapping = mappings(db, run)
         assets = {}
         facts = {}
@@ -258,34 +261,46 @@ def finalise(db, run, row, message, *, failure=False):
                     target_external_id=target_id, truth_classification=relationship["truth_classification"],
                     confidence=relationship["confidence"]), evidence[("relationship", relationship["external_id"])], source_id))
         memberships = {(record.entity_type, record.external_id): record for record in db.scalars(select(RunObservedEntity).where(RunObservedEntity.discovery_run_id == run.id))}
-        source = db.get(DataSource, run.data_source_id)
-        payload = SimpleNamespace(customer_id=run.customer_id, site_id=run.site_id, observations=list(assets.values()))
+        source = db.get(DataSource, run.data_source_id, with_for_update={"key_share": True})
         # One transaction spans all batches/domains. Prelock the entire known
         # set in canonical model/UUID order BEFORE any Asset or technical claims.
         # Per-observation locking alone can invert two Networks, or take an
         # Interface owner Asset after an earlier Network/claim has been locked.
-        db.get(DataSource, source.id, with_for_update={"key_share": True})
-        references = {("asset", external) for external in assets}
-        for relationship, _, external in relationship_rows:
-            references.update({("asset", external), ("asset", relationship.target_external_id)})
+        references = set()
         for batch in messages:
+            references.update(("asset", asset["external_id"]) for asset in batch["assets"])
+            references.update(("asset", relationship[side]["external_id"])
+                for relationship in batch["relationships"] for side in ("source", "target"))
             references.update(("network", row["external_id"]) for row in batch["networks"])
             for interface in batch["interfaces"]:
                 references.update({("asset_interface", interface["external_id"]),
                     ("asset", interface["asset_external_id"]),
                     ("network", interface.get("network_external_id"))})
+                if run.execution_provenance["connector_id"] == "proxmox":
+                    references.add(("asset", interface_guest(interface["external_id"])))
         if message["completeness"] == "complete":
             references.update(("asset", external) for external in snapshot_asset_external_ids(db, run))
         lock_ingestion_subjects(db, source_id=source.id, customer_id=run.customer_id,
             site_id=run.site_id, references=references)
+        links = {(link.entity_type, link.external_id): link for link in db.scalars(
+            scoped_source_links(data_source_id=source.id, customer_id=run.customer_id, site_id=run.site_id))}
+        held = classify_guest_holds(db, run, links, evidence)
+        _validate_references(db, run, messages, links, held)
+        record_guest_holds(db, run, held, evidence)
+        payload = SimpleNamespace(customer_id=run.customer_id, site_id=run.site_id,
+            observations=[asset for external, asset in assets.items() if ("asset", external) not in held.observations])
+        relationship_rows = [row for row in relationship_rows
+            if ("relationship", row[1].external_id) not in held.observations]
         _, _, assertions, items = ingest_observations(db, payload=payload, user_id=run.created_by_user_id,
             source=source, run=run, observed_at=datetime.now(timezone.utc), evidence_by_identity=evidence,
             memberships=memberships, namespaced_facts=facts, relationship_observations=relationship_rows)
-        summary["assertions_created"] += assertions
-        summary["reconciliation_items_created"] += len(items)
+        summary["assertions_created"] += assertions + held.assertions_created
+        summary["reconciliation_items_created"] += len(items) + held.items_created
         for batch in messages:
             for domain, kind in [("networks", "network"), ("interfaces", "asset_interface")]:
                 for observation in batch[domain]:
+                    if (kind, observation["external_id"]) in held.observations:
+                        continue
                     assertions, count, target_id = ingest_technical_observation(db, run=run, source=source,
                         evidence=evidence[(kind, observation["external_id"])], observation=observation,
                         entity_type=kind, user_id=run.created_by_user_id)
@@ -307,7 +322,8 @@ def finalise(db, run, row, message, *, failure=False):
         run.ingestion_generation = None
     if not failure:
         db.flush()
-        snapshot = reconcile_complete_snapshot(db, run=run, user_id=run.created_by_user_id, observed_at=now)
+        snapshot = reconcile_complete_snapshot(db, run=run, user_id=run.created_by_user_id,
+            observed_at=now, held_asset_keys=held.cases)
         summary.update(baseline_run_id=str(snapshot.baseline_run_id) if snapshot.baseline_run_id else None,
             no_longer_observed_count=snapshot.no_longer_observed_count, reobserved_count=snapshot.reobserved_count)
         row.last_success_at = source.last_success_at = now
