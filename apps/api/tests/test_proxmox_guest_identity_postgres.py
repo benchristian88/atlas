@@ -40,7 +40,10 @@ def cases(migrated_history, tmp_path, monkeypatch):
     migrated_history.migrate("upgrade", "head")
     monkeypatch.setenv("ATLAS_STATE_DIR", str(tmp_path))
     discovery_tokens.provision_signing_key()
-    engine = migrated_history.engine
+    return case_factory(migrated_history.engine)
+
+
+def case_factory(engine):
     manifest = json.loads((RELEASE / "manifest.json").read_text())
 
     def session():
@@ -60,7 +63,7 @@ def cases(migrated_history, tmp_path, monkeypatch):
         db.commit()
 
     def build(kind="lxc", *, alongside=None, same_site=False):
-        principal = make_principal("reconciliation.view", "reconciliation.decide", "assets.view", "assets.create", "sites.view",
+        principal = make_principal("reconciliation.view", "reconciliation.decide", "assets.view", "assets.create", "assets.delete", "sites.view",
             "assets.edit", "networks.view", "networks.create", "networks.edit", "relationships.view", "relationships.create",
             "assertions.retract", "assertions.delete", "discovery.simulate")
         principal.user.email = f"{uuid.uuid4().hex}@example.test"
@@ -125,14 +128,15 @@ class Case:
     def stage(self, *, name=None, mac=MAC_A, bridge="vmbr0", node="node-a", extra=False,
               completeness="complete", coverage_key=None, stamp=None, observed_stamp=None,
               secondary=False, dependencies_only=False, mismatched_interface_owner=False,
-              guest_relationship_only=False, relationship_target=None):
+              guest_relationship_only=False, relationship_target=None, omit_network=False, dispatch_state="settled"):
         stamp = stamp or datetime.now(timezone.utc)
         with self.session() as db:
             coverage = dict(self.coverage, key=coverage_key or self.coverage["key"])
             run = DiscoveryRun(integration_id=self.integration.id, data_source_id=self.source_id, customer_id=self.customer_id,
                 site_id=self.site_id, status="pending", started_at=stamp, created_by_user_id=self.principal.user.id,
                 coverage_key=coverage["key"], is_complete_snapshot=True, completeness_status="unknown",
-                execution_provenance=dict(self.provenance, coverage=coverage), dispatch_state="settled",
+                execution_provenance=dict(self.provenance, coverage=coverage), dispatch_state=dispatch_state,
+                identity_epoch=db.get(DataSource, self.source_id).identity_epoch,
                 ingestion_generation=uuid.uuid4(), deadline_at=datetime.now(timezone.utc) + timedelta(minutes=5))
             db.add(run)
             db.commit()
@@ -148,7 +152,8 @@ class Case:
                 "name": name_, "network_type": "lan", "cidr": cidr, "facts": []})
         if name:
             batch["assets"].append({"external_id": self.guest, "object_class": f"proxmox.{self.kind}", "name": name,
-                "facts": [{"key": "proxmox.vmid", "value_type": "integer", "class": "identity", "cardinality": "single", "value": 1029}]})
+                "facts": [{"key": "proxmox.vmid", "value_type": "integer", "class": "identity", "cardinality": "single",
+                           "value": int(self.guest.rsplit('/', 1)[1])}]})
             batch["interfaces"].append({"external_id": self.nic, "object_class": "proxmox.interface",
                 "asset_external_id": self.guest, "network_external_id": f"network/{node}/{bridge}",
                 "name": "eth0" if self.kind == "lxc" else "net0", "mac_address": mac,
@@ -165,6 +170,11 @@ class Case:
             batch["interfaces"].append(dict(batch["interfaces"][0], external_id=self.guest + "/interface/net1", name="eth1"))
         if dependencies_only or guest_relationship_only:
             batch["assets"] = [row for row in batch["assets"] if row["external_id"] != self.guest]
+        if omit_network:
+            for interface in batch["interfaces"]:
+                interface.pop("network_external_id", None)
+                interface["facts"].append({"key": "proxmox.vlan_tag", "value": 22, "value_type": "integer",
+                    "class": "configuration", "cardinality": "single"})
         if guest_relationship_only:
             batch["interfaces"] = []
         if mismatched_interface_owner:

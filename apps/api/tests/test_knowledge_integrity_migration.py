@@ -209,31 +209,35 @@ def test_0032_terminal_assertions_without_lineage_preserve_all_history(migrated_
 def test_0032_unrepresentable_downgrade_preserves_recoverable_database(migrated_history, kind):
     s = migrated_history
     s.migrate("upgrade", HEAD)
-    from app.models import KnowledgeAssertion
-    from app.services.knowledge_assertions import accept_assertion, record_assertion
     with s.session() as db:
-        def record(source, value):
-            return record_assertion(db, customer_id=db.scalar(text("SELECT id FROM customers")),
-                site_id=db.scalar(text("SELECT id FROM sites")), subject_type="asset", subject_id=s.asset,
-                subject_external_id="host", predicate="hostname", value=value, data_source_id=s.sources[source])[0]
-        old = record(0, "A1"); accept_assertion(db, old); db.commit()
+        # Use the frozen writer for source lineage and set the independent
+        # 0032 acceptance edge explicitly. Current ORM columns belong to head.
+        old = s.record(db, 0, "A1")
+        s.helpers.accept_assertion(db, old)
+        db.commit()
+        successor = None
         if kind in {"dual", "dual_same_target", "unselected_source"}:
-            successor = record(0, "A2"); db.commit()
-        if kind == "unselected_source":
-            old.is_accepted = False
-        else:
-            selected = successor if kind == "dual_same_target" else record(1, "B")
-            accept_assertion(db, selected)
+            successor = s.record(db, 0, "A2")
+        old.is_accepted = False
+        selected = None
+        if kind != "unselected_source":
+            old.accepted_at = None
             if kind == "acceptance_stale":
                 old.is_current = old.is_source_current = False
+            db.flush()
+            selected = successor if kind == "dual_same_target" else s.record(db, 1, "B")
+            s.helpers.accept_assertion(db, selected)
+            db.execute(text("UPDATE knowledge_assertions SET acceptance_replaced_by_id=:target WHERE id=:id"),
+                       {"id": old.id, "target": selected.id})
         db.commit()
+        expected = (old.superseded_by_id, selected.id if selected else None)
     before = s.snapshot()
     with pytest.raises(RuntimeError, match="downgrade refused"):
         s.migrate("downgrade", BASELINE)
     assert s.snapshot() == before
-    with s.session() as db:
-        persisted = db.get(KnowledgeAssertion, old.id)
-        assert persisted.superseded_by_id == old.superseded_by_id
-        assert persisted.acceptance_replaced_by_id == old.acceptance_replaced_by_id
+    with s.engine.connect() as db:
+        assert db.execute(text("""
+            SELECT superseded_by_id, acceptance_replaced_by_id FROM knowledge_assertions WHERE id=:id
+        """), {"id": old.id}).one() == expected
     s.migrate("upgrade", HEAD)
     assert s.snapshot() == before

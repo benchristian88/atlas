@@ -1,18 +1,19 @@
 """Hold Proxmox guest-slot evidence on the source side of the canonical boundary."""
 
 from collections import defaultdict
+import uuid
 from dataclasses import dataclass, field
-import re
 
 from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.models import (
-    Asset, AssetInterface, AssetRelationship, DiscoveryRun, EntitySourceLink, Integration,
+    Asset, AssetInterface, AssetRelationship, DiscoveryRun, EntitySourceLink,
     KnowledgeAssertion, Network, ReconciliationItem, RelationshipType,
 )
 from app.services.entity_resolution import scoped_source_links
 from app.services.knowledge_assertions import mark_superseded
+from app.services.proxmox_guest_bindings import GUEST_KEY, STALE_PROPOSAL, GuestBindings, interface_guest
 from app.utils.json_values import to_json_value
 
 REVIEW_TYPE = "source_identity"
@@ -20,15 +21,7 @@ REVIEW_LABEL = "Identity review"
 REVIEW_REQUIRED = "This source key requires a guest identity decision"
 PROPOSAL_HELD = "This source proposal cannot be applied in its current state"
 PRESENCE_PREDICATE = "source_key_present"
-GUEST_KEY = re.compile(r"guest/(lxc|qemu)/[1-9][0-9]{0,8}")
-INTERFACE_KEY = re.compile(r"(guest/(?:lxc|qemu)/[1-9][0-9]{0,8})/interface/net[0-9]{1,2}")
 PREVIEW_LIMIT = 8
-
-
-def is_proxmox_source(db, scope, source_id):
-    return db.scalar(select(Integration.id).where(
-        Integration.data_source_id == source_id, Integration.customer_id == scope.customer_id,
-        Integration.site_id == scope.site_id, Integration.connector_id == "proxmox")) is not None
 
 
 def _pending_reviews(scope, source_id):
@@ -48,22 +41,28 @@ def require_ordinary_item(item):
         raise HTTPException(409, REVIEW_REQUIRED)
 
 
-def review_snapshot(principal, item):
-    """Apply canonical detail permissions to the retained review snapshot."""
-    snapshot = dict(item.current_value_json)
-    for permission, fields in (
-        ("networks.view", ("interfaces", "more_interfaces")),
-        ("relationships.view", ("relationships", "more_relationships")),
-    ):
-        if not principal.can(permission, item.customer_id, item.site_id):
-            for field in fields:
-                snapshot.pop(field, None)
+def review_snapshot(db, principal, item):
+    """Only proven, currently readable scopes can reveal retained details."""
+    snapshot = dict(item.current_value_json or {})
+    if not principal.can("networks.view", item.customer_id, item.site_id):
+        snapshot.pop("interfaces", None)
+        snapshot.pop("more_interfaces", None)
+    relationships = snapshot.pop("relationships", [])
+    snapshot.pop("more_relationships", None)
+    if principal.can("relationships.view", item.customer_id, item.site_id):
+        visible = []
+        for row in relationships[:PREVIEW_LIMIT]:
+            try:
+                target = db.get(Asset, uuid.UUID(row["target_asset_id"]))
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+            if (target and (target.customer_id, target.site_id) == (item.customer_id, item.site_id)
+                    and principal.can("assets.view", target.customer_id, target.site_id)):
+                visible.append({"type": row["type"], "target": row["target"]})
+        if visible:
+            snapshot["relationships"] = visible
+        # An undisplayed endpoint cannot be reauthorized, including the overflow.
     return snapshot
-
-
-def interface_guest(external_id):
-    match = INTERFACE_KEY.fullmatch(external_id or "")
-    return match[1] if match else None
 
 
 def proposal_guest_keys(item, claim):
@@ -80,14 +79,14 @@ def proposal_guest_keys(item, claim):
     return {key for key in keys if isinstance(key, str) and GUEST_KEY.fullmatch(key)}
 
 
-def linked_retired_guests(db, scope, source_id, *, keys, owner_id=None):
+def linked_retired_guests(db, scope, source_id, *, keys, owner_id=None, bindings):
     query = scoped_source_links(data_source_id=source_id, customer_id=scope.customer_id, site_id=scope.site_id)
     query = query.join(Asset, Asset.id == EntitySourceLink.entity_id).where(
-        EntitySourceLink.entity_type == "asset", Asset.status == "retired")
-    for link in db.scalars(query.where(
+        EntitySourceLink.entity_type == "asset")
+    for link, asset in db.execute(query.add_columns(Asset).where(
         (EntitySourceLink.external_id.in_(keys)) | (EntitySourceLink.entity_id == owner_id)
     )):
-        if GUEST_KEY.fullmatch(link.external_id):
+        if GUEST_KEY.fullmatch(link.external_id) and bindings.needs_review(asset, link):
             return True
     return False
 
@@ -97,32 +96,49 @@ def require_applicable_proposal(db, item, claim):
     require_ordinary_item(item)
     if not claim.data_source_id or item.entity_type not in {"asset", "asset_interface", "asset_relationship"}:
         return
-    keys = proposal_guest_keys(item, claim)
+    bindings = GuestBindings.for_scope(db, item, claim.data_source_id)
+    if bindings is None:
+        return
+    if bindings.stale(claim, item=item):
+        raise HTTPException(409, STALE_PROPOSAL)
+    keys = {key for kind, key in bindings.claim_aliases(claim, claim.identity_epoch) if kind == "asset"}
+    keys.update(proposal_guest_keys(item, claim))
     owner_id = None
     if item.entity_type == "asset_interface":
+        slot, owner = interface_guest(claim.subject_external_id), bindings.interface_owner(claim)
+        if slot and owner and slot != owner:
+            raise HTTPException(409, "The Interface key and observed owner disagree")
         links = scoped_source_links(data_source_id=claim.data_source_id, customer_id=item.customer_id, site_id=item.site_id)
         owner_id = db.scalar(links.with_only_columns(EntitySourceLink.interface_owner_id).where(
             EntitySourceLink.entity_type == "asset_interface", EntitySourceLink.external_id == claim.subject_external_id))
-    if (not keys and owner_id is None) or not is_proxmox_source(db, item, claim.data_source_id):
+    if not keys and owner_id is None:
         return
     held = _pending_reviews(item, claim.data_source_id).where(
         ReconciliationItem.candidate_external_id.in_(keys) | (ReconciliationItem.entity_id == owner_id))
     if db.execute(held.limit(1)).first() or linked_retired_guests(
-        db, item, claim.data_source_id, keys=keys, owner_id=owner_id
+        db, item, claim.data_source_id, keys=keys, owner_id=owner_id, bindings=bindings
     ):
         raise HTTPException(409, PROPOSAL_HELD)
 
 
 def simulation_hold_keys(db, run, external_ids):
     """A simulation cannot submit evidence for a retained live guest identity."""
-    if not is_proxmox_source(db, run, run.data_source_id):
+    bindings = GuestBindings.for_scope(db, run, run.data_source_id)
+    if bindings is None:
         return set()
     keys = {key for key in external_ids if key and GUEST_KEY.fullmatch(key)}
     held = set(db.scalars(_pending_reviews(run, run.data_source_id).with_only_columns(
         ReconciliationItem.candidate_external_id)))
-    if keys & held or (keys and linked_retired_guests(db, run, run.data_source_id, keys=keys)):
+    guarded = held | {key for kind, key in bindings.boundaries if kind == "asset"}
+    current = defaultdict(list)
+    for kind, key in bindings.links:
+        if kind == "asset" and GUEST_KEY.fullmatch(key) and (link := bindings.current((kind, key))):
+            current[link.entity_id].append((key, link))
+    for asset in db.scalars(select(Asset).where(Asset.id.in_(current))):
+        guarded.update(key for key, link in current[asset.id] if bindings.needs_review(asset, link))
+    if keys & guarded:
         raise HTTPException(409, PROPOSAL_HELD)
-    return held
+    return guarded
 
 
 @dataclass
@@ -154,7 +170,7 @@ def _accepted_snapshot(db, scope, asset):
         (Network.customer_id == scope.customer_id) & (Network.site_id == scope.site_id)
     ).where(AssetInterface.asset_id == asset.id).order_by(AssetInterface.name, AssetInterface.id)
       .limit(PREVIEW_LIMIT + 1)).all()
-    relationships = db.execute(select(RelationshipType.name, Asset.name).select_from(AssetRelationship)
+    relationships = db.execute(select(AssetRelationship.id, RelationshipType.name, Asset.id, Asset.name).select_from(AssetRelationship)
         .join(RelationshipType, RelationshipType.key == AssetRelationship.relationship_type)
         .join(Asset, Asset.id == AssetRelationship.target_asset_id)
         .where(AssetRelationship.source_asset_id == asset.id, AssetRelationship.customer_id == scope.customer_id,
@@ -165,7 +181,8 @@ def _accepted_snapshot(db, scope, asset):
                             "ip_address": nic.ip_address, "assigned_network": network}
                            for nic, network in rows[:PREVIEW_LIMIT]],
             "more_interfaces": len(rows) > PREVIEW_LIMIT,
-            "relationships": [{"type": label, "target": name} for label, name in relationships[:PREVIEW_LIMIT]],
+            "relationships": [{"relationship_id": identifier, "type": label, "target_asset_id": target_id, "target": name}
+                              for identifier, label, target_id, name in relationships[:PREVIEW_LIMIT]],
             "more_relationships": len(relationships) > PREVIEW_LIMIT}
 
 
@@ -224,11 +241,12 @@ def _record_review(db, run, asset, key, records, previous):
     return True
 
 
-def classify_guest_holds(db, run, links, evidence):
+def classify_guest_holds(db, run, links, evidence, *, bindings=None):
     """Classify under Source and canonical subject locks before writing reviews."""
     result = GuestHolds()
     if run.execution_provenance["connector_id"] != "proxmox":
         return result
+    bindings = bindings or GuestBindings(db, run, run.data_source_id)
 
     source_id = run.data_source_id
     reviews = {item.candidate_external_id: (item, claim)
@@ -261,9 +279,11 @@ def classify_guest_holds(db, run, links, evidence):
                 candidate_assets[key] = (link.entity_id, f"proxmox.{guest[1]}")
     targets = {asset.id: asset for asset in db.scalars(select(Asset).where(
         Asset.id.in_({asset_id for asset_id, _ in candidate_assets.values()}), Asset.customer_id == run.customer_id,
-        Asset.site_id == run.site_id, Asset.status == "retired"))}
+        Asset.site_id == run.site_id))}
     for key, (asset_id, object_class) in sorted(candidate_assets.items()):
         asset, previous = targets.get(asset_id), reviews.get(key)
+        if asset and not bindings.needs_review(asset, links[("asset", key)]):
+            asset = None
         if asset is None and previous is None:
             continue
         result.by_key[key] = GuestHold(object_class, asset, previous, references[key])

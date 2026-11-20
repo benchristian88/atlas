@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "./button";
 import { reconciliationGroups } from "../lib/reconciliation-queues.mjs";
 import { EntityIdentity } from "./entity-identity";
@@ -111,11 +112,14 @@ function ReviewProvenance({ item }) {
 }
 
 function GuestIdentityEvidence({ item }) {
-  const prior = item.current;
-  const observed = item.proposed;
-  return <div className="reconciliation-values review-identity-evidence">
+  const prior = item.current || {};
+  const observed = item.proposed || {};
+  const review = item.identity_review;
+  return <>
+  {review?.current_asset_status && <p>Current Asset status <StatusBadge status={review.current_asset_status} /></p>}
+  <div className="reconciliation-values review-identity-evidence">
     <div>
-      <h3>Retired Asset at first hold</h3>
+      <h3>First-hold snapshot</h3>
       <p>{prior.name} · {prior.lifecycle_status}</p>
       {prior.interfaces?.length > 0 && <ul>{prior.interfaces.map((nic, index) =>
         <li key={index}>{[nic.name, nic.mac_address, nic.ip_address, nic.assigned_network && `Assigned Network ${nic.assigned_network}`].filter(Boolean).join(" · ")}</li>)}</ul>}
@@ -126,14 +130,81 @@ function GuestIdentityEvidence({ item }) {
     </div>
     <div>
       <h3>Latest source evidence</h3>
-      <p>{observed.name || "Only Interface or relationship evidence was received for this key."}</p>
-      {observed.interfaces.length > 0 && <ul>{observed.interfaces.map(nic =>
+      {review?.observed_at && <p className="secondary-text">Observed <time dateTime={review.observed_at}>{new Date(review.observed_at).toLocaleString()}</time></p>}
+      <p>{observed.name || (observed.guest_observed === false ? "This run did not include a guest payload." : "Verified guest evidence is unavailable.")}</p>
+      {observed.interfaces?.length > 0 && <h4>Observed Interfaces</h4>}
+      {observed.interfaces?.length > 0 && <ul>{observed.interfaces.map(nic =>
         <li key={nic.external_id}>{[nic.name, nic.mac_address, nic.ip_address, nic.network_external_id && `Observed Network ${nic.network_external_id}`].filter(Boolean).join(" · ")}</li>)}</ul>}
-      {observed.relationships.length > 0 && <ul>{observed.relationships.map(edge =>
+      {observed.relationships?.length > 0 && <h4>Observed relationships</h4>}
+      {observed.relationships?.length > 0 && <ul>{observed.relationships.map(edge =>
         <li key={edge.external_id}>{edge.source.external_id} → {edge.relationship_class.split(".").pop().replaceAll("_", " ")} → {edge.target.external_id}</li>)}</ul>}
-      {observed.asset_interface_count > observed.interfaces.length && <p>{observed.asset_interface_count} held Interface observations.</p>}
-      {observed.relationship_count > observed.relationships.length && <p>{observed.relationship_count} held relationship observations.</p>}
+      {observed.asset_interface_count > observed.interfaces?.length && <p>{observed.asset_interface_count} held Interface observations.</p>}
+      {observed.relationship_count > observed.relationships?.length && <p>{observed.relationship_count} held relationship observations.</p>}
     </div>
+  </div></>;
+}
+
+const identityActions = {
+  reactivate: "Reactivate existing Asset",
+  replace: "Accept as replacement",
+};
+
+const withheldReasons = {
+  invalid_guest_observation: "The guest observation failed validation.",
+  asset_mapping_unavailable: "The reviewed Asset type mapping is unavailable.",
+  interface_owner_conflict: "The Interface has a conflicting source binding.",
+  interface_owner_mismatch: "The Interface observation names a different owner.",
+  interface_reference_changed: "An Interface reference changed or could not be verified.",
+  invalid_relationship_guest: "The relationship does not identify this guest unambiguously.",
+  relationship_mapping_unavailable: "The reviewed relationship mapping is unavailable.",
+  other_identity_pending_or_changed: "Another endpoint has a pending or changed identity.",
+  relationship_reference_unverified: "A relationship endpoint could not be verified.",
+};
+
+function GuestIdentityActions({ item, busy, decideIdentity }) {
+  const [selected, setSelected] = useState("");
+  const [reason, setReason] = useState("");
+  const review = item.identity_review;
+  if (!review) return null;
+  function leavePending() {
+    setSelected("");
+    setReason("");
+  }
+  const confirmation = selected === "replace"
+    ? "Create a new Asset for this guest slot. The retired Asset and its history will be retained. The previous guest and applicable Interface source bindings will end. Review the new guest’s Interfaces and relationships separately."
+    : review.current_asset_status === "active"
+      ? "This Asset is already active. Confirm it is the same guest to release the held evidence."
+      : "Confirm this is the same guest and set the existing Asset to active. Changes to name, MAC, Network assignment and relationships will require separate review.";
+  return <div className="review-identity-decision">
+    {review.outcome && <p>{review.outcome === "replace" ? "Accepted as a replacement" : "Confirmed as the same guest"}</p>}
+    {Object.entries(review.withheld || {}).length > 0 && <div>
+      <p>{review.outcome ? "Evidence held for fresh discovery" : "Evidence that will remain held"}</p>
+      <ul>{Object.entries(review.withheld).map(([code, count]) =>
+        <li key={code}>{count} {count === 1 ? "observation" : "observations"} · {withheldReasons[code] || "Fresh discovery is required."}</li>)}</ul>
+    </div>}
+    {item.status === "open" && !selected && <>
+      {Object.entries(identityActions).map(([outcome, label]) => <div key={outcome}>
+        {review.actions?.[outcome] === null ? <Button type="button" variant="secondary" disabled={busy} onClick={() => setSelected(outcome)}>{label}</Button>
+          : <p className="secondary-text"><strong>{label}</strong> · {review.actions?.[outcome]}</p>}
+      </div>)}
+      <p className="secondary-text">Close this review to leave it pending.</p>
+    </>}
+    {item.status === "open" && selected && <form className="review-identity-decision" onSubmit={async event => {
+      event.preventDefault();
+      if (busy || !reason.trim() || review.actions[selected] !== null) return;
+      if (await decideIdentity(item, selected, reason.trim())) leavePending();
+    }}>
+      <p id={`identity-confirmation-${item.id}`}>{confirmation}</p>
+      <div className="field">
+        <label htmlFor={`identity-reason-${item.id}`}>Reason</label>
+        <textarea id={`identity-reason-${item.id}`} value={reason} maxLength={10000} required rows={3}
+          aria-describedby={`identity-confirmation-${item.id}`} autoFocus disabled={busy} onChange={event => setReason(event.target.value)} />
+      </div>
+      <div className="form-actions">
+        <Button type="submit" disabled={busy || !reason.trim()}>Confirm {selected === "replace" ? "replacement" : "same guest"}</Button>
+        <Button type="button" variant="quiet" disabled={busy} onClick={leavePending}>Leave pending</Button>
+      </div>
+    </form>}
   </div>;
 }
 
@@ -205,8 +276,11 @@ export function ReconciliationEntityCard({ entity, focused = false, canDecide, b
         {parent && <section className="review-parent" aria-label={identityReview ? "Identity review" : "Entity decision"}>
           {!identityReview && <div className="review-row-heading"><h3>{parent.label}</h3><StatusBadge status={parent.status} /></div>}
           {parent.warning && <p className="review-warning">{parent.warning}</p>}
-          {identityReview && <GuestIdentityEvidence item={parent} />}
-          <ReviewBlockers item={parent} reviewHref={actions.reviewHref} />
+          {identityReview && <>
+            <GuestIdentityEvidence item={parent} />
+            <GuestIdentityActions key={parent.identity_review?.expected_version} item={parent} busy={busy} decideIdentity={actions.decideIdentity} />
+          </>}
+          {!identityReview && <ReviewBlockers item={parent} reviewHref={actions.reviewHref} />}
           {canDecide && <ReviewActions item={parent} parent busy={busy} decide={actions.decide} />}
           <TechnicalIdentityLink item={parent} busy={busy} {...actions} linkSelections={linkSelections} setLinkSelections={setLinkSelections} />
           {canDecide && ["open", "deferred"].includes(parent.status) && parent.entity_type === "asset" && <details className="review-provenance"><summary>Link an existing asset</summary><div className="reconciliation-link">

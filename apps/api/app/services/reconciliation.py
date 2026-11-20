@@ -17,6 +17,7 @@ from app.models import (
     AssetType,
     Customer,
     DataSource,
+    DiscoveryRun,
     KnowledgeAssertion,
     Network,
     ReconciliationItem,
@@ -35,6 +36,9 @@ from app.services.knowledge_assertions import accept_assertion, confirm, reject
 from app.services.knowledge_changes import record_assertion_change
 from app.services.proxmox_guest_identity import require_applicable_proposal, require_ordinary_item
 from app.services.predicate_definitions import ASSET_FIELD_PREDICATES
+from app.services.proxmox_guest_bindings import (
+    STALE_PROPOSAL, GuestBindings, historical_relationship_link, recorded_relationship_endpoint,
+)
 from app.utils.json_values import to_json_value
 
 
@@ -223,6 +227,7 @@ def _attach_external_identity(
         external_type=(item.observed_value_json or {}).get("asset_type"),
         observed_at=assertion.last_observed_at,
     )
+    bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
     for related_assertion in db.scalars(
         select(KnowledgeAssertion).where(
             KnowledgeAssertion.customer_id == item.customer_id,
@@ -233,7 +238,8 @@ def _attach_external_identity(
             KnowledgeAssertion.is_source_current.is_(True),
         )
     ):
-        related_assertion.subject_id = asset.id
+        if not bindings or (related_assertion.subject_id is None and not bindings.stale(related_assertion)):
+            related_assertion.subject_id = asset.id
     for object_assertion in db.scalars(
         select(KnowledgeAssertion).where(
             KnowledgeAssertion.customer_id == item.customer_id,
@@ -244,8 +250,37 @@ def _attach_external_identity(
             KnowledgeAssertion.is_source_current.is_(True),
         )
     ):
-        object_assertion.object_id = asset.id
+        if not bindings or (object_assertion.object_id is None and not bindings.stale(object_assertion)):
+            object_assertion.object_id = asset.id
     item.entity_id = asset.id
+
+
+def construct_discovered_asset(db, customer, site, external_id, value):
+    """Construct an Asset without resolving aliases or applying optional associations."""
+    _active_asset_type(db, value["asset_type"])
+    facts = value.get("facts") or {}
+    asset = Asset(
+        workspace_id=customer.workspace_id,
+        customer_id=customer.id,
+        site_id=site.id,
+        source_integration_id=None,
+        external_id=external_id,
+        name=value["name"],
+        asset_type=value["asset_type"],
+        hostname=facts.get("hostname"),
+        status=facts.get("status") or "active",
+        vendor=facts.get("vendor"),
+        model=facts.get("model"),
+        ip_address=facts.get("ip_address"),
+        description=facts.get("description"),
+        source="discovery",
+        metadata_={"knowledge_source": "reconciliation"},
+        first_seen_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(timezone.utc),
+    )
+    db.add(asset)
+    db.flush()
+    return asset
 
 
 def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
@@ -278,33 +313,12 @@ def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
             status_code=409,
             detail="Multiple existing assets match; link the intended asset explicitly",
         )
-    _active_asset_type(db, value["asset_type"])
-    facts = value.get("facts") or {}
-    asset = Asset(
-        workspace_id=customer.workspace_id,
-        customer_id=customer.id,
-        site_id=site.id,
-        source_integration_id=None,
-        external_id=item.candidate_external_id,
-        name=value["name"],
-        asset_type=value["asset_type"],
-        hostname=facts.get("hostname"),
-        status=facts.get("status") or "active",
-        vendor=facts.get("vendor"),
-        model=facts.get("model"),
-        ip_address=facts.get("ip_address"),
-        description=facts.get("description"),
-        source="discovery",
-        metadata_={"knowledge_source": "reconciliation"},
-        first_seen_at=datetime.now(timezone.utc),
-        last_seen_at=datetime.now(timezone.utc),
-    )
-    db.add(asset)
-    db.flush()
+    asset = construct_discovered_asset(db, customer, site, item.candidate_external_id, value)
     _create_interfaces(db, asset, value.get("interfaces") or [])
     _attach_external_identity(db, item=item, assertion=assertion, asset=asset)
-    for related in db.scalars(
-        select(ReconciliationItem).where(
+    bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
+    for related, claim in db.execute(
+        select(ReconciliationItem, KnowledgeAssertion).where(
             ReconciliationItem.customer_id == item.customer_id,
             ReconciliationItem.site_id == item.site_id,
             ReconciliationItem.entity_type == "asset",
@@ -313,7 +327,8 @@ def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
         ).join(KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id).where(
             KnowledgeAssertion.data_source_id == assertion.data_source_id)
     ):
-        related.entity_id = asset.id
+        if not bindings or not bindings.stale(claim, item=related):
+            related.entity_id = asset.id
     return asset
 
 
@@ -356,6 +371,7 @@ def _accept_matching_asset_assertions(
     accepted_at: datetime,
 ) -> None:
     """Accept all reconciled scalar observations represented by a new asset."""
+    bindings = GuestBindings.for_scope(db, source_assertion, source_assertion.data_source_id)
 
     for candidate in db.scalars(
         select(KnowledgeAssertion).where(
@@ -366,6 +382,8 @@ def _accept_matching_asset_assertions(
             KnowledgeAssertion.predicate.in_(ASSET_FIELD_PREDICATES),
         )
     ):
+        if bindings and bindings.stale(candidate):
+            continue
         # An independent reconciliation proposal always needs its own decision.
         if db.scalar(select(ReconciliationItem).where(ReconciliationItem.assertion_id == candidate.id)) is not None:
             continue
@@ -482,13 +500,20 @@ def _pending_resolution_status(
 
 
 def relationship_resolution(
-    db: Session, item: ReconciliationItem, *, persist_links: bool = True
+    db: Session, item: ReconciliationItem, *, persist_links: bool = True, refresh: bool = False,
+    bindings: GuestBindings | None = None, principal=None,
 ) -> dict[str, Any]:
     assertion = _assertion_for_item(db, item)
     value = dict(item.observed_value_json or {})
+    historical = bindings is not None and not persist_links and not refresh
+    original_run = db.get(DiscoveryRun, assertion.discovery_run_id) if assertion.identity_epoch and assertion.discovery_run_id else None
+    released = original_run is not None and assertion.identity_epoch > original_run.identity_epoch
     source_external_id = value.get("source_external_id")
     target_external_id = value.get("target_external_id")
-    if assertion.data_source_id is None or not source_external_id or not target_external_id:
+    if historical:
+        source_external_id = assertion.subject_external_id or source_external_id
+        target_external_id = assertion.object_external_id or target_external_id
+    elif assertion.data_source_id is None or not source_external_id or not target_external_id:
         return {
             **value,
             "source_external_id": source_external_id,
@@ -499,14 +524,25 @@ def relationship_resolution(
             "current_relationship_id": None,
         }
 
-    def resolve(external_id: str) -> AssetResolution:
+    def resolve(external_id, side) -> AssetResolution:
+        if historical:
+            identifier = recorded_relationship_endpoint(assertion, value, side)
+            if identifier is None:
+                link = historical_relationship_link(
+                    db, assertion, bindings.links.get(("asset", external_id), ()), proxmox=True)
+                identifier = link.entity_id if link else None
+            asset = db.get(Asset, identifier) if identifier else None
+            if (asset and (asset.customer_id, asset.site_id) == (item.customer_id, item.site_id)
+                    and (principal is None or principal.can("assets.view", asset.customer_id, asset.site_id))):
+                return AssetResolution("resolved_link", asset)
+            return AssetResolution("unresolved")
         result = resolve_asset_identity(
             db,
             data_source_id=assertion.data_source_id,
             customer_id=item.customer_id,
             site_id=item.site_id,
             external_id=external_id,
-            allow_external_name_hint=True,
+            allow_external_name_hint=not released,
             observed_at=assertion.last_observed_at,
             persist_link=persist_links,
         )
@@ -519,8 +555,8 @@ def relationship_resolution(
             )
         return result
 
-    source = resolve(source_external_id)
-    target = resolve(target_external_id)
+    source = resolve(source_external_id, "source")
+    target = resolve(target_external_id, "target")
     current = None
     if source.asset is not None and target.asset is not None:
         current = db.scalar(
@@ -541,8 +577,9 @@ def relationship_resolution(
             )
             if len(competing) == 1:
                 current = competing[0]
-        assertion.subject_id = source.asset.id
-        assertion.object_id = target.asset.id
+        if persist_links or refresh:
+            assertion.subject_id = source.asset.id
+            assertion.object_id = target.asset.id
     unresolved = []
     if source.asset is None:
         unresolved.append(f"source {source_external_id} ({source.status})")
@@ -566,6 +603,8 @@ def relationship_resolution(
         "current_relationship_id": current.id if current else None,
     }
     safe_result = to_json_value(result)
+    if not persist_links and not refresh:
+        return safe_result
     item.observed_value_json = safe_result
     item.current_value_json = to_json_value(
         {
@@ -794,10 +833,12 @@ def _accept_technical(db, item, assertion):
     ensure_technical_link(db, source=source, target=target, entity_type=kind,
         external_id=item.candidate_external_id, observed_at=assertion.last_observed_at)
     item.entity_id = assertion.subject_id = target.id
+    bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
     for claim in db.scalars(select(KnowledgeAssertion).where(KnowledgeAssertion.data_source_id == source.id,
             KnowledgeAssertion.subject_type == kind, KnowledgeAssertion.subject_external_id == item.candidate_external_id,
             KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id)):
-        claim.subject_id = target.id
+        if not bindings or (claim.subject_id is None and claim.is_source_current and not bindings.stale(claim)):
+            claim.subject_id = target.id
     return target, previous_value
 
 
@@ -826,12 +867,14 @@ def link_item_to_technical(db, *, item, target, user, reason=None):
     ensure_technical_link(db, source=source, target=target, entity_type=item.entity_type,
         external_id=item.candidate_external_id, observed_at=assertion.last_observed_at)
     item.entity_id = assertion.subject_id = target.id
+    bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
     for claim in db.scalars(select(KnowledgeAssertion).where(
             KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id,
             KnowledgeAssertion.data_source_id == source.id, KnowledgeAssertion.subject_type == item.entity_type,
             KnowledgeAssertion.subject_external_id == item.candidate_external_id,
             KnowledgeAssertion.is_source_current.is_(True))):
-        claim.subject_id = target.id
+        if not bindings or (claim.subject_id is None and not bindings.stale(claim)):
+            claim.subject_id = target.id
     item.status, item.decision_reason = "accepted", reason or "Linked source identity; accepted configuration retained"
     item.decided_by_user_id, item.decided_at = user.id, datetime.now(timezone.utc)
     # Production disables autoflush. Close the identity review before looking
@@ -895,12 +938,14 @@ def link_item_to_asset(
     )
     # Identity acceptance does not select otherwise unreviewed field claims.
     # Make matching corroboration as well as disagreements explicitly reviewable.
+    bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
     for claim in db.scalars(select(KnowledgeAssertion).where(
             KnowledgeAssertion.customer_id == item.customer_id, KnowledgeAssertion.site_id == item.site_id,
             KnowledgeAssertion.data_source_id == assertion.data_source_id, KnowledgeAssertion.subject_type == "asset",
             KnowledgeAssertion.subject_external_id == item.candidate_external_id,
             KnowledgeAssertion.predicate.in_(ASSET_FIELD_PREDICATES), KnowledgeAssertion.is_source_current.is_(True))):
-        if claim.id == assertion.id or claim.is_accepted or claim.retracted_at or claim.confirmation_status in {"rejected", "superseded"}:
+        if (claim.id == assertion.id or claim.is_accepted or claim.retracted_at
+                or claim.confirmation_status in {"rejected", "superseded"} or bindings and bindings.stale(claim)):
             continue
         current = getattr(asset, claim.predicate)
         create_item(db, assertion=claim, category="changed" if current == claim.value_json else "contradiction",
@@ -922,7 +967,9 @@ def link_item_to_asset(
     ):
         # Refresh only this identity's source-local dependants. Read-only
         # resolution must not acquire another DataSource lock under ours.
-        relationship_resolution(db, related, persist_links=False)
+        claim = _assertion_for_item(db, related)
+        if not bindings or not bindings.stale(claim, item=related):
+            relationship_resolution(db, related, persist_links=False, refresh=True)
     return asset
 
 
@@ -932,6 +979,9 @@ def reject_item(db: Session, item: ReconciliationItem, user: User, reason: str |
         raise HTTPException(status_code=409, detail="This item has already been decided")
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     if assertion is not None:
+        bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
+        if bindings and bindings.stale(assertion, item=item):
+            raise HTTPException(409, STALE_PROPOSAL)
         if item.category in {"changed", "contradiction"}:
             # The user rejected the proposed operational change, not the
             # source observation itself. Preserve it as current-from-source so
@@ -969,6 +1019,10 @@ def defer_item(db: Session, item: ReconciliationItem, user: User, reason: str | 
     require_ordinary_item(item)
     if item.status != "open":
         raise HTTPException(status_code=409, detail="Only open items can be deferred")
+    assertion = _assertion_for_item(db, item)
+    bindings = GuestBindings.for_scope(db, item, assertion.data_source_id)
+    if bindings and bindings.stale(assertion, item=item):
+        raise HTTPException(409, STALE_PROPOSAL)
     item.status = "deferred"
     item.decision_reason = reason
     item.decided_by_user_id = user.id

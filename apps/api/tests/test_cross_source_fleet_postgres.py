@@ -18,11 +18,11 @@ from tests.i3_fixtures import message
 import os,pytest
 from sqlalchemy import create_engine
 from app.database import SessionLocal
-from tests.test_knowledge_integrity_migration import migrated_history, HEAD
+from tests.test_knowledge_integrity_migration import migrated_history
 pytestmark = pytest.mark.skipif(not os.getenv("ATLAS_TEST_DATABASE_URL"), reason="requires disposable migrated PostgreSQL")
 @pytest.fixture
 def db(migrated_history):
-    migrated_history.migrate('upgrade', HEAD)
+    migrated_history.migrate('upgrade', 'head')
     with SessionLocal(bind=migrated_history.engine) as session:
         yield session
 

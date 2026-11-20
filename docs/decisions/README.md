@@ -40,12 +40,12 @@ remain understandable after the original implementation discussion is gone.
 
 - [0018 — Durable original catalogue evidence and separate remote installation approval](0018-catalogue-durable-publication-evidence.md) — **Accepted 5 November 2026** for the architectural contract, including native/systemd compatibility; executable trust, workflow adoption and operational activation remain separately gated.
 
+- [0019 — Resolve Proxmox guest identity reviews with retained source bindings](0019-proxmox-guest-identity-resolution.md) — **Proposed**, with a local operator workflow pending independent review.
+
 ## ADR maintenance
 
-The [Proxmox guest identity handoff](../architecture/proxmox-guest-identity-containment.md#deferred-decisions)
-records proposed Reactivate and replacement semantics for owner review.
-Pass 1 uses the existing ADR 0017 lock order. Temporal source bindings and
-identity resolution require a separate decision.
+The [Proxmox guest identity handoff](../architecture/proxmox-guest-identity-containment.md#pass-1-design-handoff)
+records the Pass 1 boundary and the questions leading to proposed ADR 0019.
 
 Create or supersede an ADR when a change affects any of the following:
 

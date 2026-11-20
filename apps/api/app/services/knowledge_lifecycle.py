@@ -158,6 +158,8 @@ def can_delete_discovery_run(db: Session, run: DiscoveryRun) -> DeletionSafety:
             db.scalars(
                 select(EntitySourceLink.entity_id).where(
                     EntitySourceLink.data_source_id == run.data_source_id,
+                    EntitySourceLink.customer_id == run.customer_id,
+                    EntitySourceLink.site_id == run.site_id,
                     EntitySourceLink.external_id.in_(external_ids),
                 )
             )
@@ -300,6 +302,8 @@ def can_delete_assertion(db: Session, assertion: KnowledgeAssertion) -> Deletion
             db,
             select(func.count()).select_from(EntitySourceLink).where(
                 EntitySourceLink.data_source_id == assertion.data_source_id,
+                EntitySourceLink.customer_id == assertion.customer_id,
+                EntitySourceLink.site_id == assertion.site_id,
                 EntitySourceLink.external_id == assertion.subject_external_id,
                 EntitySourceLink.entity_type == assertion.subject_type,
                 ({"network": EntitySourceLink.network_id, "asset_interface": EntitySourceLink.interface_id}

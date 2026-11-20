@@ -14,6 +14,7 @@ from app.services.data_sources import manual_inventory_source
 from app.services.knowledge_assertions import accept_assertion, record_assertion
 from app.services.knowledge_changes import record_assertion_change
 from app.services.reconciliation import create_item
+from app.services.proxmox_guest_bindings import GuestBindings
 from app.utils.json_values import to_json_value
 
 MANUAL_ASSET_KNOWLEDGE_FIELDS = (
@@ -58,12 +59,16 @@ def _active_observations(
             KnowledgeAssertion.retracted_at.is_(None),
         )
     )
-    return [
-        row
-        for row in rows
-        if row.truth_classification != "declared"
-        and row.confirmation_status not in {"rejected", "superseded"}
-    ]
+    observations, by_source = [], {}
+    for row in rows:
+        if row.truth_classification == "declared" or row.confirmation_status in {"rejected", "superseded"}:
+            continue
+        if row.data_source_id not in by_source:
+            by_source[row.data_source_id] = GuestBindings.for_scope(db, asset, row.data_source_id)
+        bindings = by_source[row.data_source_id]
+        if not bindings or not bindings.stale(row):
+            observations.append(row)
+    return observations
 
 
 def declare_asset_changes(

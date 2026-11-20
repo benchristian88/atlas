@@ -63,8 +63,13 @@ invalid; older Atlas assertions normalised omission to null internally.
 
 Proxmox guest Interface observations held for an
 [identity review](cross-source-reconciliation.md#proxmox-guest-identity-review)
-remain source evidence. The existing Interface UUID and assigned Network belong
-to the retained Asset while the review is pending.
+remain source evidence. Reactivate keeps the existing Interface bindings.
+Replacement ends applicable bindings in the reviewed DataSource while the old
+Asset retains its Interface UUIDs and Network assignments. A replacement Asset
+starts without Interfaces or inherited assignments. Review released Interface
+observations independently. An explicit source Network reference must resolve
+in the same scope before acceptance. An omitted reference leaves a newly
+accepted Interface unassigned.
 
 The additive Asset-detail read is
 `GET /api/asset-interfaces?asset_id={id}&include_knowledge=true`. It retains the

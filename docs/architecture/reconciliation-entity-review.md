@@ -30,6 +30,20 @@ Connector manifests, ingestion schemas or discovery behavior change.
 
 ## Additive API
 
+Proxmox Identity reviews expose `identity_review` with `expected_version`,
+current Asset status, observation time, outcome, and server-scoped action reasons.
+A null action reason means the action is available. `current_value_json` holds
+the authorized first-hold snapshot and `observed_value_json` holds the authorized
+latest preview. The grouped projection uses the same values. The `version` field
+on grouped items still belongs to ordinary reconciliation.
+
+`POST /reconciliation-items/{item_id}/identity-decision` accepts only
+`{outcome, expected_version, reason}`. `outcome` is `reactivate` or `replace`,
+`expected_version` comes from `identity_review`, and `reason` must be nonblank.
+Success returns the case ID, accepted status and chosen outcome. A stale version
+returns 409 and requires a new comparison. Case and scope mismatches return 404.
+[Identity transaction and evidence contract](proxmox-guest-identity-containment.md#operator-decision-contract).
+
 - `GET /reconciliation-entities` accepts status/category/source/run/entity-type
   filters, entity-name search, section, limit and cursor. It returns entities,
   `record_total`, `entity_total`, matching status/category counts and next/previous

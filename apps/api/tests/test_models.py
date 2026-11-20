@@ -1,6 +1,8 @@
 import importlib
 from unittest.mock import Mock
 
+from sqlalchemy import UniqueConstraint
+
 from app.models import Base
 
 
@@ -30,6 +32,7 @@ EXPECTED_TABLES = {
     "evidence_records",
     "knowledge_assertions",
     "reconciliation_items",
+    "proxmox_guest_identity_decisions",
     "run_observed_entities",
     "knowledge_changes",
     "knowledge_requirement_definitions",
@@ -98,7 +101,7 @@ CRITICAL_COLUMNS = {
         "id", "workspace_id", "customer_id", "site_id", "source_integration_id",
         "external_id", "name", "asset_type", "icon_url", "vendor", "model",
         "hostname", "ip_address", "status", "description", "source", "metadata",
-        "first_seen_at", "last_seen_at", "created_at", "updated_at",
+        "identity_retirement_revision", "first_seen_at", "last_seen_at", "created_at", "updated_at",
     },
     "asset_relationships": {
         "id", "source_asset_id", "target_asset_id", "customer_id", "site_id",
@@ -145,7 +148,7 @@ CRITICAL_COLUMNS = {
         "id", "customer_id", "site_id", "subject_type", "subject_id",
         "subject_external_id", "predicate", "value_json", "object_type",
         "object_id", "object_external_id", "truth_classification",
-        "confirmation_status", "data_source_id", "discovery_run_id",
+        "confirmation_status", "data_source_id", "discovery_run_id", "identity_epoch",
         "evidence_record_id", "confidence", "first_observed_at",
         "last_observed_at", "valid_from", "valid_to", "superseded_by_id", "acceptance_replaced_by_id",
         "is_current", "is_source_current", "is_accepted", "accepted_at",
@@ -292,12 +295,24 @@ def test_site_specific_network_ownership_requires_a_customer_site_pair() -> None
 
 def test_entity_source_links_are_unique_and_customer_site_safe() -> None:
     links = Base.metadata.tables["entity_source_links"]
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
+    source_key = ("data_source_id", "entity_type", "external_id")
+    current_index = next(
+        index for index in links.indexes
+        if index.name == "uq_entity_source_links_current_source_type_external"
+    )
+    assert current_index.unique
+    assert tuple(current_index.columns.keys()) == source_key
+    assert str(current_index.dialect_options["postgresql"]["where"]) == "ended_epoch IS NULL"
+
+    unique_constraints = {
+        constraint.name: tuple(constraint.columns.keys())
         for constraint in links.constraints
-        if constraint.__class__.__name__ == "UniqueConstraint"
+        if isinstance(constraint, UniqueConstraint)
     }
-    assert ("data_source_id", "entity_type", "external_id") in unique_columns
+    assert unique_constraints["uq_entity_source_links_source_type_external_epoch"] == (*source_key, "opened_epoch")
+    assert "uq_entity_source_links_source_type_external" not in unique_constraints
+    assert source_key not in unique_constraints.values()
+
     composite_targets = {
         tuple(element.target_fullname for element in constraint.elements)
         for constraint in links.foreign_key_constraints

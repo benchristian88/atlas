@@ -12,7 +12,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
-from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
+from app.authorization import CurrentPrincipal, Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.services.knowledge_locks import lock_subjects, decision_conflicts as _decision_conflicts, concurrent_decision as _concurrent_decision
 from app.models import (
@@ -36,6 +36,8 @@ from app.schemas import (
     DiscoveryRunResponse,
     KnowledgeAssertionResponse,
     LifecycleReasonRequest,
+    ProxmoxIdentityDecisionRequest,
+    ProxmoxIdentityDecisionResponse,
     ReconciliationDecisionRequest,
     ReconciliationLinkAssetRequest,
     ReconciliationLinkTechnicalRequest,
@@ -74,11 +76,14 @@ from app.services.knowledge_lifecycle import (
 from app.services.simulated_discovery import run_simulation
 from app.services.knowledge_changes import record_assertion_change
 from app.utils.json_values import to_json_value
-from app.services.reconciliation_listing import filtered_items, initial_fact_context, page_rows
+from app.services.reconciliation_listing import filtered_items, initial_fact_context, page_rows, stale_identity_item_ids
+from app.services.proxmox_guest_bindings import STALE_PROPOSAL, GuestBindings
 from app.services.reconciliation_entities import EntityReview, entity_page, item_version, SECTION_LIMIT
 from app.services.proxmox_guest_identity import (
-    PRESENCE_PREDICATE, REVIEW_LABEL, REVIEW_REQUIRED, REVIEW_TYPE, proposal_guest_keys, review_snapshot,
+    PRESENCE_PREDICATE, REVIEW_LABEL, REVIEW_REQUIRED, REVIEW_TYPE, proposal_guest_keys,
 )
+
+from app.services.proxmox_identity_decisions import IdentityReview, decide_review, lock_review
 
 router = APIRouter(tags=["knowledge"])
 
@@ -172,7 +177,10 @@ def assertion_response(
             and assertion.retracted_at is None
         )
     result = KnowledgeAssertionResponse.model_validate(assertion).model_dump()
-    result["value_json"] = to_json_value(assertion.value_json)
+    value = assertion.value_json
+    if assertion.subject_type == REVIEW_TYPE and isinstance(value, dict):
+        value = {"guest_observed": value.get("guest_observed")}
+    result["value_json"] = to_json_value(value)
     result["source_name"] = _source_name(db, assertion.data_source_id)
     result["deletion_safety"] = (
         can_delete_assertion(db, assertion).as_dict()
@@ -183,10 +191,18 @@ def assertion_response(
     return to_json_value(result)
 
 
-def reconciliation_response(db: Session, item: ReconciliationItem, principal: Principal) -> dict:
+def reconciliation_response(db: Session, item: ReconciliationItem, principal: Principal, *, bindings_by_scope=None) -> dict:
     result = ReconciliationItemResponse.model_validate(item).model_dump()
     assertion = db.get(KnowledgeAssertion, item.assertion_id)
     result["source_name"] = _source_name(db, assertion.data_source_id) if assertion else None
+    bindings = None
+    if assertion and assertion.data_source_id and item.entity_type != REVIEW_TYPE:
+        cache = bindings_by_scope if bindings_by_scope is not None else {}
+        scope = (item.customer_id, item.site_id, assertion.data_source_id)
+        if scope not in cache:
+            # Even an epoch-zero source can commit a cutover before endpoint resolution.
+            cache[scope] = GuestBindings.for_scope(db, item, assertion.data_source_id)
+        bindings = cache[scope]
     run = db.get(DiscoveryRun, assertion.discovery_run_id) if assertion and assertion.discovery_run_id else None
     identifier = item.entity_id or (assertion.subject_id if assertion and assertion.subject_type == "asset" else None)
     asset = db.get(Asset, identifier) if item.entity_type == "asset" and identifier else None
@@ -213,10 +229,12 @@ def reconciliation_response(db: Session, item: ReconciliationItem, principal: Pr
         }
     )
     if item.entity_type == REVIEW_TYPE:
-        result.update(entity_name=REVIEW_LABEL, blocked_reason=REVIEW_REQUIRED,
-                      current_value_json=review_snapshot(principal, item))
+        comparison = IdentityReview(db, item, assertion).present(principal)
+        result.update(entity_name=REVIEW_LABEL, blocked_reason=REVIEW_REQUIRED, identity_review=comparison["review"],
+                      discovery_run_id=comparison["discovery_run_id"], current_value_json=comparison["current"],
+                      observed_value_json=comparison["observed"])
     if item.entity_type == "asset_relationship" and assertion is not None:
-        resolution = relationship_resolution(db, item, persist_links=False)
+        resolution = relationship_resolution(db, item, persist_links=False, bindings=bindings, principal=principal)
         for field in (
             "source_external_id",
             "target_external_id",
@@ -230,8 +248,11 @@ def reconciliation_response(db: Session, item: ReconciliationItem, principal: Pr
             "current_relationship_id",
         ):
             result[field] = resolution.get(field)
-        result["current_value_json"] = item.current_value_json
+        if bindings and (resolution["resolved_source_asset_id"] is None or resolution["resolved_target_asset_id"] is None):
+            result["current_value_json"] = None
         result["observed_value_json"] = resolution
+    if bindings and item.status in {"open", "deferred"} and bindings.stale(assertion, item=item):
+        result["blocked_reason"] = STALE_PROPOSAL
     return to_json_value(result)
 
 
@@ -751,8 +772,13 @@ def list_reconciliation_items(
 ):
     query = filtered_items(context, principal, item_status=item_status, category=category,
                            source_id=source_id, run_id=run_id, entity_type=entity_type)
+    if item_status in {"open", "deferred"} and run_id is None:
+        stale = stale_identity_item_ids(db, query)
+        if stale:
+            query = query.where(ReconciliationItem.id.not_in(stale))
     items = db.scalars(query.order_by(ReconciliationItem.created_at.desc(), ReconciliationItem.id.desc()).limit(limit))
-    return [reconciliation_response(db, item, principal) for item in items]
+    bindings_by_scope = {}
+    return [reconciliation_response(db, item, principal, bindings_by_scope=bindings_by_scope) for item in items]
 
 
 @router.get("/reconciliation-items/page", response_model=ReconciliationItemPageResponse)
@@ -770,11 +796,18 @@ def list_reconciliation_item_page(
 ):
     query = filtered_items(context, principal, item_status=item_status, category=category,
                            source_id=source_id, run_id=run_id, entity_type=entity_type)
+    if item_status in {"open", "deferred"} and run_id is None:
+        stale = stale_identity_item_ids(db, query)
+        if stale:
+            query = query.where(ReconciliationItem.id.not_in(stale))
     items, total, next_cursor = page_rows(db, query, limit=limit, cursor=cursor)
     grouping, related = initial_fact_context(db, context, principal, items)
-    return {"items": [{**reconciliation_response(db, item, principal), "initial_entity_item_id": grouping.get(item.id)}
+    bindings_by_scope = {}
+    return {"items": [{**reconciliation_response(db, item, principal, bindings_by_scope=bindings_by_scope),
+                       "initial_entity_item_id": grouping.get(item.id)}
                       for item in items], "total": total, "limit": limit, "next_cursor": next_cursor,
-            "related_new_entities": [reconciliation_response(db, item, principal) for item in related]}
+            "related_new_entities": [reconciliation_response(db, item, principal, bindings_by_scope=bindings_by_scope)
+                                     for item in related]}
 
 
 @router.get("/reconciliation-items/summary", response_model=ReconciliationSummaryResponse)
@@ -793,7 +826,8 @@ def reconciliation_summary(
     return {
         "by_status": by_status,
         "by_category": by_category,
-        "actionable": sum(by_status.get(status, 0) for status in ("open", "deferred")),
+        "actionable": sum(by_status.get(status, 0) for status in ("open", "deferred"))
+                      - len(stale_identity_item_ids(db, query)),
     }
 
 
@@ -801,7 +835,8 @@ def _lock_decision_sources(db, identifiers):
     source_ids = select(KnowledgeAssertion.data_source_id).join(
         ReconciliationItem, ReconciliationItem.assertion_id == KnowledgeAssertion.id).where(
             ReconciliationItem.id.in_(identifiers))
-    list(db.scalars(select(DataSource).where(DataSource.id.in_(source_ids)).order_by(DataSource.id).with_for_update(key_share=True)))
+    list(db.scalars(select(DataSource).where(DataSource.id.in_(source_ids)).order_by(DataSource.id)
+                    .with_for_update(key_share=True).execution_options(populate_existing=True)))
 
 
 def _lock_decision_targets(db, items, *, asset_id=None, technical_id=None):
@@ -830,11 +865,13 @@ def _lock_decision_targets(db, items, *, asset_id=None, technical_id=None):
                                ("asset", value.get("asset_external_id")),
                                ("network", value.get("network_external_id"))):
             if claim.data_source_id and kind and external:
-                aliases.add((claim.data_source_id, kind, external))
+                aliases.add((item.customer_id, item.site_id, claim.data_source_id, kind, external))
         if claim.data_source_id:
-            aliases.update((claim.data_source_id, "asset", key) for key in proposal_guest_keys(item, claim))
+            aliases.update((item.customer_id, item.site_id, claim.data_source_id, "asset", key)
+                           for key in proposal_guest_keys(item, claim))
     if aliases:
-        for link in db.scalars(select(EntitySourceLink).where(tuple_(EntitySourceLink.data_source_id,
+        for link in db.scalars(select(EntitySourceLink).where(EntitySourceLink.ended_epoch.is_(None),
+                tuple_(EntitySourceLink.customer_id, EntitySourceLink.site_id, EntitySourceLink.data_source_id,
                 EntitySourceLink.entity_type, EntitySourceLink.external_id).in_(aliases))):
             targets["asset"].update({link.entity_id, link.interface_owner_id})
             targets["network"].add(link.network_id)
@@ -945,6 +982,16 @@ def _apply_acceptance(db, item, request, principal, payload):
             if endpoint:
                 evaluate_asset_safely(db, endpoint, trigger_context="reconciliation_relationship_accepted", actor_user_id=principal.user.id)
     _audit_decision(db, request=request, principal=principal, item=item, action="accepted")
+
+
+@router.post("/reconciliation-items/{item_id}/identity-decision", response_model=ProxmoxIdentityDecisionResponse)
+@_concurrent_decision
+def decide_proxmox_identity(item_id: uuid.UUID, payload: ProxmoxIdentityDecisionRequest, request: Request,
+                            context: RequestContext, principal: CurrentPrincipal, db: Session = Depends(get_db)):
+    review, principal = lock_review(db, item_id, principal, context, payload)
+    result = decide_review(review, payload, principal, request)
+    db.commit()
+    return result
 
 
 @router.post("/reconciliation-items/{item_id}/accept", response_model=ReconciliationItemResponse)

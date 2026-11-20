@@ -39,7 +39,8 @@ def test_fresh_populated_upgrade_downgrade_reupgrade(monkeypatch):
         s = db.scalar(text("INSERT INTO sites (name,customer_id) VALUES ('Positions',:c) RETURNING id"), dict(c=c))
         db.execute(text("INSERT INTO assets (workspace_id,customer_id,site_id,name,asset_type) VALUES (:w,:c,:s,'Untouched','server')"), dict(w=w,c=c,s=s))
         snapshot = db.execute(text('SELECT * FROM asset_types ORDER BY id')).mappings().all()
-        assets = db.execute(text('SELECT * FROM assets ORDER BY id')).all()
+        asset = db.execute(text('SELECT * FROM assets')).mappings().one()
+        assert 'identity_retirement_revision' not in asset
         classes = dict(db.execute(text('SELECT id,topology_layer FROM relationship_types')).all())
     command.upgrade(config, 'head')
     with engine.connect() as db:
@@ -51,17 +52,24 @@ def test_fresh_populated_upgrade_downgrade_reupgrade(monkeypatch):
             after = db.execute(text('SELECT a.*,p.key AS position_key FROM asset_types a LEFT JOIN topology_positions p ON p.id=a.topology_position_id WHERE a.id=:id'), dict(id=before['id'])).mappings().one()
             assert after['position_key'] == (None if before['topology_role'] == 'automatic' else before['topology_role'])
             assert all(after[key] == value for key,value in before.items() if key != 'topology_role')
-        assert db.execute(text('SELECT * FROM assets ORDER BY id')).all() == assets
+        upgraded_asset = db.execute(text('SELECT * FROM assets')).mappings().one()
+        assert {column: upgraded_asset[column] for column in asset} == asset
+        assert upgraded_asset['identity_retirement_revision'] == 0
         assert dict(db.execute(text('SELECT id,topology_class FROM relationship_types')).all()) == classes
         assert 'topology_role' not in {c['name'] for c in inspect(db).get_columns('asset_types')}
     command.downgrade(config, '20260921_0022')
     with engine.connect() as db:
         assert db.execute(text('SELECT * FROM asset_types ORDER BY id')).mappings().all() == snapshot
         assert dict(db.execute(text('SELECT id,topology_layer FROM relationship_types')).all()) == classes
-        assert db.execute(text('SELECT * FROM assets ORDER BY id')).all() == assets
+        downgraded_asset = db.execute(text('SELECT * FROM assets')).mappings().one()
+        assert 'identity_retirement_revision' not in downgraded_asset
+        assert downgraded_asset == asset
     command.upgrade(config, 'head')
     with engine.begin() as db:
         assert db.execute(text('SELECT key,name,sort_order FROM topology_positions ORDER BY sort_order')).all() == positions
+        upgraded_asset = db.execute(text('SELECT * FROM assets')).mappings().one()
+        assert {column: upgraded_asset[column] for column in asset} == asset
+        assert upgraded_asset['identity_retirement_revision'] == 0
         db.execute(text("INSERT INTO topology_positions (key,name,sort_order) VALUES (:key,'Long custom',100)"), {'key': 'a' * 40})
         db.execute(text("UPDATE asset_types SET topology_position_id=(SELECT id FROM topology_positions WHERE name='Long custom') WHERE key='legacy'"))
     with pytest.raises(RuntimeError, match='32-character'):

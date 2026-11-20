@@ -1099,6 +1099,15 @@ class KnowledgeAssertionResponse(ORMResponse):
     updated_at: datetime
 
 
+class IdentityReviewPresentation(BaseModel):
+    expected_version: str
+    current_asset_status: str | None
+    observed_at: datetime | None
+    outcome: Literal["reactivate", "replace"] | None
+    actions: dict[str, str | None]
+    withheld: dict[str, int]
+
+
 class ReconciliationItemResponse(ORMResponse):
     id: uuid.UUID
     customer_id: uuid.UUID
@@ -1119,6 +1128,7 @@ class ReconciliationItemResponse(ORMResponse):
     data_source_id: uuid.UUID | None = None
     assertion_predicate: str | None = None
     initial_entity_item_id: uuid.UUID | None = None
+    identity_review: IdentityReviewPresentation | None = None
     source_external_id: str | None = None
     target_external_id: str | None = None
     resolved_source_asset_id: uuid.UUID | None = None
@@ -1237,6 +1247,26 @@ class ReconciliationGroupAcceptResponse(BaseModel):
     already_resolved: list[ReconciliationGroupOutcome]
     blocked: list[ReconciliationGroupOutcome]
     failed: list[ReconciliationGroupOutcome]
+
+
+class ProxmoxIdentityDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    outcome: Literal["reactivate", "replace"]
+    expected_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    reason: str = Field(min_length=1, max_length=10000)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_is_storable(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("Reason contains an invalid character")
+        return value
+
+
+class ProxmoxIdentityDecisionResponse(BaseModel):
+    id: uuid.UUID
+    status: Literal["accepted"]
+    outcome: Literal["reactivate", "replace"]
 
 
 class ReconciliationDecisionRequest(BaseModel):

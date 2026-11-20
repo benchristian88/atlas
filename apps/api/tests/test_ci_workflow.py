@@ -74,7 +74,12 @@ def test_ci_has_only_read_permissions_pinned_actions_and_no_publication():
 def test_backend_enables_every_optional_database_suite_and_rejects_skips():
     job = workflow()["jobs"]["backend"]
     assert job["env"]["PYTHONPATH"] == "${{ github.workspace }}/plugins/sdk:${{ github.workspace }}/plugins/proxmox"
-    assert job["env"]["ATLAS_TEST_H3_REDIS_URL"] == "redis://127.0.0.1:6379/0"
+    redis_urls = {
+        "ATLAS_TEST_H3_REDIS_URL": "redis://127.0.0.1:6379/0",
+        "ATLAS_TEST_CP2_REDIS_URL": "redis://127.0.0.1:6379/1",
+    }
+    for name, url in redis_urls.items():
+        assert job["env"][name] == url
     redis = job["services"]["redis"]
     assert redis["image"] == "redis:7.4.6-alpine"
     assert redis["ports"] == ["127.0.0.1:6379:6379"]
@@ -86,12 +91,13 @@ def test_backend_enables_every_optional_database_suite_and_rejects_skips():
     required = set()
     for path in (ROOT / "apps/api/tests").glob("test_*.py"):
         required.update(re.findall(r"ATLAS_TEST_[A-Z0-9_]+URL", path.read_text()))
-    assert required - {"ATLAS_TEST_H3_REDIS_URL"} == set(databases)
+    assert required - redis_urls.keys() == set(databases)
     assert len({name for name, _ in databases.values()}) == len(databases) == 15
     assert sum(migrate for _, migrate in databases.values()) == 5
     assert all(not migrate for key, (_, migrate) in databases.items() if "MIGRATION" in key)
     assert "NOSUPERUSER NOCREATEDB NOCREATEROLE" in source
     shell = runs(job)
+    assert 'echo "REDIS_URL=redis://127.0.0.1:6379/0" >> "$GITHUB_ENV"' in shell
     assert "postgres:17-alpine" in shell and "--publish 127.0.0.1:5432:5432" in shell
     assert "POSTGRES_HOST_AUTH_METHOD" not in shell
     assert "--env-file" in shell and "configuration.py --method docker_compose" in shell

@@ -111,7 +111,8 @@ def run_simulation(
 
 
 def ingest_observations(db, *, payload, user_id, source, run, observed_at,
-        finalise=False, evidence_by_identity=None, memberships=None, namespaced_facts=None, relationship_observations=None):
+        finalise=False, evidence_by_identity=None, memberships=None, namespaced_facts=None, relationship_observations=None,
+        guest_bindings=None):
     """Shared evidence/assertion/reconciliation owner for validated observations.
 
     The simulation creates its own run/evidence. AIP supplies an existing durable
@@ -120,6 +121,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
     """
     db.get(DataSource, source.id, with_for_update={"key_share": True})
     relationship_observations = list(relationship_observations or [])
+    attribution = {"guest_bindings": guest_bindings, "identity_epoch": run.identity_epoch} if guest_bindings else {}
 
     def asset_external_id(observation):
         return observation.external_id or f"simulated:{observation.asset_type}:{observation.name}"
@@ -239,6 +241,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
                 discovery_run_id=run.id,
                 evidence_record_id=evidence.id,
                 observed_at=now,
+                **attribution,
             )
             assertion_by_field[field] = assertion
             assertions_created += int(created)
@@ -350,7 +353,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
                 subject_type="asset", subject_id=asset.id if asset else None, subject_external_id=external_id,
                 predicate=fact["key"], value=fact["value"], data_source_id=source.id, discovery_run_id=run.id,
                 evidence_record_id=evidence.id, observed_at=now,
-                fact_metadata={name: fact[name] for name in ["value_type", "class", "cardinality"]})
+                fact_metadata={name: fact[name] for name in ["value_type", "class", "cardinality"]}, **attribution)
             assertions_created += int(created)
             # One canonical fact carries a scalar or a complete value set. Its
             # classification never grants accepted-record mutation authority.
@@ -398,6 +401,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
             observed_at=now,
             truth_classification=relationship.truth_classification,
             confidence=relationship.confidence,
+            **attribution,
         )
         assertions_created += int(created)
         existing_relationship = None
@@ -567,7 +571,7 @@ def ingest_observations(db, *, payload, user_id, source, run, observed_at,
     return run, evidence_count, assertions_created, items
 
 
-def ingest_technical_observation(db, *, run, source, evidence, observation, entity_type, user_id):
+def ingest_technical_observation(db, *, run, source, evidence, observation, entity_type, user_id, guest_bindings=None):
     """Canonical Network/Interface evidence enters the same review machinery."""
     # Standalone callers need the same serialization as complete AIP runs.
     # AIP prelocks the whole run first; these are only reacquired subsets there.
@@ -583,13 +587,25 @@ def ingest_technical_observation(db, *, run, source, evidence, observation, enti
     target = db.get(Network if entity_type == "network" else AssetInterface, target_id) if target_id else None
     if link:
         link.last_observed_at = evidence.observed_at
+    created, item_count = propose_technical_observation(db, run=run, source=source, evidence=evidence,
+        observation=observation, entity_type=entity_type, target=target, user_id=user_id, guest_bindings=guest_bindings)
+    return created, item_count, target_id
+
+
+def propose_technical_observation(db, *, run, source, evidence, observation, entity_type, target, user_id,
+                                 guest_bindings=None, release_epoch=None):
+    """Build configuration and fact proposals without touching source links or membership."""
+    target_id = target.id if target else None
     fields = ["name", "network_type", "vlan_id", "cidr", "gateway"] if entity_type == "network" else [
         "name", "asset_external_id", "network_external_id", "ip_address", "mac_address", "is_primary"]
     observed = {name: observation.get(name) for name in fields}
+    attribution = {"guest_bindings": guest_bindings, "identity_epoch": run.identity_epoch if release_epoch is None else release_epoch,
+                   "reviewed_release": release_epoch is not None,
+                   "owner_external_id": observed.get("asset_external_id")} if guest_bindings else {}
     assertion, created = record_assertion(db, customer_id=run.customer_id, site_id=run.site_id,
         subject_type=entity_type, subject_id=target_id, subject_external_id=observation["external_id"],
         predicate="configuration", value=observed, data_source_id=source.id,
-        discovery_run_id=run.id, evidence_record_id=evidence.id, observed_at=evidence.observed_at)
+        discovery_run_id=run.id, evidence_record_id=evidence.id, observed_at=evidence.observed_at, **attribution)
     item_count = 0
     current = {name: getattr(target, name, None) for name in fields} if target else None
     if target is not None and entity_type == "asset_interface":
@@ -618,11 +634,11 @@ def ingest_technical_observation(db, *, run, source, evidence, observation, enti
             subject_type=entity_type, subject_id=target_id, subject_external_id=observation["external_id"],
             predicate=fact["key"], value=fact["value"], data_source_id=source.id, discovery_run_id=run.id,
             evidence_record_id=evidence.id, observed_at=evidence.observed_at,
-            fact_metadata={name: fact[name] for name in ["value_type", "class", "cardinality"]})
+            fact_metadata={name: fact[name] for name in ["value_type", "class", "cardinality"]}, **attribution)
         created += int(new)
         if not claim.is_accepted:
             _, new_item = create_item(db, assertion=claim, category="changed", entity_type=entity_type,
                 entity_id=target_id, candidate_external_id=observation["external_id"], current_value=None,
                 observed_value={"field": fact["key"], "value": fact["value"]}, recommended_action="Review source fact")
             item_count += int(new_item)
-    return int(created), item_count, target_id
+    return int(created), item_count

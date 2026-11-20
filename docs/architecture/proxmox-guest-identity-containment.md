@@ -89,7 +89,10 @@ complete run still compares external-key presence, while pending cases are
 excluded from normal absence and re-observation decisions. This preserves the
 old guest's observation state without asserting it returned.
 
-## Deferred decisions
+## Pass 1 design handoff
+
+This section records the original Pass 1 handoff. The current implementation is
+described in the [operator decision contract](#operator-decision-contract).
 
 Pass 1 retains evidence and preserves the historical source binding. Pass 2
 needs explicit **Reactivate** and **Accept as replacement** decisions, binding
@@ -118,3 +121,65 @@ and restore strategy need independent review, including PostgreSQL tests for
 data preservation, competing decisions, stale proposals and rollout compatibility.
 An active replacement between scans still requires stronger source identity
 evidence or explicit operator intervention.
+
+## Operational cutover contract
+
+Checkpoint 2 builds on [ADR 0019](../decisions/0019-proxmox-guest-identity-resolution.md)
+and revision `20261119_0033`. The scope of a source alias is its DataSource,
+Customer, Site, entity type and external key.
+
+| Lookup | Binding rule |
+| --- | --- |
+| Asset resolution, technical linking and freshness | Use the current scoped binding. Creating a successor Interface through ordinary review requires its current Asset owner and normal Network prerequisites. |
+| AIP prelocks, omitted endpoints, holds, simulations and absence comparison | Prelock current targets before claims. Proof for an omitted relationship endpoint belongs to the current canonical target. Simulations on a live source cannot apply evidence for held, unacknowledged or decided guest slots. |
+| Ordinary reconciliation and conflict detection | Use the latest decision for the relevant guest family, including typed relationship endpoints and Interface aliases and owners. Earlier proposals remain visible in history and leave the actionable queue. Unrelated guest proposals retain their boundary. |
+| Historical summaries and reconciliation | Prefer recorded canonical IDs. Resolve a retained alias at the recorded attribution epoch if proven. Leave an ambiguous historical reference unresolved. Apply existing Customer and Site read scope before displaying targets. |
+| Provenance and deletion guards | Check all retained links, including ended Asset and Interface bindings. Keep the existing typed ownership constraints and deletion restrictions. |
+
+Admission captures the DataSource epoch under its writer lock. Dispatch and
+unsealed completion compare the stored epoch under the same lock. An obsolete
+run fails in full with `identity_epoch_changed` and preserves committed
+receipts and staged evidence. A terminal callback failure reaches the existing
+runtime settlement path. An exact sealed replay returns the stored result.
+
+Live guest-family assertions use the run epoch. A later run can coalesce an
+equal observation only within its guest-specific decision boundary. The first
+complete, comparable live membership for the current binding supplies the new
+absence baseline. A simulated, held or partial membership cannot supply it.
+An unacknowledged retirement continues to trigger review after manual activation.
+Reactivate acknowledgement is keyed by the binding ID and retirement revision.
+
+The [PostgreSQL cutover regressions](../../apps/api/tests/test_proxmox_guest_cutover_postgres.py)
+use explicit decision and binding storage fixtures. They exercise existing
+discovery and reconciliation entry points following fixture cutovers.
+
+## Operator decision contract
+
+The [operator action](reconciliation-entity-review.md#additive-api) gets its
+DataSource, Integration, scope, guest key, binding and reviewed evidence from the
+case. The transaction takes Integration, DataSource, ordered canonical subjects,
+review item and assertion locks. It reads the sealed run without a Run writer
+lock. It compares a version covering the selected evidence, canonical row
+revisions and relevant mappings after reloading the scoped grants and records.
+
+The release checks hashes for the original receipt and each held payload, exact
+run membership, pinned Connector manifest and mappings, typed owners and
+relationship roles. A reviewed omitted guest can establish its own side of a
+relationship in Reactivate. The other endpoint needs positive run evidence or an
+accepted assertion on its exact binding. An unlinked host remains a normal
+prerequisite. Each eligible record yields fresh proposals at the decision epoch.
+The original run, receipt, membership and presence assertion are preserved.
+Changes record released and withheld evidence; the card applies Network and
+relationship visibility when explaining withheld observations.
+
+Only the Replace branch ends links. It checks the exact case guest, verifies that
+only one current guest slot owns the old Asset in this source, and checks Interface
+alias ownership before ending applicable links. The database guarantees one
+current source key and a decision FK for an ended epoch. The application verifies
+that those records belong to this exact Replace. The epoch, decision, lifecycle or
+binding changes, proposals, Changes and audit commit together.
+
+The [application decision tests](../../apps/api/tests/test_proxmox_identity_decisions_postgres.py)
+use the scoped HTTP routes and disposable PostgreSQL. Browser fixture checks,
+hosted CI, deployed upgrades and live Connector acceptance are separate.
+Previously misattributed data still requires its own review.

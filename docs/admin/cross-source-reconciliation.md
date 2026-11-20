@@ -61,20 +61,49 @@ from reviewing this workflow.
 
 ## Proxmox guest identity review
 
-Open **Reconciliation** in the guest's customer and site. An **Identity review**
-appears when a successful Proxmox discovery reports a guest key bound to a
-retired Asset. It can also appear when a run reports only a dependent Interface
-or relationship. Compare **Retired Asset at first hold** with **Latest source
-evidence**. **Evidence and details** identifies the source, external key and
-review record. Use the name, Interface slots, MAC addresses and placement for
-comparison. The comparison leaves the guest's identity unresolved.
+Open **Reconciliation** in the guest's Customer and Site. An **Identity review**
+appears when a successful Proxmox discovery reports a guest slot with an
+unacknowledged retirement. A dependent Interface or relationship can trigger the
+same review when the run omitted the guest payload.
 
-The case stays open while Atlas retains the observations for a dedicated
-identity decision. Ordinary Accept, Accept all and Link cannot apply them.
-Subsequent successful runs may update the evidence and the review version.
-Manual Asset edits remain available to authorized users and preserve an
-existing hold. Explicit reactivation and replacement are pending follow-up
-work. Review observed and assigned Networks as separate values.
+Compare **First-hold snapshot**, **Latest source evidence**, and **Current Asset
+status**. The snapshot records Atlas at the time the hold first opened. It can
+include earlier misattribution. Names, MAC addresses, Network attachment and
+placement are evidence for comparison. The Connector key identifies the guest
+slot within this DataSource. Review **Evidence and details** for the source,
+key and run, and compare assigned Networks with observed Network references.
+
+- **Reactivate existing Asset** confirms the same guest, retains its UUID and
+  source binding, and sets a retired Asset to Active. If an operator already
+  activated it manually, confirmation preserves that lifecycle declaration. A
+  verified relationship-only hold can qualify. The next eligible run uses the
+  same Asset UUID. A later retirement can open a new review.
+- **Accept as replacement** requires a retired Asset and a valid guest payload
+  with an active Asset type mapping from the latest reviewed run. It creates a
+  new Asset and ends the previous guest binding and applicable Interface source
+  bindings in this DataSource. The retired Asset retains its Interfaces, Network
+  assignments, relationships, history and other sources. The next eligible run
+  uses the new Asset UUID. If the guest payload is missing, run discovery with
+  the guest included. Resolve any reported ownership conflict before trying again.
+- **Leave pending** closes the confirmation without saving. Closing the card or
+  leaving the queue also leaves the hold open. Ordinary **Accept**, **Accept all**,
+  linking, reject and defer cannot resolve an Identity review.
+
+Enter a reason and confirm the action. Both decisions release eligible held
+observations into ordinary review. Fields, Interfaces, and relationships require
+separate decisions. Where evidence cannot be released, the card shows scoped
+reasons and a fresh run can provide new evidence. If another run, edit or decision
+changes the case, refresh the comparison and confirm the new version explicitly.
+
+Viewing the case requires scoped `reconciliation.view` and `assets.view`.
+Both decisions also require `reconciliation.decide` and `assets.edit`.
+Replacement requires `assets.create`, `networks.view` and `networks.edit`, even
+when the previous guest has zero Interface bindings. Interface and relationship
+comparison details follow their separate read permissions.
+
+A replacement while the original guest still appears active in Atlas can look
+like an ordinary edit between scans. Previously misattributed records require a
+separate inventory and history review.
 
 ## Reading Asset knowledge after linking
 

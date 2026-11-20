@@ -14,9 +14,9 @@ from app.authorization import (
     scope_condition,
 )
 from app.database import get_db
-from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, Service, ServiceAssetDependency, Site
+from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, Site
 from app.schemas import ContextResponse, DashboardSummaryResponse
-from app.services.reconciliation_listing import filtered_items
+from app.services.reconciliation_listing import filtered_items, stale_identity_item_ids
 
 router = APIRouter(tags=["context"])
 
@@ -106,6 +106,9 @@ def dashboard_summary(
         BusinessFunction.active.is_(True),
     )
     open_items_query = filtered_items(context, principal, item_status="open")
+    stale_items = stale_identity_item_ids(db, open_items_query)
+    if stale_items:
+        open_items_query = open_items_query.where(ReconciliationItem.id.not_in(stale_items))
     changes_query = select(func.count()).select_from(KnowledgeChange).where(
         scope_condition(
             principal,

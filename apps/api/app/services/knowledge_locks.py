@@ -96,6 +96,7 @@ def lock_ingestion_subjects(db, *, source_id, customer_id, site_id, references):
                 EntitySourceLink.data_source_id == source_id,
                 EntitySourceLink.customer_id == customer_id,
                 EntitySourceLink.site_id == site_id,
+                EntitySourceLink.ended_epoch.is_(None),
                 tuple_(EntitySourceLink.entity_type, EntitySourceLink.external_id).in_(references))):
             targets["asset"].update({link.entity_id, link.interface_owner_id})
             targets["network"].add(link.network_id)
