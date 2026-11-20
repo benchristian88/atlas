@@ -21,7 +21,9 @@ non-superuser/non-createdb role. Domain, setup, MFA and both backup test databas
 migrated; ten migration-test databases remain empty. All existing
 `ATLAS_TEST_*` database variables are supplied, and JUnit skips fail the job.
 Redis uses the `redis:7.4.6-alpine` Actions service with a `redis-cli ping`
-healthcheck. The backend also installs the exact isolated Ansible runtime baseline and passes
+healthcheck. The Proxmox identity cutover regression uses logical database `1`,
+separate from the general regression and H3 restore database `0`.
+The backend also installs the exact isolated Ansible runtime baseline and passes
 `ATLAS_TEST_RUNTIME_PYTHON` for real test-only discovery/callback/cancellation.
 The API test harness installs psutil for runtime-module tests; API production
 requirements remain independent of runtime dependencies. Both servers publish only on runner loopback. PostgreSQL also has
@@ -139,6 +141,7 @@ set -a
 source "$ATLAS_CI_WORK/backend.env"
 set +a
 export ATLAS_TEST_H3_REDIS_URL=redis://127.0.0.1:6379/0
+export ATLAS_TEST_CP2_REDIS_URL=redis://127.0.0.1:6379/1
 # Set ATLAS_TEST_NGINX if the compatible test binary is outside PATH.
 ```
 
