@@ -167,7 +167,7 @@ def update_criticality_level(level_id: uuid.UUID, payload: CriticalityLevelUpdat
         setattr(item, key, value)
     if "rank" in changes:
         from app.services.knowledge_completeness import evaluate_service
-        for service in db.scalars(select(Service).where(Service.criticality_level_id == item.id)):
+        for service in db.scalars(select(Service).where(Service.criticality_level_id == item.id).order_by(Service.id)):
             evaluate_service(db, service, trigger_context="criticality_rank_changed", actor_user_id=principal.user.id)
     add_audit_event(db, action="criticality_level.updated", target_type="criticality_level", target_id=item.id, actor=principal.user, summary="Criticality level updated", metadata={"changed_fields": sorted(changes)}, request=request)
     commit(db, "Criticality level")

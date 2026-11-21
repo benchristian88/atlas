@@ -39,6 +39,74 @@ ACTIVE_GAP_STATUSES = {"open", "deferred", "exception"}
 logger = logging.getLogger(__name__)
 
 
+def lock_completeness_entity(db: Session, model: type[Asset] | type[Service], entity_id: uuid.UUID):
+    # Serialize completeness writers with transfers while allowing FK key-share
+    # locks taken by related records. Callers flush their own edits before this
+    # refresh so the evaluator sees the latest stored entity.
+    return db.get(model, entity_id, with_for_update={"key_share": True}, populate_existing=True)
+
+
+def _supersede_scope_gaps(db: Session, entity_type: str, entity: Asset | Service, *, scope_changed: bool = False, actor_user_id: uuid.UUID | None = None) -> bool:
+    gaps = db.scalars(select(KnowledgeGap).where(
+        KnowledgeGap.entity_type == entity_type,
+        KnowledgeGap.entity_id == entity.id,
+        KnowledgeGap.status.in_(ACTIVE_GAP_STATUSES),
+    ).execution_options(include_unmatched_completeness=True))
+    now = datetime.now(timezone.utc)
+    changed = False
+    for gap in gaps:
+        if not scope_changed and (gap.customer_id, gap.site_id) == (entity.customer_id, entity.site_id):
+            continue
+        record_change(
+            db, customer_id=gap.customer_id, site_id=gap.site_id,
+            change_type="knowledge_gap_superseded", entity_type=entity_type,
+            entity_id=entity.id, entity_name=entity_type.capitalize(),
+            predicate="knowledge_completeness", previous_value=gap.status,
+            new_value="superseded", actor_user_id=actor_user_id,
+            summary="Knowledge gap superseded because its entity scope changed",
+            metadata={"knowledge_gap_id": gap.id, "requirement_definition_id": gap.requirement_definition_id},
+            occurred_at=now,
+        )
+        gap.status = "superseded"
+        gap.resolved_at = gap.last_state_changed_at = now
+        if gap.resolution_reason is None:
+            gap.resolution_reason = "Entity scope changed"
+        changed = True
+    if changed:
+        # Release the active-per-requirement slot before inserting replacement gaps.
+        db.flush()
+    return changed
+
+
+def _stored_summary(db: Session, entity_type: str, entity: Asset | Service) -> KnowledgeCompletenessSummary:
+    summary = db.scalar(select(KnowledgeCompletenessSummary).where(
+        KnowledgeCompletenessSummary.entity_type == entity_type,
+        KnowledgeCompletenessSummary.entity_id == entity.id,
+    ).execution_options(include_unmatched_completeness=True))
+    if summary is None:
+        summary = KnowledgeCompletenessSummary(
+            entity_type=entity_type, entity_id=entity.id,
+            customer_id=entity.customer_id, site_id=entity.site_id,
+            completeness_status="not_evaluated",
+        )
+        db.add(summary)
+        db.flush()
+    return summary
+
+
+def _mark_not_evaluated(db: Session, entity_type: str, entity: Asset | Service, *, scope_changed: bool) -> KnowledgeCompletenessSummary:
+    summary = _stored_summary(db, entity_type, entity)
+    if scope_changed or (summary.customer_id, summary.site_id) != (entity.customer_id, entity.site_id):
+        summary.customer_id, summary.site_id = entity.customer_id, entity.site_id
+        summary.required_total = summary.required_satisfied = 0
+        summary.recommended_total = summary.recommended_satisfied = 0
+        summary.critical_gap_count = summary.high_gap_count = 0
+        summary.open_gap_count = summary.exception_count = 0
+    summary.completeness_status = "not_evaluated"
+    summary.last_evaluated_at = None
+    return summary
+
+
 @dataclass(slots=True)
 class RuleResult:
     satisfied: bool
@@ -228,9 +296,11 @@ def evaluate_asset(
     trigger_context: str | None = None,
     actor_user_id: uuid.UUID | None = None,
 ) -> KnowledgeCompletenessSummary:
-    asset = asset_or_id if isinstance(asset_or_id, Asset) else db.get(Asset, asset_or_id)
+    asset_id = asset_or_id.id if isinstance(asset_or_id, Asset) else asset_or_id
+    asset = lock_completeness_entity(db, Asset, asset_id)
     if asset is None:
         raise ValueError("Asset not found")
+    repaired_scope = _supersede_scope_gaps(db, "asset", asset, actor_user_id=actor_user_id)
     now = datetime.now(timezone.utc)
     asset_type = db.scalar(select(AssetType).where(AssetType.key == asset.asset_type))
     requirements = list(db.scalars(select(KnowledgeRequirementDefinition).where(
@@ -351,15 +421,10 @@ def evaluate_asset(
         status = "operationally_complete"
     else:
         status = "complete"
-    summary = db.scalar(select(KnowledgeCompletenessSummary).where(
-        KnowledgeCompletenessSummary.entity_type == "asset",
-        KnowledgeCompletenessSummary.entity_id == asset.id,
-    ))
-    if summary is None:
-        summary = KnowledgeCompletenessSummary(entity_type="asset", entity_id=asset.id, customer_id=asset.customer_id, site_id=asset.site_id, completeness_status="not_evaluated")
-        db.add(summary)
-        db.flush()
-    previous_status = summary.completeness_status
+    summary = _stored_summary(db, "asset", asset)
+    previous_status = "not_evaluated"
+    if not repaired_scope and (summary.customer_id, summary.site_id) == (asset.customer_id, asset.site_id):
+        previous_status = summary.completeness_status
     summary.required_total = counts["required_total"]
     summary.required_satisfied = counts["required_satisfied"]
     summary.recommended_total = counts["recommended_total"]
@@ -383,9 +448,14 @@ def evaluate_asset_safely(
     *,
     trigger_context: str | None = None,
     actor_user_id: uuid.UUID | None = None,
+    scope_changed: bool = False,
 ) -> KnowledgeCompletenessSummary | None:
     """Evaluate in a savepoint so an ancillary evaluator defect cannot lose a valid edit."""
     asset_id = asset_or_id.id if isinstance(asset_or_id, Asset) else asset_or_id
+    if scope_changed:
+        # The transfer already holds the entity lock. Preserve this transition
+        # in the outer transaction even if evaluation rolls back its savepoint.
+        _supersede_scope_gaps(db, "asset", asset_or_id, scope_changed=True, actor_user_id=actor_user_id)
     try:
         with db.begin_nested():
             return evaluate_asset(
@@ -396,22 +466,10 @@ def evaluate_asset_safely(
             )
     except Exception:
         logger.exception("Completeness evaluation failed for asset %s", asset_id)
-        asset = db.get(Asset, asset_id)
+        asset = lock_completeness_entity(db, Asset, asset_id)
         if asset is None:
             return None
-        summary = db.scalar(select(KnowledgeCompletenessSummary).where(
-            KnowledgeCompletenessSummary.entity_type == "asset",
-            KnowledgeCompletenessSummary.entity_id == asset.id,
-        ))
-        if summary is None:
-            summary = KnowledgeCompletenessSummary(
-                entity_type="asset", entity_id=asset.id,
-                customer_id=asset.customer_id, site_id=asset.site_id,
-            )
-            db.add(summary)
-        summary.completeness_status = "not_evaluated"
-        summary.last_evaluated_at = None
-        return summary
+        return _mark_not_evaluated(db, "asset", asset, scope_changed=scope_changed)
 
 
 def evaluate_assets_for_asset_type(db: Session, asset_type_id: uuid.UUID | None, *, limit: int = 100, actor_user_id: uuid.UUID | None = None) -> int:
@@ -422,7 +480,7 @@ def evaluate_assets_for_asset_type(db: Session, asset_type_id: uuid.UUID | None,
             return 0
         query = query.where(Asset.asset_type == asset_type.key)
     assets = list(db.scalars(query))
-    for asset in assets:
+    for asset in sorted(assets, key=lambda item: item.id):
         evaluate_asset(db, asset, trigger_context="requirement_profile_changed", actor_user_id=actor_user_id)
     return len(assets)
 
@@ -518,9 +576,11 @@ def evaluate_service(
     trigger_context: str | None = None,
     actor_user_id: uuid.UUID | None = None,
 ) -> KnowledgeCompletenessSummary:
-    service = service_or_id if isinstance(service_or_id, Service) else db.get(Service, service_or_id)
+    service_id = service_or_id.id if isinstance(service_or_id, Service) else service_or_id
+    service = lock_completeness_entity(db, Service, service_id)
     if service is None or service.deleted_at is not None:
         raise ValueError("Service not found")
+    repaired_scope = _supersede_scope_gaps(db, "service", service, actor_user_id=actor_user_id)
     now = datetime.now(timezone.utc)
     requirements = list(db.scalars(select(KnowledgeRequirementDefinition).where(
         KnowledgeRequirementDefinition.entity_type == "service",
@@ -588,11 +648,10 @@ def evaluate_service(
     recommended_open = [item for item in open_gaps if item.requirement_level == "recommended"]
     exceptions = [item for item in active_gaps if item.status == "exception"]
     status = "critical_gaps" if any(item.severity == "critical" for item in required_open) else "incomplete" if required_open else "exception_accepted" if exceptions else "operationally_complete" if recommended_open else "complete"
-    summary = db.scalar(select(KnowledgeCompletenessSummary).where(KnowledgeCompletenessSummary.entity_type == "service", KnowledgeCompletenessSummary.entity_id == service.id))
-    if summary is None:
-        summary = KnowledgeCompletenessSummary(entity_type="service", entity_id=service.id, customer_id=service.customer_id, site_id=service.site_id, completeness_status="not_evaluated")
-        db.add(summary); db.flush()
-    previous_status = summary.completeness_status
+    summary = _stored_summary(db, "service", service)
+    previous_status = "not_evaluated"
+    if not repaired_scope and (summary.customer_id, summary.site_id) == (service.customer_id, service.site_id):
+        previous_status = summary.completeness_status
     summary.required_total = counts["required_total"]; summary.required_satisfied = counts["required_satisfied"]
     summary.recommended_total = counts["recommended_total"]; summary.recommended_satisfied = counts["recommended_satisfied"]
     summary.critical_gap_count = sum(item.severity == "critical" for item in open_gaps); summary.high_gap_count = sum(item.severity == "high" for item in open_gaps)
@@ -603,26 +662,24 @@ def evaluate_service(
     return summary
 
 
-def evaluate_service_safely(db: Session, service_or_id: Service | uuid.UUID, *, trigger_context: str | None = None, actor_user_id: uuid.UUID | None = None) -> KnowledgeCompletenessSummary | None:
+def evaluate_service_safely(db: Session, service_or_id: Service | uuid.UUID, *, trigger_context: str | None = None, actor_user_id: uuid.UUID | None = None, scope_changed: bool = False) -> KnowledgeCompletenessSummary | None:
     service_id = service_or_id.id if isinstance(service_or_id, Service) else service_or_id
+    if scope_changed:
+        _supersede_scope_gaps(db, "service", service_or_id, scope_changed=True, actor_user_id=actor_user_id)
     try:
         with db.begin_nested():
             return evaluate_service(db, service_or_id, trigger_context=trigger_context, actor_user_id=actor_user_id)
     except Exception:
         logger.exception("Completeness evaluation failed for service %s", service_id)
-        service = db.get(Service, service_id)
+        service = lock_completeness_entity(db, Service, service_id)
         if service is None: return None
-        summary = db.scalar(select(KnowledgeCompletenessSummary).where(KnowledgeCompletenessSummary.entity_type == "service", KnowledgeCompletenessSummary.entity_id == service.id))
-        if summary is None:
-            summary = KnowledgeCompletenessSummary(entity_type="service", entity_id=service.id, customer_id=service.customer_id, site_id=service.site_id)
-            db.add(summary)
-        summary.completeness_status = "not_evaluated"; summary.last_evaluated_at = None
-        return summary
+        return _mark_not_evaluated(db, "service", service, scope_changed=scope_changed)
 
 
 def evaluate_services_for_service_type(db: Session, service_type_id: uuid.UUID | None, *, limit: int = 100, actor_user_id: uuid.UUID | None = None) -> int:
     query = select(Service).order_by(Service.updated_at.desc()).limit(limit)
     if service_type_id is not None: query = query.where(Service.service_type_id == service_type_id)
     rows = list(db.scalars(query))
-    for service in rows: evaluate_service(db, service, trigger_context="requirement_profile_changed", actor_user_id=actor_user_id)
+    for service in sorted(rows, key=lambda item: item.id):
+        evaluate_service(db, service, trigger_context="requirement_profile_changed", actor_user_id=actor_user_id)
     return len(rows)

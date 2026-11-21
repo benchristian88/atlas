@@ -208,8 +208,8 @@ def create_asset_relationship(
         summary=f"Added {relationship.relationship_type} relationship from {source.name} to {target.name}",
     )
     from app.services.knowledge_completeness import evaluate_asset_safely
-    evaluate_asset_safely(db, source, trigger_context="relationship_created", actor_user_id=principal.user.id)
-    evaluate_asset_safely(db, target, trigger_context="relationship_created", actor_user_id=principal.user.id)
+    for asset in sorted((source, target), key=lambda item: item.id):
+        evaluate_asset_safely(db, asset, trigger_context="relationship_created", actor_user_id=principal.user.id)
     commit(db, "Asset relationship")
     db.refresh(relationship)
     return relationship_response(db, relationship)
@@ -287,9 +287,8 @@ def update_asset_relationship(
         summary=f"Updated {relationship.relationship_type} relationship from {source.name}",
     )
     from app.services.knowledge_completeness import evaluate_asset_safely
-    evaluate_asset_safely(db, source, trigger_context="relationship_updated", actor_user_id=principal.user.id)
-    if target:
-        evaluate_asset_safely(db, target, trigger_context="relationship_updated", actor_user_id=principal.user.id)
+    for asset in sorted((item for item in (source, target) if item is not None), key=lambda item: item.id):
+        evaluate_asset_safely(db, asset, trigger_context="relationship_updated", actor_user_id=principal.user.id)
     commit(db, "Asset relationship")
     db.refresh(relationship)
     return relationship_response(db, relationship)
@@ -324,9 +323,7 @@ def delete_asset_relationship(
     db.delete(relationship)
     flush(db, "Asset relationship")
     from app.services.knowledge_completeness import evaluate_asset_safely
-    if source:
-        evaluate_asset_safely(db, source, trigger_context="relationship_deleted", actor_user_id=principal.user.id)
-    if target:
-        evaluate_asset_safely(db, target, trigger_context="relationship_deleted", actor_user_id=principal.user.id)
+    for asset in sorted((item for item in (source, target) if item is not None), key=lambda item: item.id):
+        evaluate_asset_safely(db, asset, trigger_context="relationship_deleted", actor_user_id=principal.user.id)
     commit(db, "Asset relationship")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

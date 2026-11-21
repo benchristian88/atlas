@@ -49,6 +49,26 @@ Function completeness remains unimplemented. Future analysis may use scoped
 gaps and exceptions as qualifiers, but completeness is not Impact Analysis and
 does not prove health, outage behavior, protection, or recoverability.
 
+## Customer and site transfers
+
+Gap and completeness reads require the stored customer and site to match the
+live Asset or Service. Gap mutations and reevaluation take the same entity row
+lock as transfers and check scope before changing state.
+
+A transfer supersedes the entity's active gaps in their original scope in the
+same transaction as the move. Reevaluation opens fresh gaps in the destination
+for requirements that still fail. Previous assignments, deferrals and exceptions
+stay on the retained rows, along with existing Changes, audit events and evidence.
+If reevaluation fails, the move retains the supersession and the destination
+summary reports `not_evaluated`.
+
+Gap APIs require a live entity in the recorded scope, including for historical
+rows. Historical rows retain their original scope in storage pending a product
+decision about cross-scope Gap history visibility. Where an earlier move left
+active gaps in the wrong scope, Atlas also hides summaries that could still
+count those gaps. A successful reevaluation supersedes the mismatched rows and
+creates current gaps as needed.
+
 ## Knowledge profile administration
 
 Asset Type and Service Type profiles separate global requirements from type-specific

@@ -25,12 +25,14 @@ from app.schemas import (
     ServiceCompletenessResponse,
     GlobalKnowledgeRequirementResponse,
 )
-from app.services.knowledge_completeness import ACTIVE_GAP_STATUSES, evaluate_asset, evaluate_assets_for_asset_type, evaluate_service, evaluate_services_for_service_type
+from app.services.knowledge_completeness import ACTIVE_GAP_STATUSES, evaluate_asset, evaluate_assets_for_asset_type, evaluate_service, evaluate_services_for_service_type, lock_completeness_entity
 from app.services.knowledge_changes import record_change
+from app.services.knowledge_locks import concurrent_decision
 from app.services.knowledge_requirement_references import interpret_rule, validate_rule_config
 from app.utils.json_values import to_json_value
 
 router = APIRouter(tags=["knowledge completeness"])
+GAP_ENTITY_MODELS = {"asset": Asset, "service": Service}
 
 
 def _requirement_response(db: Session, item: KnowledgeRequirementDefinition) -> dict:
@@ -47,15 +49,17 @@ def _requirement_response(db: Session, item: KnowledgeRequirementDefinition) -> 
 
 def _gap_response(db: Session, gap: KnowledgeGap) -> dict:
     requirement = db.get(KnowledgeRequirementDefinition, gap.requirement_definition_id)
-    asset = db.get(Asset, gap.entity_id) if gap.entity_type == "asset" else None
-    service = db.get(Service, gap.entity_id) if gap.entity_type == "service" else None
+    model = GAP_ENTITY_MODELS[gap.entity_type]
+    entity_name = db.scalar(select(model.name).where(
+        model.id == gap.entity_id, model.customer_id == gap.customer_id, model.site_id == gap.site_id,
+    ))
     asset_type = db.get(AssetType, gap.asset_type_id_snapshot) if gap.asset_type_id_snapshot else None
     assigned = db.get(User, gap.assigned_to_user_id) if gap.assigned_to_user_id else None
     result = KnowledgeGapResponse.model_validate(gap).model_dump()
     result.update(
         requirement_name=requirement.name if requirement else None,
         remediation_hint=requirement.remediation_hint if requirement else None,
-        entity_name=(asset.name if asset else service.name if service else None),
+        entity_name=entity_name,
         asset_type_name=asset_type.name if asset_type else None,
         assigned_to_name=(assigned.display_name or assigned.email) if assigned else None,
         details_json=to_json_value(gap.details_json),
@@ -63,12 +67,21 @@ def _gap_response(db: Session, gap: KnowledgeGap) -> dict:
     return to_json_value(result)
 
 
-def _asset(db: Session, principal: Principal, asset_id: uuid.UUID, permission: str) -> Asset:
-    asset = db.get(Asset, asset_id)
-    if asset is None:
-        raise not_found("Asset")
-    require_scope(principal, permission, asset.customer_id, asset.site_id, hide_existence=True)
-    return asset
+def _scoped_entity(db: Session, principal: Principal, model, entity_id: uuid.UUID, permission: str, *, lock: bool = False):
+    entity = lock_completeness_entity(db, model, entity_id) if lock else db.get(model, entity_id)
+    if entity is None:
+        raise not_found(model.__name__)
+    require_scope(principal, permission, entity.customer_id, entity.site_id, hide_existence=True)
+    return entity
+
+
+def _entity_completeness_query(row, entity_type: str, entity: Asset | Service):
+    # Keep the scope authorized by the detail request even if the entity moves
+    # before the follow-up query for its completeness records.
+    return select(row).where(
+        row.entity_type == entity_type, row.entity_id == entity.id,
+        row.customer_id == entity.customer_id, row.site_id == entity.site_id,
+    )
 
 
 def _reevaluate_requirement_entities(db: Session, item: KnowledgeRequirementDefinition, actor_user_id: uuid.UUID | None) -> int:
@@ -149,7 +162,7 @@ def list_global_requirements(entity_type: Literal["asset", "service"] = Query(..
     """Global policy management; inherited requirements remain viewable in profiles."""
     require_global(principal, "knowledge_requirements.view")
     require_global(principal, "knowledge_requirements.manage")
-    has_history = exists().where(KnowledgeGap.requirement_definition_id == KnowledgeRequirementDefinition.id)
+    has_history = exists().where(KnowledgeGap.__table__.c.requirement_definition_id == KnowledgeRequirementDefinition.id)
     rows = db.execute(select(KnowledgeRequirementDefinition, has_history).where(
         KnowledgeRequirementDefinition.entity_type == entity_type,
         KnowledgeRequirementDefinition.asset_type_id.is_(None),
@@ -211,7 +224,8 @@ def update_requirement(requirement_id: uuid.UUID, payload: KnowledgeRequirementU
 def delete_requirement(requirement_id: uuid.UUID, request: Request, principal: Principal = Depends(require_permission("knowledge_requirements.manage")), db: Session = Depends(get_db)) -> Response:
     require_global(principal, "knowledge_requirements.manage")
     item = _requirement(db, requirement_id)
-    gap_count = int(db.scalar(select(func.count()).select_from(KnowledgeGap).where(KnowledgeGap.requirement_definition_id == item.id)) or 0)
+    history = KnowledgeGap.__table__
+    gap_count = int(db.scalar(select(func.count()).select_from(history).where(history.c.requirement_definition_id == item.id)) or 0)
     if item.system_defined or gap_count:
         raise HTTPException(status_code=409, detail="Requirement has history and must be deactivated instead of deleted")
     add_audit_event(db, action="knowledge_requirement.deleted", target_type="knowledge_requirement", target_id=item.id, actor=principal.user, summary="Knowledge requirement deleted", metadata={"key": item.key}, request=request)
@@ -248,11 +262,11 @@ def deactivate_requirement(requirement_id: uuid.UUID, request: Request, principa
 
 
 @router.post("/assets/{asset_id}/evaluate-completeness", response_model=KnowledgeCompletenessSummaryResponse)
+@concurrent_decision
 def evaluate_asset_endpoint(asset_id: uuid.UUID, principal: Principal = Depends(require_permission("knowledge_completeness.evaluate")), db: Session = Depends(get_db)):
-    asset = _asset(db, principal, asset_id, "knowledge_completeness.evaluate")
+    asset = _scoped_entity(db, principal, Asset, asset_id, "knowledge_completeness.evaluate", lock=True)
     summary = evaluate_asset(db, asset, trigger_context="manual_reevaluation", actor_user_id=principal.user.id)
     commit(db, "Knowledge completeness")
-    db.refresh(summary)
     return summary
 
 
@@ -266,8 +280,8 @@ def evaluate_batch(payload: CompletenessBatchRequest, principal: Principal = Dep
 
 @router.get("/assets/{asset_id}/completeness", response_model=AssetCompletenessResponse)
 def asset_completeness(asset_id: uuid.UUID, principal: Principal = Depends(require_permission("knowledge_gaps.view")), db: Session = Depends(get_db)):
-    asset = _asset(db, principal, asset_id, "knowledge_gaps.view")
-    summary = db.scalar(select(KnowledgeCompletenessSummary).where(KnowledgeCompletenessSummary.entity_type == "asset", KnowledgeCompletenessSummary.entity_id == asset.id))
+    asset = _scoped_entity(db, principal, Asset, asset_id, "knowledge_gaps.view")
+    summary = db.scalar(_entity_completeness_query(KnowledgeCompletenessSummary, "asset", asset))
     if summary is None:
         summary = KnowledgeCompletenessSummary(
             entity_type="asset", entity_id=asset.id,
@@ -278,33 +292,26 @@ def asset_completeness(asset_id: uuid.UUID, principal: Principal = Depends(requi
             exception_count=0, completeness_status="not_evaluated",
             last_evaluated_at=None,
         )
-    gaps = list(db.scalars(select(KnowledgeGap).where(KnowledgeGap.entity_type == "asset", KnowledgeGap.entity_id == asset.id).order_by(KnowledgeGap.created_at.desc()).limit(500)))
+    gaps = list(db.scalars(_entity_completeness_query(KnowledgeGap, "asset", asset).order_by(KnowledgeGap.created_at.desc()).limit(500)))
     return {"asset_id": asset.id, "summary": summary, "active_gaps": [_gap_response(db, item) for item in gaps if item.status in ACTIVE_GAP_STATUSES], "resolved_gaps": [_gap_response(db, item) for item in gaps if item.status not in ACTIVE_GAP_STATUSES]}
 
 
-def _service(db: Session, principal: Principal, service_id: uuid.UUID, permission: str) -> Service:
-    service = db.get(Service, service_id)
-    if service is None:
-        raise not_found("Service")
-    require_scope(principal, permission, service.customer_id, service.site_id, hide_existence=True)
-    return service
-
-
 @router.post("/services/{service_id}/evaluate-completeness", response_model=KnowledgeCompletenessSummaryResponse)
+@concurrent_decision
 def evaluate_service_endpoint(service_id: uuid.UUID, principal: Principal = Depends(require_permission("service_completeness.evaluate")), db: Session = Depends(get_db)):
-    service = _service(db, principal, service_id, "service_completeness.evaluate")
+    service = _scoped_entity(db, principal, Service, service_id, "service_completeness.evaluate", lock=True)
     summary = evaluate_service(db, service, trigger_context="manual_reevaluation", actor_user_id=principal.user.id)
-    commit(db, "Service knowledge completeness"); db.refresh(summary)
+    commit(db, "Service knowledge completeness")
     return summary
 
 
 @router.get("/services/{service_id}/completeness", response_model=ServiceCompletenessResponse)
 def service_completeness(service_id: uuid.UUID, principal: Principal = Depends(require_permission("knowledge_gaps.view")), db: Session = Depends(get_db)):
-    service = _service(db, principal, service_id, "knowledge_gaps.view")
-    summary = db.scalar(select(KnowledgeCompletenessSummary).where(KnowledgeCompletenessSummary.entity_type == "service", KnowledgeCompletenessSummary.entity_id == service.id))
+    service = _scoped_entity(db, principal, Service, service_id, "knowledge_gaps.view")
+    summary = db.scalar(_entity_completeness_query(KnowledgeCompletenessSummary, "service", service))
     if summary is None:
         summary = KnowledgeCompletenessSummary(entity_type="service", entity_id=service.id, customer_id=service.customer_id, site_id=service.site_id, required_total=0, required_satisfied=0, recommended_total=0, recommended_satisfied=0, critical_gap_count=0, high_gap_count=0, open_gap_count=0, exception_count=0, completeness_status="not_evaluated", last_evaluated_at=None)
-    gaps = list(db.scalars(select(KnowledgeGap).where(KnowledgeGap.entity_type == "service", KnowledgeGap.entity_id == service.id).order_by(KnowledgeGap.created_at.desc()).limit(500)))
+    gaps = list(db.scalars(_entity_completeness_query(KnowledgeGap, "service", service).order_by(KnowledgeGap.created_at.desc()).limit(500)))
     return {"service_id": service.id, "summary": summary, "active_gaps": [_gap_response(db, item) for item in gaps if item.status in ACTIVE_GAP_STATUSES], "resolved_gaps": [_gap_response(db, item) for item in gaps if item.status not in ACTIVE_GAP_STATUSES]}
 
 
@@ -353,12 +360,25 @@ def gap_summary(context: RequestContext, principal: Principal = Depends(require_
     return {"open_knowledge_gap_count": sum(item.requirement_level in {"required", "conditional"} for item in active_open), "critical_knowledge_gap_count": sum(item.severity == "critical" for item in active_open), "high_knowledge_gap_count": sum(item.severity == "high" for item in active_open), "assets_with_critical_gaps": len({item.entity_id for item in active_assets if item.severity == "critical"}), "assets_not_evaluated": max(0, asset_count - sum(item.completeness_status != "not_evaluated" for item in asset_summaries)), "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in asset_summaries), "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at and item.exception_expires_at <= now for item in gaps)}
 
 
-def _scoped_gap(db: Session, principal: Principal, gap_id: uuid.UUID, permission: str):
-    gap = db.get(KnowledgeGap, gap_id)
-    if gap is None: raise not_found("Knowledge gap")
-    require_scope(principal, permission, gap.customer_id, gap.site_id, hide_existence=True)
-    entity = db.get(Asset, gap.entity_id) if gap.entity_type == "asset" else db.get(Service, gap.entity_id) if gap.entity_type == "service" else None
-    if entity is None: raise HTTPException(status_code=409, detail="Gap entity is unavailable")
+def _scoped_gap(db: Session, principal: Principal, gap_id: uuid.UUID, permission: str | None = None):
+    candidate = db.execute(select(
+        KnowledgeGap.entity_type, KnowledgeGap.entity_id, KnowledgeGap.customer_id, KnowledgeGap.site_id,
+    ).where(KnowledgeGap.id == gap_id)).one_or_none()
+    if candidate is None:
+        raise not_found("Knowledge gap")
+    if permission is None:
+        permission = "service_completeness.evaluate" if candidate.entity_type == "service" else "knowledge_completeness.evaluate"
+    require_scope(principal, permission, candidate.customer_id, candidate.site_id, hide_existence=True)
+
+    # Transfers, reevaluation and Gap mutations all acquire the entity lock
+    # before writing completeness data. Recheck the live scope after waiting.
+    entity = lock_completeness_entity(db, GAP_ENTITY_MODELS[candidate.entity_type], candidate.entity_id)
+    if entity is None or (entity.customer_id, entity.site_id) != (candidate.customer_id, candidate.site_id):
+        raise not_found("Knowledge gap")
+    require_scope(principal, permission, entity.customer_id, entity.site_id, hide_existence=True)
+    gap = db.get(KnowledgeGap, gap_id, populate_existing=True)
+    if gap is None:
+        raise not_found("Knowledge gap")
     return gap, entity
 
 
@@ -374,12 +394,14 @@ def _audit_gap_action(db: Session, request: Request, principal: Principal, gap: 
 
 
 def _evaluate_gap_entity(db: Session, gap: KnowledgeGap, entity, *, trigger_context: str, actor_user_id: uuid.UUID | None):
+    db.flush()
     if gap.entity_type == "service":
         return evaluate_service(db, entity, trigger_context=trigger_context, actor_user_id=actor_user_id)
     return evaluate_asset(db, entity, trigger_context=trigger_context, actor_user_id=actor_user_id)
 
 
 @router.post("/knowledge-gaps/{gap_id}/defer", response_model=KnowledgeGapResponse)
+@concurrent_decision
 def defer_gap(gap_id: uuid.UUID, payload: GapDeferRequest, request: Request, principal: Principal = Depends(require_permission("knowledge_gaps.defer")), db: Session = Depends(get_db)):
     gap, entity = _scoped_gap(db, principal, gap_id, "knowledge_gaps.defer")
     if gap.status not in {"open", "deferred"}:
@@ -392,6 +414,7 @@ def defer_gap(gap_id: uuid.UUID, payload: GapDeferRequest, request: Request, pri
 
 
 @router.post("/knowledge-gaps/{gap_id}/exception", response_model=KnowledgeGapResponse)
+@concurrent_decision
 def except_gap(gap_id: uuid.UUID, payload: GapExceptionRequest, request: Request, principal: Principal = Depends(require_permission("knowledge_gaps.exception")), db: Session = Depends(get_db)):
     gap, entity = _scoped_gap(db, principal, gap_id, "knowledge_gaps.exception")
     if gap.status not in {"open", "deferred", "exception"}:
@@ -404,6 +427,7 @@ def except_gap(gap_id: uuid.UUID, payload: GapExceptionRequest, request: Request
 
 
 @router.post("/knowledge-gaps/{gap_id}/reopen", response_model=KnowledgeGapResponse)
+@concurrent_decision
 def reopen_gap(gap_id: uuid.UUID, payload: GapReopenRequest, request: Request, principal: Principal = Depends(require_permission("knowledge_gaps.exception")), db: Session = Depends(get_db)):
     gap, entity = _scoped_gap(db, principal, gap_id, "knowledge_gaps.exception")
     if gap.status not in {"deferred", "exception"}:
@@ -415,6 +439,7 @@ def reopen_gap(gap_id: uuid.UUID, payload: GapReopenRequest, request: Request, p
 
 
 @router.post("/knowledge-gaps/{gap_id}/assign", response_model=KnowledgeGapResponse)
+@concurrent_decision
 def assign_gap(gap_id: uuid.UUID, payload: GapAssignRequest, request: Request, principal: Principal = Depends(require_permission("knowledge_gaps.assign")), db: Session = Depends(get_db)):
     gap, entity = _scoped_gap(db, principal, gap_id, "knowledge_gaps.assign")
     if gap.status not in ACTIVE_GAP_STATUSES:
@@ -427,8 +452,9 @@ def assign_gap(gap_id: uuid.UUID, payload: GapAssignRequest, request: Request, p
 
 
 @router.post("/knowledge-gaps/{gap_id}/resolve", response_model=KnowledgeGapResponse)
+@concurrent_decision
 def resolve_gap(gap_id: uuid.UUID, request: Request, principal: Principal = Depends(require_any_permission("knowledge_completeness.evaluate", "service_completeness.evaluate")), db: Session = Depends(get_db)):
-    gap, entity = _scoped_gap(db, principal, gap_id, "service_completeness.evaluate" if (db.get(KnowledgeGap, gap_id) and db.get(KnowledgeGap, gap_id).entity_type == "service") else "knowledge_completeness.evaluate")
+    gap, entity = _scoped_gap(db, principal, gap_id)
     _evaluate_gap_entity(db, gap, entity, trigger_context="manual_resolution_check", actor_user_id=principal.user.id)
     if gap.status in ACTIVE_GAP_STATUSES:
         db.rollback()

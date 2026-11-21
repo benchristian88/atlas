@@ -32,7 +32,7 @@ class CompletenessSession:
     def begin_nested(self):
         return nullcontext()
 
-    def get(self, model, record_id):
+    def get(self, model, record_id, **kwargs):
         return next((value for value in self.records if isinstance(value, model) and value.id == record_id), None)
 
     def _entity(self, statement):
