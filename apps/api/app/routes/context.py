@@ -15,6 +15,7 @@ from app.authorization import (
 )
 from app.database import get_db
 from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, Site
+from app.services.service_relationship_scope import current_relationship
 from app.schemas import ContextResponse, DashboardSummaryResponse
 from app.services.reconciliation_listing import filtered_items, stale_identity_item_ids
 
@@ -191,7 +192,7 @@ def dashboard_summary(
     asset_count_value = int(db.scalar(asset_query) or 0)
     service_rows = list(db.scalars(service_records_query)) if principal.can_anywhere("services.view") else []
     service_ids = [item.id for item in service_rows]
-    service_asset_dependency_ids = set(db.scalars(select(ServiceAssetDependency.service_id).where(ServiceAssetDependency.service_id.in_(service_ids), ServiceAssetDependency.valid_to.is_(None)))) if service_ids else set()
+    service_asset_dependency_ids = set(db.scalars(select(ServiceAssetDependency.service_id).where(ServiceAssetDependency.service_id.in_(service_ids), current_relationship(ServiceAssetDependency, principal)))) if service_ids else set()
     criticality_by_id = {item.id: item for item in db.scalars(select(CriticalityLevel))} if service_rows else {}
     required_gap_service_ids = {item.entity_id for item in active_gaps if item.entity_type == "service" and item.requirement_level in {"required", "conditional"}}
     return {

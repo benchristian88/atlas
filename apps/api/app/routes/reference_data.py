@@ -21,8 +21,6 @@ from app.models import (
     AssetCategory,
     AssetRelationship,
     AssetType,
-    BusinessFunction,
-    Service,
     TopologyPosition,
     CustomFieldAssetType,
     RelationshipType,
@@ -31,6 +29,7 @@ from app.models import (
     ServiceBusinessFunction,
     ServiceDependency,
 )
+from app.services.service_relationship_scope import current_relationship
 from app.schemas import (
     AssetTypeCreate,
     AssetTypeResponse,
@@ -143,28 +142,9 @@ def _relationship_usage_counts(
         query = query.where(RelationshipType.id == type_id)
     counts = dict(db.execute(query).all())
 
-    for model, source_model, source_id, target_model, target_id, permission, source_permission, target_permission in (
-        (ServiceAssetDependency, Service, ServiceAssetDependency.service_id, Asset, ServiceAssetDependency.asset_id,
-         "service_dependencies.view", "services.view", "assets.view"),
-        (ServiceDependency, Service, ServiceDependency.source_service_id, Service, ServiceDependency.target_service_id,
-         "service_dependencies.view", "services.view", "services.view"),
-        (ServiceBusinessFunction, Service, ServiceBusinessFunction.service_id, BusinessFunction, ServiceBusinessFunction.business_function_id,
-         "business_functions.view", "services.view", "business_functions.view"),
-    ):
-        # Entity subqueries also inherit the shared tombstone read policy.
-        # Keep Services unaliased: the Session's loader criteria apply to the
-        # mapped entity, including scalar-ID selects.
-        visible_sources = select(source_model.id).where(scope_condition(
-            principal, source_permission, source_model.customer_id, source_model.site_id,
-        ))
-        visible_targets = select(target_model.id).where(scope_condition(
-            principal, target_permission, target_model.customer_id, target_model.site_id,
-        ))
+    for model in (ServiceAssetDependency, ServiceDependency, ServiceBusinessFunction):
         query = select(model.relationship_type_id, func.count()).select_from(model).where(
-            model.valid_to.is_(None),
-            scope_condition(principal, permission, model.customer_id, model.site_id),
-            source_id.in_(visible_sources),
-            target_id.in_(visible_targets),
+            current_relationship(model, principal),
         )
         if type_id is not None:
             query = query.where(model.relationship_type_id == type_id)

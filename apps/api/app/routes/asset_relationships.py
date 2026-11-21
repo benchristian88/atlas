@@ -8,6 +8,7 @@ from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.models import Asset, AssetRelationship, Customer, RelationshipType, Site
+from app.services.knowledge_locks import concurrent_decision, lock_subjects
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
 from app.services.knowledge_changes import record_change
 from app.schemas import (
@@ -118,6 +119,7 @@ def list_asset_relationships(
 
 
 @router.post("", response_model=AssetRelationshipResponse, status_code=status.HTTP_201_CREATED)
+@concurrent_decision
 def create_asset_relationship(
     payload: AssetRelationshipCreate,
     request: Request,
@@ -127,6 +129,7 @@ def create_asset_relationship(
 ):
     if payload.source_asset_id == payload.target_asset_id:
         raise HTTPException(status_code=422, detail="Source and target assets must be different")
+    lock_subjects(db, {"asset": {payload.source_asset_id, payload.target_asset_id}})
     source = db.get(Asset, payload.source_asset_id)
     target = db.get(Asset, payload.target_asset_id)
     if source is None or target is None:

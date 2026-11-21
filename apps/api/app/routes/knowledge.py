@@ -15,6 +15,7 @@ from app.audit import add_audit_event
 from app.authorization import CurrentPrincipal, Principal, RequestContext, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.services.knowledge_locks import lock_subjects, decision_conflicts as _decision_conflicts, concurrent_decision as _concurrent_decision
+from app.services.service_relationship_scope import visible_service_relationship_assertion
 from app.models import (
     Customer,
     Asset,
@@ -566,6 +567,7 @@ def list_assertions(
 ):
     query = select(KnowledgeAssertion).where(
         scope_condition(principal, "assets.view", KnowledgeAssertion.customer_id, KnowledgeAssertion.site_id),
+        visible_service_relationship_assertion(principal),
         or_(KnowledgeAssertion.subject_type != REVIEW_TYPE, scope_condition(
             principal, "reconciliation.view", KnowledgeAssertion.customer_id, KnowledgeAssertion.site_id))
     )

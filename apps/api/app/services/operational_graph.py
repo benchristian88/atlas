@@ -33,6 +33,7 @@ from app.models import (
     ServiceDependency,
     ServiceType,
 )
+from app.services.service_relationship_scope import valid_relationship_scope
 from app.schemas import (
     OperationalGraphEdge,
     OperationalGraphNode,
@@ -417,7 +418,7 @@ class OperationalGraphBuilder:
             if family == "service_business_function"
             else "service_dependencies.view"
         )
-        return self.principal.can(permission, row.customer_id, row.site_id)
+        return valid_relationship_scope(row, source, target) and self.principal.can(permission, row.customer_id, row.site_id)
 
     def _load_edge_candidates(
         self,

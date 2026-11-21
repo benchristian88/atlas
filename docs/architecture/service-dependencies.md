@@ -28,6 +28,70 @@ duplicate active edges are rejected by database constraints. Targets must be
 within the permitted customer/site scope; Business Functions and customer-wide
 Services can be shared into a compatible site context.
 
+## Ownership and transfers
+
+The source Service owns the relationship. A current row has the source's
+customer and site. A null site represents customer-wide ownership. Both
+endpoints belong to the same customer.
+
+| Source Service | Asset target | Service or Business Function target |
+| --- | --- | --- |
+| Site-specific | Same site | Same site or customer-wide |
+| Customer-wide | Any site in the same customer | Customer-wide or any site in the same customer |
+
+The existing relationship management permission must cover both endpoints.
+The caller also needs the target's entity view permission before a mutation can
+return its details or record its name. Reads check the recorded relationship
+scope and both endpoints. Site grants do not cover customer-wide records.
+Group writes authorize all affected members, including members being removed.
+
+Asset transfers retain active dependencies when the destination remains
+compatible with every owning Service. Dependencies of archived Services count
+until explicitly ended. Asset Relationships and Interfaces still restrict
+Asset moves. Service site moves require ending outgoing links and groups,
+which retain the Service's original recorded scope. Incoming links to Services
+and Business Functions can remain active when their source scope is compatible
+with the proposed target site. A blocked move returns a generic HTTP 409.
+
+Rows with `valid_to` set retain their original IDs and ownership. They do not
+block transfers. Relationship history returns an ended row when the reader
+can view its recorded scope and both live endpoints within the original
+customer. Knowledge Changes retain their recorded scope and historical
+snapshots. Assertions and audit events are retained. Typed Service assertion
+reads check live endpoint visibility, and current claims also require
+compatible ownership.
+
+## Transaction ordering and legacy records
+
+Relationship and group writes lock their endpoints with PostgreSQL
+`FOR UPDATE` in canonical subject order. Assets come first, followed by
+Services and Business Functions. Rows within each type lock in ascending UUID
+order. The request then refreshes scopes and grants before mutating
+relationship, group, membership, or assertion rows.
+Asset Relationship and Interface creation lock their Assets before writing
+references, so their foreign-key locks cannot precede the Asset writer lock.
+
+Transfers lock the moving record before querying active edges. The competing
+relationship writer must hold that same endpoint lock. Transfer guards read
+the other endpoints without acquiring additional locks. An owning Service with
+an active outgoing edge cannot change its recorded scope, which makes those
+reads sufficient. The S1.1 completeness and gap writers use
+`FOR NO KEY UPDATE` on the same entity rows. Dependency creation and ending
+reevaluate the affected Services in the same transaction. Manual assertions
+reuse the held canonical lock. Their source references take foreign-key
+`KEY SHARE`, which is compatible with the source writer mode used by
+reconciliation under ADR 0017.
+
+The database enforces endpoint existence, valid customer/site pairs, active
+uniqueness, and membership cardinality. The cross-row ownership checks are
+enforced by the application. Legacy mismatches can still exist in stored data.
+Current relationship lists, counts, graph, analysis and completeness rules
+exclude them. Normal relationship and group edits fail closed with HTTP 404
+when an endpoint is unavailable or incompatible. Previously stored
+completeness results reflect their last evaluation and need reevaluation
+to reflect the corrected rules. An explicit owner-reviewed remediation is
+required for invalid edges that cannot be made compatible by a normal transfer.
+
 ## Direction and labels
 
 The stored source and target retain semantic direction. A Service detail page
