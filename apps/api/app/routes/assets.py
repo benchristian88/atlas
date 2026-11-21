@@ -8,6 +8,7 @@ from app.audit import add_audit_event
 from app.authorization import (
     Principal,
     RequestContext,
+    refresh_principal,
     require_permission,
     require_scope,
     scope_condition,
@@ -23,6 +24,7 @@ from app.models import (
     Customer,
     KnowledgeCompletenessSummary,
     KnowledgeGap,
+    ServiceAssetDependency,
     Site,
 )
 from app.presenters import asset_response_data
@@ -39,6 +41,7 @@ from app.services.manual_knowledge import (
     declare_asset_changes,
 )
 from app.services.knowledge_locks import concurrent_decision
+from app.services.service_relationship_scope import incompatible_incoming_move
 
 from app.services import asset_icons
 
@@ -345,6 +348,7 @@ def update_asset(
     asset = db.get(Asset, asset_id, with_for_update=True, populate_existing=True)
     if asset is None:
         raise not_found("Asset")
+    principal = refresh_principal(principal, db)
     require_scope(
         principal, "assets.edit", asset.customer_id, asset.site_id, hide_existence=True
     )
@@ -386,6 +390,8 @@ def update_asset(
                 status_code=409,
                 detail="An asset with relationships or interfaces cannot be moved to another site",
             )
+        if incompatible_incoming_move(db, ServiceAssetDependency, asset.id, customer_id, site_id):
+            raise HTTPException(409, "The asset cannot be moved while it has incompatible Service dependencies")
         if customer.status != "active" or site.status != "active":
             raise HTTPException(status_code=409, detail="Assets cannot be moved to an inactive context")
     new_type = changes.get("asset_type", asset.asset_type)

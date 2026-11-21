@@ -9,13 +9,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
-from app.authorization import Principal, RequestContext, require_permission, require_scope, scope_condition
+from app.authorization import Principal, RequestContext, refresh_principal, require_permission, require_scope, scope_condition
 from app.database import get_db
 from app.presentation import default_entity_accent
 from app.schemas import EntityDeletionEligibilityResponse
 from app.models import BusinessFunction, CriticalityLevel, KnowledgeGap, ServiceBusinessFunction, Service, Site
 from app.routes.crud_helpers import commit, flush, not_found
-from app.routes.services import _business_function_link_response, _visible_related_ids, service_response
+from app.routes.services import _business_function_link_response, _visible_related_ids
 from app.schemas import BusinessFunctionCreate, BusinessFunctionResponse, BusinessFunctionUpdate, ServiceBusinessFunctionResponse, ServiceGraphResponse, ServiceResponse
 from app.services.operational_graph import (
     GraphFocusNotFound,
@@ -23,12 +23,14 @@ from app.services.operational_graph import (
     OperationalGraphBuilder,
     operational_graph_to_service_graph,
 )
+from app.services.knowledge_locks import concurrent_decision
+from app.services.service_relationship_scope import current_relationship, incompatible_incoming_move, visible_relationships
 
 router = APIRouter(prefix="/business-functions", tags=["business functions"])
 
 
-def _function(db: Session, principal: Principal, function_id: uuid.UUID, permission: str) -> BusinessFunction:
-    item = db.get(BusinessFunction, function_id)
+def _function(db: Session, principal: Principal, function_id: uuid.UUID, permission: str, *, lock: bool = False) -> BusinessFunction:
+    item = db.get(BusinessFunction, function_id, with_for_update=True, populate_existing=True) if lock else db.get(BusinessFunction, function_id)
     if item is None or item.deleted_at is not None:
         raise not_found("Business function")
     require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
@@ -37,13 +39,15 @@ def _function(db: Session, principal: Principal, function_id: uuid.UUID, permiss
 
 def function_response(db: Session, item: BusinessFunction, principal: Principal) -> dict:
     criticality = db.get(CriticalityLevel, item.criticality_level_id) if item.criticality_level_id else None
-    service_ids = list(db.scalars(select(ServiceBusinessFunction.service_id).where(ServiceBusinessFunction.business_function_id == item.id, ServiceBusinessFunction.valid_to.is_(None))))
-    visible_service_ids = _visible_related_ids(db, principal, Service, service_ids, "services.view", item.customer_id)
+    visible_service_ids = set(db.scalars(select(ServiceBusinessFunction.service_id).where(
+        ServiceBusinessFunction.business_function_id == item.id,
+        current_relationship(ServiceBusinessFunction, principal),
+    )))
     gap_service_ids = _visible_related_ids(db, principal, Service, visible_service_ids, "knowledge_gaps.view", item.customer_id)
     result = BusinessFunctionResponse.model_validate(item).model_dump()
     result.update(
         criticality_name=criticality.name if criticality else None,
-        service_count=sum(service_id in visible_service_ids for service_id in service_ids),
+        service_count=len(visible_service_ids),
         open_gap_count=int(db.scalar(select(func.count()).select_from(KnowledgeGap).where(KnowledgeGap.entity_type == "service", KnowledgeGap.entity_id.in_(gap_service_ids), KnowledgeGap.status.in_({"open", "deferred"}))) or 0) if gap_service_ids else 0,
     )
     return result
@@ -86,16 +90,19 @@ def get_business_function(function_id: uuid.UUID, principal: Principal = Depends
 
 
 @router.patch("/{function_id}", response_model=BusinessFunctionResponse)
+@concurrent_decision
 def update_business_function(function_id: uuid.UUID, payload: BusinessFunctionUpdate, request: Request, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
-    item = _function(db, principal, function_id, "business_functions.manage")
+    item = _function(db, principal, function_id, "business_functions.manage", lock=True)
+    principal = refresh_principal(principal, db)
+    require_scope(principal, "business_functions.manage", item.customer_id, item.site_id, hide_existence=True)
     changes = payload.model_dump(exclude_unset=True)
+    require_scope(principal, "business_functions.manage", item.customer_id, changes.get("site_id", item.site_id))
     if "site_id" in changes and changes["site_id"] != item.site_id:
-        count = int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.business_function_id == item.id, ServiceBusinessFunction.valid_to.is_(None))) or 0)
-        if count: raise HTTPException(status_code=409, detail="A Business Function linked to Services cannot be moved")
         if changes["site_id"]:
             site = db.get(Site, changes["site_id"])
             if site is None or site.customer_id != item.customer_id: raise HTTPException(status_code=422, detail="Site does not belong to the selected customer")
-    require_scope(principal, "business_functions.manage", item.customer_id, changes.get("site_id", item.site_id))
+        if incompatible_incoming_move(db, ServiceBusinessFunction, item.id, item.customer_id, changes["site_id"]):
+            raise HTTPException(409, "A Business Function with incompatible Service links cannot be moved")
     if changes.get("criticality_level_id"):
         criticality = db.get(CriticalityLevel, changes["criticality_level_id"])
         if criticality is None or not criticality.active: raise HTTPException(status_code=422, detail="Criticality level is not active or does not exist")
@@ -111,11 +118,13 @@ def update_business_function(function_id: uuid.UUID, payload: BusinessFunctionUp
 @router.get("/{function_id}/services", response_model=list[ServiceBusinessFunctionResponse])
 def business_function_services(function_id: uuid.UUID, principal: Principal = Depends(require_permission("business_functions.view")), include_history: bool = False, db: Session = Depends(get_db)):
     function = _function(db, principal, function_id, "business_functions.view")
-    query = select(ServiceBusinessFunction).where(ServiceBusinessFunction.business_function_id == function.id)
-    if not include_history: query = query.where(ServiceBusinessFunction.valid_to.is_(None))
-    rows = list(db.scalars(query.order_by(ServiceBusinessFunction.created_at)))
-    visible = _visible_related_ids(db, principal, Service, (row.service_id for row in rows), "services.view", function.customer_id)
-    return [_business_function_link_response(db, row) for row in rows if row.service_id in visible]
+    query = visible_relationships(ServiceBusinessFunction, principal, include_history=include_history).where(
+        ServiceBusinessFunction.business_function_id == function.id,
+    )
+    return [
+        _business_function_link_response(db, row, source, target)
+        for source, target, row in db.execute(query.order_by(ServiceBusinessFunction.created_at))
+    ]
 
 
 @router.get("/{function_id}/graph", response_model=ServiceGraphResponse)

@@ -10,6 +10,7 @@ from app.authorization import Principal, RequestContext, require_permission, req
 from app.database import get_db
 from app.models import Asset, AssetInterface, Network
 from app.routes.crud_helpers import apply_changes, commit, flush, not_found
+from app.services.knowledge_locks import concurrent_decision
 from app.schemas import AssetInterfaceCreate, AssetInterfaceReadResponse, AssetInterfaceResponse, AssetInterfaceUpdate
 
 router = APIRouter(prefix="/asset-interfaces", tags=["asset interfaces"])
@@ -82,6 +83,7 @@ def list_asset_interfaces(
 
 
 @router.post("", response_model=AssetInterfaceResponse, status_code=status.HTTP_201_CREATED)
+@concurrent_decision
 def create_asset_interface(
     payload: AssetInterfaceCreate,
     request: Request,
@@ -89,7 +91,7 @@ def create_asset_interface(
     principal: Principal = Depends(require_permission("networks.create")),
     db: Session = Depends(get_db),
 ):
-    asset = db.get(Asset, payload.asset_id)
+    asset = db.get(Asset, payload.asset_id, with_for_update=True, populate_existing=True)
     if asset is None:
         raise not_found("Asset")
     require_scope(

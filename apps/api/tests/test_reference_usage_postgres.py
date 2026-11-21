@@ -195,22 +195,22 @@ def test_one_hidden_endpoint_cannot_contribute(usage, family, hidden_site, hidde
     add_usage(usage, family, **{f"{hidden_endpoint}_site": hidden_site})
     assert snapshot(apis["site"], family, usage.ids) == before["site"]
     assert snapshot(apis["definitions"], family, usage.ids) == before["definitions"]
-    assert_counts(snapshot(apis["broad"], family, usage.ids), usage.ids, 2)
-    if hidden_site == 2:
+    assert_counts(snapshot(apis["broad"], family, usage.ids), usage.ids, 2 if family == "asset" else 1)
+    if hidden_site == 2 or family in TYPED:
         assert snapshot(apis["customer"], family, usage.ids) == before["customer"]
     else:
         assert_counts(snapshot(apis["customer"], family, usage.ids), usage.ids, 2)
 
 
 @pytest.mark.parametrize("family", TYPED)
-def test_relationship_scope_is_checked_even_when_both_endpoints_are_visible(usage, family):
+def test_inconsistent_stored_scope_is_excluded_even_when_both_endpoints_are_visible(usage, family):
     apis = clients(usage)
     add_usage(usage, family)
     before = snapshot(apis["site"], family, usage.ids)
     add_usage(usage, family, edge_site=1)
     assert snapshot(apis["site"], family, usage.ids) == before
-    assert_counts(snapshot(apis["customer"], family, usage.ids), usage.ids, 2)
-    assert_counts(snapshot(apis["broad"], family, usage.ids), usage.ids, 2)
+    assert_counts(snapshot(apis["customer"], family, usage.ids), usage.ids, 1)
+    assert_counts(snapshot(apis["broad"], family, usage.ids), usage.ids, 1)
 
 
 @pytest.mark.parametrize("family,permission", [

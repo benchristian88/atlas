@@ -112,8 +112,13 @@ class DependencyResponseDatabase:
         return self.records.get((model, record_id))
 
     def scalar(self, statement):
+        return None
+
+    def scalars(self, statement):
         entity = statement.column_descriptions[0].get("entity")
-        return self.membership if entity is DependencyGroupMembership else None
+        if entity is DependencyGroupMembership:
+            return [self.membership]
+        return [row for (model, _), row in self.records.items() if model is entity]
 
 
 def test_dependency_response_adds_group_semantics_without_removing_legacy_flag():
@@ -141,7 +146,7 @@ def test_dependency_response_adds_group_semantics_without_removing_legacy_flag()
     db = DependencyResponseDatabase(
         membership, subject, host, runs_on, group, dependency,
     )
-    response = _asset_dependency_response(db, dependency)
+    response = _asset_dependency_response(db, dependency, subject, host)
     assert response["required_for_operation"] is False
     assert response["dependency_group_id"] == group.id
     assert response["dependency_strategy"] == "all"

@@ -32,6 +32,7 @@ from app.models import (
 )
 from app.services.custom_fields import custom_field_values
 from app.services.knowledge_changes import record_change
+from app.services.service_relationship_scope import current_relationship
 from app.services.knowledge_requirement_references import validate_rule_config
 from app.utils.json_values import to_json_value
 
@@ -521,18 +522,18 @@ def evaluate_service_rule(
         service_type = db.get(ServiceType, service.service_type_id)
         if service_type and not service_type.requires_asset_dependency:
             return RuleResult(True, details={"reason": "Service Type explicitly permits an external Service without an Asset dependency", "service_type": service_type.key, "external_service_exception": True})
-        count = int(db.scalar(select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.service_id == service.id, ServiceAssetDependency.valid_to.is_(None))) or 0)
+        count = int(db.scalar(select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.service_id == service.id, current_relationship(ServiceAssetDependency))) or 0)
         return RuleResult(count >= config.get("minimum", 1), details={"matching_count": count, "minimum": config.get("minimum", 1)})
     if rule_type == "service_dependency_exists":
         direction = config.get("direction", "outgoing")
-        conditions = [ServiceDependency.valid_to.is_(None)]
+        conditions = [current_relationship(ServiceDependency)]
         if direction == "incoming": conditions.append(ServiceDependency.target_service_id == service.id)
         elif direction == "either": conditions.append(or_(ServiceDependency.source_service_id == service.id, ServiceDependency.target_service_id == service.id))
         else: conditions.append(ServiceDependency.source_service_id == service.id)
         count = int(db.scalar(select(func.count()).select_from(ServiceDependency).where(*conditions)) or 0)
         return RuleResult(count >= config.get("minimum", 1), details={"matching_count": count, "minimum": config.get("minimum", 1), "direction": direction})
     if rule_type == "service_business_function_exists":
-        count = int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == service.id, ServiceBusinessFunction.valid_to.is_(None))) or 0)
+        count = int(db.scalar(select(func.count()).select_from(ServiceBusinessFunction).where(ServiceBusinessFunction.service_id == service.id, current_relationship(ServiceBusinessFunction))) or 0)
         return RuleResult(count >= config.get("minimum", 1), details={"matching_count": count, "minimum": config.get("minimum", 1)})
     if rule_type == "criticality_rank":
         return RuleResult(bool(criticality and criticality.rank >= config["minimum_rank"]), details={"criticality_rank": criticality.rank if criticality else None, "minimum_rank": config["minimum_rank"]})
