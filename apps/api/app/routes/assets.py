@@ -426,7 +426,7 @@ def update_asset(
             replace_active=False,
         )
     from app.services.knowledge_completeness import evaluate_asset_safely
-    evaluate_asset_safely(db, asset, trigger_context="asset_updated", actor_user_id=principal.user.id)
+    evaluate_asset_safely(db, asset, trigger_context="asset_updated", actor_user_id=principal.user.id, scope_changed=moving)
     add_audit_event(
         db,
         action="asset.updated",
@@ -495,13 +495,13 @@ def delete_asset(
     for gap in db.scalars(select(KnowledgeGap).where(
         KnowledgeGap.entity_type == "asset", KnowledgeGap.entity_id == asset.id,
         KnowledgeGap.status.in_(("open", "deferred", "exception")),
-    )):
+    ).execution_options(include_unmatched_completeness=True)):
         gap.status = "superseded"
         gap.resolution_reason = "Asset was deleted"
     summary = db.scalar(select(KnowledgeCompletenessSummary).where(
         KnowledgeCompletenessSummary.entity_type == "asset",
         KnowledgeCompletenessSummary.entity_id == asset.id,
-    ))
+    ).execution_options(include_unmatched_completeness=True))
     if summary:
         db.delete(summary)
     db.delete(asset)

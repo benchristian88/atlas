@@ -38,6 +38,7 @@ from app.services.asset_icons import icon_fields
 from app.services.knowledge_assertions import accept_assertion, record_assertion
 from app.services.knowledge_changes import record_assertion_change, record_change
 from app.services.knowledge_lifecycle import retract_assertion
+from app.services.knowledge_locks import concurrent_decision
 from app.services.manual_knowledge import MANUAL_SERVICE_KNOWLEDGE_FIELDS, declare_service_changes
 from app.services.operational_graph import (
     GraphFocusNotFound,
@@ -54,8 +55,11 @@ def _slug(value: str) -> str:
     return result[:255] or "service"
 
 
-def _service(db: Session, principal: Principal, service_id: uuid.UUID, permission: str) -> Service:
-    item = db.get(Service, service_id)
+def _service(db: Session, principal: Principal, service_id: uuid.UUID, permission: str, *, lock: bool = False) -> Service:
+    if lock:
+        item = db.get(Service, service_id, with_for_update={"key_share": True}, populate_existing=True)
+    else:
+        item = db.get(Service, service_id)
     if item is None or item.deleted_at is not None:
         raise not_found("Service")
     require_scope(principal, permission, item.customer_id, item.site_id, hide_existence=True)
@@ -96,10 +100,14 @@ def service_response(db: Session, item: Service, principal: Principal) -> dict:
     summary = db.scalar(select(KnowledgeCompletenessSummary).where(
         KnowledgeCompletenessSummary.entity_type == "service",
         KnowledgeCompletenessSummary.entity_id == item.id,
+        KnowledgeCompletenessSummary.customer_id == item.customer_id,
+        KnowledgeCompletenessSummary.site_id == item.site_id,
     )) if principal.can("knowledge_gaps.view", item.customer_id, item.site_id) else None
     open_gaps = list(db.scalars(select(KnowledgeGap).where(
         KnowledgeGap.entity_type == "service",
         KnowledgeGap.entity_id == item.id,
+        KnowledgeGap.customer_id == item.customer_id,
+        KnowledgeGap.site_id == item.site_id,
         KnowledgeGap.status.in_({"open", "deferred"}),
     ))) if principal.can("knowledge_gaps.view", item.customer_id, item.site_id) else []
     visible_assets = select(Asset.id).where(Asset.customer_id == item.customer_id, scope_condition(principal, "assets.view", Asset.customer_id, Asset.site_id))
@@ -244,14 +252,16 @@ def get_service(service_id: uuid.UUID, principal: Principal = Depends(require_pe
 
 
 @router.patch("/services/{service_id}", response_model=ServiceResponse)
+@concurrent_decision
 def update_service(service_id: uuid.UUID, payload: ServiceUpdate, request: Request, context: RequestContext, principal: Principal = Depends(require_permission("services.edit")), db: Session = Depends(get_db)):
-    item = _service(db, principal, service_id, "services.edit")
+    item = _service(db, principal, service_id, "services.edit", lock=True)
     changes = payload.model_dump(exclude_unset=True)
     new_site_id = changes.get("site_id", item.site_id)
     if context.site_id and new_site_id != context.site_id:
         raise HTTPException(status_code=403, detail="Service site must match the active context")
     _validate_context(db, principal, "services.edit", item.customer_id, new_site_id)
-    if new_site_id != item.site_id:
+    moving = new_site_id != item.site_id
+    if moving:
         dependency_count = sum(int(db.scalar(query) or 0) for query in (
             select(func.count()).select_from(ServiceAssetDependency).where(ServiceAssetDependency.service_id == item.id, ServiceAssetDependency.valid_to.is_(None)),
             select(func.count()).select_from(ServiceDependency).where(or_(ServiceDependency.source_service_id == item.id, ServiceDependency.target_service_id == item.id), ServiceDependency.valid_to.is_(None)),
@@ -275,7 +285,7 @@ def update_service(service_id: uuid.UUID, payload: ServiceUpdate, request: Reque
     flush(db, "Service")
     declare_service_changes(db, service=item, previous_values=previous, actor_user_id=principal.user.id)
     from app.services.knowledge_completeness import evaluate_service_safely
-    evaluate_service_safely(db, item, trigger_context="service_updated", actor_user_id=principal.user.id)
+    evaluate_service_safely(db, item, trigger_context="service_updated", actor_user_id=principal.user.id, scope_changed=moving)
     add_audit_event(db, action="service.updated", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service updated", metadata={"changed_fields": sorted(semantic_changes)}, request=request)
     commit(db, "Service")
     db.refresh(item)
