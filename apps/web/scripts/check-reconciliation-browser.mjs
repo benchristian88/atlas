@@ -44,7 +44,16 @@ try {
     page.on("pageerror", error => errors.push(error.message));
     let parentAccepted = false, childrenAccepted = false, interfaceLinked = false, linkAttempts = 0;
     let snapshotMode = false, snapshotRevision = 3, snapshotAccepted = false;
-    let identityRevision = 5, identityOutcome = null, relationshipOnly = false;
+    let identityRevision = 5, identityOutcome = null, relationshipOnly = false, identityOmitted = false;
+    let identityAmbiguous = false, identityReadConflict = false;
+    const omissionReason = "A newer complete discovery run did not observe this guest.";
+    const reactivateOmissionReason = `${omissionReason} Run discovery and review fresh evidence before confirming the same guest.`;
+    const ambiguityReason = "Comparable discovery runs have the same start time. Run discovery again with this guest included and review the fresh evidence before deciding.";
+    const changedReason = "This identity review changed; refresh and review the comparison before deciding.";
+    const identityVersion = outcome => {
+      const needsGuest = outcome === "replace" && relationshipOnly;
+      return String(needsGuest ? identityRevision : identityAmbiguous ? 9 : identityOmitted ? 7 : identityRevision).repeat(64);
+    };
     function snapshotGroup() {
       const current = snapshotRevision === 3 ? "Curated" : "New manual value";
       const fact = { ...base, id: id(20), label: "Name", assertion_predicate: "name", current, proposed: "Observed",
@@ -82,9 +91,11 @@ try {
         label: "Identity review", candidate_external_id: "guest/lxc/1029", assertion_predicate: "source_key_present",
         current: previous, proposed: evidence, can_reject: false, can_defer: false,
         status: identityOutcome ? "accepted" : "open",
-        identity_review: { expected_version: String(identityRevision).repeat(64), current_asset_status: "retired",
+        identity_review: { expected_version: identityVersion("reactivate"), replacement_expected_version: identityVersion("replace"), current_asset_status: "retired",
           observed_at: "2026-11-01T00:00:00Z", outcome: identityOutcome, withheld: {},
-          actions: { reactivate: null, replace: relationshipOnly ? "Run discovery with this guest included to review it as a replacement." : null } },
+          actions: { reactivate: identityAmbiguous ? ambiguityReason : identityOmitted ? reactivateOmissionReason : null,
+            replace: relationshipOnly ? "Run discovery with this guest included to review it as a replacement."
+              : identityAmbiguous ? ambiguityReason : identityOmitted ? omissionReason : null } },
         blocked_reason: "This source key requires a guest identity decision" };
       return { ...group(), id: parent.id, name: "Observed guest B", entity_type: "source_identity",
         type_label: "Identity review", parent, sections: [], default_expanded: true, matching_record_count: 1, decision_items: [],
@@ -107,9 +118,12 @@ try {
       else if (path === `/reconciliation-items/${id(12)}/identity-decision`) {
         const payload = request.postDataJSON();
         assert.ok(payload.reason.trim());
-        if (payload.expected_version !== String(identityRevision).repeat(64)) {
+        if (payload.expected_version !== identityVersion(payload.outcome)) {
           status = 409;
-          body = { detail: "This identity review changed; refresh and review the comparison before deciding." };
+          body = { detail: changedReason };
+        } else if (identityAmbiguous || identityOmitted) {
+          status = 409;
+          body = { detail: identityAmbiguous ? ambiguityReason : payload.outcome === "reactivate" ? reactivateOmissionReason : omissionReason };
         } else {
           identityOutcome = payload.outcome;
           body = { id: id(12), status: "accepted", outcome: identityOutcome };
@@ -129,6 +143,10 @@ try {
           body = [{ id: id(60), asset_id: id(50), name: "net0", mac_address: "02:00:00:00:00:01", ip_address: "192.0.2.8" },
             { id: id(61), asset_id: id(51), name: "Hidden other-owner interface" }];
         }
+      }
+      else if (identityReadConflict && path === "/reconciliation-entities" && url.searchParams.get("search") === "Observed guest B") {
+        status = 409;
+        body = { detail: changedReason };
       }
       else if (path === "/reconciliation-entities") {
         let entities = [group()];
@@ -296,23 +314,55 @@ try {
     await identity.getByRole("button", { name: "Accept as replacement" }).click();
     await identity.getByLabel("Reason").fill("Verified replacement guest");
     if (accent === null) await identity.screenshot({ path: `${output}/identity-confirmation-${theme}-390.png` });
-    identityRevision = 6;
+    identityOmitted = true;
     await identity.getByRole("button", { name: "Confirm replacement" }).click();
     await page.getByText("Review the refreshed identity comparison before confirming again.").waitFor();
-    await identity.getByText("Newer guest evidence", { exact: true }).waitFor();
+    await identity.getByText(`Accept as replacement · ${omissionReason}`, { exact: true }).waitFor();
     assert.equal(await identity.getByLabel("Reason").count(), 0);
+    assert.equal(await identity.getByRole("button", { name: "Accept as replacement" }).count(), 0);
+    assert.equal(await identity.getByRole("button", { name: "Reactivate existing Asset" }).count(), 0);
+    assert.equal(identityOutcome, null);
+    identityOmitted = false;
+    identityRevision = 6;
+    await page.reload();
+    await identity.getByText("Newer guest evidence", { exact: true }).waitFor();
     await identity.getByRole("button", { name: "Accept as replacement" }).click();
     await identity.getByLabel("Reason").fill("Reviewed the refreshed comparison");
     await identity.getByRole("button", { name: "Confirm replacement" }).click();
     await identity.getByText("Accepted as a replacement", { exact: true }).waitFor();
     assert.equal(identityOutcome, "replace");
     identityOutcome = null;
+    identityAmbiguous = true;
+    await page.reload();
+    await identity.getByText(`Reactivate existing Asset · ${ambiguityReason}`, { exact: true }).waitFor();
+    await identity.getByText(`Accept as replacement · ${ambiguityReason}`, { exact: true }).waitFor();
+    assert.equal(await identity.getByRole("button", { name: /Reactivate existing Asset|Accept as replacement/ }).count(), 0);
+    checks.push({ surface: "identity-ambiguous-start", theme, accent });
+    identityAmbiguous = false;
+    identityReadConflict = true;
+    await page.reload();
+    await page.getByText(changedReason, { exact: true }).waitFor();
+    assert.equal(await identity.count(), 0);
+    checks.push({ surface: "identity-read-conflict", theme, accent });
+    identityReadConflict = false;
     relationshipOnly = true;
     await page.reload();
     await identity.getByText("This run did not include a guest payload.").waitFor();
     assert.equal(await identity.getByRole("button", { name: "Accept as replacement" }).count(), 0);
     await identity.getByRole("button", { name: "Reactivate existing Asset" }).click();
     await identity.getByLabel("Reason").fill("Confirmed the same guest from source context");
+    identityOmitted = true;
+    await identity.getByRole("button", { name: "Confirm same guest" }).click();
+    await page.getByText("Review the refreshed identity comparison before confirming again.").waitFor();
+    await identity.getByText(`Reactivate existing Asset · ${reactivateOmissionReason}`, { exact: true }).waitFor();
+    assert.equal(await identity.getByLabel("Reason").count(), 0);
+    assert.equal(await identity.getByRole("button", { name: "Reactivate existing Asset" }).count(), 0);
+    assert.equal(identityOutcome, null);
+    identityOmitted = false;
+    identityRevision = 8;
+    await page.reload();
+    await identity.getByRole("button", { name: "Reactivate existing Asset" }).click();
+    await identity.getByLabel("Reason").fill("Reviewed the fresh relationship evidence");
     await identity.getByRole("button", { name: "Confirm same guest" }).click();
     await identity.getByText("Confirmed as the same guest", { exact: true }).waitFor();
     assert.equal(identityOutcome, "reactivate");

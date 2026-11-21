@@ -31,17 +31,27 @@ Connector manifests, ingestion schemas or discovery behavior change.
 ## Additive API
 
 Proxmox Identity reviews expose `identity_review` with `expected_version`,
-current Asset status, observation time, outcome, and server-scoped action reasons.
+`replacement_expected_version`, current Asset status, observation time, outcome,
+and server-scoped action reasons.
 A null action reason means the action is available. `current_value_json` holds
 the authorized first-hold snapshot and `observed_value_json` holds the authorized
 latest preview. The grouped projection uses the same values. The `version` field
 on grouped items still belongs to ordinary reconciliation.
 
 `POST /reconciliation-items/{item_id}/identity-decision` accepts only
-`{outcome, expected_version, reason}`. `outcome` is `reactivate` or `replace`,
-`expected_version` comes from `identity_review`, and `reason` must be nonblank.
+`{outcome, expected_version, reason}`. Use `identity_review.expected_version`
+for `reactivate` and `identity_review.replacement_expected_version` for `replace`.
+Each version reflects the evidence required for that action, including any newer
+comparable complete omission or tied start among qualifying runs. Positive
+observations from successful partial runs participate in that check even when
+the selected comparison stays the same. Retained sealed conflicts, scoped
+corroboration Changes and sealed observations of corroborating Assets prevent
+confirmation versions from reverting after retraction or discovery refresh.
+The `reason` must be nonblank.
 Success returns the case ID, accepted status and chosen outcome. A stale version
 returns 409 and requires a new comparison. Case and scope mismatches return 404.
+A review GET also returns 409 if the selected case evidence changes during the
+read. Refresh to load the current comparison.
 [Identity transaction and evidence contract](proxmox-guest-identity-containment.md#operator-decision-contract).
 
 - `GET /reconciliation-entities` accepts status/category/source/run/entity-type

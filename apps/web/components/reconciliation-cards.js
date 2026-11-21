@@ -162,10 +162,11 @@ const withheldReasons = {
 };
 
 function GuestIdentityActions({ item, busy, decideIdentity }) {
-  const [selected, setSelected] = useState("");
+  const [selectedOutcome, setSelected] = useState("");
   const [reason, setReason] = useState("");
   const review = item.identity_review;
   if (!review) return null;
+  const selected = review.actions?.[selectedOutcome] === null ? selectedOutcome : "";
   function leavePending() {
     setSelected("");
     setReason("");
@@ -184,7 +185,7 @@ function GuestIdentityActions({ item, busy, decideIdentity }) {
     </div>}
     {item.status === "open" && !selected && <>
       {Object.entries(identityActions).map(([outcome, label]) => <div key={outcome}>
-        {review.actions?.[outcome] === null ? <Button type="button" variant="secondary" disabled={busy} onClick={() => setSelected(outcome)}>{label}</Button>
+        {review.actions?.[outcome] === null ? <Button type="button" variant="secondary" disabled={busy} onClick={() => { setReason(""); setSelected(outcome); }}>{label}</Button>
           : <p className="secondary-text"><strong>{label}</strong> · {review.actions?.[outcome]}</p>}
       </div>)}
       <p className="secondary-text">Close this review to leave it pending.</p>

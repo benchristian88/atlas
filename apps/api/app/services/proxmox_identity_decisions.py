@@ -3,20 +3,23 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import cached_property
 
 from fastapi import HTTPException
-from sqlalchemy import String, cast, literal_column, select
+from sqlalchemy import String, cast, func, literal_column, select
 
 from atlas_connector_sdk.aip import body_hash
 from app.authorization import refresh_principal
 from app.models import (Asset, AssetInterface, AssetRelationship, AssetType, ConnectorMapping, Customer, DataSource,
-    EntitySourceLink, Integration, KnowledgeAssertion, Network, ProxmoxGuestIdentityDecision, ReconciliationItem,
-    RelationshipType, Site)
+    DiscoveryRun, EntitySourceLink, Integration, KnowledgeAssertion, KnowledgeChange, Network, ProxmoxGuestIdentityDecision,
+    ReconciliationItem, RelationshipType, RunObservedEntity, Site)
 from app.services.connector_mappings import mapping_state
 from app.services.knowledge_locks import SUBJECT_MODELS, lock_subjects
 from app.services.proxmox_guest_bindings import GUEST_KEY, GuestBindings, attribution_epoch, historical_link, interface_guest
-from app.services.proxmox_guest_identity import REVIEW_TYPE, _pending_reviews
-from app.services.proxmox_identity_evidence import UNAVAILABLE_EVIDENCE, accepted_endpoint_evidence, reviewed_evidence
+from app.services.proxmox_guest_identity import REVIEW_TYPE, _pending_reviews, valid_guest_name
+from app.services.proxmox_identity_evidence import (
+    UNAVAILABLE_EVIDENCE, accepted_endpoint_evidence, held_observes_guest, newest_evidence_conflict, reviewed_evidence,
+)
 from app.utils.json_values import to_json_value
 
 READ_GRANTS = ("reconciliation.view", "assets.view")
@@ -26,6 +29,13 @@ DECISION_GRANTS = {
 }
 CHANGED = "This identity review changed; refresh and review the comparison before deciding."
 MISSING_GUEST = "Run discovery with this guest included to review it as a replacement."
+GUEST_OMITTED = "A newer complete discovery run did not observe this guest. Run discovery with the guest included and review the new evidence before choosing a replacement."
+REACTIVATION_GUEST_OMITTED = (
+    "A newer complete discovery run did not observe this guest. Run discovery and review fresh evidence before confirming the same guest."
+)
+AMBIGUOUS_DISCOVERY_START = (
+    "Comparable discovery runs have the same start time. Run discovery again with this guest included and review the fresh evidence before deciding."
+)
 ACTIVE_ASSET = "This Asset is active. Confirm the same guest, or review its lifecycle before choosing a replacement."
 OWNERSHIP_CONFLICT = "Review the source bindings and Interface ownership before choosing a replacement."
 MAPPING_REQUIRED = "Run discovery with a valid guest name and active Asset type mapping before choosing a replacement."
@@ -61,6 +71,7 @@ class ReleasePlan:
     withheld: dict = field(default_factory=dict)
     relationship_types: dict = field(default_factory=dict)
     proof_claims: dict = field(default_factory=dict)
+    proof_targets: set = field(default_factory=set)
     guest_type: str | None = None
     valid_guest_observation: bool = False
     conflicting_owner: bool = False
@@ -72,6 +83,8 @@ class IdentityReview:
     def __init__(self, db, item, claim):
         self.db, self.item, self.claim = db, item, claim
         self.key = item.candidate_external_id
+        slot = GUEST_KEY.fullmatch(self.key or "")
+        self.guest_class = f"proxmox.{slot[1]}" if slot else None
         self.source = db.get(DataSource, claim.data_source_id) if claim and claim.data_source_id else None
         self.asset = db.get(Asset, item.entity_id) if item.entity_id else None
         self.asset = self.asset if _scoped(item, self.asset) else None
@@ -94,8 +107,7 @@ class IdentityReview:
         self.decision = db.get(ProxmoxGuestIdentityDecision, item.id) if item.status == "accepted" else None
         if self.asset is not None:
             self.targets["asset"].add(self.asset.id)
-        if (not item.site_id or not _scoped(item, self.source) or not _scoped(item, claim)
-                or not GUEST_KEY.fullmatch(self.key or "")):
+        if not item.site_id or not _scoped(item, self.source) or not _scoped(item, claim) or not slot:
             return
         self.integration = db.scalar(select(Integration).where(Integration.data_source_id == self.source.id,
             Integration.customer_id == item.customer_id, Integration.site_id == item.site_id,
@@ -160,6 +172,7 @@ class IdentityReview:
         if (binding is None or binding.opened_epoch > evidence.run.identity_epoch
                 or binding.created_at > evidence.run.completed_at):
             return None
+        self.plan.proof_targets.add(binding.entity_id)
         for record, claim in accepted_endpoint_evidence(self.db, evidence.run, key, binding):
             epoch = attribution_epoch(self.db, claim)
             if epoch is None or historical_link(self.bindings.links[("asset", key)], epoch) != binding:
@@ -174,14 +187,13 @@ class IdentityReview:
         provenance = evidence.run.execution_provenance
         manifest = provenance["manifest"]
         declarations = {row["key"]: row for row in manifest["relationship_classes"]}
-        guest_class = "proxmox." + GUEST_KEY.fullmatch(self.key)[1]
+        guest_class = self.guest_class
         pending = set(self.db.scalars(_pending_reviews(self.item, self.source.id).with_only_columns(
             ReconciliationItem.candidate_external_id))) - {self.key}
         if evidence.guest:
             guest = evidence.guest.payload_json
-            name = guest.get("name")
             plan.valid_guest_observation = (guest["object_class"] == guest_class
-                and guest_class in provenance["object_classes"] and isinstance(name, str) and 0 < len(name.strip()) <= 255)
+                and guest_class in provenance["object_classes"] and valid_guest_name(guest.get("name")))
             if plan.valid_guest_observation:
                 plan.guest_type = self.allowed_mappings.get(("asset", guest_class))
         for record in evidence.held:
@@ -272,13 +284,31 @@ class IdentityReview:
                 list(self.db.scalars(select(model).where(model.id.in_(ids)).order_by(model.id)
                     .with_for_update(read=True, of=model).execution_options(populate_existing=True)))
 
+    def _proof_revision(self):
+        if not self.plan.proof_targets:
+            return 0, 0
+        # A retraction or a discovery refresh can return the original selected
+        # assertion. Both Changes and sealed memberships outlive that selection.
+        changes = self.db.scalar(select(func.count(KnowledgeChange.id)).where(
+            KnowledgeChange.customer_id == self.item.customer_id, KnowledgeChange.site_id == self.item.site_id,
+            KnowledgeChange.data_source_id == self.source.id, KnowledgeChange.entity_type == "asset",
+            KnowledgeChange.entity_id.in_(self.plan.proof_targets)))
+        observations = self.db.scalar(select(func.count(RunObservedEntity.id)).join(
+            DiscoveryRun, DiscoveryRun.id == RunObservedEntity.discovery_run_id).where(
+            RunObservedEntity.customer_id == self.item.customer_id, RunObservedEntity.site_id == self.item.site_id,
+            RunObservedEntity.data_source_id == self.source.id, RunObservedEntity.entity_type == "asset",
+            RunObservedEntity.entity_id.in_(self.plan.proof_targets), RunObservedEntity.evidence_record_id.is_not(None),
+            DiscoveryRun.integration_id == self.integration.id, DiscoveryRun.status == "completed",
+            DiscoveryRun.completed_at.is_not(None), DiscoveryRun.finalisation_hash.is_not(None)))
+        return changes, observations
+
     def version(self):
         item, claim, evidence = self.item, self.claim, self.evidence
         references = [[link.id, link.entity_type, link.external_id, link.entity_id, link.interface_id, link.interface_owner_id,
                        link.network_id, link.opened_epoch, link.ended_epoch] for link in sorted(self.referenced_links, key=lambda row: row.id)]
         subjects = [[kind, identifier, _row_revision(self.db, model, self.db.get(model, identifier))]
             for kind, model in SUBJECT_MODELS.items() for identifier in sorted(self.targets[kind])]
-        value = [item.id, item.status, item.updated_at, item.assertion_id, item.entity_id, self.key,
+        value = ["sealed-identity-evidence", item.id, item.status, item.updated_at, item.assertion_id, item.entity_id, self.key,
             item.current_value_json, self.asset.status if self.asset else None,
             self.asset.identity_retirement_revision if self.asset else None, subjects, references,
             self.integration.id if self.integration else None,
@@ -290,27 +320,83 @@ class IdentityReview:
             [claim.updated_at, claim.value_json, claim.is_source_current, claim.retracted_at, claim.superseded_by_id] if claim else None,
             [evidence.run.id, evidence.run.finalisation_hash, evidence.run.execution_provenance, evidence.receipt_hashes,
              [[row.id, row.payload_hash] for row in evidence.held]] if evidence else None,
-            sorted(self.plan.withheld.items()), sorted(self.plan.proof_claims.items())]
+            sorted(self.plan.withheld.items()), sorted(self.plan.proof_claims.items()), self._proof_revision()]
         return body_hash(to_json_value(value))
+
+    @cached_property
+    def binding_epoch_floor(self):
+        if self.binding is None or self.asset is None or self.binding.entity_id != self.asset.id:
+            return None
+        # Replacement opens a new link. Reactivate keeps the link and starts a
+        # new evidence window at the decision recorded for this guest slot.
+        return max(self.binding.opened_epoch, self.bindings.latest({("asset", self.key)}))
+
+    def _binding_matches_review(self):
+        return (self.binding_epoch_floor is not None
+                and self.binding_epoch_floor <= self.evidence.run.identity_epoch <= self.source.identity_epoch)
+
+    @cached_property
+    def sealed_positive(self):
+        return (self.evidence is not None and self.binding is not None
+                and held_observes_guest(self.evidence, self.key, self.binding, self.bindings))
+
+    def _can_confirm_identity(self):
+        return self.sealed_positive and (self.plan.valid_guest_observation or (
+            self.evidence is not None and self.evidence.guest is None and bool(self.plan.records)
+        ))
+
+    def _held_positive(self, claim_id):
+        evidence = reviewed_evidence(self.db, self.item, self.db.get(KnowledgeAssertion, claim_id),
+            self.integration, retained=True)
+        return evidence is not None and held_observes_guest(evidence, self.key, self.binding, self.bindings)
+
+    @cached_property
+    def freshness_conflict(self):
+        if (self.item.status != "open" or not self.sealed_positive or not self._binding_matches_review()
+                or self.asset.status not in {"active", "retired"}):
+            return None
+        run = self.evidence.run
+        if self.guest_class not in run.execution_provenance["object_classes"]:
+            return None
+        # Ingestion selects later held evidence under the same writer lock,
+        # including relationship-only evidence. Compare from that selected run's start.
+        return newest_evidence_conflict(self.db, run, self.key, self.guest_class, binding=self.binding,
+            binding_epoch_floor=self.binding_epoch_floor, source_epoch=self.source.identity_epoch,
+            held_positive=self._held_positive)
+
+    def version_for(self, version, outcome):
+        if outcome == "replace" and (not self.plan.valid_guest_observation or self.asset.status != "retired"):
+            return version
+        conflict = self.freshness_conflict
+        return body_hash(to_json_value([version, conflict])) if conflict else version
+
+    def _freshness_blocker(self, omission_reason):
+        if conflict := self.freshness_conflict:
+            return {"ambiguous_start": AMBIGUOUS_DISCOVERY_START, "omission": omission_reason,
+                    "newer_positive": CHANGED}[conflict.kind]
+        return None
 
     def blocked(self, outcome):
         if self.item.status != "open":
             return "This identity review has already been decided."
         if not self.evidence:
             return UNAVAILABLE_EVIDENCE
-        if (self.binding is None or self.asset is None or self.binding.entity_id != self.asset.id
-                or self.bindings.latest({("asset", self.key)}) > self.evidence.run.identity_epoch):
+        if not self._binding_matches_review():
             return "The current guest binding has changed. Run discovery to review current evidence."
         if self.evidence.guest and not self.plan.valid_guest_observation:
             return UNAVAILABLE_EVIDENCE
         if self.asset.status not in {"active", "retired"}:
             return LIFECYCLE_REQUIRED
         if outcome == "reactivate":
-            return None if self.plan.valid_guest_observation or self.plan.records else UNAVAILABLE_EVIDENCE
+            if not self._can_confirm_identity():
+                return UNAVAILABLE_EVIDENCE
+            return self._freshness_blocker(REACTIVATION_GUEST_OMITTED)
         if self.asset.status == "active":
             return ACTIVE_ASSET
         if self.evidence.guest is None:
             return MISSING_GUEST
+        if reason := self._freshness_blocker(GUEST_OMITTED):
+            return reason
         if self.plan.guest_type is None:
             return MAPPING_REQUIRED
         if not self.customer or not self.site or self.site.customer_id != self.customer.id or (
@@ -346,13 +432,27 @@ class IdentityReview:
                 observed.pop("relationship_count")
         outcome = self.decision.outcome if self.decision else None
         reasons = {outcome: self.action_reason(principal, outcome) for outcome in DECISION_GRANTS}
-        return {
+        version = self.version()
+        versions = {action: self.version_for(version, action) if _permitted(principal, self.item, grants) else version
+            for action, grants in DECISION_GRANTS.items()}
+        presentation = {
             "current": review_snapshot(self.db, principal, self.item), "observed": observed,
-            "review": {"expected_version": self.version(), "current_asset_status": self.asset.status if self.asset else None,
+            "review": {"expected_version": versions["reactivate"], "replacement_expected_version": versions["replace"],
+                "current_asset_status": self.asset.status if self.asset else None,
                 "observed_at": evidence.anchor.observed_at if evidence else None,
                 "outcome": outcome, "actions": reasons, "withheld": self._visible_withheld(principal)},
             "discovery_run_id": evidence.run.id if evidence else None,
         }
+        # A completion commits its run and the selected case evidence together.
+        # Re-read the case after projection so a READ COMMITTED request cannot
+        # publish an older comparison with that completion's freshness result.
+        item = self.item
+        selection = self.db.execute(select(ReconciliationItem.assertion_id, ReconciliationItem.status,
+            ReconciliationItem.updated_at).where(ReconciliationItem.id == item.id,
+            ReconciliationItem.customer_id == item.customer_id, ReconciliationItem.site_id == item.site_id)).one_or_none()
+        if selection != (item.assertion_id, item.status, item.updated_at):
+            raise HTTPException(409, CHANGED)
+        return presentation
 
     def _relationship_visible(self, principal, row):
         if not _permitted(principal, self.item, ("relationships.view",)):
@@ -374,7 +474,6 @@ class IdentityReview:
             return {}
         withheld = self.plan.withheld
         if self.decision:
-            from app.models import KnowledgeChange
             change = self.db.scalar(select(KnowledgeChange).where(
                 KnowledgeChange.reconciliation_item_id == self.item.id,
                 KnowledgeChange.change_type.in_(("identity_confirmed", "identity_replaced", "lifecycle_changed"))))
@@ -429,7 +528,9 @@ def lock_review(db, item_id, principal, context, payload):
     review = IdentityReview(db, item, claims.get(item.assertion_id))
     if (review.source is not source or review.integration is not integration
             or any(ids - initial.targets[kind] for kind, ids in review.targets.items())
-            or set(review.plan.proof_claims) - claims.keys() or review.version() != payload.expected_version):
+            or set(review.plan.proof_claims) - claims.keys()):
+        raise HTTPException(409, CHANGED)
+    if review.version_for(review.version(), payload.outcome) != payload.expected_version:
         raise HTTPException(409, CHANGED)
     if reason := review.blocked(payload.outcome):
         raise HTTPException(409, reason)

@@ -304,7 +304,7 @@ def finalise(db, run, row, message, *, failure=False):
         bindings = GuestBindings(db, run, source.id) if run.execution_provenance["connector_id"] == "proxmox" else None
         held = classify_guest_holds(db, run, links, evidence, bindings=bindings)
         _validate_references(db, run, messages, links, held)
-        record_guest_holds(db, run, held, evidence)
+        record_guest_holds(db, run, held, evidence, row, bindings)
         payload = SimpleNamespace(customer_id=run.customer_id, site_id=run.site_id,
             observations=[asset for external, asset in assets.items() if ("asset", external) not in held.observations])
         relationship_rows = [row for row in relationship_rows

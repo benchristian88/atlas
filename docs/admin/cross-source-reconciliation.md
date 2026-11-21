@@ -76,18 +76,32 @@ key and run, and compare assigned Networks with observed Network references.
 - **Reactivate existing Asset** confirms the same guest, retains its UUID and
   source binding, and sets a retired Asset to Active. If an operator already
   activated it manually, confirmation preserves that lifecycle declaration. A
-  verified relationship-only hold can qualify. The next eligible run uses the
-  same Asset UUID. A later retirement can open a new review.
+  verified relationship-only hold can qualify even when the run has no guest
+  Asset payload. The next eligible run uses the same Asset UUID. A later
+  retirement can open a new review.
 - **Accept as replacement** requires a retired Asset and a valid guest payload
   with an active Asset type mapping from the latest reviewed run. It creates a
   new Asset and ends the previous guest binding and applicable Interface source
   bindings in this DataSource. The retired Asset retains its Interfaces, Network
   assignments, relationships, history and other sources. The next eligible run
-  uses the new Asset UUID. If the guest payload is missing, run discovery with
-  the guest included. Resolve any reported ownership conflict before trying again.
+  uses the new Asset UUID. Resolve any reported ownership conflict before trying
+  again.
 - **Leave pending** closes the confirmation without saving. Closing the card or
   leaving the queue also leaves the hold open. Ordinary **Accept**, **Accept all**,
   linking, reject and defer cannot resolve an Identity review.
+
+A newer complete discovery run with matching coverage that omits the guest
+leaves the Identity review pending and disables both identity decisions.
+Successful partial runs can supply positive evidence for a guest they observe.
+When qualifying runs share the latest start time, Atlas keeps the comparison
+visible and requires fresh discovery before either decision. Retracting a
+supporting assertion leaves a recorded conflict pending. Observations that
+fail identity validation stay in history, and a qualifying positive can
+replace a diagnostic preview. A decision on
+another guest leaves this review's discovery history in scope. Run discovery
+again when the guest is present and review the fresh evidence before confirming.
+Replacement requires the guest Asset payload. Manual Asset status edits remain
+a separate lifecycle action and leave the Identity review pending.
 
 Enter a reason and confirm the action. Both decisions release eligible held
 observations into ordinary review. Fields, Interfaces, and relationships require

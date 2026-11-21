@@ -1101,6 +1101,7 @@ class KnowledgeAssertionResponse(ORMResponse):
 
 class IdentityReviewPresentation(BaseModel):
     expected_version: str
+    replacement_expected_version: str
     current_asset_status: str | None
     observed_at: datetime | None
     outcome: Literal["reactivate", "replace"] | None

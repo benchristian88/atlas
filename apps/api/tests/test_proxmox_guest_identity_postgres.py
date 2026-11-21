@@ -128,7 +128,8 @@ class Case:
     def stage(self, *, name=None, mac=MAC_A, bridge="vmbr0", node="node-a", extra=False,
               completeness="complete", coverage_key=None, stamp=None, observed_stamp=None,
               secondary=False, dependencies_only=False, mismatched_interface_owner=False,
-              guest_relationship_only=False, relationship_target=None, omit_network=False, dispatch_state="settled"):
+              guest_relationship_only=False, relationship_target=None, omit_network=False, dispatch_state="settled",
+              run_id=None):
         stamp = stamp or datetime.now(timezone.utc)
         with self.session() as db:
             coverage = dict(self.coverage, key=coverage_key or self.coverage["key"])
@@ -138,6 +139,8 @@ class Case:
                 execution_provenance=dict(self.provenance, coverage=coverage), dispatch_state=dispatch_state,
                 identity_epoch=db.get(DataSource, self.source_id).identity_epoch,
                 ingestion_generation=uuid.uuid4(), deadline_at=datetime.now(timezone.utc) + timedelta(minutes=5))
+            if run_id is not None:
+                run.id = run_id
             db.add(run)
             db.commit()
             headers = {"Authorization": "Bearer " + discovery_tokens.mint(run)}
@@ -348,7 +351,8 @@ def test_relationship_only_opens_hold_after_link_without_accepted_guest_fields(c
         claim = db.get(KnowledgeAssertion, uuid.UUID(review["assertion_id"]))
         assert claim.evidence_record_id == evidence.id
         assert claim.subject_id is None and claim.object_id is None and not claim.is_accepted
-        assert claim.value_json == {"guest_observed": False, "held_evidence_ids": [str(evidence.id)]}
+        assert claim.value_json == {"guest_observed": False, "identity_positive": True,
+                                    "held_evidence_ids": [str(evidence.id)]}
         run = db.get(DiscoveryRun, staged.id)
         assert run.status == "completed" and run.summary["reobserved_count"] == 0
     assert case.snapshot(prior) == before

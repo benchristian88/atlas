@@ -201,7 +201,44 @@ def _evidence_preview(guest, records):
     return preview
 
 
-def _record_review(db, run, asset, key, records, previous):
+def valid_guest_name(name):
+    return isinstance(name, str) and 0 < len(name.strip()) <= 255
+
+
+def observes_guest_at_seal(run, key, records, binding, bindings):
+    """Classify a hold after AIP reference validation using its original evidence."""
+    provenance = run.execution_provenance
+    guest_class = f"proxmox.{GUEST_KEY.fullmatch(key)[1]}"
+    if guest_class not in provenance["object_classes"]:
+        return False
+    guest = next((row for row in records if row.entity_kind == "asset"), None)
+    if guest:
+        payload = guest.payload_json
+        return (guest.external_id == key and payload["object_class"] == guest_class
+                and valid_guest_name(payload.get("name")))
+    declarations = {row["key"]: row for row in provenance["manifest"]["relationship_classes"]}
+    mapped_relationships = {row["source_key"] for row in provenance["mappings"] if row["kind"] == "relationship"
+        and row["resolved"] and not row["ignored"] and row["target_key"]}
+    for row in records:
+        payload = row.payload_json
+        if row.entity_kind == "relationship":
+            relationship_class = payload["relationship_class"]
+            sides = [side for side in ("source", "target") if payload[side]["external_id"] == key]
+            if (len(sides) == 1 and relationship_class in mapped_relationships
+                    and guest_class in declarations[relationship_class][sides[0] + "_object_classes"]):
+                return True
+        elif (row.entity_kind == "asset_interface" and payload["asset_external_id"] == key
+                and interface_guest(row.external_id) in {None, key}):
+            links = [link for link in bindings.links.get(("asset_interface", row.external_id), ())
+                if link.opened_epoch <= run.identity_epoch
+                and (run.completed_at is None or link.created_at <= run.completed_at)
+                and (link.ended_epoch is None or run.identity_epoch < link.ended_epoch)]
+            if not links or (len(links) == 1 and links[0].interface_owner_id == binding.entity_id):
+                return True
+    return False
+
+
+def _record_review(db, run, asset, key, records, previous, *, positive, previous_positive):
     from app.services.reconciliation import create_item
 
     item, previous_claim = previous if previous else (None, None)
@@ -213,7 +250,7 @@ def _record_review(db, run, asset, key, records, previous):
         confirmation_status="unreviewed", data_source_id=run.data_source_id,
         discovery_run_id=run.id, evidence_record_id=anchor.id,
         first_observed_at=anchor.observed_at, last_observed_at=anchor.observed_at,
-        value_json={"guest_observed": guest is not None,
+        value_json={"guest_observed": guest is not None, "identity_positive": positive,
                     "held_evidence_ids": [str(row.id) for row in records]},
         is_current=True, is_source_current=True, is_accepted=False,
     )
@@ -221,11 +258,11 @@ def _record_review(db, run, asset, key, records, previous):
     db.flush()
     if previous_claim:
         previous_run = db.get(DiscoveryRun, previous_claim.discovery_run_id)
-        # The server's run start orders the evidence across completions. Source
-        # clocks and request delivery order cannot make an older run win.
+        # A diagnostic hold cannot displace a positive. With comparable
+        # positives, preserve both claims and keep the preview stable on a tie.
         closed_at = max(anchor.observed_at, previous_claim.last_observed_at)
-        if (run.started_at, anchor.observed_at, run.id) <= (
-                previous_run.started_at, previous_claim.last_observed_at, previous_run.id):
+        if ((previous_positive and not positive)
+                or (previous_positive == positive and run.started_at <= previous_run.started_at)):
             mark_superseded(claim, previous_claim, closed_at)
             return False
         mark_superseded(previous_claim, claim, closed_at)
@@ -292,8 +329,10 @@ def classify_guest_holds(db, run, links, evidence, *, bindings=None):
     return result
 
 
-def record_guest_holds(db, run, holds, evidence):
+def record_guest_holds(db, run, holds, evidence, integration, bindings):
     """Record validated evidence in the same transaction as the run seal."""
+    from app.services.proxmox_identity_evidence import held_observes_guest, reviewed_evidence
+
     prior = [hold.previous_review for hold in holds.by_key.values() if hold.previous_review]
     if prior:
         for model, identifiers in (
@@ -303,6 +342,18 @@ def record_guest_holds(db, run, holds, evidence):
             list(db.scalars(select(model).where(model.id.in_(identifiers)).order_by(model.id).with_for_update()))
     for key, hold in holds.by_key.items():
         records = [evidence[identity] for identity in sorted(hold.observations)]
-        created = _record_review(db, run, hold.retired_asset, key, records, hold.previous_review)
+        binding = bindings.current(("asset", key))
+        positive = observes_guest_at_seal(run, key, records, binding, bindings)
+        previous_positive = False
+        if hold.previous_review:
+            item, claim = hold.previous_review
+            marker = claim.value_json.get("identity_positive") if isinstance(claim.value_json, dict) else None
+            if isinstance(marker, bool):
+                previous_positive = marker
+            else:
+                previous = reviewed_evidence(db, item, claim, integration)
+                previous_positive = previous is not None and held_observes_guest(previous, key, binding, bindings)
+        created = _record_review(db, run, hold.retired_asset, key, records, hold.previous_review,
+            positive=positive, previous_positive=previous_positive)
         holds.items_created += int(created)
         holds.assertions_created += 1
