@@ -59,7 +59,8 @@ application-UID child and enables `no-new-privileges`. A successful pytest exit
 and JUnit evidence of at least all 83 cases, every selected module and no skips,
 errors or failures are required. `always()` cleanup removes this project's
 containers, network, database volume and protected configuration, including on
-test/build failure. The backend's existing 20-minute timeout remains in force.
+test/build failure. The 60-minute backend job timeout covers both the ordinary
+regression and the root-only Docker build and regression.
 
 Ubuntu 24.04's nginx 1.24 cannot validate the gateway's upstream `resolve`
 directive. CI builds nginx 1.28.3 from an official HTTPS archive checked against

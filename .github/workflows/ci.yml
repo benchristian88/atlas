@@ -26,7 +26,7 @@ jobs:
   backend:
     name: Backend / PostgreSQL
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       PYTHONPATH: ${{ github.workspace }}/plugins/sdk:${{ github.workspace }}/plugins/proxmox
       ATLAS_TEST_H3_REDIS_URL: redis://127.0.0.1:6379/0
