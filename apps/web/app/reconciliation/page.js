@@ -130,9 +130,11 @@ export default function ReconciliationPage() {
     setNotice("");
     setOutcome(null);
     try {
+      const review = item.identity_review;
+      const expectedVersion = outcome === "replace" ? (review.replacement_expected_version ?? review.expected_version) : review.expected_version;
       await apiRequest(`/reconciliation-items/${item.id}/identity-decision`, {
         method: "POST",
-        body: JSON.stringify({ outcome, expected_version: item.identity_review.expected_version, reason }),
+        body: JSON.stringify({ outcome, expected_version: expectedVersion, reason }),
       });
       if (activeLoadKey.current === actionKey) {
         await load();

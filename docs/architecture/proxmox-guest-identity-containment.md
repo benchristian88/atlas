@@ -162,12 +162,48 @@ review item and assertion locks. It reads the sealed run without a Run writer
 lock. It compares a version covering the selected evidence, canonical row
 revisions and relevant mappings after reloading the scoped grants and records.
 
+Both identity decisions compare qualifying sealed, successful Proxmox runs for
+the same Integration, DataSource, Customer, Site, coverage key and guest object
+class. Complete and partial runs can supply positive evidence for a guest
+explicitly observed in that run. A held Asset membership confirms presence even
+when its Asset UUID is unassigned. Verified relationship-only evidence can
+supply a Reactivate comparison without an Asset membership. Only a qualifying
+complete run can establish an omission. Failed and simulated runs are outside
+this comparison. The evidence window begins
+at the current binding's opening epoch or the latest identity decision for this
+guest slot, whichever is later. Reactivate keeps the Asset binding and starts a
+new evidence window. Replacement ends the old binding and opens the successor's
+window, including when it reuses the same VMID. An unrelated guest decision
+leaves this window intact, so comparable runs can span multiple source epochs.
+At seal, Atlas records whether each hold establishes positive guest evidence
+alongside the retained receipt and claims. Diagnostic holds stay in history.
+The preview prefers a qualifying positive and orders qualifying positives by
+server run start time. When two qualifying runs tie, ingestion keeps the
+current preview and both claims. GET and locked POST compare the same sealed
+evidence and require a fresh discovery for a tie or a newer complete omission.
+
+Current ownership, mappings and accepted corroboration determine what the
+selected comparison can release. Retraction changes release eligibility and
+preserves any established conflict. The confirmation version includes the
+sealed conflict, scoped Changes and sealed observations of corroborating
+Assets. A previously used proof cannot restore an earlier version after
+retraction or discovery refresh. Assertion retraction
+and identity decisions serialize on the DataSource writer lock. A later
+unambiguous positive supplies a new comparison for explicit confirmation.
+The post-decision absence baseline continues to require an attributed complete
+run.
+
+Read-only review responses recheck the selected case evidence after building
+the comparison. A concurrent update to the selection returns HTTP 409 with a
+refresh message. This recheck uses a plain read and takes no writer locks.
+
 The release checks hashes for the original receipt and each held payload, exact
 run membership, pinned Connector manifest and mappings, typed owners and
-relationship roles. A reviewed omitted guest can establish its own side of a
-relationship in Reactivate. The other endpoint needs positive run evidence or an
-accepted assertion on its exact binding. An unlinked host remains a normal
-prerequisite. Each eligible record yields fresh proposals at the decision epoch.
+relationship roles. A guest with reviewed relationship-only evidence can
+establish its own side of a relationship in Reactivate. The other endpoint needs
+positive run evidence or an accepted assertion on its exact binding. An unlinked
+host remains a normal prerequisite. Each eligible record yields fresh proposals
+at the decision epoch.
 The original run, receipt, membership and presence assertion are preserved.
 Changes record released and withheld evidence; the card applies Network and
 relationship visibility when explaining withheld observations.

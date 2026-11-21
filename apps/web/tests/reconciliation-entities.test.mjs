@@ -103,6 +103,20 @@ test("guest identity review shows current status, retained configuration and ser
   assert.match(html, />Reactivate existing Asset<\/button>/);
   assert.match(html, /This Asset is active/);
   assert.doesNotMatch(html, />Accept as replacement<\/button>|Accept all|Link an existing asset/);
+  const omitted = render({ ...entity, parent: { ...hold, identity_review: { ...hold.identity_review,
+    current_asset_status: "retired", replacement_expected_version: "b".repeat(64),
+    actions: { reactivate: "Review fresh evidence before confirming the same guest.",
+      replace: "A newer complete discovery run did not observe this guest." } } },
+    sections: [], decision_items: [] });
+  assert.match(omitted, /A newer complete discovery run did not observe this guest/);
+  assert.match(omitted, /Review fresh evidence before confirming the same guest/);
+  assert.doesNotMatch(omitted, />Reactivate existing Asset<\/button>|>Accept as replacement<\/button>/);
+  const sameStart = "Comparable discovery runs have the same start time. Run discovery again with this guest included and review the fresh evidence before deciding.";
+  const ambiguous = render({ ...entity, parent: { ...hold, identity_review: { ...hold.identity_review,
+    current_asset_status: "retired", actions: { reactivate: sameStart, replace: sameStart } } },
+    sections: [], decision_items: [] });
+  assert.equal(ambiguous.match(/Comparable discovery runs have the same start time/g)?.length, 2);
+  assert.doesNotMatch(ambiguous, />Reactivate existing Asset<\/button>|>Accept as replacement<\/button>/);
   const readOnly = render({ ...entity, parent: { ...hold, identity_review: { ...hold.identity_review,
     actions: { reactivate: "Permission required", replace: "Permission required" } } }, sections: [], decision_items: [] });
   assert.doesNotMatch(readOnly, /<button/);
