@@ -3,7 +3,7 @@
 import { Button } from "../../../components/button";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { AccessDenied } from "../../../components/access-denied";
 import { EntityDetailHeader, EntitySection } from "../../../components/entity-detail";
@@ -15,6 +15,7 @@ import { CompletenessPanel } from "../../../components/completeness-panel";
 import { DependencyAnalysisPanel } from "../../../components/dependency-analysis-panel";
 import { useAuth } from "../../../components/auth-context";
 import { StatusBadge } from "../../../components/status-badge";
+import { Section } from "../../../components/section";
 import { TimelineEvent } from "../../../components/timeline-event";
 import { useWorkspaceContext } from "../../../components/workspace-context";
 import { apiRequest } from "../../../lib/api";
@@ -79,6 +80,21 @@ export default function AssetDetailPage() {
   const [knowledgeTab, setKnowledgeTab] = useState("summary");
   const [relationshipForm, setRelationshipForm] = useState({ target_asset_id: "", relationship_type: "", notes: "" });
   const [showRelationshipForm, setShowRelationshipForm] = useState(false);
+  const [relationshipError, setRelationshipError] = useState("");
+  const relationshipHeading = useRef(null);
+  const [relationshipRefreshFocus, setRelationshipRefreshFocus] = useState(null);
+  const restoreRelationshipFocus = useRef(false);
+  const focusRelationshipAction = useCallback((button) => {
+    if (button && restoreRelationshipFocus.current) {
+      restoreRelationshipFocus.current = false;
+      button.focus();
+    }
+  }, []);
+  const focusRelationshipError = useCallback((summary) => {
+    if (!summary) return;
+    summary.focus({ preventScroll: true });
+    summary.scrollIntoView({ block: "nearest" });
+  }, []);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -134,6 +150,11 @@ export default function AssetDetailPage() {
   }, [canView, hasPermission, hasPermissionForObject, id, interfaceListPath]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (loading || !relationshipRefreshFocus) return;
+    setRelationshipRefreshFocus(null);
+    if (relationshipRefreshFocus === id && asset?.id === id) relationshipHeading.current?.focus();
+  }, [asset?.id, id, loading, relationshipRefreshFocus]);
   const assetTypesByKey = useMemo(() => Object.fromEntries(assetTypes.map((type) => [type.key, type])), [assetTypes]);
   const assetsById = useMemo(() => Object.fromEntries(assets.map((item) => [item.id, item])), [assets]);
   if (!canView) return <AccessDenied />;
@@ -202,20 +223,30 @@ export default function AssetDetailPage() {
   async function createRelationship(event) {
     event.preventDefault();
     setSaving(true);
-    setError("");
+    setRelationshipError("");
     try {
       await apiRequest("/asset-relationships", { method: "POST", body: JSON.stringify({ source_asset_id: asset.id, target_asset_id: relationshipForm.target_asset_id, relationship_type: relationshipForm.relationship_type, notes: relationshipForm.notes || null }) });
       setRelationshipForm({ target_asset_id: "", relationship_type: "", notes: "" });
       setShowRelationshipForm(false);
       await load();
-    } catch (requestError) { setError(requestError.message || "Atlas could not create this relationship."); }
-    finally { setSaving(false); }
+      setRelationshipRefreshFocus(id);
+    } catch (requestError) {
+      const detail = requestError.status >= 400 && requestError.status < 500 && requestError.message;
+      setRelationshipError(detail ? `Could not save relationship. ${detail}` : "Atlas could not create this relationship.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function removeRelationship(edge) {
     if (!window.confirm(`Delete the ${edge.relationship_type} relationship?`)) return;
-    try { await apiRequest(`/asset-relationships/${edge.id}`, { method: "DELETE" }); await load(); }
-    catch (requestError) { setError(requestError.message); }
+    try {
+      await apiRequest(`/asset-relationships/${edge.id}`, { method: "DELETE" });
+      await load();
+      setRelationshipRefreshFocus(id);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   }
 
   async function refreshNetworking() {
@@ -250,6 +281,7 @@ export default function AssetDetailPage() {
       <EntityDetailHeader type="asset" record={asset} reference={assetType} id={id} name={asset.name} description={asset.description} subtitle={`${customer?.name || "Unknown customer"} / ${site?.name || "Unknown site"} · ${assetType?.name || asset.asset_type}`} state={asset.status} completeness={completeness?.summary} canViewCompleteness={hasPermissionForObject("knowledge_gaps.view", asset.customer_id, asset.site_id)} canGraph={hasPermissionForObject("service_dependencies.view", asset.customer_id, asset.site_id)} actions={canEdit && <Link className="button button-secondary" href={`/assets/${id}/edit`}>Edit asset</Link>} />
       {searchParams.get("updated") === "1" && <div className="success-banner" role="status">Asset updated successfully.</div>}
       {error && <div className="error-banner" role="alert">{error}</div>}
+      {completeness && <CompletenessPanel assetId={asset.id} canDefer={hasPermissionForObject("knowledge_gaps.defer", asset.customer_id, asset.site_id)} canEvaluate={hasPermissionForObject("knowledge_completeness.evaluate", asset.customer_id, asset.site_id)} canExcept={hasPermissionForObject("knowledge_gaps.exception", asset.customer_id, asset.site_id)} completeness={completeness} onChanged={refreshCompleteness} />}
       <EntitySection title="Asset details"><div className="detail-grid">
         <div><span>Status</span><strong><StatusIndicator state={asset.status} /></strong></div><div><span>Type</span><strong>{assetType?.name || asset.asset_type}</strong></div><div><span>Source</span><strong>{asset.source}</strong></div>
         <div><span>Vendor</span><strong>{asset.vendor || "—"}</strong></div><div><span>Model</span><strong>{asset.model || "—"}</strong></div>
@@ -260,7 +292,6 @@ export default function AssetDetailPage() {
       {Object.keys(asset.custom_fields || {}).length > 0 && <section className="detail-card"><div className="form-card-header"><h2>Custom enrichment</h2></div><div className="detail-grid">{Object.entries(asset.custom_fields).map(([key, value]) => { const definition = customDefinitions.find((item) => item.key === key); return <div key={key}><span>{definition?.name || key}</span><strong>{displayCustomValue(definition, value)}</strong></div>; })}</div></section>}
 
       {hasPermissionForObject("service_dependencies.view", asset.customer_id, asset.site_id) && <DependencyAnalysisPanel focusType="asset" focusId={asset.id} />}
-      {completeness && <CompletenessPanel assetId={asset.id} canDefer={hasPermissionForObject("knowledge_gaps.defer", asset.customer_id, asset.site_id)} canEvaluate={hasPermissionForObject("knowledge_completeness.evaluate", asset.customer_id, asset.site_id)} canExcept={hasPermissionForObject("knowledge_gaps.exception", asset.customer_id, asset.site_id)} completeness={completeness} onChanged={refreshCompleteness} />}
 
       <AssetNetworking
         assetId={asset.id} canCreateInterface={canCreateInterface} canDeleteInterface={canDeleteInterface}
@@ -269,9 +300,75 @@ export default function AssetDetailPage() {
         onChanged={refreshNetworking}
       />
 
-      {canViewRelationships && <><section className="form-card"><div className="form-card-header"><h2>Relationships</h2>{canCreateRelationship && relationshipTypes.length > 0 && !showRelationshipForm && <Button variant="primary" onClick={() => setShowRelationshipForm(true)} type="button">Add relationship</Button>}</div>
-        {showRelationshipForm && <form onSubmit={createRelationship}><div className="form-grid"><label className="field"><span>Source</span><input disabled value={asset.name} /></label><label className="field"><span>Target asset *</span><select required value={relationshipForm.target_asset_id} onChange={(event) => setRelationshipForm({ ...relationshipForm, target_asset_id: event.target.value, relationship_type: "" })}><option value="">Select same-site asset</option>{sameSiteAssets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="field"><span>Relationship type *</span><select required value={relationshipForm.relationship_type} onChange={(event) => setRelationshipForm({ ...relationshipForm, relationship_type: event.target.value })}><option value="">Select relationship</option>{allowedRelationshipTypes.map((type) => <option key={type.key} value={type.key}>{type.name}</option>)}</select></label><label className="field field-wide"><span>Notes</span><textarea value={relationshipForm.notes} onChange={(event) => setRelationshipForm({ ...relationshipForm, notes: event.target.value })} /></label></div><div className="form-actions"><Button variant="secondary" onClick={() => setShowRelationshipForm(false)} type="button">Cancel</Button><Button variant="primary" disabled={saving} type="submit">Add relationship</Button></div></form>}
-      </section><section className="table-card"><div className="table-meta"><span>{relationships.length} relationships</span></div>{relationships.length === 0 ? <p className="empty-state">No relationships yet.</p> : <div className="relationship-list">{relationships.map((edge) => { const type = relationshipTypes.find((item) => item.key === edge.relationship_type); return <div className="relationship-row" key={edge.id}><span><strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name || "Unknown"}</strong> → {type?.name || edge.relationship_type} → <strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name || "Unknown"}</strong>{edge.notes ? ` — ${edge.notes}` : ""}</span>{canDeleteRelationship && <button className="text-button text-danger" onClick={() => removeRelationship(edge)} type="button">Delete</button>}</div>; })}</div>}</section></>}
+      {canViewRelationships && (
+        <Section
+          className="ops-card entity-section asset-relationships"
+          title="Relationships"
+          headingRef={canCreateRelationship || canDeleteRelationship ? relationshipHeading : undefined}
+          actions={canCreateRelationship && relationshipTypes.length > 0 && !showRelationshipForm && (
+            <Button ref={focusRelationshipAction} variant="primary" onClick={() => {
+              setRelationshipError("");
+              setShowRelationshipForm(true);
+            }}>Add relationship</Button>
+          )}
+        >
+          {showRelationshipForm && (
+            <form onSubmit={createRelationship}>
+              <div className="form-grid">
+                <label className="field"><span>Source</span><input disabled value={asset.name} /></label>
+                <label className="field">
+                  <span>Target asset *</span>
+                  <select autoFocus required value={relationshipForm.target_asset_id} onChange={(event) => setRelationshipForm({ ...relationshipForm, target_asset_id: event.target.value, relationship_type: "" })}>
+                    <option value="">Select same-site asset</option>
+                    {sameSiteAssets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Relationship type *</span>
+                  <select required value={relationshipForm.relationship_type} onChange={(event) => setRelationshipForm({ ...relationshipForm, relationship_type: event.target.value })}>
+                    <option value="">Select relationship</option>
+                    {allowedRelationshipTypes.map((type) => <option key={type.key} value={type.key}>{type.name}</option>)}
+                  </select>
+                </label>
+                <label className="field field-wide"><span>Notes</span><textarea value={relationshipForm.notes} onChange={(event) => setRelationshipForm({ ...relationshipForm, notes: event.target.value })} /></label>
+              </div>
+              {relationshipError && <div
+                className="error-banner"
+                role="group"
+                aria-labelledby="relationship-save-error"
+                tabIndex={-1}
+                ref={focusRelationshipError}
+              ><span id="relationship-save-error">{relationshipError}</span></div>}
+              <div className="form-actions">
+                <Button variant="secondary" onClick={() => {
+                  restoreRelationshipFocus.current = true;
+                  setShowRelationshipForm(false);
+                }}>Cancel</Button>
+                <Button variant="primary" disabled={saving} type="submit">Add relationship</Button>
+              </div>
+            </form>
+          )}
+          <p className="ops-meta">{relationships.length} relationships</p>
+          {relationships.length === 0 ? <p className="empty-state">No relationships yet.</p> : (
+            <div className="relationship-list">
+              {relationships.map((edge) => {
+                const type = relationshipTypes.find((item) => item.key === edge.relationship_type);
+                return (
+                  <div className="relationship-row" key={edge.id}>
+                    <span>
+                      <strong>{edge.source_asset_name || assetsById[edge.source_asset_id]?.name || "Unknown"}</strong>
+                      {" → "}{type?.name || edge.relationship_type}{" → "}
+                      <strong>{edge.target_asset_name || assetsById[edge.target_asset_id]?.name || "Unknown"}</strong>
+                      {edge.notes ? ` — ${edge.notes}` : ""}
+                    </span>
+                    {canDeleteRelationship && <button className="text-button text-danger" onClick={() => removeRelationship(edge)} type="button">Delete</button>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+      )}
 
       <section className="knowledge-card"><div className="form-card-header"><div><p className="eyebrow">Knowledge</p><h2>Asset knowledge</h2></div>{knowledgeSummary && (knowledgeSummary.conflict_count > 0 || knowledgeSummary.unresolved_count > 0 || knowledgeSummary.consistency_issue_count > 0) && <StatusBadge status="Needs review" />}</div><div className="knowledge-tabs" role="tablist" aria-label="Asset knowledge views">{[["summary", "Summary"], ["history", "History"], ["raw", "Raw assertions"]].map(([value, label]) => <button aria-selected={knowledgeTab === value} className={knowledgeTab === value ? "active" : ""} key={value} onClick={() => setKnowledgeTab(value)} role="tab" type="button">{label}</button>)}</div>
         {knowledgeTab === "summary" && <AssetKnowledgeSummary groups={knowledgeGroups} />}

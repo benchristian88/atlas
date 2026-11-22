@@ -791,8 +791,11 @@ tbody tr:hover { background: var(--surface-muted); }
 .detail-grid > div { display: grid; gap: 6px; }
 .detail-grid span { color: var(--muted); font-size: var(--type-meta); text-transform: uppercase; }
 .detail-grid strong { font-size: var(--type-compact); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.relationship-list { display: grid; }
-.relationship-row { align-items: center; border-top: 1px solid var(--border); display: flex; font-size: var(--type-compact); gap: 20px; justify-content: space-between; padding: var(--space-3) var(--space-4); }
+.asset-relationships > form { border-bottom: 1px solid var(--border); margin-bottom: var(--space-4); padding-bottom: var(--space-4); }
+.asset-relationships .relationship-list { display: grid; }
+.asset-relationships .relationship-row { align-items: center; border-top: 1px solid var(--border); display: flex; gap: var(--space-3); justify-content: space-between; padding: var(--space-2) 0; }
+.asset-relationships .relationship-row > span { min-width: 0; overflow-wrap: anywhere; }
+.asset-relationships .relationship-row > button { min-height: var(--control-height); padding-inline: var(--space-2); }
 .topology-tree { display: grid; gap: 18px; }
 .topology-customer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); padding: 20px; }
 .topology-customer h2 { font-size: 19px; margin: 0 0 16px; }
