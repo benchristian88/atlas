@@ -11,8 +11,9 @@ import { Navigation } from "./navigation";
 import { useWorkspaceContext } from "./workspace-context";
 import { logout } from "../lib/auth";
 import { accentThemeStyle } from "../lib/accent-theme.mjs";
+import onboardingStyles from "./onboarding.module.css";
 
-export function AppShell({ children }) {
+export function AppShell({ children, focused = false }) {
   const router = useRouter();
   const { user, resolvedThemeMode } = useAuth();
   const version = useBuildInfo()?.version;
@@ -37,24 +38,24 @@ export function AppShell({ children }) {
 
   return (
     <div className="app-shell" style={accentThemeStyle(user.accent_colour, resolvedThemeMode)}>
-      <aside className="sidebar">
+      {!focused && <aside className="sidebar">
         <AtlasBrand href={authenticatedHome(user)} variant={sidebarBrandVariant} />
         <Navigation />
         {version && <div className="sidebar-footer">Atlas {version}</div>}
-      </aside>
-      <div className="content">
-        <header className="topbar">
-          <ContextSelector />
+      </aside>}
+      <div className={focused ? undefined : "content"}>
+        <header className={focused ? onboardingStyles.topbar : "topbar"}>
+          {focused ? <AtlasBrand href={authenticatedHome(user)} variant={sidebarBrandVariant} /> : <ContextSelector />}
           <AccountMenu onLogout={signOut} signingOut={signingOut} user={user} />
         </header>
-        {workspace.error && (
+        {!focused && workspace.error && (
           <div className="shell-error error-banner" role="alert">
             <span>{workspace.error}</span>
             <button className="text-button" onClick={workspace.reload} type="button">Try again</button>
           </div>
         )}
         {logoutError && <div className="shell-error error-banner" role="alert">{logoutError}</div>}
-        <main className="page-content" key={workspace.reloadKey}>{children}</main>
+        <main className={focused ? onboardingStyles.main : "page-content"} key={focused ? "onboarding" : workspace.reloadKey}>{children}</main>
       </div>
     </div>
   );

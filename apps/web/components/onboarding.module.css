@@ -1,0 +1,148 @@
+.topbar {
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: 0 var(--space-5);
+}
+
+.topbar :global(.atlas-brand) {
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.topbar :global(.atlas-brand-logo) { max-width: 128px; }
+
+.main {
+  margin-inline: auto;
+  max-width: 1480px;
+  padding: var(--space-6);
+}
+
+.layout, .session {
+  align-items: start;
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(180px, 216px) minmax(0, 1fr);
+}
+
+.session {
+  grid-template-areas: "stage summary";
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 232px);
+}
+
+.stagePanel { grid-area: stage; }
+.summary { grid-area: summary; }
+
+.rail ol {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rail li {
+  align-items: start;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  display: grid;
+  font-size: var(--type-compact);
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: var(--space-2);
+}
+
+.rail li[aria-current="step"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-soft-foreground);
+}
+
+.rail small, .profiles small { color: var(--muted); display: block; }
+.rail li[aria-current="step"] small { color: inherit; }
+
+.stepNumber {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.panel, .summary { overflow-wrap: anywhere; }
+.panel :global(.section), .summary :global(.section) { margin: 0; }
+
+.invitation {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.invitation h2, .invitation p { margin: 0; }
+.invitation p { color: var(--muted); }
+
+.actions, .footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+}
+
+.fields {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: var(--space-3);
+}
+
+.fields select { min-width: 0; }
+
+.editor, .profiles {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.editor h3 { margin: 0; }
+.profiles label { display: block; }
+.profiles input { accent-color: var(--accent); }
+.profiles small { margin-inline-start: var(--space-6); }
+.summary dl, .summary dd { margin: 0; }
+.summary dl { display: grid; gap: var(--space-3); }
+.summary dt { color: var(--muted); font-size: var(--type-label); }
+
+@media (max-width: 1024px) {
+  .session {
+    grid-template-areas: "summary" "stage";
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .main { padding: var(--space-4); }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .rail ol { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .footer { justify-content: flex-start; }
+}

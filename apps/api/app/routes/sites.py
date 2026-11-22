@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, require_permission, require_scope, scope_condition
 from app.database import get_db
-from app.models import AccessAssignment, Asset, Customer, Integration, Network, Site
+from app.models import AccessAssignment, Asset, Customer, Integration, Network, Site, SiteOnboarding
 from app.routes.crud_helpers import apply_changes, commit, flush, has_retained_context_reference, not_found
 from app.schemas import SiteCreate, SiteResponse, SiteUpdate
 
@@ -28,7 +28,9 @@ def _dependent_count(db: Session, site_id: uuid.UUID) -> int:
             (Integration, Integration.site_id),
             (AccessAssignment, AccessAssignment.site_id),
         )
-    )
+    ) + int(db.scalar(select(func.count()).select_from(SiteOnboarding).where(
+        SiteOnboarding.site_id == site_id, SiteOnboarding.draft_only.is_(False),
+    )) or 0)
 
 
 @router.get("", response_model=list[SiteResponse])

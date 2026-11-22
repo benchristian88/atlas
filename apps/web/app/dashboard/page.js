@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
+import { OnboardingEntry } from "../../components/onboarding-entry";
 import { PageHeader } from "../../components/page-header";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { ServiceLandscape } from "../../components/service-landscape";
@@ -111,6 +112,7 @@ export default function DashboardPage() {
   }, [canView, canGraph, hasPermission, workspace.customerId, workspace.siteId, retry]);
   if (!canView) return <AccessDenied />;
   return <div className="operations-page"><PageHeader title="Dashboard" description="Your environment, built from recorded knowledge." />
+    <OnboardingEntry key={workspace.reloadKey} customerId={workspace.customerId} siteId={workspace.siteId} />
     {!workspace.customerId || !workspace.siteId ? <section className="ops-card"><h2>Set up your environment</h2><p>Select a Customer and Site to build your service landscape.</p>{hasPermission("sites.manage") && <Link className="text-button" href="/admin/sites">Manage Sites →</Link>}</section> : <>
       {error && <div className="error-banner" role="alert">{error} <button className="text-button" onClick={() => setRetry((n) => n + 1)} type="button">Try again</button></div>}
       <div className="ops-dashboard">{WIDGETS.map((widget) => { const Component = widgetComponents[widget.id]; return <div className={`widget-${widget.id}`} data-widget-id={widget.id} key={widget.id}><Component {...data} workspace={workspace} hasPermission={hasPermission} /></div>; })}</div>

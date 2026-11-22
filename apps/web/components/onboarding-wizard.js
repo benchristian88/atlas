@@ -1,0 +1,354 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiRequest } from "../lib/api";
+import { canContinueSetup, initialEnvironment, onboardingPath, PROFILES, STAGES } from "../lib/onboarding.mjs";
+import { authenticatedHome, useAuth } from "./auth-context";
+import { Button } from "./button";
+import { PageHeader } from "./page-header";
+import { Section, Surface } from "./section";
+import styles from "./onboarding.module.css";
+
+const request = (path, options) => apiRequest(path, { ...options, omitContext: true });
+const write = (path, method, values) => request(path, { method, body: JSON.stringify(values) });
+const decisionLabels = { completed: "Completed", skipped: "Skipped", attention: "Needs attention" };
+
+function Wizard({ stage, decisions = {}, onEnvironment, children }) {
+  return <>
+    <PageHeader title="Guided setup" description="Set up one Site at a time." />
+    <div className={styles.layout}>
+      <nav aria-label="Setup stages" className={styles.rail}>
+        <ol>
+          {STAGES.map(([key, title], index) => {
+            const label = decisionLabels[decisions[key]] || (stage === key && key === "environment" ? "In progress" : "Pending");
+            return <li key={key} aria-current={stage === key ? "step" : undefined}>
+              <span className={styles.stepNumber} aria-hidden="true">{index + 1}</span>
+              <div>
+                {key === "environment" && onEnvironment
+                  ? <button className="text-button" type="button" onClick={onEnvironment}>{title}</button>
+                  : <strong>{title}</strong>}
+                <small>{label}</small>
+              </div>
+            </li>;
+          })}
+        </ol>
+      </nav>
+      {children}
+    </div>
+  </>;
+}
+
+function Feedback({ error, retry, busy }) {
+  const errorRef = useRef(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  if (!error) return null;
+  return <div className="error-banner" role="alert" tabIndex={-1} ref={errorRef}>
+    {error.message}
+    {retry && <> <Button onClick={retry} disabled={busy}>Reload progress</Button></>}
+  </div>;
+}
+
+function Unavailable({ error, retry, recovery = false }) {
+  const { user } = useAuth();
+  const blocked = [403, 404, 422].includes(error?.status);
+  return <Surface>
+    <Feedback error={blocked ? new Error("Guided setup is unavailable for this selection.") : error} />
+    <div className={styles.actions}>
+      {!blocked && <Button onClick={retry}>Try again</Button>}
+      {recovery && <Button href="/onboarding">Choose another Site</Button>}
+      <Button href={authenticatedHome(user)}>Return to Atlas</Button>
+    </div>
+  </Surface>;
+}
+
+function NameEditor({ operation, onSave, onCancel, onRefresh }) {
+  const [name, setName] = useState(operation.name || "");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const input = useRef(null);
+  const entity = operation.kind === "customer" ? "Customer" : "Site";
+  const label = operation.id ? `Rename ${entity}` : `Create ${entity}`;
+
+  useEffect(() => { input.current?.focus(); }, []);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave(operation, name.trim());
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <form onSubmit={submit} className={styles.editor} aria-label={label}>
+    <h3>{label}</h3>
+    <label className="field">{entity} name
+      <input ref={input} required maxLength={255} value={name} onChange={(event) => setName(event.target.value)} disabled={busy} />
+    </label>
+    <Feedback error={error} />
+    {error && !operation.id && <p>Refresh the Customer and Site choices before retrying if the last request may have succeeded.</p>}
+    <div className={styles.actions}>
+      <Button variant="primary" type="submit" loading={busy} disabled={!name.trim()}>{operation.id ? "Save name" : label}</Button>
+      <Button onClick={onCancel} disabled={busy}>Cancel</Button>
+      {error && !operation.id && onRefresh && <Button onClick={onRefresh} disabled={busy}>Refresh choices</Button>}
+    </div>
+  </form>;
+}
+
+function saveName({ kind, id, customerId }, name) {
+  return write(`/${kind}s${id ? `/${id}` : ""}`, id ? "PATCH" : "POST", {
+    name,
+    ...(!id && kind === "site" ? { customer_id: customerId } : {}),
+  });
+}
+
+export function OnboardingChooser() {
+  const { user, hasPermissionForObject } = useAuth();
+  const [options, setOptions] = useState(null);
+  const [selection, setSelection] = useState(null);
+  const [editor, setEditor] = useState(null);
+  const [error, setError] = useState(null);
+  const [reload, setReload] = useState(0);
+  const heading = useRef(null);
+  const choices = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    request("/onboarding/contexts").then((result) => {
+      if (!active) return;
+      setOptions(result);
+      setError(null);
+    }).catch((requestError) => { if (active) setError(requestError); });
+    return () => { active = false; };
+  }, [reload]);
+
+  useEffect(() => { if (options) heading.current?.focus(); }, [options]);
+
+  function refresh() {
+    setEditor(null);
+    setError(null);
+    setReload((value) => value + 1);
+  }
+
+  async function saveEditor(operation, name) {
+    const record = await saveName(operation, name);
+    // Keep the committed Customer selectable even if creating its Site fails.
+    const key = operation.kind === "site" ? "sites" : "customers";
+    const entry = key === "customers" ? { can_add_site: true, ...record } : record;
+    setOptions((old) => ({
+      ...old,
+      [key]: operation.id
+        ? old[key].map((row) => row.id === record.id ? { ...row, name: record.name } : row)
+        : [...old[key], entry],
+    }));
+    if (!operation.id) {
+      setSelection(operation.kind === "site"
+        ? { customerId: record.customer_id, siteId: record.id }
+        : { customerId: record.id, siteId: "" });
+    }
+    setEditor(null);
+  }
+
+  if (error) return <Unavailable error={error} retry={refresh} />;
+  if (!options) return <p role="status">Loading Customer and Site choices…</p>;
+  const suggested = selection || initialEnvironment(options);
+  const customer = options.customers.find(({ id }) => id === suggested.customerId);
+  const sites = options.sites.filter(({ customer_id }) => customer_id === customer?.id);
+  const site = sites.find(({ id }) => id === suggested.siteId);
+
+  return <Wizard stage="environment">
+    <Surface className={styles.panel}>
+      <Section title="Environment" description="Choose the Customer and Site you want to set up." headingRef={heading}>
+        <div className={styles.fields} ref={choices}>
+          <label className="field">Customer
+            <select value={customer?.id || ""} disabled={Boolean(editor)}
+              onChange={(event) => setSelection({ customerId: event.target.value, siteId: "" })}>
+              <option value="">Select a Customer</option>
+              {options.customers.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
+          <label className="field">Site
+            <select value={site?.id || ""} disabled={Boolean(editor) || !sites.length}
+              onChange={(event) => setSelection({ customerId: customer.id, siteId: event.target.value })}>
+              <option value="">Select a Site</option>
+              {sites.map(({ id, name, status }) => <option key={id} value={id}>
+                {canContinueSetup(status) ? `${name} · Setup started` : name}
+              </option>)}
+            </select>
+          </label>
+        </div>
+        {customer && !sites.length && <p>No Sites are available for setup in this Customer.</p>}
+        {!options.customers.length && <p>No Customers are available for setup.</p>}
+        {editor
+          ? <NameEditor operation={editor} onSave={saveEditor} onRefresh={refresh} onCancel={() => {
+            setEditor(null);
+            requestAnimationFrame(() => choices.current?.querySelector("select")?.focus());
+          }} />
+          : <div className={styles.actions}>
+            {options.can_add_customer && <Button onClick={() => setEditor({ kind: "customer" })}>Create Customer</Button>}
+            {customer && hasPermissionForObject("customers.manage", customer.id) &&
+              <Button onClick={() => setEditor({ kind: "customer", id: customer.id, name: customer.name })}>Rename Customer</Button>}
+            {customer?.can_add_site && <Button onClick={() => setEditor({ kind: "site", customerId: customer.id })}>Create Site</Button>}
+            {site && <Button onClick={() => setEditor({ kind: "site", id: site.id, name: site.name })}>Rename Site</Button>}
+          </div>}
+        <div className={styles.footer}>
+          <Button href={authenticatedHome(user)}>Return to Atlas</Button>
+          <Button onClick={refresh} disabled={Boolean(editor)}>Refresh choices</Button>
+          {site && <Button variant="primary" href={onboardingPath(customer.id, site.id)} disabled={Boolean(editor)}>Open Site setup</Button>}
+        </div>
+      </Section>
+    </Surface>
+  </Wizard>;
+}
+
+export function OnboardingSession({ customerId, siteId }) {
+  const { user, hasPermissionForObject } = useAuth();
+  const router = useRouter();
+  const path = onboardingPath(customerId, siteId);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [pendingProfile, setPendingProfile] = useState(null);
+  const [revisiting, setRevisiting] = useState(false);
+  const [editor, setEditor] = useState(null);
+  const heading = useRef(null);
+  const headingTarget = data && (revisiting ? "environment" : data.progress?.current_stage || "environment");
+  const saved = data?.status === "saved";
+  const profile = pendingProfile ?? data?.progress?.draft_profile ?? "homelab";
+
+  useEffect(() => {
+    let active = true;
+    request(path).then((result) => {
+      if (!active) return;
+      setData(result);
+      setError(null);
+      setLoading(false);
+    }).catch((requestError) => {
+      if (!active) return;
+      setData(null);
+      setError(requestError);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [path, reload]);
+
+  useEffect(() => { if (!loading) heading.current?.focus(); }, [headingTarget, loading, saved]);
+
+  function refresh() {
+    setLoading(true);
+    setError(null);
+    setEditor(null);
+    setRevisiting(false);
+    setPendingProfile(null);
+    setReload((value) => value + 1);
+  }
+
+  async function change(action) {
+    if (!data.can_manage) return;
+    setBusy(true);
+    setError(null);
+    try {
+      let progress = data.progress;
+      if (!progress && action === "environment") {
+        progress = await request(`${path}/start`, { method: "POST" });
+        if (progress.version !== 1) {
+          throw Object.assign(new Error("Setup progress changed. Reload progress before trying again."), { status: 409 });
+        }
+        setData((old) => ({ ...old, progress, status: progress.status }));
+      }
+      const updated = await write(`${path}/${action}`, action === "environment" ? "PATCH" : "POST", {
+        version: progress?.version ?? 0,
+        ...(action === "environment" ? { environment_profile: profile } : {}),
+        ...(action === "save" && !progress?.environment_profile ? { draft_profile: profile } : {}),
+      });
+      setPendingProfile(null);
+      setData((old) => ({ ...old, progress: updated, status: updated.status }));
+      if (action === "save") router.replace(authenticatedHome(user));
+    } catch (requestError) {
+      if ([403, 404].includes(requestError.status)) setData(null);
+      setError(requestError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveEditor(operation, name) {
+    const updated = await saveName(operation, name);
+    setData((old) => ({ ...old, [operation.kind]: { ...old[operation.kind], name: updated.name } }));
+    setEditor(null);
+    heading.current?.focus();
+  }
+
+  if (loading) return <p role="status">Loading setup progress…</p>;
+  if (!data) return <Unavailable error={error} retry={refresh} recovery />;
+  const { customer, site, progress, can_manage: canManage } = data;
+  const stage = headingTarget;
+  const confirmed = Boolean(progress?.environment_profile);
+  const completed = data.status === "completed";
+  const conflict = error?.status === 409;
+  const blocked = busy || Boolean(editor) || conflict;
+  const stageTitle = STAGES.find(([key]) => key === stage)?.[1] || "Setup progress";
+
+  return <Wizard stage={stage} decisions={progress?.stage_decisions} onEnvironment={
+    confirmed && stage !== "environment" && !busy ? () => setRevisiting(true) : undefined
+  }>
+    <div className={styles.session}>
+      <Surface className={styles.summary}>
+        <Section title="Setup context">
+          <dl>
+            <div><dt>Customer</dt><dd>{customer.name}</dd></div>
+            <div><dt>Site</dt><dd>{site.name}</dd></div>
+            {confirmed && <div><dt>Profile</dt><dd>{PROFILES[progress.environment_profile]}</dd></div>}
+          </dl>
+        </Section>
+      </Surface>
+      <Surface className={`${styles.panel} ${styles.stagePanel}`}>
+        <Section title={stageTitle} headingRef={heading}>
+          <Feedback error={error} retry={conflict ? refresh : undefined} busy={busy} />
+          {!canManage && <p>You can view setup progress for this Site.</p>}
+          {saved && <p role="status">Progress is saved for this Site.</p>}
+          {stage === "environment" ? <>
+            {confirmed
+              ? <p>Environment is confirmed. To work on a different Site, save and exit first.</p>
+              : <>
+                {canManage && <p>Confirm this Customer and Site to fix the context for this setup.</p>}
+                <fieldset className={styles.profiles} disabled={!canManage || busy || saved || completed || conflict}>
+                  <legend>Environment profile</legend>
+                  {Object.entries(PROFILES).map(([value, label]) => <label key={value}>
+                    <input type="radio" name="environment-profile" value={value} checked={profile === value}
+                      onChange={() => setPendingProfile(value)} /> <strong>{label}</strong>
+                    <small>{value === "blank" ? "Start with a manual setup." : "Set up a home or lab environment."}</small>
+                  </label>)}
+                </fieldset>
+              </>}
+            {editor ? <NameEditor operation={editor} onSave={saveEditor} onCancel={() => {
+              setEditor(null);
+              heading.current?.focus();
+            }} /> : <div className={styles.actions}>
+              {hasPermissionForObject("customers.manage", customer.id) && <Button disabled={busy}
+                onClick={() => setEditor({ kind: "customer", id: customer.id, name: customer.name })}>Rename Customer</Button>}
+              {canManage && <Button disabled={busy} onClick={() => setEditor({ kind: "site", id: site.id, name: site.name })}>Rename Site</Button>}
+            </div>}
+          </> : <p>{completed ? "Setup is complete." : "Environment is confirmed. Further stages are unavailable in this preview."}</p>}
+          <div className={styles.footer}>
+            {canManage && !confirmed && <Button href="/onboarding" disabled={blocked}>Change Site</Button>}
+            {revisiting && <Button onClick={() => setRevisiting(false)} disabled={blocked}>Return to current stage</Button>}
+            {!revisiting && confirmed && stage !== "environment" && <Button onClick={() => setRevisiting(true)} disabled={blocked}>Back to Environment</Button>}
+            {!canManage || completed || saved ? <Button href={authenticatedHome(user)} disabled={Boolean(editor) || busy}>Return to Atlas</Button>
+              : <Button onClick={() => change("save")} disabled={blocked}>Save &amp; exit</Button>}
+            {canManage && saved && <Button variant="primary" onClick={() => change("resume")} disabled={blocked}>Resume setup</Button>}
+            {canManage && !confirmed && !saved && !completed && <Button variant="primary" onClick={() => change("environment")} disabled={blocked}>Confirm Environment</Button>}
+          </div>
+        </Section>
+      </Surface>
+    </div>
+  </Wizard>;
+}

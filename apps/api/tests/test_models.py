@@ -66,6 +66,8 @@ EXPECTED_TABLES = {
     "audit_events",
     "system_settings",
     "installation_state",
+    "site_onboarding",
+    "onboarding_invitation_dismissals",
 }
 
 

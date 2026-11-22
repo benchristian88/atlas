@@ -33,6 +33,7 @@ export function RootShell({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const publicRoute = isPublicRoute(pathname);
+  const onboarding = pathname === "/onboarding" || pathname.startsWith("/onboarding/");
   const [authState, setAuthState] = useState(checkingSessionState);
   const [retryKey, setRetryKey] = useState(0);
   const resolvedThemeMode = useResolvedThemeMode(authState.user?.theme_mode);
@@ -141,8 +142,8 @@ export function RootShell({ children }) {
   return (
     <AuthContext.Provider value={authValue}>
       <BuildInfoProvider key={authState.user.id}>
-        <WorkspaceContextProvider user={authState.user}>
-          <AppShell>{children}</AppShell>
+        <WorkspaceContextProvider key={onboarding ? "onboarding" : "workspace"} user={authState.user}>
+          <AppShell focused={onboarding}>{children}</AppShell>
         </WorkspaceContextProvider>
       </BuildInfoProvider>
     </AuthContext.Provider>

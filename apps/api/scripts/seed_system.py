@@ -164,12 +164,12 @@ def _ensure_taxonomy(db: Session) -> None:
             relationship_type.system_defined = True
 
 
-def _ensure_home_context(db: Session) -> None:
+def _ensure_home_context(db: Session) -> Site | None:
     """Create Home/Homelab only for an otherwise context-free installation."""
 
     customer = db.scalar(select(Customer).order_by(Customer.created_at, Customer.id))
     if customer is not None:
-        return
+        return None
 
     workspace = db.scalar(
         select(Workspace).order_by(Workspace.created_at, Workspace.id)
@@ -187,15 +187,15 @@ def _ensure_home_context(db: Session) -> None:
     )
     db.add(home)
     db.flush()
-    db.add(
-        Site(
-            customer_id=home.id,
-            name="Homelab",
-            notes="Default site created during Atlas bootstrap.",
-            status="active",
-        )
+    site = Site(
+        customer_id=home.id,
+        name="Homelab",
+        notes="Default site created during Atlas bootstrap.",
+        status="active",
     )
+    db.add(site)
     db.flush()
+    return site
 
 
 def seed_system(db: Session) -> None:

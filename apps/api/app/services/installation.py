@@ -104,7 +104,10 @@ def create_first_administrator(db: Session, payload, token: str | None) -> User:
     from app.models import AccessAssignment
 
     master = _ensure_rbac(db)
-    _ensure_home_context(db)
+    bootstrap_site = _ensure_home_context(db)
+    if bootstrap_site is not None:
+        state.onboarding_customer_id = bootstrap_site.customer_id
+        state.onboarding_site_id = bootstrap_site.id
     user = User(
         email=str(payload.email).strip().lower(), display_name=payload.display_name,
         password_hash=hash_password(payload.password), is_active=True,

@@ -25,6 +25,7 @@ from app.routes import (
     knowledge_completeness,
     networks,
     operational_graph,
+    onboarding,
     dependency_analysis,
     protected,
     reference_data,
@@ -128,6 +129,9 @@ async def safe_setup_validation(request: Request, exc: RequestValidationError):
     if request.url.path.startswith(("/api/auth/", "/api/users", "/api/system-settings/backups", "/api/system-settings/restore", "/api/setup/restore")):
         return JSONResponse(status_code=422, content={"detail": "Invalid authentication request. Check the supplied fields."},
                             headers={"Cache-Control": "no-store"})
+    if request.url.path.startswith("/api/onboarding/"):
+        return JSONResponse(status_code=422, content={"detail": "Invalid guided setup request."},
+                            headers={"Cache-Control": "no-store"})
     if request.url.path.startswith("/api/setup/"):
         # FastAPI normally echoes invalid input, even with Pydantic's
         # hide_input_in_errors. Setup credentials must never be echoed.
@@ -166,7 +170,7 @@ async def request_security(request: Request, call_next):
         return JSONResponse(status_code=503, content={"detail": "Atlas is in maintenance mode. A restore or local recovery is in progress."},
                             headers={"Cache-Control": "no-store", "Retry-After": "5", "X-Request-ID": request_id})
     response.headers["X-Request-ID"] = request_id
-    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users", "/api/system-settings", "/api/restore-status/", "/api/integration-runtime", "/api/integration-catalogue", "/api/installed-connectors", "/api/integrations", "/api/integration-forms", "/api/connector-mappings", "/api/integration-ingestion")):
+    if request.url.path.startswith(("/api/setup/", "/api/auth/", "/api/users", "/api/system-settings", "/api/restore-status/", "/api/integration-runtime", "/api/integration-catalogue", "/api/installed-connectors", "/api/integrations", "/api/integration-forms", "/api/connector-mappings", "/api/integration-ingestion", "/api/onboarding/")):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -184,6 +188,7 @@ api_router.include_router(roles.router)
 api_router.include_router(roles.permissions_router)
 api_router.include_router(customers.router)
 api_router.include_router(sites.router)
+api_router.include_router(onboarding.router)
 api_router.include_router(service_reference_data.service_types_router)
 api_router.include_router(service_reference_data.criticality_router)
 api_router.include_router(services.router)
