@@ -52,6 +52,8 @@ try {
     data.asset_types.find(t => t.key === "platform").default_icon_url = "https://icons.example.test/type.png";
     const context = await browser.newContext({ viewport: { width: 1800, height: 1200 }, deviceScaleFactor: Number(process.env.ATLAS_BROWSER_DPR || 1), colorScheme: theme, reducedMotion: "reduce" });
     const page = await context.newPage(), errors = [], requests = [], networkRequests = [];
+    const retired = size === "small" ? { ...data.assets.find(asset => asset.asset_type === "platform"), id: id(9900), name: "Retired Showcase fixture", status: "retired", cached_icon_url: null } : null;
+    let delayedInclusive, delayedExcluded;
     page.on("request", request => { if (request.url().startsWith("http")) networkRequests.push(request.url()); });
     page.on("pageerror", e => errors.push(e.message));
     await page.route("https://icons.example.test/**", async route => route.request().url().endsWith("/type.png")
@@ -63,12 +65,17 @@ try {
         ? route.fulfill({ contentType: "image/png", body: await readFile(new URL("../public/branding/favicon-32x32.png", import.meta.url)) })
         : route.fulfill({ status: 404, body: "" });
       let body = [];
+      if (url.pathname === "/api/setup/status") body = { state: "INITIALISED" };
       if (url.pathname === "/api/auth/me") body = { id: id(999), display_name: "Showcase fixture", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
       if (url.pathname === "/api/context") body = { customers: [customer], sites: [site], selected_customer_id: customer.id, selected_site_id: site.id, global_access: true };
       if (url.pathname === "/api/topology") {
         assert.equal(route.request().headers()["x-atlas-site-id"], site.id);
         assert.equal(route.request().headers()["x-atlas-customer-id"], customer.id);
-        body = data;
+        const includeRetired = url.searchParams.get("include_retired") === "true";
+        if (includeRetired && retired) body = { ...data, assets: [...data.assets, retired] };
+        else body = data;
+        const gate = includeRetired ? delayedInclusive : delayedExcluded;
+        if (gate) await gate.promise;
       }
       if (url.pathname === "/api/topology/connectivity") {
         // Complete authorized renderer fixture, deliberately without the API's
@@ -96,7 +103,6 @@ try {
       await page.getByRole("button", { name: /^Filters/ }).click();
       await page.getByRole("checkbox", { name: /^Edge Devices/ }).check();
       await page.keyboard.press("Escape");
-      await page.getByRole("checkbox", { name: "Networks", exact: true }).uncheck();
       await page.getByRole("button", { name: "Expand Infrastructure Topology", exact: true }).click();
       await page.getByRole("button", { name: "3 hops", exact: true }).click();
       await page.getByRole("button", { name: "Hide details panel", exact: true }).click();
@@ -113,8 +119,46 @@ try {
       await page.screenshot({ path: `${output}/${size}-connectivity-networks-off-expanded.png`, fullPage: true });
       await page.getByRole("button", { name: "Close expanded Infrastructure Topology", exact: true }).click();
     }
-    await page.getByRole("button", { name: "Showcase", exact: true }).click();
     const scene = page.locator(".showcase-scene"), button = page.getByRole("button", { name: "Export PNG", exact: true });
+    const showcase = page.getByRole("button", { name: "Showcase", exact: true });
+    const filters = page.getByRole("button", { name: /^Filters/ });
+    const retiredControl = page.getByRole("checkbox", { name: "Include retired", exact: true });
+    const retiredCard = page.locator(`[data-platform-id="${retired?.id}"]`);
+    if (retired) {
+      const matchesMode = (request, include) => {
+        const url = new URL(request.url());
+        return url.pathname === "/api/topology" && url.searchParams.get("include_retired") === String(include);
+      };
+      await filters.click();
+      await retiredControl.check();
+      await retiredCard.waitFor();
+      await page.keyboard.press("Escape");
+      delayedInclusive = Promise.withResolvers();
+      await Promise.all([
+        page.waitForRequest(request => matchesMode(request, true)),
+        page.getByRole("button", { name: "Refresh", exact: true }).click(),
+      ]);
+      delayedExcluded = Promise.withResolvers();
+      await page.evaluate(retiredId => {
+        const selector = `.showcase-scene [data-showcase-asset="${retiredId}"]`;
+        window.retiredShowcaseRendered = false;
+        new MutationObserver(() => {
+          window.retiredShowcaseRendered ||= Boolean(document.querySelector(selector));
+        }).observe(document.body, { subtree: true, childList: true });
+      }, retired.id);
+      await Promise.all([page.waitForRequest(request => matchesMode(request, false)), showcase.click()]);
+      await page.getByText("Loading infrastructure…", { exact: true }).waitFor();
+      assert.equal(await scene.count(), 0, "Showcase waits for the excluded projection");
+      assert.equal(await button.count(), 0);
+      delayedExcluded.resolve();
+      await scene.waitFor();
+      const late = page.waitForResponse(response => matchesMode(response, true));
+      delayedInclusive.resolve();
+      await (await late).finished();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await page.evaluate(() => window.retiredShowcaseRendered), false);
+      assert.equal(await scene.locator(`[data-showcase-asset="${retired.id}"]`).count(), 0);
+    } else await showcase.click();
     await scene.waitFor(); await button.waitFor();
     await page.waitForFunction(() => !document.querySelector(".showcase-actions button")?.disabled);
     assert.equal(await scene.getAttribute("viewBox"), `0 0 ${layout.sceneWidth} ${layout.sceneHeight}`);
@@ -218,6 +262,9 @@ try {
     assert.ok(text.includes(site.name));
     for (const hidden of ["192.0.2.99", "private.example.test", "Recorded:", "Export PNG", "Cluster"]) assert.ok(!text.includes(hidden), hidden);
     for (const forbidden of ["Focus", "Filters", "Refresh", "Hide details panel", "Expand Infrastructure Topology"]) assert.equal(await page.getByRole("button", { name: forbidden, exact: true }).count(), 0);
+    assert.equal(await filters.count(), 0);
+    assert.equal(await retiredControl.count(), 0);
+    assert.equal(await page.getByRole("checkbox", { name: "Networks", exact: true }).count(), 0);
     const geometry = await scene.evaluate(el => [...el.querySelectorAll("[data-showcase-item]")].map(n => [n.getAttribute("data-showcase-item"), n.getAttribute("transform")]));
     const countBefore = requests.length;
     await page.setViewportSize({ width: 1000, height: 900 });
@@ -273,6 +320,7 @@ try {
       frame.srcdoc = source; await loaded; await frame.contentDocument.fonts.ready;
     }, serializedExport);
     const exportedSvg = page.frameLocator('[data-showcase-export-check]').locator("svg.showcase-scene");
+    if (retired) assert.equal(await exportedSvg.locator(`[data-showcase-asset="${retired.id}"]`).count(), 0);
     const typographyAfter = await exportedSvg.evaluate(typographySnapshot, SHOWCASE_TEXT_PROPERTIES);
     assert.deepEqual(typographyAfter.geometry, typographyBefore.geometry, "Export retains every node rectangle, padding, icon transform and route");
     assert.equal(typographyAfter.viewBox, typographyBefore.viewBox);
@@ -320,6 +368,16 @@ try {
     }
     assert.deepEqual(errors, []);
     await page.getByRole("button", { name: "Platform", exact: true }).click();
+    if (retired) {
+      await retiredCard.waitFor();
+      assert.equal(await filters.innerText(), "Filters · 1");
+      await filters.click();
+      assert.equal(await retiredControl.isChecked(), true);
+      await page.getByRole("button", { name: "Reset to defaults", exact: true }).click();
+      await retiredCard.waitFor({ state: "detached" });
+      await page.locator(".topology-platform-card").first().waitFor();
+      await page.keyboard.press("Escape");
+    }
     assert.deepEqual(await page.locator(".topology-platform-section").allTextContents(), platformBefore);
     const exported = await context.newPage(); await exported.setContent(`<img style="width:100%;height:auto" src="data:image/png;base64,${png.toString("base64")}" />`);
     await exported.locator("img").waitFor(); await exported.screenshot({ path: `${output}/${size}-${theme}-export-opened.png` });

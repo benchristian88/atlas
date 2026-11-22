@@ -1078,6 +1078,7 @@ tbody tr:hover { background: var(--surface-muted); }
 .graph-find { min-width: 170px; flex: 1; position: relative; }
 .graph-find input { width: 100%; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-muted); color: var(--text); padding: 9px 12px; font: inherit; }
 .graph-search-results { position: absolute; top: 100%; left: 0; width: max(100%, 260px); background: var(--surface); border: 1px solid var(--border); box-shadow: 0 8px 25px #0002; padding: 10px; border-radius: var(--radius-control); max-height: 340px; overflow: auto; }
+.graph-toolbar:has(+ .graph-filters) .graph-find:not(:focus-within) .graph-search-results { display: none; }
 .graph-search-results ul { list-style: none; margin: 0; padding: 0; }
 .graph-search-results button { font: inherit; color: var(--text); border: 0; background: none; text-align: left; padding: 8px; width: 100%; cursor: pointer; }
 .graph-search-results button:hover { background: var(--surface-muted); }
@@ -1328,7 +1329,6 @@ tbody tr:hover { background: var(--surface-muted); }
 .topology-connectivity-controls { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; margin-bottom: 12px; }
 .topology-focus-control { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; font-size: var(--type-compact); }
 .topology-focus-control select { width: 240px; min-width: 0; }
-.topology-networks-control { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: var(--type-compact); }
 .topology-connectivity-controls :is(input[type="search"], select, button) { height: 38px; }
 .topology-connectivity-controls .topology-back-focus { height: auto; min-height: 38px; overflow-wrap: anywhere; }
 .connectivity-asset-search { position: relative; flex: 1 1 280px; max-width: 360px; min-width: 0; }

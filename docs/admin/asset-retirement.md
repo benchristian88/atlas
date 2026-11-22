@@ -18,10 +18,11 @@ the original Asset retired and creates a new Asset for future discovery at that
 slot. Retained source bindings still protect historical records from deletion.
 See the [identity review procedure](cross-source-reconciliation.md#proxmox-guest-identity-review).
 
-Asset lists (under Filters), Infrastructure Topology and Knowledge Graph offer
-**Include retired**. It includes retained records in that view; it is not a
-historical point-in-time reconstruction. Retired Asset detail, facts, Changes,
-source associations and audit remain available with their existing permissions.
+On Assets, Knowledge Graph and interactive Infrastructure Topology, open
+**Filters** and select **Include retired** to add retained records to the
+current view. It is off by default. Showcase always excludes retired Assets.
+Retired Asset detail, facts, Changes, source associations and audit remain
+available with their existing permissions.
 Missing, inactive, unknown and other statuses retain their previous visibility.
 
 An Interface linked to retained discovery history cannot be deleted, even after

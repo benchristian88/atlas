@@ -116,11 +116,13 @@ appear in the four operational views, including administrator-created and inacti
 icons and accents. Choices apply immediately; click outside or press Escape to
 close it. Tab moves through the checkboxes and back into the page. Initial choices
 follow **Show in Infrastructure Topology by default** in managed Asset Categories.
-You can enable Uncategorized or another hidden category temporarily. The button
-counts category and relationship-class values that differ from defaults.
-**Reset to defaults** restores the managed category choices and default classes,
-keeping the selector open. These changes never edit Atlas knowledge or Reference
-Data.
+You can enable Uncategorized or another hidden category temporarily. **Include
+retired** is off by default and carries across interactive views and Refresh.
+The button counts filter choices that differ from defaults. **Reset to defaults**
+restores the managed category choices and default classes, turns off Include
+retired and Networks where available, and keeps the selector open. Filter choices
+affect the view and its queries only. Showcase always excludes retired Assets and
+logical Networks.
 
 Connectivity adds **Relationship classes**:
 
@@ -133,8 +135,9 @@ Connectivity adds **Relationship classes**:
 This starts with infrastructure placement and technical connections. Application
 and logical relationships belong primarily in Knowledge Graph; enable their
 class temporarily when needed. Disabling Physical / network also disables
-interface-membership traversal; the existing Networks checkbox separately
-controls Network visibility. Disabling Physical / network and enabling Logical /
+interface-membership traversal. Enable **Networks** in Filters to include Network
+nodes in Connectivity traversal and make them available as focus options.
+Disabling Physical / network and enabling Logical /
 operational counts as two changed values.
 
 [Relationship Type administration](relationship-types.md) assigns these classes.
@@ -142,11 +145,11 @@ New custom types default to Other until an administrator deliberately classifies
 them. Routes remains Other because Atlas does not yet model full L3 routing;
 enabling it does not infer routers, gateways or routing paths.
 
-Clicking a different topology view starts it with fresh defaults: blank search,
-managed category choices, closed Filters and no previous inspector selection.
+Clicking a different topology view clears search and inspector selection, restores
+the managed category choices, and closes Filters.
 Platform returns to its child previews and normal ordering. Network & VLAN selects
 the first Network in VLAN/name/ID order. Connectivity returns to one hop, Networks
-enabled, default relationship layers, its first visible Asset in name/ID order,
+off, default relationship layers, its first visible Asset in name/ID order,
 and a fitted viewport.
 Explicit refocusing inside Connectivity, Expand/close and Refresh preserve layer
 choices. Customer, Site and theme stay unchanged. Clicking the current view does not reset
@@ -160,7 +163,7 @@ interface IP and makes it the Connectivity focus. It shows up to ten matches
 from the current authorized topology after one character; typing does not filter
 the graph or the separate Focus selector. Select a result with the pointer, or
 use Arrow Up/Down and Enter. Escape closes results; Tab moves to Focus. Search,
-inline Focus, hops and Networks share one compact toolbar that wraps at narrower
+inline Focus and hops share one compact toolbar that wraps at narrower
 widths, including expanded mode.
 
 The inspector includes recorded status, type, category, visible Site, hostname,

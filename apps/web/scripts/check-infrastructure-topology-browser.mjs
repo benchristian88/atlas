@@ -71,6 +71,14 @@ function addHopContinuationFixture(data) {
   data.platform_links.push({ relationship_id: id(1653), parent_id: id(1603), child_id: id(1604) });
 }
 
+const filtersButton = page => page.getByRole("button", { name: /^Filters(?: · \d+)?$/ });
+const filterCheckbox = (page, name) => page.locator(".topology-filter-popover").getByRole("checkbox", { name, exact: true });
+async function setNetworks(page, checked) {
+  await filtersButton(page).click();
+  await filterCheckbox(page, "Networks").setChecked(checked);
+  await page.keyboard.press("Escape");
+}
+
 async function checkHopContinuation(page, requests, theme, width) {
   const button = name => page.getByRole("button", { name, exact: true });
   const card = n => page.locator(`[data-node-key="asset:${id(n)}"]`);
@@ -83,10 +91,20 @@ async function checkHopContinuation(page, requests, theme, width) {
   await page.goto(`${base}/topology`);
   await button("Connectivity").click();
   await button("Filters").click();
+  const panel = page.locator(".topology-filter-popover");
+  const panelBox = await panel.boundingBox();
+  assert.ok(panelBox.x >= 0 && panelBox.x + panelBox.width <= width);
+  const networks = filterCheckbox(page, "Networks");
+  assert.equal(await networks.isChecked(), false);
+  await networks.scrollIntoViewIfNeeded();
+  assert.equal(await networks.evaluate(input => {
+    const box = input.getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === input;
+  }), true, "The Networks checkbox remains reachable in the scrollable popover");
+  await page.screenshot({ path: `${output}/connectivity-filters-${theme}-${width}.png` });
   await page.getByLabel("Logical / operational", { exact: true }).check();
   await page.getByLabel("Uncategorized", { exact: true }).check();
   await page.keyboard.press("Escape");
-  await page.getByLabel("Networks", { exact: true }).uncheck();
   await focus.selectOption(id(1600));
   await cue("Rack switch").waitFor();
   await card(1605).waitFor();
@@ -254,6 +272,7 @@ async function checkCompactPicker(page, theme, width, surface) {
 async function checkCategoryPointerInput(page, data, theme, width) {
   const filters = page.getByRole("button", { name: /^Filters(?: · \d+)?$/ });
   const panel = page.locator(".topology-filter-popover");
+  const categories = panel.getByRole("group", { name: "Asset categories" });
   const checkbox = name => panel.getByRole("checkbox", { name, exact: true });
   const row = name => panel.locator("label").filter({ has: page.getByRole("checkbox", { name, exact: true }) });
   const card = n => page.locator(`[data-platform-id="${id(n)}"]`);
@@ -270,7 +289,7 @@ async function checkCategoryPointerInput(page, data, theme, width) {
         pointerEvents: style.pointerEvents, zIndex: style.zIndex,
         before: getComputedStyle(element, "::before").content, after: getComputedStyle(element, "::after").content };
     };
-    return { panel: inspect(panel), options: [...panel.querySelectorAll("label")].map(label => ({
+    return { panel: inspect(panel), options: [...panel.querySelectorAll("label:has(.presentation-identity)")].map(label => ({
       name: label.textContent, row: inspect(label), checkbox: inspect(label.querySelector("input")),
       text: inspect(label.querySelector(".presentation-identity > span:last-child")), icon: inspect(label.querySelector(".presentation-icon")),
     })) };
@@ -292,7 +311,7 @@ async function checkCategoryPointerInput(page, data, theme, width) {
   };
   // Start with the label/row, the path missed by the original acceptance.
   await row("Backup").click(); await backupState(!initial);
-  const inputIds = await panel.getByRole("checkbox").evaluateAll(inputs => inputs.map(input => input.id));
+  const inputIds = await categories.getByRole("checkbox").evaluateAll(inputs => inputs.map(input => input.id));
   assert.equal(new Set(inputIds).size, data.categories.length);
   assert.ok(inputIds.every(Boolean));
   assert.equal(await row("Backup").getAttribute("for"), await checkbox("Backup").getAttribute("id"));
@@ -355,6 +374,8 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
     assert.equal(await filters.getAttribute("aria-expanded"), "false");
     await filters.click();
     for (const category of data.categories) assert.equal(await panel.getByLabel(category.name, { exact: true }).isChecked(), category.show_in_topology);
+    assert.equal(await filterCheckbox(page, "Include retired").isChecked(), false);
+    if (await filterCheckbox(page, "Networks").count()) assert.equal(await filterCheckbox(page, "Networks").isChecked(), false);
     await page.keyboard.press("Escape");
   };
   const overrides = async () => {
@@ -369,12 +390,12 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   await filters.focus(); await page.keyboard.press("Enter");
   assert.equal(await filters.getAttribute("aria-expanded"), "true");
   assert.equal(await filters.getAttribute("aria-controls"), await panel.getAttribute("id"));
-  assert.equal(await panel.getByRole("checkbox").count(), data.categories.length);
+  assert.equal(await panel.getByRole("checkbox").count(), data.categories.length + 1);
   assert.equal(await page.locator(".topology-category-filters").count(), 0);
   assert.equal(await panel.getByRole("checkbox").first().evaluate(el => el === document.activeElement), true);
   const box = await panel.boundingBox();
   assert.ok(box.width >= 320 && box.width <= 420 && box.x >= 0 && box.x + box.width <= width);
-  assert.equal(await panel.locator(".topology-filter-options").evaluate(el => getComputedStyle(el).gridTemplateColumns.split(" ").length), 2);
+  assert.equal(await panel.getByRole("group", { name: "Asset categories" }).locator(".topology-filter-options").evaluate(el => getComputedStyle(el).gridTemplateColumns.split(" ").length), 2);
   assert.equal((await page.locator(".topology-platform-grid").first().boundingBox()).y, before.y, "Opening filters does not move topology");
   const compute = panel.locator("label").filter({ has: page.getByLabel("Compute", { exact: true }) });
   assert.equal(await compute.locator('[data-presentation-icon="server"]').getAttribute("data-presentation-accent"), "blue");
@@ -406,9 +427,9 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   await pve.locator(".topology-asset-identity").first().click();
   await search.fill("AdGuard"); await overrides();
   for (const action of [async () => {
-    const count = requests.filter(r => r === "/api/topology").length;
+    const count = requests.filter(r => r.startsWith("/api/topology?")).length;
     await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === "/api/topology"), button("Refresh").click()]);
-    assert.ok(requests.filter(r => r === "/api/topology").length > count);
+    assert.ok(requests.filter(r => r.startsWith("/api/topology?")).length > count);
   }]) {
     await action();
     assert.equal(await search.inputValue(), "AdGuard");
@@ -449,7 +470,6 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   await overrides(); await search.fill("PVE"); await page.keyboard.press("Escape");
   await page.locator(`[data-node-key="asset:${id(36)}"]`).waitFor();
   await page.locator(`[data-node-key="asset:${id(36)}"]`).click();
-  await page.getByLabel("Networks", { exact: true }).uncheck();
   await world.waitFor();
   const fitTransform = await world.evaluate(el => el.style.transform);
   await button("Zoom in").click();
@@ -470,7 +490,9 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   assert.equal(await focus.inputValue(), id(31));
   assert.equal(await search.inputValue(), "PVE");
   assert.equal(await button("2 hops").getAttribute("aria-pressed"), "true");
-  assert.equal(await page.getByLabel("Networks", { exact: true }).isChecked(), false);
+  await filters.click();
+  assert.equal(await filterCheckbox(page, "Networks").isChecked(), false);
+  await page.keyboard.press("Escape");
   assert.equal(await filters.innerText(), "Filters · 2");
   assert.equal(await world.evaluate(el => el.style.transform), zoomTransform, "Refresh preserves zoom");
   assert.deepEqual(await page.locator(".topology-connectivity-viewport").evaluate(el => [el.scrollLeft, el.scrollTop]), restoredPan, "Refresh preserves pan");
@@ -479,7 +501,6 @@ async function checkTopologyInteractions(page, data, requests, theme, width) {
   assert.equal(await focus.inputValue(), defaultFocus);
   assert.equal(await search.inputValue(), "");
   assert.equal(await button("1 hop").getAttribute("aria-pressed"), "true");
-  assert.equal(await page.getByLabel("Networks", { exact: true }).isChecked(), true);
   assert.equal(await page.locator(".topology-graph-node.is-selected:not(.is-focus)").count(), 0);
   const resetTransform = await world.evaluate(el => el.style.transform);
   await button("Fit").click(); assert.equal(await world.evaluate(el => el.style.transform), resetTransform);
@@ -615,7 +636,7 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
   await refocus(pve, () => node(pve).dblclick());
   assert.equal(await inspector.locator("h2").innerText(), "PVE1");
   assert.equal(await button("2 hops").getAttribute("aria-pressed"), "true");
-  assert.equal(await button("Filters").innerText(), "Filters · 1");
+  assert.equal(await button("Filters").innerText(), "Filters · 2");
   assert.equal(await page.getByLabel(/^Search assets$/i, { exact: true }).inputValue(), "AdGuard");
   assert.equal(await node(`asset:${id(101)}`).count(), 1, "Explicit host focus admits hosted siblings");
   assert.equal(await node(`asset:${id(36)}`).count(), 1, "Switch path remains visible");
@@ -634,15 +655,22 @@ async function checkConnectivityRefocus(page, requests, theme, width) {
   await node(management).dblclick();
   await page.waitForTimeout(100);
   assert.equal(queryRequests().length, beforeRepeat, "Double-click current focus is idempotent");
-  await focus.selectOption(id(100)); await waitFocus(adguard);
-  await page.getByLabel("Networks", { exact: true }).uncheck(); await world.waitFor();
+  const fallbackRequest = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/topology/connectivity" &&
+      url.searchParams.get("focus_asset_id") === id(100) &&
+      url.searchParams.get("show_networks") === "false" && !url.searchParams.has("focus_network_id");
+  });
+  await setNetworks(page, false);
+  await fallbackRequest;
+  await waitFocus(adguard);
+  assert.equal(await focus.locator('option[value^="network:"]').count(), 0);
   await refocus(pve, () => node(pve).dblclick());
-  assert.equal(await page.getByLabel("Networks", { exact: true }).isChecked(), false);
   assert.equal(await page.locator('[data-node-key^="network:"]').count(), 0);
   // Restore initial settings for the existing presentation/geometry acceptance.
   await button("Filters").click(); await button("Reset to defaults").click(); await page.keyboard.press("Escape");
   await page.getByLabel(/^Search assets$/i, { exact: true }).fill("");
-  await page.getByLabel("Networks", { exact: true }).check();
+  await setNetworks(page, true);
   await button("1 hop").click(); await focus.selectOption(id(100)); await waitFocus(adguard);
 }
 
@@ -698,29 +726,31 @@ async function checkTopologyClasss(page, data, theme, width) {
   assert.equal(await node(1304).count(),0);
   await filters.click();
   for (const [name,checked] of [["Platform / containment",true],["Physical / network",true],["Data / resilience",false],["Logical / operational",false],["Other",false]]) assert.equal(await layer(name).isChecked(),checked);
+  await layer("Networks").check();
+  await page.locator(`[data-node-key="network:${id(300)}"]`).waitFor();
   await layer("Logical / operational").check();
   await node(1302).waitFor();
   await layer("Physical / network").uncheck();
   await node(1301).waitFor({state:"detached"});
   assert.equal(await page.locator('[data-node-key^="network:"]').count(),0);
-  assert.equal(await filters.innerText(),"Filters · 2");
+  assert.equal(await filters.innerText(),"Filters · 3");
   await layer("Other").check(); await node(1303).waitFor();
   await layer("Data / resilience").check(); await node(1304).waitFor();
-  assert.equal(await filters.innerText(),"Filters · 4");
+  assert.equal(await filters.innerText(),"Filters · 5");
   await page.keyboard.press("Escape");
   await button("Refresh").click(); await waitGraph();
-  assert.equal(await filters.innerText(),"Filters · 4");
+  assert.equal(await filters.innerText(),"Filters · 5");
   await button("Expand Infrastructure Topology").click();
-  assert.equal(await filters.innerText(),"Filters · 4");
+  assert.equal(await filters.innerText(),"Filters · 5");
   await filters.click();
   await layer("Other").uncheck(); await node(1303).waitFor({state:"detached"});
   await layer("Other").check(); await node(1303).waitFor();
   await page.screenshot({path:`${output}/relationship-classes-${theme}-${width}.png`});
   await page.keyboard.press("Escape");
   await button("Close expanded Infrastructure Topology").click();
-  assert.equal(await filters.innerText(),"Filters · 4");
+  assert.equal(await filters.innerText(),"Filters · 5");
   await node(1302).dblclick(); await waitGraph();
-  assert.equal(await filters.innerText(),"Filters · 4");
+  assert.equal(await filters.innerText(),"Filters · 5");
   await filters.click(); await button("Reset to defaults").click();
   assert.equal(await filters.innerText(),"Filters");
   assert.equal(await layer("Physical / network").isChecked(),true);
@@ -734,6 +764,7 @@ async function checkTopologyClasss(page, data, theme, width) {
   assert.equal(await layer("Other").isChecked(),false);
   assert.equal(await filters.innerText(),"Filters");
   // Empty enabled layers must reach the API explicitly, not fall back to defaults.
+  await layer("Networks").check();
   await layer("Platform / containment").uncheck();
   await layer("Physical / network").uncheck();
   await page.keyboard.press("Escape"); await waitGraph();
@@ -758,6 +789,7 @@ async function checkBranchDisclosure(page, data, requests, theme, width) {
   assert.equal(await card(6003).locator(".topology-platform-facts").innerText(),"1 interface");
   assert.equal(await card(6004).locator(".topology-platform-facts").count(),0);
   await button("Connectivity").click();
+  await setNetworks(page, true);
   await page.getByLabel("Focus",{exact:true}).selectOption(id(6000));
   await button("2 hops").click();
   const more = button("Show 10 more child Assets for Primary");
@@ -1195,8 +1227,8 @@ async function checkConnectivitySearch(page, data, requests, theme, width) {
   await button("Filters").click();
   await page.getByLabel("Backup", {exact:true}).click();
   await page.getByLabel("Logical / operational", {exact:true}).click();
+  await filterCheckbox(page, "Networks").check();
   await page.keyboard.press("Escape"); await focused(100).waitFor();
-  await page.getByLabel("Networks",{exact:true}).click(); await focused(100).waitFor();
   const settings = new URL(graphRequests().at(-1), base).searchParams;
   const type = async query => { await search.click(); await page.keyboard.press("ControlOrMeta+A"); await page.keyboard.type(query); };
   const selectPointer = async name => {
@@ -1241,7 +1273,7 @@ async function checkConnectivitySearch(page, data, requests, theme, width) {
   await type("Uncategorized"); await selectPointer("Uncategorized Asset");
   assert.equal(await focus.inputValue(),id(150));
   await page.getByText("The focused Asset’s category is hidden.",{exact:false}).waitFor();
-  assert.equal(await button("Filters · 2").count(),1);
+  assert.equal(await button("Filters · 3").count(),1);
   await type("adg"); await selectPointer("AdGuard Home"); await focused(100).waitFor();
   await button("Expand Infrastructure Topology").click();
   await button("Hide details panel").click();
@@ -1254,7 +1286,7 @@ async function checkConnectivitySearch(page, data, requests, theme, width) {
   assert.equal(await page.locator('[aria-label="Topology inspector"] h2').innerText(),"PVE1");
   await button("Fit").click();
   await type("adg");
-  await Promise.all([page.waitForResponse(r=>r.url().includes('/api/topology/connectivity?')),button("Refresh").click()]);
+  await Promise.all([page.waitForResponse(r=>r.url().includes('/api/topology/connectivity?') && new URL(r.url()).searchParams.get("show_networks") === "true"),button("Refresh").click()]);
   assert.equal(await search.inputValue(),"adg"); assert.equal(await focus.inputValue(),id(30));
   await search.click(); await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter"); await focused(100).waitFor();
   await page.screenshot({path:`${output}/search-expanded-${theme}-${width}.png`,fullPage:true});
@@ -1272,17 +1304,41 @@ async function checkConnectivitySearch(page, data, requests, theme, width) {
   assert.equal(await search.isDisabled(),false);
   await button("Platform").click(); await button("Connectivity").click(); await focused(100).waitFor();
   assert.equal(await search.inputValue(),""); assert.equal(await button("1 hop").getAttribute("aria-pressed"),"true");
-  assert.equal(await page.getByLabel("Networks",{exact:true}).isChecked(),true);
   assert.equal(await button("Filters").count(),1);
   // No categories enabled must not turn a selected hidden focus into an endless loading state.
+  const networkOptions = focus.locator('option[value^="network:"]');
+  const connectivityResponse = (focusParam, focusId, showNetworks) => page.waitForResponse(response => {
+    const url = new URL(response.url());
+    const otherFocusParam = focusParam === "focus_asset_id" ? "focus_network_id" : "focus_asset_id";
+    return url.pathname === "/api/topology/connectivity" && url.searchParams.get(focusParam) === focusId &&
+      !url.searchParams.has(otherFocusParam) && url.searchParams.get("show_networks") === String(showNetworks);
+  });
+  assert.equal(await networkOptions.count(), 0);
   await button("Filters").click();
+  assert.equal(await filterCheckbox(page, "Networks").isChecked(), false);
+  await Promise.all([connectivityResponse("focus_asset_id", id(100), true), filterCheckbox(page, "Networks").check()]);
+  assert.ok(await networkOptions.count() > 0);
   const categoryOptions = page.getByRole("group", {name:"Asset categories"}).getByRole("checkbox");
   for (const option of await categoryOptions.all()) if (await option.isChecked()) await option.click();
+  await page.getByText("Enable a category with Assets to explore connectivity.", {exact:true}).waitFor();
+  assert.equal(await networkOptions.count(), 0);
   await page.keyboard.press("Escape");
   await type("pve"); await selectPointer("PVE1");
   assert.equal(await focus.inputValue(),id(30));
   await page.getByText("The focused Asset’s category is hidden.",{exact:false}).waitFor();
   assert.equal(await page.getByText("Loading recorded connectivity…",{exact:true}).count(),0);
+  assert.equal(await networkOptions.count(), 0);
+  await filtersButton(page).click();
+  await filterCheckbox(page, "Workload").check();
+  await page.keyboard.press("Escape");
+  const networkId = id(305);
+  await focus.locator(`option[value="network:${networkId}"]`).waitFor({state:"attached"});
+  await Promise.all([connectivityResponse("focus_network_id", networkId, true), focus.selectOption(`network:${networkId}`)]);
+  await page.locator(`[data-node-key="network:${networkId}"].is-focus`).waitFor();
+  await Promise.all([connectivityResponse("focus_asset_id", id(100), false), setNetworks(page, false)]);
+  await focused(100).waitFor();
+  assert.equal(await focus.inputValue(), id(100));
+  assert.equal(await networkOptions.count(), 0);
   await button("Platform").click(); await button("Connectivity").click(); await focused(100).waitFor();
   data.asset_interfaces[0].ip_address = originalIp;
 }
@@ -1611,7 +1667,32 @@ try {
     assert.match(await page.locator(".topology-network-detail").innerText(),/10.0.3.5/);
     assert.equal(await expand.count(), 0);
     assert.equal(await close.count(), 0);
-    await page.getByRole("button",{name:"Connectivity",exact:true}).click();
+    const connectivityResponse = (networks, retired) => page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/topology/connectivity" &&
+        url.searchParams.get("show_networks") === String(networks) &&
+        url.searchParams.get("include_retired") === String(retired);
+    });
+    await Promise.all([connectivityResponse(false, false), page.getByRole("button",{name:"Connectivity",exact:true}).click()]);
+    const focusOptions = page.getByLabel("Focus", { exact: true }).locator('option[value^="network:"]');
+    await page.locator(".topology-connectivity-world").waitFor();
+    assert.equal(await focusOptions.count(), 0);
+    assert.equal(await page.locator('[data-node-key^="network:"]').count(), 0);
+    assert.equal(await page.getByRole("checkbox", { name: "Networks", exact: true }).count(), 0);
+    await filtersButton(page).click();
+    assert.equal(await filterCheckbox(page, "Networks").isChecked(), false);
+    assert.equal(await filterCheckbox(page, "Include retired").isChecked(), false);
+    await Promise.all([connectivityResponse(false, true), filterCheckbox(page, "Include retired").check()]);
+    await Promise.all([connectivityResponse(true, true), filterCheckbox(page, "Networks").check()]);
+    assert.equal(await filtersButton(page).innerText(), "Filters · 2");
+    await Promise.all([connectivityResponse(false, false), page.getByRole("button", { name: "Reset to defaults", exact: true }).click()]);
+    assert.equal(await filterCheckbox(page, "Networks").isChecked(), false);
+    assert.equal(await filterCheckbox(page, "Include retired").isChecked(), false);
+    assert.equal(await filtersButton(page).innerText(), "Filters");
+    await page.keyboard.press("Escape");
+    await Promise.all([connectivityResponse(true, false), setNetworks(page, true)]);
+    await page.locator(`[data-node-key="network:${id(305)}"]`).waitFor();
+    assert.ok(await focusOptions.count() > 0);
     await page.getByLabel("Focus",{exact:true}).selectOption(id(100)).catch(async e => { await page.screenshot({ path: `${output}/failure.png` }); console.error(await page.locator("body").innerText()); throw e; });
     await page.locator(`[data-node-key="asset:${id(100)}"]`).waitFor();
     assert.equal(await page.locator("[data-node-key]").count(),4);
@@ -1690,7 +1771,7 @@ try {
     await close.click();
     await page.getByLabel("Focus",{exact:true}).selectOption(id(100));
     await page.waitForFunction(()=>document.querySelectorAll("[data-node-key]").length===5);
-    await page.getByRole("button",{name:"Filters",exact:true}).click();
+    await filtersButton(page).click();
     await page.getByLabel("Compute",{exact:true}).click();
     await page.locator(`[data-node-key="asset:${id(30)}"]`).waitFor({state:"detached"});
     await page.getByLabel("Compute",{exact:true}).click();
@@ -1821,6 +1902,7 @@ try {
     await page.locator(".topology-network-list button").filter({hasText:"Custom Network"}).click();
     assert.equal(await page.locator(".topology-network-heading").getAttribute("data-presentation-accent"),"rose");
     await page.getByRole("button",{name:"Connectivity",exact:true}).click();
+    await setNetworks(page, true);
     await page.getByLabel("Focus",{exact:true}).selectOption(id(851));
     await page.locator(`[data-node-key="network:${id(850)}"]`).waitFor();
     assert.equal(await page.locator(`[data-node-key="asset:${id(851)}"]`).getAttribute("data-presentation-accent"),"teal");
