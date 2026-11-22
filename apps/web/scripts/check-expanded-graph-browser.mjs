@@ -18,6 +18,7 @@ const provider = { ...edge("provider", dns, adguard, "service_asset"), dependenc
 const edges = [provider, edge("host", adguard, pve, "asset_relationship"), edge("cluster", pve, cluster, "asset_relationship")];
 const graph = depth => ({ nodes: [dns, adguard, pve, cluster].slice(0, depth + 1), edges: edges.slice(0, depth), truncated: false, warnings: [] });
 const proxy = node(14, "service", "Reverse Proxy");
+const retired = { ...node(15, "asset", "Retired fixture"), status: "retired" };
 const depends = edge("proxy-dns", proxy, dns, "service_service");
 const analysis = { focus_key: dns.key, focus: dns, results: [{ service: proxy, state: "unavailable", classification: "direct", distance: 1, paths: [{ nodes: [proxy, dns], edges: [depends] }], reasons: [] }], assumption: "Hypothetical unavailable scenario.", truncated: false, warnings: [] };
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSawAAAAASUVORK5CYII=", "base64");
@@ -36,14 +37,24 @@ try {
       requests.push(url.pathname + url.search);
       if (url.pathname.endsWith("/icon")) return route.fulfill({ contentType: "image/png", body: png });
       let body = [];
-      if (url.pathname === "/api/auth/me") body = { id: id(99), display_name: "Graph tester", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
+      if (url.pathname === "/api/setup/status") body = { state: "INITIALISED" };
+      else if (url.pathname === "/api/auth/me") body = { id: id(99), display_name: "Graph tester", email: "fixture@example.test", theme_mode: theme, permissions, assignments: [{ scope_type: "global", permissions }] };
       else if (url.pathname === "/api/context") body = { customers: [customer], sites: [site], global_access: true, selected_customer_id: customer.id, selected_site_id: site.id };
       else if (url.pathname.startsWith("/api/operational-graph")) {
         body = graph(Number(url.searchParams.get("max_depth") || 3));
         if (url.searchParams.get("focus_type") === "asset") body = { ...graph(3), nodes: [adguard, dns, pve, cluster] };
+        if (url.searchParams.get("include_retired") === "true") {
+          body.nodes.push(retired);
+          body.edges.push(edge("retired", adguard, retired, "asset_relationship"));
+        }
       }
       else if (url.pathname === "/api/dependency-analysis") body = analysis;
-      else if (url.pathname === "/api/assets") body = [{ ...adguard, id: adguard.entity_id }];
+      else if (url.pathname === "/api/assets") {
+        body = url.searchParams.get("search") === retired.name
+          ? (url.searchParams.get("include_retired") === "true" ? [retired] : [])
+          : [adguard];
+        body = body.map(asset => ({ ...asset, id: asset.entity_id }));
+      }
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
     });
     const structural = async checked => {
@@ -59,7 +70,27 @@ try {
     await graphNode(adguard).click();
     await page.locator(".graph-inspector h2").filter({ hasText: adguard.name }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Depth 3", exact: true }).count(), 0);
-    await page.getByRole("button", { name: "Filters", exact: true }).click();
+    const filters = page.getByRole("button", { name: "Filters", exact: true });
+    const filterPanel = page.getByRole("region", { name: "Graph filters" });
+    const retiredControl = filterPanel.getByRole("checkbox", { name: "Include retired" });
+    const checkFilterTabOrder = async () => {
+      await page.keyboard.press("Shift+Tab");
+      assert.equal(await filters.evaluate(el => el === document.activeElement), true);
+      await page.keyboard.press("Tab");
+      assert.equal(await retiredControl.evaluate(el => el === document.activeElement), true);
+      await page.keyboard.press("Tab");
+      const firstNodeType = filterPanel.getByRole("group", { name: "Node types" }).getByRole("checkbox").first();
+      assert.equal(await firstNodeType.evaluate(el => el === document.activeElement), true);
+    };
+    assert.equal(await page.getByRole("checkbox", { name: "Include retired" }).count(), 0);
+    assert.equal(await filters.getAttribute("aria-expanded"), "false");
+    await filters.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await filters.getAttribute("aria-expanded"), "true");
+    assert.equal(await filters.getAttribute("aria-controls"), await filterPanel.getAttribute("id"));
+    assert.equal(await retiredControl.isChecked(), false);
+    assert.equal(await retiredControl.evaluate(el => el === document.activeElement && el.matches(":focus-visible")), true);
+    await checkFilterTabOrder();
     await structural(true);
     await graphNode(pve).waitFor();
     await page.waitForTimeout(100);
@@ -137,7 +168,44 @@ try {
     await page.getByText(analysis.assumption, { exact: true }).waitFor();
     assert.equal(requests.filter(p => p.startsWith("/api/dependency-analysis")).length, analysisRequests);
     assert.equal(await page.locator(".graph-inspector h2").innerText(), proxy.name);
-    await page.getByRole("button", { name: "Exit analysis", exact: true }).click();
+    const waitForProjection = (path, includeRetired, search) => page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === path && url.searchParams.get("include_retired") === String(includeRetired) &&
+        (search === undefined || url.searchParams.get("search") === search);
+    });
+    await Promise.all([waitForProjection("/api/operational-graph", true), retiredControl.check()]);
+    await graphNode(retired).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Hypothetical scenario" }).count(), 0);
+    assert.equal(await graphNode(proxy).count(), 0);
+    assert.equal(new URL(page.url()).searchParams.get("focus"), dns.key);
+    assert.equal(new URL(page.url()).searchParams.has("include_retired"), false);
+    await expand.click();
+    assert.equal(await retiredControl.isChecked(), true);
+    await retiredControl.focus();
+    await checkFilterTabOrder();
+    await page.keyboard.press("Escape");
+    assert.equal(await filters.getAttribute("aria-expanded"), "false");
+    assert.equal(await filterPanel.count(), 0);
+    assert.equal(await filters.evaluate(el => el === document.activeElement), true);
+    assert.equal(await close.isVisible(), true);
+    await page.keyboard.press("Enter");
+    assert.equal(await retiredControl.isChecked(), true);
+    assert.equal(await retiredControl.evaluate(el => el === document.activeElement), true);
+    await close.click();
+    await Promise.all([waitForProjection("/api/operational-graph/landscape", true), page.getByRole("button", { name: "Overview", exact: true }).click()]);
+    await graphNode(retired).waitFor();
+    const find = page.getByLabel("Find in graph", { exact: true });
+    await Promise.all([waitForProjection("/api/assets", true, retired.name), find.fill(retired.name)]);
+    const searchResults = page.locator("#graph-search-results");
+    await searchResults.getByRole("button", { name: "Retired fixture asset", exact: true }).waitFor();
+    await retiredControl.focus();
+    assert.equal(await searchResults.isVisible(), false);
+    await Promise.all([waitForProjection("/api/operational-graph/landscape", false), waitForProjection("/api/assets", false, retired.name), page.keyboard.press("Space")]);
+    await find.focus();
+    await page.getByText("No matches.", { exact: true }).waitFor();
+    assert.equal(await graphNode(retired).count(), 0);
+    assert.equal(await retiredControl.isChecked(), false);
+    await find.fill("");
     await page.getByRole("button", { name: "Overview", exact: true }).click();
     await expand.click();
     assert.equal(await page.getByRole("button", { name: /^Depth / }).count(), 0);

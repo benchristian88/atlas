@@ -7,7 +7,7 @@ import { PresentationIdentity } from "./presentation-identity.mjs";
 
 // Reuse Atlas dropdown styling and dismissal conventions, with native checkboxes
 // so multiple choices remain open and participate in the normal Tab order.
-export function TopologyCategoryFilter({ categories, enabled, changedCount, open, onOpenChange, onChange, onReset, classes = [], enabledClasses, onClassChange }) {
+export function TopologyCategoryFilter({ categories, enabled, changedCount, open, onOpenChange, onChange, onReset, classes = [], enabledClasses, onClassChange, visibilityControls = [] }) {
   const id = useId();
   const root = useRef(null), trigger = useRef(null), panel = useRef(null);
   const pointerInside = useRef(false);
@@ -58,21 +58,27 @@ export function TopologyCategoryFilter({ categories, enabled, changedCount, open
         onOpenChange(false); trigger.current?.focus({ preventScroll: true });
       }
     }}>
-    <Button ref={trigger} type="button" variant="secondary" disabled={!categories.length}
+    <Button ref={trigger} type="button" variant="secondary" disabled={!categories.length && !classes.length && !visibilityControls.length}
       aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => onOpenChange(!open)}>
       Filters{changedCount > 0 && ` · ${changedCount}`}
     </Button>
     {open && <div ref={panel} id={id} className="account-dropdown topology-filter-popover" style={placement}>
-      <fieldset><legend>Asset categories</legend><div className="topology-filter-options">
+      {categories.length > 0 && <fieldset><legend>Asset categories</legend><div className="topology-filter-options">
         {categories.map(category => <label key={category.id} htmlFor={`${id}-${category.id}`}>
           <input id={`${id}-${category.id}`} type="checkbox" checked={enabled.has(category.id)} onChange={event => onChange(category.id, event.target.checked)} />
           <PresentationIdentity record={category} />{!category.active && <small>(inactive)</small>}
         </label>)}
-      </div></fieldset>
+      </div></fieldset>}
       {classes.length > 0 && <fieldset><legend>Relationship classes</legend><div className="topology-filter-options">
         {classes.map(topologyClass => <label key={topologyClass.key} htmlFor={`${id}-class-${topologyClass.key}`}>
           <input id={`${id}-class-${topologyClass.key}`} type="checkbox" checked={enabledClasses.has(topologyClass.key)} onChange={event => onClassChange(topologyClass.key, event.target.checked)} />
           {topologyClass.label}
+        </label>)}
+      </div></fieldset>}
+      {visibilityControls.length > 0 && <fieldset><legend>Visibility</legend><div className="topology-filter-options">
+        {visibilityControls.map(({ label, checked, onChange }) => <label key={label}>
+          <input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} />
+          {label}
         </label>)}
       </div></fieldset>}
       <button type="button" className="text-button" onClick={onReset}>Reset to defaults</button>
