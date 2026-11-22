@@ -34,7 +34,7 @@ try {
    let body=[],status=200;
    if(path==='/auth/me') { if(currentPath==='/login') {status=401;body={detail:'Not signed in'};} else body={id:id(90),email:'operator@example.test',display_name:'Acceptance operator',theme_mode:theme,accent_colour:accent,permissions,assignments:[{scope_type:'global',role_name:'Administrator',permissions}]}; }
    else if(path==='/context')body={global_access:true,customers:[customer],sites:[site]};
-   else if(path==='/dashboard/summary')body={assets:1,services:1,business_functions:1,open_knowledge_gap_count:0};
+   else if(path==='/dashboard/summary')body={assets:1,non_retired_assets:1,services:1,business_functions:1,open_knowledge_gap_count:0};
    else if(path==='/assets/summary')body={total:1,by_asset_type:[{asset_type_id:type.id,asset_type_name:type.name,count:1}]};
    else if(path==='/services/summary')body={total:1,critical:0,missing_owner:1,missing_dependencies:0,missing_recovery_targets:1,incomplete:0};
    else if(path.startsWith('/operational-graph'))body=graph;

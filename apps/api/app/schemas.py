@@ -820,6 +820,7 @@ class DashboardSummaryResponse(BaseModel):
     customers: int
     sites: int
     assets: int
+    non_retired_assets: int = Field(ge=0)
     networks: int
     relationships: int
     reconciliation: int

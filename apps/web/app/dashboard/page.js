@@ -16,7 +16,7 @@ import { apiRequest } from "../../lib/api";
 import { useRouter } from "next/navigation";
 
 const metrics = [
-  { key: "assets", label: "Assets", type: "asset", href: "/assets", permission: "assets.view" },
+  { key: "non_retired_assets", label: "Assets", type: "asset", href: "/assets", permission: "assets.view" },
   { key: "services", label: "Services", type: "service", href: "/services", permission: "services.view" },
   { key: "business_functions", label: "Business Functions", type: "business_function", href: "/business-functions", permission: "business_functions.view" },
   { key: "open_knowledge_gap_count", label: "Knowledge Gaps", href: "/knowledge-gaps", permission: "knowledge_gaps.view" },

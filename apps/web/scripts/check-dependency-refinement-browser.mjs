@@ -31,7 +31,7 @@ try {
         if (authenticated) body = { id: id(99), display_name: "Fixture tester", email: "fixture@example.test", permissions, assignments: [{ scope_type: "global", permissions }] };
         else { status = 401; body = { detail: "Not authenticated" }; }
       } else if (url.pathname === "/api/context") body = { customers: [customer], sites: [site], global_access: true, selected_customer_id: customer.id, selected_site_id: site.id };
-      else if (url.pathname === "/api/dashboard/summary") body = { assets: 8, services: 5, business_functions: 2, open_knowledge_gap_count: 3 };
+      else if (url.pathname === "/api/dashboard/summary") body = { assets: 8, non_retired_assets: 8, services: 5, business_functions: 2, open_knowledge_gap_count: 3 };
       else if (url.pathname.startsWith("/api/operational-graph")) {
         body = mode === "empty" ? { nodes: [], edges: [] } : mode === "partial" ? { ...graph, nodes: [...graph.nodes, null, {}], edges: [...graph.edges, null, {}, { key: "hidden", edge_family: "service_asset", source_key: dns.key, target_key: "asset:hidden", failure_effect: "unknown" }, { id: id(500), edge_type: "service_asset", source_id: dns.entity_id, target_id: asset.entity_id, label: "Managed by" }] } : graph;
       }
