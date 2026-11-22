@@ -50,7 +50,7 @@ it. These are narrow compatibility adaptations, not entity-detail redesigns.
 | `GET /api/operational-graph/landscape` | Explicit Customer/Site landscape, existing graph node/edge contracts; empty `focus_key` for Overview | New read-only endpoint |
 | `GET /api/operational-graph` | Optional `site_viewpoint=true` uses selected Customer plus per-object authorization across Sites | Default Site-bound behavior unchanged |
 | `POST /api/dependency-analysis` | Same opt-in `site_viewpoint=true` before calling the existing dependency impact analysis engine | Scenario/response and engine unchanged |
-| `GET /api/dashboard/summary` | Optional `include_customer_wide=true` includes authorized customer-wide completeness/gaps | Default counts unchanged |
+| `GET /api/dashboard/summary` | Optional `include_customer_wide=true` includes authorized customer-wide completeness/gaps | Adds `non_retired_assets` alongside the existing `assets` total |
 | `GET /api/changes` | Optional `include_customer_wide=true` includes authorized customer-wide changes alongside Site changes | Default filtering unchanged |
 | Operational graph nodes | Optional Site name, criticality rank, required requirement totals/satisfied counts, interface IP and authorized VLAN | Additive metadata |
 
@@ -80,6 +80,12 @@ presentation. Search is debounced and scoped to the selected Customer.
 Registry entries map to small components in the Dashboard module. The registry
 is a future customization seam, not a plugin framework. It provides no layout
 persistence, reordering, drag/drop, resizing, catalogue, or customization UI.
+
+The Dashboard Assets card displays `non_retired_assets`, which counts all Asset
+statuses except `retired`. The legacy `assets` field includes retired Assets and
+still supplies the total used for `assets_not_evaluated`. Both counts use the same
+`assets.view` permissions and selected Customer/Site scope. The
+`include_customer_wide` option affects completeness and gaps only.
 
 Completeness uses the existing `required_satisfied / required_total` presentation
 ratio (100% when a successfully evaluated total is zero). Not-evaluated summaries

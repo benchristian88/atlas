@@ -89,7 +89,10 @@ def dashboard_summary(
     asset_predicate = scope_condition(
         principal, "assets.view", Asset.customer_id, Asset.site_id
     )
-    asset_query = select(func.count()).select_from(Asset).where(asset_predicate)
+    asset_query = select(
+        func.count(),
+        func.count().filter(Asset.status != "retired"),
+    ).select_from(Asset).where(asset_predicate)
     network_predicate = scope_condition(
         principal, "networks.view", Network.customer_id, Network.site_id
     )
@@ -189,7 +192,7 @@ def dashboard_summary(
     active_asset_gaps = [item for item in active_gaps if item.entity_type == "asset"]
     asset_completeness = [item for item in completeness if item.entity_type == "asset"]
     now = datetime.now(timezone.utc)
-    asset_count_value = int(db.scalar(asset_query) or 0)
+    asset_count_value, non_retired_asset_count = db.execute(asset_query).one()
     service_rows = list(db.scalars(service_records_query)) if principal.can_anywhere("services.view") else []
     service_ids = [item.id for item in service_rows]
     service_asset_dependency_ids = set(db.scalars(select(ServiceAssetDependency.service_id).where(ServiceAssetDependency.service_id.in_(service_ids), current_relationship(ServiceAssetDependency, principal)))) if service_ids else set()
@@ -199,6 +202,7 @@ def dashboard_summary(
         "customers": int(db.scalar(customer_query) or 0),
         "sites": int(db.scalar(site_query) or 0),
         "assets": asset_count_value,
+        "non_retired_assets": non_retired_asset_count,
         "networks": int(db.scalar(network_query) or 0),
         "relationships": int(db.scalar(relationship_query) or 0),
         "reconciliation": len(open_items),

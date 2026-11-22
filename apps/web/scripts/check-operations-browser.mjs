@@ -20,6 +20,7 @@ let variant = "normal";
 let calls = [];
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const customer = id(1), site = id(2), remote = id(3);
+const dashboardSummary = { assets: 3, non_retired_assets: 2, services: 2, business_functions: 1, open_knowledge_gap_count: 2 };
 const permissions = ["customers.view", "sites.view", "assets.view", "services.view", "services.create", "business_functions.view", "service_dependencies.view", "knowledge_gaps.view", "changes.view", "networks.view", "integrations.view", "reconciliation.view", "users.view", "asset_types.manage", "system_settings.manage"];
 const fixtureUser = { id: id(90), email: "fixture@example.test", display_name: "Fixture Operator", accent_colour: null, theme_mode: "system", permissions, assignments: [{ id: id(91), role_name: "Administrator", scope_type: "global", permissions }] };
 const node = (type, number, name, extra = {}) => ({ key: `${type}:${id(number)}`, entity_type: type, entity_id: id(number), id: id(number), customer_id: customer, site_id: type === "asset" ? site : null, name, href: `/${type === "business_function" ? "business-functions" : type === "service" ? "services" : "assets"}/${id(number)}`, criticality_rank: type === "service" ? 75 : null, criticality_name: type === "service" ? "High" : null, operational_state: type === "service" ? "operational" : null, lifecycle_state: "active", completeness_status: "incomplete", required_total: type === "business_function" ? null : 4, required_satisfied: type === "business_function" ? null : 3, open_gap_count: 1, ...extra });
@@ -55,6 +56,11 @@ async function loadDocument(path) {
   await until("!window.__atlasSmokeOldDocument && document.readyState !== 'loading'");
 }
 async function navigate(path) { await loadDocument(path); await until("document.querySelector('.operations-page') !== null"); }
+async function assertDashboardAssetCount() {
+  const card = '.ops-summary-item[href="/assets"]';
+  await until(`document.querySelector('${card} small')?.textContent === 'Current recorded total'`);
+  assert.equal(await evaluate(`document.querySelector('${card} strong').textContent`), String(dashboardSummary.non_retired_assets));
+}
 async function screenshot(name) { const image = await call("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }); await writeFile(`${output}/${name}.png`, Buffer.from(image.data, "base64")); }
 try {
   let target;
@@ -72,10 +78,11 @@ try {
     if (!url.pathname.startsWith("/api/")) { await call("Fetch.continueRequest", { requestId }); return; }
     calls.push({ path: url.pathname, query: url.search, headers: request.headers });
     let body = {}, status = 200;
-    if (url.pathname === "/api/auth/me") body = fixtureUser;
+    if (url.pathname === "/api/setup/status") body = { state: "INITIALISED" };
+    else if (url.pathname === "/api/auth/me") body = fixtureUser;
     else if (url.pathname === "/api/auth/profile") { Object.assign(fixtureUser, JSON.parse(request.postData)); body = fixtureUser; }
     else if (url.pathname === "/api/context") body = { global_access: true, customers: [{ id: customer, name: "Home Lab" }], sites: [{ id: site, customer_id: customer, name: "Local lab" }, { id: remote, customer_id: customer, name: "Remote lab" }] };
-    else if (url.pathname === "/api/dashboard/summary") body = { assets: 3, services: 2, business_functions: 1, open_knowledge_gap_count: 2 };
+    else if (url.pathname === "/api/dashboard/summary") body = dashboardSummary;
     else if (url.pathname === "/api/changes") body = { items: [
       { id: id(80), change_type: "service_dependency_added", summary: "Service dependency added", entity_name_snapshot: dns.name, occurred_at: "2026-09-09T01:00:00Z" },
       { id: id(81), change_type: "knowledge_gap_resolved", summary: "Knowledge gap resolved", entity_name_snapshot: proxy.name, occurred_at: "2026-09-09T00:50:00Z" },
@@ -179,7 +186,8 @@ try {
         assert.equal(await evaluate("document.querySelector('.page-header .eyebrow')"), null);
         assert.equal(await evaluate("getComputedStyle(document.querySelector('.nav-link.active')).borderLeftWidth"), "0px");
         assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.nav-link.active')).backgroundColor"), "rgba(0, 0, 0, 0)");
-        assert.deepEqual(await evaluate("[...document.querySelectorAll('.ops-summary-item strong')].map(n=>n.textContent)"), ["3", "2", "1", "2"]);
+        await assertDashboardAssetCount();
+        assert.deepEqual(await evaluate("[...document.querySelectorAll('.ops-summary-item strong')].map(n=>n.textContent)"), ["2", "2", "1", "2"]);
         assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-item')].every(n=>n.querySelector('svg') && n.querySelector('small').textContent === 'Current recorded total')"), true);
         assert.equal(await evaluate("new Set([...document.querySelectorAll('.ops-summary-item')].map(n=>n.getBoundingClientRect().height)).size"), 1);
         assert.equal(await evaluate("document.querySelectorAll('.ops-attention-row svg').length"), 4);
@@ -215,6 +223,7 @@ try {
   } else {
     await navigate("/dashboard");
     await until("document.querySelectorAll('.landscape-node').length > 0");
+    await assertDashboardAssetCount();
     assert.equal(await evaluate("document.querySelectorAll('.ops-summary-item').length"), 4);
     assert.equal(await evaluate("document.querySelectorAll('[data-widget-id]').length"), 5);
     assert.equal(await evaluate("[...document.querySelectorAll('.context-selector option')].some(n=>n.textContent==='All sites'||n.textContent==='All customers')"), false);
@@ -276,6 +285,7 @@ try {
     await screenshot("dashboard-dark-desktop");
     for (const width of [900, 390]) {
       await call("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width === 390 });
+      await assertDashboardAssetCount();
       await screenshot(`dashboard-dark-${width}`);
       assert.equal(await evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
       await navigate(`/knowledge-graph?focus=${dns.key}`); await until("document.querySelector('.graph-inspector h2')");

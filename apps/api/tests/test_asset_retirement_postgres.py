@@ -6,11 +6,11 @@ import uuid
 
 from fastapi import HTTPException
 import pytest
-from sqlalchemy import event, func, select
+from sqlalchemy import delete, event, func, select
 
 from app.authorization import ActiveContext, get_active_context, get_principal
-from app.models import Asset, AssetInterface, AssetRelationship, AuditEvent, EntitySourceLink, KnowledgeAssertion
-from app.routes import asset_interfaces, topology, operational_graph
+from app.models import Asset, AssetInterface, AssetRelationship, AuditEvent, Customer, EntitySourceLink, KnowledgeAssertion, Site
+from app.routes import asset_interfaces, context, topology, operational_graph
 from app.services.entity_resolution import ensure_asset_link, ensure_technical_link
 from tests.test_reconciliation_integrity_postgres import committed, review, pytestmark
 from tests.test_reconciliation_final_integrity import absence
@@ -19,13 +19,24 @@ from tests.test_reconciliation_final_integrity import absence
 @pytest.fixture
 def inventory(committed):
     s = committed
-    for router in (asset_interfaces.router, topology.router, operational_graph.router):
+    for router in (asset_interfaces.router, context.router, topology.router, operational_graph.router):
         s.app.include_router(router)
     s.principal = replace(s.principal, grants=(replace(s.principal.grants[0], permissions=s.principal.grants[0].permissions | {
         'assets.create', 'assets.delete', 'networks.delete', 'relationships.view', 'customers.view', 'sites.view',
         'services.view', 'business_functions.view'}),))
     s.app.dependency_overrides[get_principal] = lambda: s.principal
     return s
+
+
+def assert_dashboard_asset_counts(inventory, total, non_retired, *, headers=None):
+    for include_customer_wide in ('false', 'true'):
+        response = inventory.client.get('/dashboard/summary', headers=headers,
+            params={'include_customer_wide': include_customer_wide})
+        assert response.status_code == 200, response.text
+        summary = response.json()
+        assert (summary['assets'], summary['non_retired_assets']) == (total, non_retired)
+        # These callers have no completeness records in their summary.
+        assert summary['assets_not_evaluated'] == total
 
 
 def test_retirement_collection_history_and_edges(inventory):
@@ -37,7 +48,9 @@ def test_retirement_collection_history_and_edges(inventory):
         db.commit()
     identifier, claim_id = absence(s)
     row, _ = review(s, identifier)
+    assert_dashboard_asset_counts(s, 2, 2)
     assert s.client.post(f'/reconciliation-items/{identifier}/accept', json={'expected_version': row['version'], 'disposition': 'retire'}).status_code == 200
+    assert_dashboard_asset_counts(s, 2, 1)
     for included in (False, True):
         query = f'include_retired={str(included).lower()}'
         listed = s.client.get(f'/assets?{query}').json()
@@ -72,6 +85,59 @@ def test_other_statuses_remain_visible(inventory, status):
     assert len(s.client.get('/assets').json()) == 2
     assert len(s.client.get('/topology').json()['assets']) == 2
     assert len(s.client.get('/operational-graph/landscape').json()['nodes']) == 2
+    assert_dashboard_asset_counts(s, 2, 2)
+
+
+def test_dashboard_asset_counts_respect_selected_context_and_grants(inventory):
+    s = inventory
+    workspace_id = s.customer.workspace_id
+    other_customer = Customer(workspace_id=workspace_id, name='Other dashboard Customer')
+    with s.session() as db:
+        db.add(other_customer)
+        db.flush()
+        sibling_site = Site(customer_id=s.customer.id, name='Sibling dashboard Site')
+        other_site = Site(customer_id=other_customer.id, name='Other dashboard Site')
+        db.add_all([sibling_site, other_site])
+        db.flush()
+        for site, statuses in (
+            (sibling_site, ('active', 'inactive', 'retired')),
+            (other_site, ('active', 'active', 'missing', 'unknown')),
+        ):
+            db.add_all(Asset(workspace_id=workspace_id, customer_id=site.customer_id,
+                site_id=site.id, name=f'Dashboard fixture {index}', asset_type=s.asset.asset_type,
+                status=status) for index, status in enumerate(statuses))
+        db.commit()
+
+    try:
+        assert s.client.patch(f'/assets/{s.asset.id}', json={'status': 'retired'}).status_code == 200
+        # Exercise the production context dependency with real request headers.
+        del s.app.dependency_overrides[get_active_context]
+        customer_headers = {'X-Atlas-Customer-ID': str(s.customer.id)}
+        local_headers = {**customer_headers, 'X-Atlas-Site-ID': str(s.site.id)}
+        sibling_headers = {**customer_headers, 'X-Atlas-Site-ID': str(sibling_site.id)}
+        assert_dashboard_asset_counts(s, 2, 1, headers=local_headers)
+        assert_dashboard_asset_counts(s, 3, 2, headers=sibling_headers)
+        assert_dashboard_asset_counts(s, 5, 3, headers=customer_headers)
+        assert_dashboard_asset_counts(s, 4, 4, headers={
+            'X-Atlas-Customer-ID': str(other_customer.id), 'X-Atlas-Site-ID': str(other_site.id),
+        })
+
+        grant = s.principal.grants[0]
+        dashboard_grant = replace(grant, permissions=frozenset({'sites.view'}))
+        s.principal = replace(s.principal, grants=(dashboard_grant,))
+        assert_dashboard_asset_counts(s, 0, 0, headers=local_headers)
+
+        asset_grant = replace(grant, assignment_id=uuid.uuid4(), scope_type='site',
+            customer_id=s.customer.id, site_id=s.site.id, permissions=frozenset({'assets.view'}))
+        s.principal = replace(s.principal, grants=(dashboard_grant, asset_grant))
+        assert_dashboard_asset_counts(s, 2, 1, headers=customer_headers)
+        assert_dashboard_asset_counts(s, 0, 0, headers=sibling_headers)
+    finally:
+        with s.session() as db:
+            db.execute(delete(Asset).where(Asset.customer_id == other_customer.id))
+            db.execute(delete(Site).where(Site.customer_id == other_customer.id))
+            db.execute(delete(Customer).where(Customer.id == other_customer.id))
+            db.commit()
 
 
 @pytest.mark.parametrize('same_customer', [False, True])

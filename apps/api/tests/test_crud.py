@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -238,11 +239,14 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         customer_id=customer_id,
     )
     db = EmptyDatabase()
+    db.execute = MagicMock()
+    db.execute.return_value.one.return_value = (0, 0)
     summary = dashboard_summary(ActiveContext(customer_id, None), scoped_user, db)
     assert summary == {
         "customers": 0,
         "sites": 0,
         "assets": 0,
+        "non_retired_assets": 0,
         "networks": 0,
         "relationships": 0,
         "reconciliation": 0,
@@ -270,6 +274,13 @@ def test_dashboard_counts_are_computed_with_scope_filters() -> None:
         "services_missing_dependencies": 0,
     }
     assert all("WHERE" in statement for statement in db.statements)
+    asset_query, = [
+        sql for call in db.execute.call_args_list
+        if "\nFROM assets " in (sql := str(call.args[0]))
+    ]
+    assert "count(*) FILTER (WHERE assets.status !=" in asset_query
+    assert "assets.customer_id IN" in asset_query
+    assert "AND assets.customer_id =" in asset_query
 
 
 def test_asset_type_summary_is_scoped_and_database_ordered() -> None:
@@ -378,6 +389,14 @@ def test_openapi_exposes_administration_and_reference_endpoints() -> None:
     assert all(path.startswith("/api/") for path in paths)
     for old_path in ("/customers", "/sites", "/assets", "/topology"):
         assert old_path not in paths
+
+
+def test_dashboard_openapi_requires_non_negative_non_retired_asset_count() -> None:
+    schema = app.openapi()["components"]["schemas"]["DashboardSummaryResponse"]
+    assert {"assets", "non_retired_assets"} <= set(schema["required"])
+    field = schema["properties"]["non_retired_assets"]
+    assert field["type"] == "integer"
+    assert field["minimum"] == 0
 
 
 def test_legacy_asset_ip_is_deprecated_without_changing_schema_acceptance():
