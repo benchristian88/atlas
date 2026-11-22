@@ -24,7 +24,7 @@ from app.database import get_db
 from app.main import app
 from app.models import (AccessAssignment, Asset, AssetIconCache, AssetInterface, AssetRelationship, AuditEvent,
                         BusinessFunction, CriticalityLevel, Customer, InstallationState, MfaChallenge, MfaRecoveryCode,
-                        Network, Role, Service, ServiceAssetDependency, ServiceType, Site,
+                        Network, OnboardingInvitationDismissal, Role, Service, ServiceAssetDependency, ServiceType, Site, SiteOnboarding,
                         SystemSetting, User, UserMfa, Workspace, RelationshipType)
 from app.services import backup_runtime as runtime, backups, mfa
 from app.services.backup_archive import BackupError, decrypt_archive, encrypt_archive
@@ -144,6 +144,19 @@ def restore(inst, archive, *, mode="local", passphrase=None):
 
 def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installations):
     inst = installations
+    with Session(inst["source"]) as db:
+        site = db.scalar(select(Site))
+        actor_id = inst["ids"]["user"]
+        installation = db.get(InstallationState, 1)
+        installation.onboarding_customer_id = site.customer_id
+        installation.onboarding_site_id = site.id
+        db.add(SiteOnboarding(
+            customer_id=site.customer_id, site_id=site.id, last_actor_id=actor_id,
+            environment_profile="blank", current_stage="capabilities", status="saved", version=3,
+            stage_decisions={"environment": "completed"},
+        ))
+        db.add(OnboardingInvitationDismissal(user_id=actor_id))
+        db.commit()
     archive = portable_backup(inst)
     signing_key = os.environ["AUTH_SECRET_KEY"]
     # A token with the SAME signing key and a colliding restored version must
@@ -187,6 +200,13 @@ def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installati
         installation = db.get(InstallationState, 1)
         assert installation.initialized_at and installation.setup_code_hash is None
         assert installation.setup_generation == 11
+        progress = db.scalar(select(SiteOnboarding).where(SiteOnboarding.site_id == installation.onboarding_site_id))
+        assert progress.customer_id == installation.onboarding_customer_id
+        assert (progress.status, progress.current_stage, progress.environment_profile, progress.version) == (
+            "saved", "capabilities", "blank", 3,
+        )
+        assert progress.last_actor_id == user.id
+        assert db.get(OnboardingInvitationDismissal, user.id) is not None
         actions = list(db.scalars(select(AuditEvent.event_type)))
         assert "h3.fixture" in actions and "restore.completed" in actions
     def database():
@@ -370,10 +390,12 @@ def test_h1_schema_restores_and_migrates_forward_without_stale_new_tables(instal
     archive = portable_backup(inst)
     restore(inst, archive)
     with inst["target"].connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261119_0033"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261122_0034"
     with Session(inst["target"]) as db:
         assert db.get(User, inst["ids"]["user"]).mfa_enabled is False
         assert db.get(Asset, inst["ids"]["asset"]).name == "Portable host"
+        assert db.get(InstallationState, 1).onboarding_site_id is None
+        assert db.scalar(select(func.count()).select_from(SiteOnboarding)) == 0
 
 
 @pytest.mark.parametrize("scope", ["customer", "custom_global"])

@@ -16,7 +16,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.auth import COOKIE_NAME, _secret_key, decode_session_token, hash_password
 from app.database import get_db
 from app.main import app
-from app.models import AccessAssignment, AuditEvent, InstallationState, SystemSetting, User
+from app.models import AccessAssignment, AuditEvent, Customer, InstallationState, Network, Site, SystemSetting, User, Workspace
 from app.routes.setup import FirstAdministratorRequest
 from app.services.installation import SETUP_COOKIE, SETUP_DURATION, create_first_administrator, installation_state, is_initialized, normalize_code, require_setup_authorization, reset_setup_code, verify_setup_code
 from app.services.system_settings import SESSION_LIFETIME_KEY
@@ -365,3 +365,71 @@ def test_competing_first_admin_requests_create_exactly_one(engine, monkeypatch):
         scoped.dispose()
         with engine.begin() as connection:
             connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+
+
+@pytest.mark.parametrize("preexisting", [False, True])
+def test_secure_setup_captures_only_the_actual_new_bootstrap_pair(db, client, monkeypatch, preexisting):
+    monkeypatch.setenv("ATLAS_ONBOARDING_PREVIEW", "true")
+    if preexisting:
+        workspace = Workspace(name="Existing Atlas", slug="existing-atlas")
+        db.add(workspace)
+        db.flush()
+        customer = Customer(name="Home", workspace_id=workspace.id)
+        db.add(customer)
+        db.flush()
+        site = Site(name="Homelab", customer_id=customer.id)
+        db.add(site)
+        db.flush()
+        db.add(Network(name="Existing LAN", network_type="lan", customer_id=customer.id, site_id=site.id))
+        db.commit()
+
+    authorize(db, client)
+    assert client.get("/api/onboarding/contexts").status_code == 401
+    payload = admin_payload()
+    assert client.post("/api/setup/administrator", json=payload).status_code == 204
+    assert client.get("/api/onboarding/contexts").status_code == 401
+    assert client.post("/api/auth/login", json={
+        "email": payload["email"], "password": payload["password"],
+    }).status_code == 200
+    marker = installation_state(db)
+    customer, site = db.execute(select(Customer, Site).join(Site, Site.customer_id == Customer.id)).one()
+    assert (customer.name, site.name) == ("Home", "Homelab")
+    pair = f"/api/onboarding/{customer.id}/{site.id}"
+    if preexisting:
+        assert (marker.onboarding_customer_id, marker.onboarding_site_id) == (None, None)
+        assert client.get(pair).json()["invitation"] == {"offered": False, "dismissed": False}
+    else:
+        assert (marker.onboarding_customer_id, marker.onboarding_site_id) == (customer.id, site.id)
+        assert client.patch(f"/api/customers/{customer.id}", json={"name": "Renamed home"}).status_code == 200
+        assert client.patch(f"/api/sites/{site.id}", json={"name": "Renamed lab"}).status_code == 200
+        assert client.get(pair).json()["invitation"] == {"offered": True, "dismissed": False}
+        db.add(Network(name="New LAN", network_type="lan", customer_id=customer.id, site_id=site.id))
+        db.commit()
+        assert client.get(pair).json()["invitation"] == {"offered": False, "dismissed": False}
+
+    response = client.get(pair)
+    assert response.json()["status"] == "not_started"
+    assert response.headers["cache-control"] == "no-store"
+    monkeypatch.delenv("ATLAS_ONBOARDING_PREVIEW")
+    assert client.get(pair).status_code == 404
+    assert client.post(f"{pair}/start").status_code == 404
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_initial_setup_reuses_existing_customer_that_has_no_site(db, client, monkeypatch):
+    monkeypatch.setenv("ATLAS_ONBOARDING_PREVIEW", "true")
+    workspace = Workspace(name="Existing installation", slug="existing-installation")
+    db.add(workspace)
+    db.flush()
+    customer = Customer(name="Existing Customer", workspace_id=workspace.id)
+    db.add(customer)
+    db.commit()
+    authorize(db, client)
+    payload = admin_payload()
+    assert client.post("/api/setup/administrator", json=payload).status_code == 204
+    assert client.post("/api/auth/login", json={"email": payload["email"], "password": payload["password"]}).status_code == 200
+    state = installation_state(db)
+    assert (state.onboarding_customer_id, state.onboarding_site_id) == (None, None)
+    options = client.get("/api/onboarding/contexts").json()
+    assert options["customers"] == [{"id": str(customer.id), "name": customer.name, "can_add_site": True}]
+    assert options["sites"] == []

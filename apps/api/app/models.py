@@ -2120,6 +2120,10 @@ class InstallationState(Base):
 
     __tablename__ = "installation_state"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["onboarding_customer_id", "onboarding_site_id"], ["sites.customer_id", "sites.id"],
+            match="FULL", ondelete="SET NULL", onupdate="SET NULL",
+        ),
         CheckConstraint("id = 1", name="singleton"),
         CheckConstraint("setup_generation >= 0 AND failed_attempts >= 0", name="nonnegative"),
         CheckConstraint("initialized_at IS NULL OR setup_code_hash IS NULL", name="no_initialized_verifier"),
@@ -2131,6 +2135,52 @@ class InstallationState(Base):
     setup_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    onboarding_customer_id: Mapped[uuid.UUID | None]
+    onboarding_site_id: Mapped[uuid.UUID | None]
+
+
+class SiteOnboarding(UUIDPrimaryKeyMixin, Base):
+    """Shared workflow decisions for one authoritative Customer/Site pair."""
+
+    __tablename__ = "site_onboarding"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_id", "site_id"], ["sites.customer_id", "sites.id"],
+            match="FULL", ondelete="SET NULL", onupdate="SET NULL",
+        ),
+        CheckConstraint("site_id IS NOT NULL OR draft_only", name="detached_draft_only"),
+        CheckConstraint(
+            "NOT draft_only OR (draft_profile IS NOT NULL AND environment_profile IS NULL "
+            "AND current_stage = 'environment' AND status <> 'completed')",
+            name="unconfirmed_draft",
+        ),
+        CheckConstraint("version > 0", name="positive_version"),
+        CheckConstraint("status IN ('in_progress', 'saved', 'completed')", name="valid_status"),
+        CheckConstraint("(status = 'completed') = (completed_at IS NOT NULL)", name="completed_timestamp"),
+    )
+
+    site_id: Mapped[uuid.UUID | None] = mapped_column(unique=True)
+    customer_id: Mapped[uuid.UUID | None]
+    environment_profile: Mapped[str | None] = mapped_column(String(50))
+    draft_profile: Mapped[str | None] = mapped_column(String(50))
+    draft_only: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    current_stage: Mapped[str] = mapped_column(String(50), server_default="environment")
+    stage_decisions: Mapped[dict[str, str]] = mapped_column(JSONB, server_default="{}")
+    status: Mapped[str] = mapped_column(String(20), server_default="in_progress")
+    version: Mapped[int] = mapped_column(Integer, server_default="1")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class OnboardingInvitationDismissal(Base):
+    """A personal invitation preference, independent of shared progress."""
+
+    __tablename__ = "onboarding_invitation_dismissals"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    dismissed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SystemSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
