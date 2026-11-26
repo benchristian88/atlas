@@ -29,6 +29,7 @@ from app.services.integration_secrets import AtlasEncryptedSecretProvider
 from app.services.reconciliation import accept_item, link_item_to_technical
 from app.services.knowledge_lifecycle import archive_discovery_run
 from app.routes import integration_discovery as routes
+from app.routes import integration_connections as connections
 from tests.i3_fixtures import fixture_bundle, message, ROOT
 from tests.test_administration import make_principal, request
 
@@ -94,6 +95,41 @@ def new_run(db, configured):
     run.ingestion_generation = uuid.uuid4(); run.deadline_at = orchestration.utcnow() + timedelta(minutes=10)
     db.commit()
     return run
+
+
+def test_guided_save_uses_manual_schedule_and_pins_installed_package(db, configured, monkeypatch):
+    row, principal, _, _ = configured
+    queued = []
+    monkeypatch.setattr(orchestration, "enqueue", queued.append)
+    payload = connections.ConnectionCreate(
+        creation_key=uuid.uuid4(), name="Verified guided connection", connector_id=row.connector_id,
+        customer_id=row.customer_id, site_id=row.site_id, config=row.config_json,
+        selected_scopes=row.selected_scopes, credentials={"token_secret": secrets.token_urlsafe(32)},
+        start_initial_discovery=False, expected_connector_digest=row.connector_digest,
+    )
+
+    changed = payload.model_copy(update={"expected_connector_digest": "0" * 64})
+    for operation in [connections.preview_connection(row.connector_id, changed, request(), principal, db),
+                      connections.create_integration(changed, request(), principal, db)]:
+        with pytest.raises(HTTPException) as failure:
+            asyncio.run(operation)
+        assert failure.value.status_code == 409
+        assert failure.value.detail["code"] == "connector_changed"
+    assert db.scalar(select(Integration.id).where(Integration.creation_key == payload.creation_key)) is None
+
+    saved = asyncio.run(connections.create_integration(payload, request(), principal, db))
+    assert saved["schedule_preset"] == "manual"
+    assert orchestration.active_run(db, saved["id"]) is None
+    assert queued == []
+
+    ordinary = payload.model_copy(update={"creation_key": uuid.uuid4(), "start_initial_discovery": True,
+        "expected_connector_digest": None})
+    saved = asyncio.run(connections.create_integration(ordinary, request(), principal, db))
+    automatic = orchestration.active_run(db, saved["id"])
+    assert automatic is not None
+    assert automatic.execution_provenance["trigger"] == "onboarding"
+    assert saved["schedule_preset"] == "hourly"
+    assert queued == [automatic.id]
 
 
 def auth_request(token):

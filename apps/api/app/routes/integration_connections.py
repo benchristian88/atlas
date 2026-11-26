@@ -17,6 +17,7 @@ from app.models import Integration, DataSource, Site, InstalledConnectorPackage,
 from app.services import connector_lifecycle as lifecycle
 from app.services import connector_mappings as mappings
 from app.services.integration_connections import installed_manifest, response, validate_scopes, protect_source_identity, SourceIdentityLocked, locally_accepted
+from app.services.integration_connections import available_execution_package, discovery_readiness
 from app.services.integration_secrets import AtlasEncryptedSecretProvider, JobSecretLease, SecretProviderError
 from app.services.integration_runtime import runtime
 
@@ -37,6 +38,8 @@ class ConnectionCreate(Input):
     credentials: dict[str, SecretStr] = Field(repr=False, max_length=32)
     selected_scopes: list[str] = Field(default_factory=list, max_length=16)
     enabled: bool = True
+    start_initial_discovery: bool = True
+    expected_connector_digest: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class ConnectionUpdate(Input):
@@ -108,6 +111,12 @@ async def ready(db, connector_id):
     return record, manifest
 
 
+def require_expected_package(record, payload):
+    if payload.expected_connector_digest is not None and payload.expected_connector_digest != record.bundle_digest:
+        raise HTTPException(409, {"code": "connector_changed",
+            "message": "The installed Connector changed. Reload its configuration form and test again."})
+
+
 def form(record, manifest):
     return {"connector_id": record.connector_id, "version": record.version, "digest": record.bundle_digest,
         "name": manifest["display"]["name"], "manifest_version": manifest["manifest_version"],
@@ -138,17 +147,7 @@ def integration_detail(integration_id: uuid.UUID, principal: Principal = Depends
     from app.services.discovery_orchestration import active_run
     current = active_run(db, row.id)
     value.update(current_run_id=current.id if current else None, current_run_status=current.status if current else None)
-    value.update(discovery_capable=False, scheduling_capable=False, discovery_configured=False)
-    try:
-        record, manifest = installed_manifest(db, row.connector_id) if row.connector_id else (None, None)
-        if manifest and (record.version, record.bundle_digest) == (row.connector_version, row.connector_digest):
-            value.update(discovery_capable=manifest["capabilities"]["discover"] == "read_only",
-                scheduling_capable=manifest["capabilities"]["scheduling"] and not locally_accepted(record))
-            validate_configuration(manifest, row.config_json, configured_fields=AtlasEncryptedSecretProvider(db).state(row))
-            validate_scopes(manifest, row.selected_scopes)
-            value["discovery_configured"] = True
-    except (ValueError, OSError):
-        pass
+    value.update(discovery_readiness(row, available_execution_package(db, row.connector_id), value["configured_fields"]))
     return value
 
 
@@ -168,6 +167,7 @@ async def create_integration(payload: ConnectionCreate, request: Request,
         return response(existing, AtlasEncryptedSecretProvider(db))
     try:
         record, manifest = await ready(db, payload.connector_id)
+        require_expected_package(record, payload)
         values = {key: value.get_secret_value() for key, value in payload.credentials.items()}
         config = validate_configuration(manifest, payload.config, values)
         validate_scopes(manifest, payload.selected_scopes)
@@ -191,7 +191,8 @@ async def create_integration(payload: ConnectionCreate, request: Request,
         initial = None
         can_run = db.scalar(select(Integration.id).where(Integration.id == row.id,
             scope_condition(principal, "integrations.run", Integration.customer_id, Integration.site_id))) is not None
-        if manifest["capabilities"]["discover"] == "read_only" and row.enabled and can_run and not locally_accepted(record):
+        if (payload.start_initial_discovery and manifest["capabilities"]["discover"] == "read_only"
+                and row.enabled and can_run and not locally_accepted(record)):
             if manifest["capabilities"]["scheduling"]:
                 row.schedule_preset = "hourly"
                 row.next_run_at = discovery.next_run("hourly", datetime.now(timezone.utc))
@@ -340,6 +341,7 @@ async def preview_connection(connector_id: str, payload: ConnectionCreate, reque
         raise HTTPException(422, "Connector identity does not match")
     try:
         record, manifest = await ready(db, connector_id)
+        require_expected_package(record, payload)
         values = {key: value.get_secret_value() for key, value in payload.credentials.items()}
         config = validate_configuration(manifest, payload.config, values)
         add_audit_event(db, action="integration.preview_test_requested", target_type="connector_package", actor=principal.user,

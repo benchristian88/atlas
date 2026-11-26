@@ -1,4 +1,4 @@
-# Guided setup preview (AT-R01 / E1-A through E1-C)
+# Guided setup preview (AT-R01 / E1-A through E1-D)
 
 ## Preview operation
 
@@ -69,7 +69,7 @@ customised description to inspect the text that will be saved. Services without
 a selected Supports association appear under their own heading. Apply
 creates new Customer-wide records, which other authorized Sites can use.
 Existing records stay as they are. On success, the wizard shows the creation
-counts from the API and opens the pending Add Integrations stage.
+counts from the API and opens Add Integrations.
 
 **Save & exit** stores the selection and selected-entry overrides for the
 confirmed Site. **Resume** restores the saved Function, Service and association
@@ -218,8 +218,8 @@ slugs. A conflict returns 409 and the selection remains available for edits.
   A reference edit that changes completeness rules waits for in-flight
   creations before finding the Services to reevaluate. The reference edit and
   the resulting completeness changes commit together.
-  The draft clears on success. The first decision advances to Add Integrations,
-  which is pending. Later imports preserve the cursor and other stage
+  The draft clears on success. The first decision advances to Add Integrations.
+  Later imports preserve the cursor and other stage
   decisions. Skip and the Blank profile create zero operational records.
 - If the Apply response is lost, resend the same UUID and the same version.
   Authorized replay returns the original outcome, even after progress or
@@ -270,8 +270,100 @@ after trimming and lowercasing, and reject duplicate generated Service slugs.
 The fixture is independent of the signed Connector Catalogue and Atlas release
 metadata.
 
+## Add integrations (E1-D)
+
+Add Integrations shows the confirmed Customer and Site, followed by
+**Configured integrations** and **Available connectors**. The first section
+shows the connection's enabled state, recorded connection test when available,
+and the active or latest discovery run. Opening or resuming the stage reads
+current records. Use **Reload integration status** to pick up concurrent
+administration changes. Atlas polls active discovery while the stage is open
+and stops when the run settles, when you leave, or after five minutes.
+
+The **Connector Catalogue** lists executable connectors and their package
+status. The **Capability Catalogue** in Step 2 contains starter Business
+Functions and Services. Installed connectors and applicable bundled packages
+are available offline. **Refresh catalogue** explicitly checks the official
+source for operators with global runtime management access. Atlas applies the
+standard verification and refresh cooldown rules. A failed official check
+leaves local options available.
+
+Use **Install** for an eligible bundled package or **Review & install** for
+an eligible official package. Review the exact package, source and available
+qualification evidence and confirm activation. Installation and updates apply
+to the entire instance and require global `integration_runtime.manage`.
+Installed packages remain available to configure while eligible updates can
+be reviewed separately. Connector verification, runtime compatibility,
+mapping requirements and update preflight use the standard catalogue commands.
+
+**Configure** opens the standard integration creation form with the Customer,
+Site and connector fixed. Fill the connector's connection fields and run
+**Test Connection**. Configuration changes clear the successful test. Atlas
+checks the same package identity at the probe and save. Unsaved credentials
+are transient masked inputs. Leaving an edited form discards its entries
+after confirmation. A saved integration uses Atlas's existing encrypted
+storage. The preview probe is audited. Saved-card test history comes from
+the integration's recorded test fields.
+
+For a discovery-capable connector, **Save & discover** creates the connection
+and explicitly requests one manual discovery run. For a probe-only connector,
+**Save integration** creates the connection. The wizard creates manual
+schedules. A rejected save keeps the editable form. When a save succeeds
+and discovery is rejected, use **Retry discovery** on the saved integration.
+The discovery service serializes concurrent execution for the same
+integration. Atlas shows queued, running, completed, failed or cancelled
+status and recorded observation counts. Accepted knowledge changes through
+the ordinary reconciliation workflow.
+
+After a lost save response, the wizard looks up the canonical creation key.
+After a lost discovery response, **Check operation status** reloads the
+Site's discovery records. The browser session retains the unresolved
+request across reload and resume and blocks further dispatch from that
+session. A visible run can be used for setup while the earlier request's
+outcome remains unknown. **Use available run and continue** acknowledges
+the unresolved local operation after the Site decision succeeds. Manual
+continuation is also available. The manual start API guards against
+overlapping active runs. Exact request attribution after a lost response
+is unavailable through its history reads.
+
+**Save & exit** saves the shared Site progress. Resume reloads canonical
+integrations and discovery. **Back to Capabilities** opens the previous
+step with its decision preserved. **Continue to Discovery Review** records
+the decision when Atlas has a queued, running or completed run from a
+non-retired integration in the confirmed Site. Displayed discovery history
+can include a different run. If a concurrent change makes the candidate
+ineligible, the wizard refreshes status so you can choose how to continue.
+**Continue without integrations** records a skip in either profile and
+preserves configured integrations and their history. Both decisions open
+the pending Discovery Review step. Reopening Add Integrations preserves
+the current workflow stage and later decisions.
+
+### API contracts
+
+- `GET /api/integrations?include_discovery=true` adds bounded discovery
+  readiness, a credential-free status summary and an eligible
+  `continuation_run_id` (or null) for each returned integration. Atlas
+  chooses the newest eligible run per integration with an ID tie-breaker.
+  The wizard uses the first eligible integration in the scoped list.
+  `GET /api/integrations?creation_key=<uuid>` looks up an existing create
+  request. Both options require the confirmed Customer and Site context
+  headers and retain the existing integration visibility checks.
+- The creation and unsaved test input accepts an optional
+  `expected_connector_digest`. A different active digest returns 409.
+  Integration creation accepts `start_initial_discovery`, defaulting to
+  `true` for existing callers. Onboarding passes `false` before issuing
+  the existing explicit discovery action. The ordinary form, package
+  activation, discovery start and discovery read endpoints handle their
+  respective permissions and persistence.
+- `POST /api/onboarding/{customer_id}/{site_id}/integrations/decision`
+  accepts `{version, decision, discovery_run_id?}` and returns existing
+  progress. The preview gate and scoped Site management apply.
+  `completed` requires a current authorized run for a live integration in
+  that exact Site. `skipped` carries no run ID. Shared version conflict
+  returns 409 and the wizard offers **Reload progress**. The existing
+  onboarding row stores the decision and the audit event records the actor.
+
 ## Later packets
 
-Later packets own integration setup, discovery review, Service linking,
-readiness and Showcase using authorized records in the fixed Site context.
-The public feature remains gated pending E1-H.
+Discovery Review, Service linking, readiness and Showcase remain pending.
+Public activation remains gated pending E1-H.

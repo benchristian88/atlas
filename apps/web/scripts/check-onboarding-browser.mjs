@@ -1,10 +1,11 @@
-// Live E1-A and E1-C acceptance. Use a fresh, disposable Atlas with the onboarding preview enabled.
+// Live guided setup acceptance. Use a fresh, disposable Atlas with the onboarding preview enabled.
 // Pass { code } on stdin. Administrator credentials are generated in memory.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { checkCapabilities } from "./onboarding-capabilities-browser.mjs";
+import { checkIntegrations } from "./onboarding-integrations-browser.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 
@@ -286,9 +287,13 @@ try {
     a, b, c, origin, api, output, workshopHref, selectedCustomer, workshopSite, blankHref: href,
     login, openPage, credentials, action, link, heading, resumeWithKeyboard,
   });
+  const integrations = process.env.ATLAS_E1D_LIVE === "true" ? await checkIntegrations({
+    a, b, c, origin, api, output, workshopHref, blankHref: href, action, heading, resumeWithKeyboard,
+  }) : null;
   assert.deepEqual(pageErrors, []);
-  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, pageErrors, liveAuthentication: true }, null, 2));
+  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, integrations, pageErrors, liveAuthentication: true }, null, 2));
   console.log(`PASS: live Environment and Capabilities, shared drafts and conflicts, keyboard and permissions, atomic Apply and receipt replay, additional import, ${layouts.length + capabilities.layouts.length} responsive/theme layouts.`);
+  if (integrations) console.log(`PASS: live Add Integrations, verified installation, probe, discovery and recovery, ${integrations.layouts.length} responsive/theme layouts.`);
 } finally {
   await browser.close();
 }

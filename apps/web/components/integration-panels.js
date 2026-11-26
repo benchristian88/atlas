@@ -4,7 +4,7 @@ import { Surface, EmptyState } from "./section";
 import { StatusIndicator } from "./status-indicator";
 import { connectorActions, connectorState, formatIntegrationTime, PACKAGING_LABELS, TRUST_LABELS, runtimeErrorMessage, runtimeOperations, formatOfficialCatalogueTime, officialCatalogueBlocked, officialCatalogueDiagnostic, officialCatalogueSummary } from "../lib/integrations.mjs";
 
-export function OfficialCataloguePanel({ status, canManage, loading, refreshing, error, feedback, onRefresh, onReload, styles = {} }) {
+export function OfficialCataloguePanel({ status, canManage, loading, refreshing, error, feedback, onRefresh, onReload, styles = {}, compact }) {
   const pending = loading || refreshing;
   const inProgress = refreshing || status?.refresh_state === "in_progress";
   const blocked = officialCatalogueBlocked(status);
@@ -17,7 +17,7 @@ export function OfficialCataloguePanel({ status, canManage, loading, refreshing,
         {status?.trusted_remote_available && <p className={styles.meta}>Last confirmed: {formatOfficialCatalogueTime(status.last_confirmed_current_at)}. Past confirmation does not establish that the source is unchanged now.</p>}
       </div>
       <div className="form-actions">
-        {canManage && <Button loading={refreshing} disabled={pending || !status || blocked || Boolean(error) || ["cooldown", "in_progress"].includes(feedback?.result)} onClick={onRefresh}>Check for catalogue updates</Button>}
+        {canManage && <Button loading={refreshing} disabled={pending || !status || blocked || Boolean(error) || ["cooldown", "in_progress"].includes(feedback?.result)} onClick={onRefresh}>{compact ? "Refresh catalogue" : "Check for catalogue updates"}</Button>}
       </div>
     </div>
     <div aria-live="polite" aria-atomic="true" role="status">
@@ -39,22 +39,30 @@ export function OfficialCataloguePanel({ status, canManage, loading, refreshing,
   </div>;
 }
 
-export function ConnectorCard({ entry, canManage, busy, onAction, onInstall, installBlocked, className = "", styles = {} }) {
-  const actions = connectorActions(entry.localActionEntry || (entry.source === "official" ? null : entry), canManage);
+export function ConnectorCard({ entry, canManage, busy, onAction, onInstall, installBlocked, className = "", styles = {}, configuration }) {
+  const localEntry = configuration ? configuration.local : entry.localActionEntry || (entry.source === "official" ? null : entry);
+  const actions = connectorActions(localEntry, canManage).filter(action => !configuration || ["install", "update"].includes(action.action));
   const mappings = entry.installed?.package_available ? entry.installed : entry.package_available ? entry : entry.installEntry;
+  const Heading = configuration ? "h4" : "h3";
   return <Surface className={className} data-connector-id={entry.connector_id}>
-    <header className="catalogue-identity"><EntityIdentity type="connector" record={{ ...entry, id: entry.connector_id }} size={38} /><div className="catalogue-copy"><h3>{entry.name}</h3>{entry.category && <span className="secondary-text">{entry.category}</span>}</div></header>
+    <header className="catalogue-identity"><EntityIdentity type="connector" record={{ ...entry, id: entry.connector_id }} size={38} /><div className="catalogue-copy"><Heading tabIndex={configuration ? -1 : undefined}>{entry.name}</Heading>{entry.category && <span className="secondary-text">{entry.category}</span>}</div></header>
     <p>{entry.description}</p>
     <dl className="ops-definition"><dt>Publisher</dt><dd>{entry.publisher || "Not specified"} <span className="secondary-text">· {TRUST_LABELS[entry.trust_tier] || (entry.source === "official" ? "Atlas official" : "Trust not established")}</span></dd><dt>Version</dt><dd>{entry.version || "Not released"}{entry.installed_version && <span className="secondary-text"> · {entry.installed_version === entry.version ? "Installed" : `${entry.installed_version} installed`}</span>}</dd>{entry.availableRelease && entry.availableRelease.version !== entry.version && <><dt>Official release</dt><dd>{entry.availableRelease.version} · {entry.availableRelease.installSelection ? "Available for review" : "Unavailable for remote installation"}</dd></>}{entry.licence && <><dt>Licence</dt><dd>{entry.licence}</dd></>}</dl>
     <div className={styles.cardStatus}><StatusIndicator state={connectorState(entry)} variant="badge" />{entry.installed && <StatusIndicator state={entry.verification_status} variant="badge" />}</div>
+    {configuration && <p className="secondary-text">
+      {entry.installed_version ? "Installed package" : entry.source === "official" ? "Official catalogue" : "Bundled catalogue"}
+      {entry.source_versions?.qualification && <> · {entry.source_versions.qualification.replaceAll("_", " ")}</>}
+    </p>}
+    {configuration?.configure && <div className="form-actions"><Button data-configure variant="primary" disabled={Boolean(busy)} onClick={configuration.configure}>Configure</Button></div>}
+    {configuration?.limitation && <p className="secondary-text">{configuration.limitation}</p>}
     {canManage && (actions.length > 0 || entry.installEntry || mappings) && <div className={`form-actions ${styles.cardActions || ""}`}>
-      {entry.installEntry && <Button variant="primary" disabled={Boolean(busy) || installBlocked} onClick={() => onInstall(entry.installEntry)}>{entry.installed_version ? "Review package change" : "Review installation"}</Button>}
-      {mappings && <Button href={`/integrations/mappings/${encodeURIComponent(entry.connector_id)}?version=${encodeURIComponent(mappings.version)}`}>Resolve mappings</Button>}
-      {actions.map(action => <Button key={action.action} variant={action.action === "remove" ? "destructive" : "primary"} loading={busy === entry.connector_id} disabled={Boolean(busy)} onClick={() => onAction(entry.localActionEntry || entry, action)}>{action.label}</Button>)}
+      {entry.installEntry && <Button variant="primary" disabled={Boolean(busy) || installBlocked} onClick={() => onInstall({ ...entry.installEntry, installed_version: entry.installed_version })}>{entry.installed_version ? "Review package change" : configuration ? "Review & install" : "Review installation"}</Button>}
+      {mappings && (!configuration || (entry.installed_version && !configuration.configure && configuration.needsForm)) && <Button href={`/integrations/mappings/${encodeURIComponent(entry.connector_id)}?version=${encodeURIComponent(mappings.version)}`}>Resolve mappings</Button>}
+      {actions.map(action => <Button key={action.action} variant={action.action === "remove" ? "destructive" : "primary"} loading={busy === entry.connector_id} disabled={Boolean(busy)} onClick={() => onAction(localEntry || entry, action)}>{configuration ? action.action === "install" ? "Install" : "Review bundled update" : action.label}</Button>)}
     </div>}
     {entry.message && entry.message !== entry.description && entry.verification_status !== "metadata_only" && <p className="secondary-text">{entry.message}</p>}
     {entry.verification_status === "metadata_only" && <small className="secondary-text">{entry.source === "official" ? "Accepted official metadata. Package eligibility is checked separately." : "Planned · Catalogue metadata verified. Executable bundle not released."}</small>}
-    {entry.history?.length > 0 && <details className={styles.technical}><summary>Release history and bundled packages ({entry.history.length})</summary><ul className={styles.releaseHistory}>{entry.history.map(release => <li key={`${release.source}/${release.version}/${release.digest || "metadata"}`}>
+    {!configuration && entry.history?.length > 0 && <details className={styles.technical}><summary>Release history and bundled packages ({entry.history.length})</summary><ul className={styles.releaseHistory}>{entry.history.map(release => <li key={`${release.source}/${release.version}/${release.digest || "metadata"}`}>
       <strong>{release.version || "Not released"}</strong> · {release.source === "bootstrap" ? "Included offline package" : release.withdrawn ? "Withdrawn official release" : "Official release"}
       <p>{release.description}</p>
       {release.source === "official" && !release.installSelection && <small>Unavailable for remote installation</small>}

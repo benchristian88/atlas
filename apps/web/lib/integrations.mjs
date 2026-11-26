@@ -85,6 +85,7 @@ export function officialConnectorMetadata(entry) {
     withdrawn: entry.status === "withdrawn",
     packageAvailable: entry.package_available === true,
     installSelection: remoteInstallSelection(entry),
+    source_versions: manifest.source_versions,
   };
 }
 

@@ -12,7 +12,7 @@ from app.services.connector_verification import BootstrapReleaseVerifier, Offici
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def fixture_bundle(tmp_path):
+def fixture_bundle(tmp_path, *, with_probe=False):
     manifest = json.loads((ROOT / "docs/architecture/integrations/contracts/manifests/proxmox.json").read_text())
     # Schema example is only a template: no vendor endpoint or inventory code.
     raw = json.dumps(manifest).replace("proxmox", "i3-fixture")
@@ -48,6 +48,8 @@ scenario=inputs["config"].get("scenario","complete")
 if scenario=="slow":
  Path(sys.argv[2]).with_name("fixture.pid").write_text(str(__import__("os").getpid()))
  time.sleep(120)
+if scenario=="brief":
+ time.sleep(7)
 envelope={"protocol_version":"1.0","connector":{"id":inputs["reference"]["connector_id"],"version":inputs["reference"]["version"],"bundle_digest":"sha256:"+inputs["reference"]["digest"]},"run_id":inputs["run_id"],"integration_id":inputs["integration_id"],"observed_at":"2026-10-12T00:00:00Z","source":{"version":"8.4.0"},"coverage":inputs["coverage"]}
 messages=[]
 for sequence in [1,2]:
@@ -67,6 +69,20 @@ Path(sys.argv[2]).write_text("\\n".join(json.dumps(row) for row in messages)+"\\
             "packages": [{"name": "i3-fixture", "SPDXID": "SPDXRef-Fixture", "versionInfo": "1.0.0", "downloadLocation": "NOASSERTION",
                 "filesAnalyzed": False, "licenseDeclared": "AGPL-3.0-only", "licenseConcluded": "NOASSERTION", "copyrightText": "NOASSERTION"}]}).encode()),
         ("discover.yml", playbook), ("emit.py", emit)]
+    if with_probe:
+        probe = playbook.replace(b"emit.py", b"probe.py").replace(b"atlas_aip_file", b"atlas_result_file")
+        files.extend([
+            ("test_connection.yml", probe),
+            ("probe.py", b"""import json, sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text())
+success = payload["config"].get("scenario") != "invalid"
+Path(sys.argv[2]).write_text(json.dumps({
+    "success": success, "category": "connected" if success else "authentication_failed",
+    "source_version": "8.4.0" if success else None,
+}))
+"""),
+        ])
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
         for name, content in files:

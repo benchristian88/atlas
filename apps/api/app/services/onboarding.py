@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.audit import add_audit_event
 from app.authorization import Principal, forbidden, refresh_principal, require_scope
 from app.models import (
-    Asset, BusinessFunction, Customer, InstallationState, Integration, Network,
+    Asset, BusinessFunction, Customer, DiscoveryRun, InstallationState, Integration, Network,
     OnboardingInvitationDismissal, Service, Site, SiteOnboarding,
 )
 from app.routes.crud_helpers import commit
@@ -188,3 +188,35 @@ def record_progress(db, customer, site, principal, request, state, action):
     state.updated_at = db.scalar(select(func.clock_timestamp()))
     state.version += 1
     audit(db, customer, site, principal, request, action, version=state.version)
+
+
+def integration_decision_runs(customer_id, site_id):
+    return select(DiscoveryRun.integration_id, DiscoveryRun.id.label("run_id")).join(
+        Integration, Integration.id == DiscoveryRun.integration_id,
+    ).where(
+        DiscoveryRun.customer_id == customer_id, DiscoveryRun.site_id == site_id,
+        Integration.customer_id == customer_id, Integration.site_id == site_id, Integration.retired_at.is_(None),
+        DiscoveryRun.archived_at.is_(None), DiscoveryRun.status.in_(("pending", "running", "completed")),
+    )
+
+
+def decide_integrations(db, customer, site, principal, request, *, version, decision, discovery_run_id):
+    state = progress(db, site, lock=True)
+    principal = refreshed_access(db, principal, site, manage=True)
+    if state is None or version != state.version or state.status != "in_progress" or state.current_stage != "integrations":
+        raise HTTPException(409, CONFLICT)
+    if decision == "completed":
+        require_scope(principal, "integrations.view", customer.id, site.id, hide_existence=True)
+        run = db.execute(integration_decision_runs(customer.id, site.id).where(
+            DiscoveryRun.id == discovery_run_id,
+        )).one_or_none() if discovery_run_id else None
+        if run is None:
+            raise HTTPException(422, "Choose a queued, running or completed discovery run for this Site.")
+    elif discovery_run_id is not None:
+        raise HTTPException(422, "Manual continuation does not take a discovery run.")
+    state.stage_decisions = {**state.stage_decisions, "integrations": decision}
+    state.current_stage = "discovery_review"
+    action = "integrations_completed" if decision == "completed" else "integrations_skipped"
+    record_progress(db, customer, site, principal, request, state, action)
+    commit(db, "Onboarding progress")
+    return state

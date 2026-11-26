@@ -297,3 +297,35 @@
   .desktopReview:global(.button) { display: none; }
   .mobileReview:global(.button) { display: inline-flex; }
 }
+
+.integrationStage { display: grid; gap: var(--space-4); min-width: 0; }
+.integrationStage > p { margin-block: 0; }
+.integrationStage > [role="region"]:empty { display: none; }
+.integrationList { list-style: none; margin: 0; padding: 0; }
+.integrationRow {
+  align-items: start;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  padding: var(--space-3) 0;
+}
+.integrationRow h4, .integrationRow p, .integrationFacts, .integrationFacts dd { margin: 0; }
+.integrationRow > p { grid-column: 1 / -1; }
+.integrationRow > button { justify-self: start; }
+.integrationFacts { display: grid; gap: var(--space-2); }
+.integrationFacts dt { color: var(--muted); font-size: var(--type-label); }
+.manualContinuation { color: var(--muted); flex-basis: 100%; margin-block: 0; }
+.integrationStage h3 { font-size: var(--type-h3); }
+.integrationStage :global(.integration-steps) { display: flex; flex-wrap: wrap; }
+.grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
+.card { display: grid; gap: var(--space-2); min-width: 0; }
+.card h4, .card p, .card dl, .card :global(.form-actions) { margin: 0; }
+.cardStatus, .statusHeading { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.catalogueStatus { margin-bottom: var(--space-4); }
+.catalogueStatus .meta { margin-block: var(--space-2); }
+.technical { color: var(--muted); }
+.technical summary { cursor: pointer; }
+@media (max-width: 530px) {
+  .integrationRow { grid-template-columns: minmax(0, 1fr); }
+}
