@@ -1,9 +1,10 @@
-// Live E1-A acceptance. Use a fresh, disposable Atlas with the onboarding preview enabled.
+// Live E1-A and E1-C acceptance. Use a fresh, disposable Atlas with the onboarding preview enabled.
 // Pass { code } on stdin. Administrator credentials are generated in memory.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { checkCapabilities } from "./onboarding-capabilities-browser.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 
@@ -174,7 +175,7 @@ try {
   await action(b.page, "Reload progress").click();
   await action(b.page, "Resume setup").waitFor();
   assert.equal(await b.page.getByRole("radio", { name: /Blank/ }).isChecked(), true);
-  await link(a.page, "Continue setup").click();
+  await link(a.page, "Resume").click();
   await resumeWithKeyboard(a.page, "Environment");
   assert.equal(await a.page.getByRole("radio", { name: /Blank/ }).isChecked(), true);
   await action(b.page, "Resume setup").click();
@@ -200,7 +201,7 @@ try {
   await action(a.page, "Return to current stage").click();
   await action(a.page, "Save & exit").click();
   await a.page.waitForURL("**/dashboard");
-  await link(a.page, "Continue setup").click();
+  await link(a.page, "Resume").click();
   await resumeWithKeyboard(a.page, "Capabilities");
   await action(a.page, "Save & exit").waitFor();
   await a.page.reload();
@@ -263,7 +264,9 @@ try {
   await link(a.page, "Atlas Impact home").click();
   await a.page.waitForURL("**/dashboard");
   await a.page.getByRole("combobox", { name: "Active customer" }).selectOption(selectedCustomer);
-  await link(a.page, "Continue setup for Renamed Homelab").click();
+  const resumeOther = a.page.getByRole("region", { name: "Guided setup" });
+  await resumeOther.getByText("Renamed Homelab", { exact: true }).waitFor();
+  await link(resumeOther, "Resume").click();
   await a.page.waitForURL(`${origin}${href}`);
   await heading(a.page, "Capabilities").waitFor();
   assert.equal(await a.page.locator(".context-selector").count(), 0);
@@ -279,9 +282,13 @@ try {
     assert.equal(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     accents.push({ theme, accent });
   }
+  const capabilities = await checkCapabilities({
+    a, b, c, origin, api, output, workshopHref, selectedCustomer, workshopSite, blankHref: href,
+    login, openPage, credentials, action, link, heading, resumeWithKeyboard,
+  });
   assert.deepEqual(pageErrors, []);
-  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, pageErrors, liveAuthentication: true }, null, 2));
-  console.log(`PASS: live setup, personal dismissal, draft persistence, stale-write recovery, keyboard resume, permissions, context creation/recovery, and ${layouts.length} responsive/theme layouts.`);
+  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, pageErrors, liveAuthentication: true }, null, 2));
+  console.log(`PASS: live Environment and Capabilities, shared drafts and conflicts, keyboard and permissions, atomic Apply and receipt replay, additional import, ${layouts.length + capabilities.layouts.length} responsive/theme layouts.`);
 } finally {
   await browser.close();
 }
