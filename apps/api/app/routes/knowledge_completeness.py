@@ -25,7 +25,11 @@ from app.schemas import (
     ServiceCompletenessResponse,
     GlobalKnowledgeRequirementResponse,
 )
-from app.services.knowledge_completeness import ACTIVE_GAP_STATUSES, evaluate_asset, evaluate_assets_for_asset_type, evaluate_service, evaluate_services_for_service_type, lock_completeness_entity
+from app.services.knowledge_completeness import (
+    ACTIVE_GAP_STATUSES, OPEN_GAP_STATUSES, REQUIRED_GAP_LEVELS, evaluate_asset,
+    evaluate_assets_for_asset_type, evaluate_service, evaluate_services_for_service_type,
+    lock_completeness_entity, scoped_completeness_query,
+)
 from app.services.knowledge_changes import record_change
 from app.services.knowledge_locks import concurrent_decision
 from app.services.knowledge_requirement_references import interpret_rule, validate_rule_config
@@ -315,26 +319,36 @@ def service_completeness(service_id: uuid.UUID, principal: Principal = Depends(r
     return {"service_id": service.id, "summary": summary, "active_gaps": [_gap_response(db, item) for item in gaps if item.status in ACTIVE_GAP_STATUSES], "resolved_gaps": [_gap_response(db, item) for item in gaps if item.status not in ACTIVE_GAP_STATUSES]}
 
 
-def _gap_query(context: RequestContext, principal: Principal):
-    query = select(KnowledgeGap).where(scope_condition(principal, "knowledge_gaps.view", KnowledgeGap.customer_id, KnowledgeGap.site_id))
-    if context.customer_id:
-        query = query.where(KnowledgeGap.customer_id == context.customer_id)
-    if context.site_id:
-        query = query.where(KnowledgeGap.site_id == context.site_id)
-    return query
-
-
 @router.get("/knowledge-gaps", response_model=list[KnowledgeGapResponse])
-def list_gaps(context: RequestContext, principal: Principal = Depends(require_permission("knowledge_gaps.view")), entity_type: str | None = None, asset_type_id: uuid.UUID | None = None, requirement_id: uuid.UUID | None = None, severity: str | None = None, requirement_level: str | None = None, gap_status: str | None = Query(default=None, alias="status"), assigned_user_id: uuid.UUID | None = None, minimum_age_days: int | None = Query(default=None, ge=0), limit: int = Query(default=200, ge=1, le=500), db: Session = Depends(get_db)):
-    query = _gap_query(context, principal)
+def list_gaps(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("knowledge_gaps.view")),
+    entity_type: str | None = None,
+    asset_type_id: uuid.UUID | None = None,
+    requirement_id: uuid.UUID | None = None,
+    severity: str | None = None,
+    requirement_level: str | None = None,
+    gap_status: str | None = Query(default=None, alias="status"),
+    assigned_user_id: uuid.UUID | None = None,
+    minimum_age_days: int | None = Query(default=None, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+    include_customer_wide: bool = False,
+    db: Session = Depends(get_db),
+):
+    query = scoped_completeness_query(KnowledgeGap, context, principal, include_customer_wide=include_customer_wide)
     if entity_type:
         if entity_type not in {"asset", "service"}: raise HTTPException(status_code=422, detail="entity_type must be asset or service")
         query = query.where(KnowledgeGap.entity_type == entity_type)
     if asset_type_id: query = query.where(KnowledgeGap.asset_type_id_snapshot == asset_type_id)
     if requirement_id: query = query.where(KnowledgeGap.requirement_definition_id == requirement_id)
     if severity: query = query.where(KnowledgeGap.severity == severity)
-    if requirement_level: query = query.where(KnowledgeGap.requirement_level == requirement_level)
-    if gap_status: query = query.where(KnowledgeGap.status == gap_status)
+    if requirement_level == "required_or_conditional":
+        query = query.where(KnowledgeGap.requirement_level.in_(REQUIRED_GAP_LEVELS))
+    elif requirement_level:
+        query = query.where(KnowledgeGap.requirement_level == requirement_level)
+    if gap_status == "open_or_deferred":
+        query = query.where(KnowledgeGap.status.in_(OPEN_GAP_STATUSES))
+    elif gap_status: query = query.where(KnowledgeGap.status == gap_status)
     else: query = query.where(KnowledgeGap.status.in_(ACTIVE_GAP_STATUSES))
     if assigned_user_id: query = query.where(KnowledgeGap.assigned_to_user_id == assigned_user_id)
     if minimum_age_days is not None: query = query.where(KnowledgeGap.first_detected_at <= datetime.now(timezone.utc) - timedelta(days=minimum_age_days))
@@ -342,12 +356,15 @@ def list_gaps(context: RequestContext, principal: Principal = Depends(require_pe
 
 
 @router.get("/knowledge-gaps/summary", response_model=GapSummaryResponse)
-def gap_summary(context: RequestContext, principal: Principal = Depends(require_permission("knowledge_gaps.view")), db: Session = Depends(get_db)):
-    gaps = list(db.scalars(_gap_query(context, principal)))
-    active_open = [item for item in gaps if item.status in {"open", "deferred"}]
-    summaries = list(db.scalars(select(KnowledgeCompletenessSummary).where(scope_condition(principal, "knowledge_gaps.view", KnowledgeCompletenessSummary.customer_id, KnowledgeCompletenessSummary.site_id))))
-    if context.customer_id: summaries = [item for item in summaries if item.customer_id == context.customer_id]
-    if context.site_id: summaries = [item for item in summaries if item.site_id == context.site_id]
+def gap_summary(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("knowledge_gaps.view")),
+    include_customer_wide: bool = False,
+    db: Session = Depends(get_db),
+):
+    gaps = list(db.scalars(scoped_completeness_query(KnowledgeGap, context, principal, include_customer_wide=include_customer_wide)))
+    active_open = [item for item in gaps if item.status in OPEN_GAP_STATUSES]
+    summaries = list(db.scalars(scoped_completeness_query(KnowledgeCompletenessSummary, context, principal, include_customer_wide=include_customer_wide)))
     asset_count_query = select(func.count()).select_from(Asset).where(
         scope_condition(principal, "knowledge_gaps.view", Asset.customer_id, Asset.site_id)
     )
@@ -357,7 +374,15 @@ def gap_summary(context: RequestContext, principal: Principal = Depends(require_
     now = datetime.now(timezone.utc)
     active_assets = [item for item in active_open if item.entity_type == "asset"]
     asset_summaries = [item for item in summaries if item.entity_type == "asset"]
-    return {"open_knowledge_gap_count": sum(item.requirement_level in {"required", "conditional"} for item in active_open), "critical_knowledge_gap_count": sum(item.severity == "critical" for item in active_open), "high_knowledge_gap_count": sum(item.severity == "high" for item in active_open), "assets_with_critical_gaps": len({item.entity_id for item in active_assets if item.severity == "critical"}), "assets_not_evaluated": max(0, asset_count - sum(item.completeness_status != "not_evaluated" for item in asset_summaries)), "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in asset_summaries), "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at and item.exception_expires_at <= now for item in gaps)}
+    return {
+        "open_knowledge_gap_count": sum(item.requirement_level in REQUIRED_GAP_LEVELS for item in active_open),
+        "critical_knowledge_gap_count": sum(item.severity == "critical" for item in active_open),
+        "high_knowledge_gap_count": sum(item.severity == "high" for item in active_open),
+        "assets_with_critical_gaps": len({item.entity_id for item in active_assets if item.severity == "critical"}),
+        "assets_not_evaluated": max(0, asset_count - sum(item.completeness_status != "not_evaluated" for item in asset_summaries)),
+        "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in asset_summaries),
+        "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at is not None and item.exception_expires_at <= now for item in gaps),
+    }
 
 
 def _scoped_gap(db: Session, principal: Principal, gap_id: uuid.UUID, permission: str | None = None):

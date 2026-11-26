@@ -38,7 +38,7 @@ test("dashboard and asset list consume API-computed completeness summaries", asy
   const dashboard = await readFile(new URL("../app/dashboard/page.js", import.meta.url), "utf8");
   const assets = await readFile(new URL("../app/assets/page.js", import.meta.url), "utf8");
   assert.match(dashboard, /open_knowledge_gap_count/);
-  assert.match(dashboard, /href: "\/knowledge-gaps"/);
+  assert.match(dashboard, /href: DASHBOARD_GAPS_HREF/);
   assert.match(dashboard, /CompletenessLine node=\{node\}/);
   assert.match(assets, /has_critical_gaps/);
   assert.match(assets, /has_open_knowledge_gaps/);

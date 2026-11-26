@@ -68,11 +68,42 @@ h3 { font-size: var(--type-h3); font-weight: var(--weight-semibold); line-height
 .filter-toolbar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-surface); display: grid; gap: 14px; margin-bottom: 18px; padding: var(--space-4); }
 .filter-toolbar-grid { display: grid; gap: var(--space-3); }
 .changes-filter-grid { display: grid; gap: 12px; grid-template-columns: minmax(120px, .7fr) repeat(3, minmax(150px, 1fr)) minmax(190px, 1.25fr); }
-.knowledge-gaps-filter-grid { grid-template-columns: minmax(150px, 1fr) minmax(200px, 1.35fr) minmax(120px, .7fr) minmax(155px, 1fr); }
+.knowledge-gaps-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.knowledge-gap-scope-filter { grid-column: 1 / -1; }
+.knowledge-gap-scope-filter input { accent-color: var(--accent); }
+.knowledge-gap-scope-filter p { margin: var(--space-1) 0 0; }
 .filter-toolbar .field { min-width: 0; }
 .changes-period-filter { max-width: 180px; }
 .filter-toolbar-actions { align-items: center; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 14px; padding-top: 12px; }
 .filter-toolbar-actions .secondary-text { margin-left: auto; }
+.filter-popover {
+  box-sizing: border-box;
+  width: min(740px, calc(100vw - 2 * var(--space-4)));
+  max-height: 70dvh;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-overlay);
+  box-shadow: 0 12px 30px rgba(20, 37, 40, .16);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  color: var(--text);
+}
+.filter-popover .filter-toolbar { margin: 0; border-radius: inherit; }
+@media (min-width: 701px) {
+  @supports (position-area: bottom span-right) {
+    .filter-popover {
+      position-area: bottom span-right;
+      position-try-fallbacks: flip-block;
+      inset: auto;
+      justify-self: start;
+      align-self: start;
+      max-width: stretch;
+      max-height: stretch;
+      margin: var(--space-2) var(--space-4) var(--space-2) 0;
+    }
+  }
+}
 .timeline-summary { color: var(--muted); font-size: var(--type-label); margin: 0 0 12px; }
 .change-timeline { display: grid; gap: 20px; }
 .change-day { min-width: 0; }

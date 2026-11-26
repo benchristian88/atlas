@@ -14,13 +14,15 @@ import { WIDGETS, graphHref } from "../../lib/operations-experience.mjs";
 import { normalizeOperationalGraph } from "../../lib/operational-graph.mjs";
 import { dependencyAttention } from "../../lib/dependency-attention.mjs";
 import { apiRequest } from "../../lib/api";
+import { DASHBOARD_GAPS_HREF } from "../../lib/knowledge-gap-filters.mjs";
 import { useRouter } from "next/navigation";
 
+const gapCountDescription = "Required or conditional gaps that are open or deferred";
 const metrics = [
   { key: "non_retired_assets", label: "Assets", type: "asset", href: "/assets", permission: "assets.view" },
   { key: "services", label: "Services", type: "service", href: "/services", permission: "services.view" },
   { key: "business_functions", label: "Business Functions", type: "business_function", href: "/business-functions", permission: "business_functions.view" },
-  { key: "open_knowledge_gap_count", label: "Knowledge Gaps", href: "/knowledge-gaps", permission: "knowledge_gaps.view" },
+  { key: "open_knowledge_gap_count", label: "Knowledge Gaps", href: DASHBOARD_GAPS_HREF, description: gapCountDescription, permission: "knowledge_gaps.view" },
 ];
 
 function Summary({ summary, hasPermission }) {
@@ -32,7 +34,7 @@ function Summary({ summary, hasPermission }) {
       <div className="ops-summary-copy">
         <span>{metric.label}</span>
         <strong>{count ?? "—"}</strong>
-        <small>{!allowed ? "Requires view permission" : count == null ? "Total unavailable" : "Current recorded total"}</small>
+        <small>{!allowed ? "Requires view permission" : count == null ? "Total unavailable" : metric.description || "Current recorded total"}</small>
       </div>
     </Link>;
   })}</section>;
@@ -59,7 +61,7 @@ function Attention({ graph, summary, hasPermission }) {
   const items = [
     { label: "Unknown dependency effects", icon: "discovery", count: unknown, href: "/knowledge-graph", text: "Recorded dependencies with an unknown failure effect." },
     { label: "Ungrouped dependencies", icon: "knowledge-graph", count: ungrouped, href: "/knowledge-graph", text: "Review whether these dependencies need explicit behaviour." },
-    ...(hasPermission("knowledge_gaps.view") ? [{ label: "Knowledge gaps", icon: "knowledge-gaps", count: summary?.open_knowledge_gap_count, href: "/knowledge-gaps", text: "Required or conditional knowledge that needs attention." }, { label: "Critical Services with gaps", icon: "services", count: graph?.nodes.filter((n) => n.entity_type === "service" && n.criticality_rank >= 75 && n.open_gap_count > 0).length, href: "/services?attention=required_gaps", text: "High criticality Services with recorded knowledge gaps." }] : []),
+    ...(hasPermission("knowledge_gaps.view") ? [{ label: "Knowledge gaps", icon: "knowledge-gaps", count: summary?.open_knowledge_gap_count, href: DASHBOARD_GAPS_HREF, text: gapCountDescription }, { label: "Critical Services with gaps", icon: "services", count: graph?.nodes.filter((n) => n.entity_type === "service" && n.criticality_rank >= 75 && n.open_gap_count > 0).length, href: "/services?attention=required_gaps", text: "High criticality Services with recorded knowledge gaps." }] : []),
   ];
   return <section className="ops-card"><header className="ops-section-header"><div><h2>Knowledge attention</h2><p>What Atlas needs you to review.</p></div></header>{items.map((item) => <Link className="ops-attention-row" href={item.href} key={item.label}><span className="ops-icon-tile"><NavigationIcon name={item.icon} /></span><div><strong>{item.label}</strong><small>{item.text}</small></div><span className="ops-badge">{item.count ?? "—"}{graph?.truncated && item.href === "/knowledge-graph" ? "+" : ""}</span><span aria-hidden="true">›</span></Link>)}<details className="graph-semantic-list"><summary>Relationships needing dependency-impact classification</summary><ul>{relationships.map(edge => <li key={edge.key}><Link href={`/services/${edge.source.entity_id}#dependency-impact`}>{edge.source.name} — {edge.label} → {edge.target.name}</Link><small> · {!edge.dependency_group_id ? "Impact not classified" : "Unknown effect"}</small></li>)}</ul>{graph && !relationships.length && <p>No visible dependencies need classification.</p>}{graph?.truncated && <p>Showing relationships within this bounded overview. Other Services may also need review.</p>}</details><p className="ops-meta">Knowledge quality based on recorded data.</p></section>;
 }

@@ -15,6 +15,7 @@ from app.authorization import (
 )
 from app.database import get_db
 from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, Site
+from app.services.knowledge_completeness import OPEN_GAP_STATUSES, REQUIRED_GAP_LEVELS, scoped_completeness_query
 from app.services.service_relationship_scope import current_relationship
 from app.schemas import ContextResponse, DashboardSummaryResponse
 from app.services.reconciliation_listing import filtered_items, stale_identity_item_ids
@@ -138,12 +139,8 @@ def dashboard_summary(
         .join(target, target.id == AssetRelationship.target_asset_id)
         .where(source_scope, target_scope)
     )
-    gap_query = select(KnowledgeGap).where(
-        scope_condition(principal, "knowledge_gaps.view", KnowledgeGap.customer_id, KnowledgeGap.site_id)
-    )
-    completeness_query = select(KnowledgeCompletenessSummary).where(
-        scope_condition(principal, "knowledge_gaps.view", KnowledgeCompletenessSummary.customer_id, KnowledgeCompletenessSummary.site_id)
-    )
+    gap_query = scoped_completeness_query(KnowledgeGap, context, principal, include_customer_wide=include_customer_wide)
+    completeness_query = scoped_completeness_query(KnowledgeCompletenessSummary, context, principal, include_customer_wide=include_customer_wide)
     if context.customer_id is not None:
         customer_query = customer_query.where(Customer.id == context.customer_id)
         site_query = site_query.where(Site.customer_id == context.customer_id)
@@ -157,8 +154,6 @@ def dashboard_summary(
             source.customer_id == context.customer_id,
             target.customer_id == context.customer_id,
         )
-        gap_query = gap_query.where(KnowledgeGap.customer_id == context.customer_id)
-        completeness_query = completeness_query.where(KnowledgeCompletenessSummary.customer_id == context.customer_id)
     if context.site_id is not None:
         site_query = site_query.where(Site.id == context.site_id)
         asset_query = asset_query.where(Asset.site_id == context.site_id)
@@ -173,8 +168,6 @@ def dashboard_summary(
             source.site_id == context.site_id,
             target.site_id == context.site_id,
         )
-        gap_query = gap_query.where(or_(KnowledgeGap.site_id == context.site_id, KnowledgeGap.site_id.is_(None)) if include_customer_wide else KnowledgeGap.site_id == context.site_id)
-        completeness_query = completeness_query.where(or_(KnowledgeCompletenessSummary.site_id == context.site_id, KnowledgeCompletenessSummary.site_id.is_(None)) if include_customer_wide else KnowledgeCompletenessSummary.site_id == context.site_id)
     open_items = list(db.scalars(open_items_query))
     category_counts = {
         category: sum(item.category == category for item in open_items)
@@ -188,7 +181,7 @@ def dashboard_summary(
     }
     gaps = list(db.scalars(gap_query)) if principal.can_anywhere("knowledge_gaps.view") else []
     completeness = list(db.scalars(completeness_query)) if principal.can_anywhere("knowledge_gaps.view") else []
-    active_gaps = [item for item in gaps if item.status in {"open", "deferred"}]
+    active_gaps = [item for item in gaps if item.status in OPEN_GAP_STATUSES]
     active_asset_gaps = [item for item in active_gaps if item.entity_type == "asset"]
     asset_completeness = [item for item in completeness if item.entity_type == "asset"]
     now = datetime.now(timezone.utc)
@@ -197,7 +190,7 @@ def dashboard_summary(
     service_ids = [item.id for item in service_rows]
     service_asset_dependency_ids = set(db.scalars(select(ServiceAssetDependency.service_id).where(ServiceAssetDependency.service_id.in_(service_ids), current_relationship(ServiceAssetDependency, principal)))) if service_ids else set()
     criticality_by_id = {item.id: item for item in db.scalars(select(CriticalityLevel))} if service_rows else {}
-    required_gap_service_ids = {item.entity_id for item in active_gaps if item.entity_type == "service" and item.requirement_level in {"required", "conditional"}}
+    required_gap_service_ids = {item.entity_id for item in active_gaps if item.entity_type == "service" and item.requirement_level in REQUIRED_GAP_LEVELS}
     return {
         "customers": int(db.scalar(customer_query) or 0),
         "sites": int(db.scalar(site_query) or 0),
@@ -214,13 +207,13 @@ def dashboard_summary(
         "possible_duplicate_count": category_counts["possible_duplicate"],
         "oldest_open_item_at": min((item.created_at for item in open_items), default=None),
         "knowledge_changes_last_7_days": int(db.scalar(changes_query) or 0),
-        "open_knowledge_gap_count": sum(item.requirement_level in {"required", "conditional"} for item in active_gaps),
+        "open_knowledge_gap_count": sum(item.requirement_level in REQUIRED_GAP_LEVELS for item in active_gaps),
         "critical_knowledge_gap_count": sum(item.severity == "critical" for item in active_gaps),
         "high_knowledge_gap_count": sum(item.severity == "high" for item in active_gaps),
         "assets_with_critical_gaps": len({item.entity_id for item in active_asset_gaps if item.severity == "critical"}),
         "assets_not_evaluated": max(0, asset_count_value - sum(item.completeness_status != "not_evaluated" for item in asset_completeness)),
         "assets_operationally_complete": sum(item.completeness_status in {"complete", "operationally_complete", "exception_accepted"} for item in asset_completeness),
-        "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at and item.exception_expires_at <= now for item in gaps),
+        "expired_exception_count": sum(item.status == "exception" and item.exception_expires_at is not None and item.exception_expires_at <= now for item in gaps),
         "services": int(db.scalar(service_query) or 0),
         "business_functions": int(db.scalar(business_function_query) or 0),
         "services_with_critical_gaps": len({item.entity_id for item in active_gaps if item.entity_type == "service" and item.severity == "critical"}),
