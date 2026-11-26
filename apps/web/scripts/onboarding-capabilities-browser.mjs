@@ -355,7 +355,7 @@ export async function checkCapabilities({
   assert.equal(links[0].site_id, null);
   const firstProgress = (await json(await context.request.get(pair))).progress;
 
-  await action(page, "Open capability catalogue").click();
+  await action(page, "Back to Capabilities").click();
   await counts(0, 0, 0);
   assert.equal(await action(page, "Skip capabilities").count(), 0);
   await groupCheck.check();

@@ -95,6 +95,33 @@ def validate_dependents(db, manifest, *, lock=True):
     return rows
 
 
+def discovery_readiness(row, installed, configured_fields):
+    value = {"discovery_capable": False, "scheduling_capable": False, "discovery_configured": False}
+    if installed is None:
+        return value
+    record, manifest = installed
+    if (record.version, record.bundle_digest) != (row.connector_version, row.connector_digest):
+        return value
+    value.update(discovery_capable=manifest["capabilities"]["discover"] == "read_only",
+        scheduling_capable=manifest["capabilities"]["scheduling"] and not locally_accepted(record))
+    try:
+        validate_configuration(manifest, row.config_json, configured_fields=configured_fields)
+        validate_scopes(manifest, row.selected_scopes)
+        value["discovery_configured"] = True
+    except (ValueError, OSError):
+        pass
+    return value
+
+
+def available_execution_package(db, connector_id):
+    if connector_id:
+        try:
+            return installed_manifest(db, connector_id)
+        except (ValueError, OSError):
+            pass
+    return None
+
+
 def response(integration, provider, *, detail=True):
     fields = provider.state(integration) if integration.connector_id else []
     value = {"id": integration.id, "name": integration.name,

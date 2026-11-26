@@ -4,18 +4,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from contextlib import AsyncExitStack
 from typing import Literal
+from uuid import UUID
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
 from app.authorization import Principal, RequestContext, require_global, require_permission, scope_condition
 from app.database import get_db
-from app.models import Customer, InstalledConnectorPackage, Integration, Site
+from app.models import Customer, DiscoveryRun, InstalledConnectorPackage, Integration, Site
 from app.services import connector_lifecycle as lifecycle
 from app.services.integration_runtime import runtime
 from app.services.integration_connections import UpdateRequiresConfiguration
@@ -47,27 +48,70 @@ def _installed(db):
 
 @router.get("/integrations")
 def configured_integrations(context: RequestContext,
-        principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db)):
+        principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db),
+        creation_key: UUID | None = None, include_discovery: bool = False):
     statement = select(Integration, Customer.name, Site.name).join(Customer, Customer.id == Integration.customer_id).join(Site, Site.id == Integration.site_id).where(scope_condition(principal, "integrations.view", Integration.customer_id, Integration.site_id))
     if context.customer_id:
         statement = statement.where(Integration.customer_id == context.customer_id)
     if context.site_id:
         statement = statement.where(Integration.site_id == context.site_id)
+    if (creation_key is not None or include_discovery) and (context.customer_id is None or context.site_id is None):
+        raise HTTPException(422, "Select a Customer and Site for this integration query")
+    if creation_key is not None:
+        statement = statement.where(Integration.creation_key == creation_key)
     # Preserve useful legacy identity/status without exposing endpoint, username
     # or secret references; no configuration/edit flow is added here.
-    from app.services.integration_connections import response
+    from app.services.integration_connections import available_execution_package, discovery_readiness, response
     from app.services.integration_secrets import AtlasEncryptedSecretProvider
     provider = AtlasEncryptedSecretProvider(db)
     result = []
-    for item, customer_name, site_name in db.execute(statement.order_by(Integration.name, Integration.id).limit(500)):
+    rows = db.execute(statement.order_by(Integration.name, Integration.id).limit(500)).all()
+    runs, continuation_runs = {}, {}
+    if include_discovery and rows:
+        from app.services.onboarding import integration_decision_runs
+        ids = [item.id for item, _, _ in rows]
+        runs = scoped_discovery_status(db, context, ids)
+        candidates = integration_decision_runs(context.customer_id, context.site_id).where(
+            DiscoveryRun.integration_id.in_(ids),
+        ).distinct(DiscoveryRun.integration_id).order_by(
+            DiscoveryRun.integration_id, DiscoveryRun.started_at.desc(), DiscoveryRun.id.desc(),
+        )
+        continuation_runs = dict(db.execute(candidates).tuples().all())
+    manifests = {}
+    for item, customer_name, site_name in rows:
         if item.connector_id:
             value = response(item, provider, detail=False)
         else:
             value = {"id": item.id, "name": item.name, "connector_id": item.plugin_id,
                 "customer_id": item.customer_id, "site_id": item.site_id, "status": item.status, "generic": False}
+        if include_discovery:
+            value["run"] = runs.get(item.id)
+            value["continuation_run_id"] = continuation_runs.get(item.id)
+            if item.connector_id:
+                value["connector_version"] = item.connector_version
+                if item.connector_id not in manifests:
+                    manifests[item.connector_id] = available_execution_package(db, item.connector_id)
+                value.update(discovery_readiness(item, manifests[item.connector_id], value["configured_fields"]))
         result.append({**value, "customer_name": customer_name, "site_name": site_name})
     return result
 
+
+def scoped_discovery_status(db, context, integration_ids):
+    if not integration_ids:
+        return {}
+    from app.services.discovery_orchestration import active_run_condition
+    # Match the active run before looking at history. An unsettled run can
+    # still block another execution after its user-visible status is terminal.
+    run = DiscoveryRun
+    dispatch_state = case((run.execution_provenance.is_not(None), run.dispatch_state), else_=None).label("dispatch_state")
+    fields = (run.id, run.integration_id, run.status, dispatch_state,
+        run.started_at, run.finished_at, run.completed_at, run.observation_count)
+    active_first = case((active_run_condition(), 0), else_=1)
+    query = select(*fields).where(
+        run.customer_id == context.customer_id, run.site_id == context.site_id,
+        run.integration_id.in_(integration_ids), run.archived_at.is_(None),
+    ).distinct(run.integration_id).order_by(run.integration_id, active_first, run.started_at.desc(), run.id.desc())
+    return {row.integration_id: row._asdict() for row in db.execute(query)}
 
 
 @router.get("/integration-runtime")

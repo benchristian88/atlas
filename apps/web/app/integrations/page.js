@@ -13,6 +13,7 @@ import { PageHeader } from "../../components/page-header";
 import { EmptyState, Section, Surface } from "../../components/section";
 import { StatusIndicator } from "../../components/status-indicator";
 import { apiRequest } from "../../lib/api";
+import { requestConnectorAction } from "../../lib/connector-actions";
 import { integrationTab, INTEGRATION_TABS } from "../../lib/integrations.mjs";
 import styles from "./integrations.module.css";
 
@@ -60,7 +61,7 @@ export default function IntegrationsPage() {
     if (!canManage || busy) return;
     setBusy(entry.connector_id); setSuccess(""); setErrors({});
     try {
-      await apiRequest(selected.path, { method: selected.method, ...(selected.body ? { body: JSON.stringify(selected.body) } : {}), omitContext: true });
+      await requestConnectorAction(selected);
       setSuccess(`${entry.name}: ${selected.action === "remove" ? "package removed" : "package activated"}.`);
       await load();
     } catch (error) { setErrors({ catalogue: error.message || "Atlas could not change this Connector package." }); }

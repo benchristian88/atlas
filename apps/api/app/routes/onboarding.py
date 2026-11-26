@@ -113,6 +113,24 @@ class SaveProgress(VersionedRequest):
     draft_profile: Literal["homelab", "blank"] | None = None
 
 
+class DecideIntegrations(VersionedRequest):
+    decision: Literal["completed", "skipped"]
+    discovery_run_id: UUID | None = None
+
+
+@router.post(PAIR + "/integrations/decision", response_model=Progress)
+@concurrent_decision
+def decide_integrations(
+    customer_id: UUID, site_id: UUID, payload: DecideIntegrations, request: Request,
+    principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id, lock=True, manage=True)
+    return onboarding.decide_integrations(
+        db, customer, site, principal, request, version=payload.version,
+        decision=payload.decision, discovery_run_id=payload.discovery_run_id,
+    )
+
+
 @router.get("/contexts", response_model=ContextOptions)
 def contexts(principal: PreviewPrincipal, db: Database):
     visible = scope_condition(principal, "customers.view", Customer.id)

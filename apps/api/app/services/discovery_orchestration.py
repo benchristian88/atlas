@@ -37,10 +37,15 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+def active_run_condition():
+    return DiscoveryRun.execution_provenance.is_not(None) & or_(
+        DiscoveryRun.status.in_(["pending", "running"]), DiscoveryRun.dispatch_state != "settled",
+    )
+
+
 def active_run(db, integration_id):
     return db.scalar(select(DiscoveryRun).where(DiscoveryRun.integration_id == integration_id,
-        DiscoveryRun.execution_provenance.is_not(None), or_(DiscoveryRun.status.in_(["pending", "running"]),
-            DiscoveryRun.dispatch_state != "settled")).order_by(DiscoveryRun.created_at).limit(1))
+        active_run_condition()).order_by(DiscoveryRun.created_at).limit(1))
 
 
 def scope_encoding(row, manifest, mappings):

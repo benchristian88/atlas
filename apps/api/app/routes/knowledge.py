@@ -329,7 +329,7 @@ def list_discovery_runs(
         query = query.where(DiscoveryRun.archived_at.is_(None))
     if integration_id is not None:
         query = query.where(DiscoveryRun.integration_id == integration_id)
-    runs = db.scalars(query.order_by(DiscoveryRun.started_at.desc()).limit(limit))
+    runs = db.scalars(query.order_by(DiscoveryRun.started_at.desc(), DiscoveryRun.id.desc()).limit(limit))
     return [run_response(db, run, include_deletion_safety=True) for run in runs]
 
 

@@ -63,6 +63,19 @@ Integration setup and the remaining stages are pending.
 
 ## Engineering backlog
 
+- **Concurrent Integration saves can stall an API worker.** Resolve this
+  before public guided onboarding activation (E1-H). With a single API
+  worker, start two saves for the same Connector while the first is waiting
+  for runtime health. The first request holds the PostgreSQL Connector
+  advisory lock across the runtime await. The second waits synchronously
+  for that lock on the same event loop, preventing the first from resuming
+  and stalling other requests on the worker. The E1-D independent review
+  reproduced the wait on disposable PostgreSQL and found the same lock
+  ordering at baseline `6d6026e`. Investigate moving blocking lock
+  acquisition off the event loop or restructuring the transaction around
+  runtime I/O. Preserve package identity checks, write serialization and
+  creation-key replay. Add a two-request single-worker regression.
+  [Integration creation](../../apps/api/app/routes/integration_connections.py)
 - **Service move with rename.** A single `PATCH /api/services/{id}` that changes
   the name and clears `site_id` can return `409` when the accepted name assertion
   still belongs to the original Site. PostgreSQL's

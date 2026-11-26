@@ -276,9 +276,15 @@ encrypted backup and deployment configuration until recovery is no longer needed
 
 Guided setup is disabled by default. On a development or test installation,
 set `ATLAS_ONBOARDING_PREVIEW=true` in the API process environment and restart
-the API to expose the authenticated preview. The wizard supports Environment
-confirmation and shared Site progress. The Homelab starter catalogue is
-included locally in both distributions. The Capabilities API supports draft,
-Apply and Skip operations. The wizard's selection and Apply controls are
-scheduled for E1-C. Public activation is scheduled for a later packet.
-[Guided setup preview](../architecture/guided-onboarding.md)
+the API to expose the authenticated preview. Confirm the Site, import or skip
+Capabilities, then open Add Integrations. Existing Site integrations and their
+discovery history appear automatically. Installed and applicable bundled
+connectors are available offline. Global connector administrators can
+explicitly refresh the official Connector Catalogue and approve instance-wide
+package activation. Use the shared configuration form to test the connection
+and select **Save & discover**. Atlas stores the integration and shows the
+discovery status. If dispatch fails after the save, retry discovery from the
+saved integration. **Save & exit** retains Site progress and **Resume** loads
+the latest records. **Continue without integrations** advances either
+profile to pending Discovery Review. Public activation is scheduled for a
+later packet. See [Guided setup preview](../architecture/guided-onboarding.md).
