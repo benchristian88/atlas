@@ -1,4 +1,4 @@
-# Guided setup preview (AT-R01 / E1-A and E1-B)
+# Guided setup preview (AT-R01 / E1-A through E1-C)
 
 ## Preview operation
 
@@ -20,9 +20,12 @@ being queried. In particular, a Site-only grant can use voluntary entry without
 learning whether Customer-wide records exist.
 
 **Set up manually** or **Dismiss invitation** dismisses the optional invitation
-for the signed-in user. **Guided setup** opens the authorized chooser for Site managers.
-**Continue setup** opens progress for the active Dashboard Site or identifies
-a sole resumable Site if it differs from the workspace selection. The chooser
+for the signed-in user. The compact Guided setup area below the Dashboard
+heading shows **Start guided setup** for a new setup and **Resume** with the
+saved profile and current stage for shared progress. It targets the active
+Dashboard Site or identifies a sole resumable Site if it differs from the
+workspace selection. Completed setups use a quieter **Guided setup** entry.
+The authorized chooser
 marks Sites with resumable progress, suggests a unique authorized pair and
 requires explicit selection when there are several choices. It uses the same
 Customer and Site create and rename APIs as normal administration. Each create
@@ -30,15 +33,66 @@ has its own confirmation and transaction. If creating a Site fails, the
 Customer remains selected. If a create response was lost, refresh choices and
 look for the record before retrying.
 
-Choose the **Homelab** or **Blank** profile and confirm Environment. The wizard
-then opens the Capabilities placeholder. E1-B supplies the catalogue and
-workflow commands through the preview API. The selection, review and Apply
-controls are scheduled for E1-C. Use **Back to
-Environment** to inspect the confirmed pair or rename it if authorized. **Save
-& exit** saves the pending profile and returns to Atlas. On resume, Atlas
-reselects the draft profile at Environment. Confirmation is a separate action.
-A different pair has its own progress. A previously confirmed profile and
-context stay fixed when you resume.
+Choose the **Homelab** or **Blank** profile and confirm Environment to open
+Capabilities. Before confirmation, **Save & exit** saves the pending profile.
+A different pair has its own progress. After confirmation, **Back to
+Environment** lets you inspect the fixed pair and profile or rename the
+Customer or Site if authorized. Return to Capabilities to continue editing.
+
+## Select and apply capabilities
+
+Homelab shows one expandable card per Business Function, with Standard
+(recommended) and Extended (optional) Services. The first visit recommends
+eight Business Functions, 24 Standard Services and their 24 Supports
+associations. Each Function can be selected on its own. Selecting a Service
+adds its parent and its catalogue-defined Supports association. Deselecting a
+Service removes its associations. Clearing a Function clears its Services and
+associations, and choosing it again restores those choices for the editing
+session. **Select all Services** selects remaining Services across both tiers.
+Selection actions affect the chosen entries. The summary counts the actual
+selected Functions, Services and Supports associations.
+
+Use **Edit** on a selected entry to change its name or description. Services
+also support an active managed Service Type and Criticality level. **Restore
+catalogue defaults** clears one entry's overrides. **Restore recommended
+selection** restores the catalogue recommendations and asks before discarding
+customised values. If a classification is unavailable, the wizard identifies
+the affected Services. **Edit classifications** opens the affected Service's
+editor. Choose an active value if authorized, or deselect that Service.
+
+Atlas previews the selection as it changes. Existing-name warnings identify
+names that already occur in authorized Customer-wide records. You can rename,
+deselect or continue with a warned entry. The canonical create validation still
+applies. **Review selection** shows the selected records, classifications,
+warnings and counts before the explicit **Apply capabilities** action. Expand a
+customised description to inspect the text that will be saved. Services without
+a selected Supports association appear under their own heading. Apply
+creates new Customer-wide records, which other authorized Sites can use.
+Existing records stay as they are. On success, the wizard shows the creation
+counts from the API and opens the pending Add Integrations stage.
+
+**Save & exit** stores the selection and selected-entry overrides for the
+confirmed Site. **Resume** restores the saved Function, Service and association
+IDs and their overrides. A draft can contain a Service without its parent or
+both endpoints without a Supports association. Opening, editing descriptions,
+previewing, reviewing and saving preserve that membership. **Skip capabilities**
+records the decision and advances to Add Integrations without creating records. It asks
+before discarding selections or edits. Blank provides the manual setup path
+and Skip without a starter catalogue.
+
+After an initial decision, use the Capabilities entry in the progress rail or
+**Open capability catalogue** to start an additional import. The selection
+starts empty unless an additional-import draft exists. An additional Apply
+creates new records and preserves the current stage and other decisions.
+
+If another administrator changes progress, **Reload saved progress** fetches the
+shared state and asks before discarding local changes. Review the refreshed
+selection before applying. If the saved draft uses another catalogue version,
+**Review current catalogue** enables review of the installed version. Saving or
+applying then explicitly replaces the stale draft. If the Apply response is
+lost, use **Retry this Apply** in the same browser tab, including after a page
+reload. Atlas keeps only the submission UUID and the requested workflow version
+in per-tab storage and replays that exact command to recover its outcome.
 
 ## Persistence, tenancy and writes
 
@@ -107,8 +161,10 @@ wording, display taxonomy, order and readable definition and association IDs.
 First entry recommends eight independently selectable Business Functions,
 24 Standard Services and their associations. All 18 Extended Services are
 available. After a Capabilities decision, the full catalogue remains available
-with an empty default selection. Associations are individually selectable and
-eligible only when both endpoints are selected.
+with an empty default selection. The API accepts eligible association IDs and
+allows either endpoint to be selected independently. The wizard uses approved
+association IDs for linked selection actions and preserves the association
+membership supplied by a saved draft.
 
 Authored Business Function names in the bundled English catalogue must contain
 only ASCII characters after the canonical whitespace trim. The offline validator
@@ -216,6 +272,6 @@ metadata.
 
 ## Later packets
 
-E1-C will expose the Capabilities workflow through the wizard. Later packets
-own integration setup, discovery review, Service linking, readiness and
-Showcase using authorized records in the fixed Site context.
+Later packets own integration setup, discovery review, Service linking,
+readiness and Showcase using authorized records in the fixed Site context.
+The public feature remains gated pending E1-H.

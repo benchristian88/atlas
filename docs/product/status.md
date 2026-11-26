@@ -38,6 +38,11 @@ See the [feature reference](feature-ledger.md) for implemented scope and limits.
 Dependency impact analysis uses recorded knowledge and hypothetical scenarios;
 it is not live monitoring or evidence of recovery readiness.
 
+The default-off Guided setup preview now covers Environment and Capabilities.
+Homelab users can select, customise, save and review the starter catalogue, then
+apply it to create Customer-wide records. The Dashboard can resume Site setup.
+Integration setup and the remaining stages are pending.
+
 ## Next development
 
 - Catalogue-driven integrations follow the accepted

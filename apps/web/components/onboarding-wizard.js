@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../lib/api";
 import { canContinueSetup, initialEnvironment, onboardingPath, PROFILES, STAGES } from "../lib/onboarding.mjs";
+import { pendingApplyKey, readPendingApply } from "../lib/onboarding-capabilities.mjs";
 import { authenticatedHome, useAuth } from "./auth-context";
 import { Button } from "./button";
+import { OnboardingCapabilities } from "./onboarding-capabilities";
 import { PageHeader } from "./page-header";
 import { Section, Surface } from "./section";
 import styles from "./onboarding.module.css";
@@ -14,19 +16,21 @@ const request = (path, options) => apiRequest(path, { ...options, omitContext: t
 const write = (path, method, values) => request(path, { method, body: JSON.stringify(values) });
 const decisionLabels = { completed: "Completed", skipped: "Skipped", attention: "Needs attention" };
 
-function Wizard({ stage, decisions = {}, onEnvironment, children }) {
+function Wizard({ stage, decisions = {}, onEnvironment, onCapabilities, children }) {
   return <>
     <PageHeader title="Guided setup" description="Set up one Site at a time." />
     <div className={styles.layout}>
       <nav aria-label="Setup stages" className={styles.rail}>
         <ol>
           {STAGES.map(([key, title], index) => {
-            const label = decisionLabels[decisions[key]] || (stage === key && key === "environment" ? "In progress" : "Pending");
+            const label = decisionLabels[decisions[key]]
+              || (stage === key && ["environment", "capabilities"].includes(key) ? "In progress" : "Pending");
+            const openStage = key === "environment" ? onEnvironment : key === "capabilities" ? onCapabilities : undefined;
             return <li key={key} aria-current={stage === key ? "step" : undefined}>
               <span className={styles.stepNumber} aria-hidden="true">{index + 1}</span>
               <div>
-                {key === "environment" && onEnvironment
-                  ? <button className="text-button" type="button" onClick={onEnvironment}>{title}</button>
+                {openStage
+                  ? <button className="text-button" type="button" onClick={openStage}>{title}</button>
                   : <strong>{title}</strong>}
                 <small>{label}</small>
               </div>
@@ -218,10 +222,19 @@ export function OnboardingSession({ customerId, siteId }) {
   const [reload, setReload] = useState(0);
   const [pendingProfile, setPendingProfile] = useState(null);
   const [revisiting, setRevisiting] = useState(false);
+  const [visitingCapabilities, setVisitingCapabilities] = useState(false);
+  const [capabilitiesBusy, setCapabilitiesBusy] = useState(false);
+  const [receipt, setReceipt] = useState(null);
   const [editor, setEditor] = useState(null);
   const heading = useRef(null);
-  const headingTarget = data && (revisiting ? "environment" : data.progress?.current_stage || "environment");
+  const capabilitiesHeading = useRef(null);
   const saved = data?.status === "saved";
+  const pendingKey = pendingApplyKey(user.id, path);
+  const pending = data?.progress?.environment_profile === "homelab" && Boolean(readPendingApply(pendingKey));
+  const activeStage = data?.progress?.current_stage || "environment";
+  const showCapabilities = data?.progress?.environment_profile
+    && (pending || ((!saved || !data.can_manage) && (activeStage === "capabilities" || visitingCapabilities)));
+  const headingTarget = data && (revisiting ? "environment" : showCapabilities ? "capabilities" : activeStage);
   const profile = pendingProfile ?? data?.progress?.draft_profile ?? "homelab";
 
   useEffect(() => {
@@ -229,6 +242,7 @@ export function OnboardingSession({ customerId, siteId }) {
     request(path).then((result) => {
       if (!active) return;
       setData(result);
+      if (readPendingApply(pendingKey)) setVisitingCapabilities(true);
       setError(null);
       setLoading(false);
     }).catch((requestError) => {
@@ -238,15 +252,20 @@ export function OnboardingSession({ customerId, siteId }) {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [path, reload]);
+  }, [path, pendingKey, reload]);
 
-  useEffect(() => { if (!loading) heading.current?.focus(); }, [headingTarget, loading, saved]);
+  useEffect(() => {
+    if (loading) return;
+    const target = showCapabilities && !revisiting ? capabilitiesHeading : heading;
+    target.current?.focus();
+  }, [headingTarget, loading, saved, showCapabilities, revisiting, receipt]);
 
   function refresh() {
     setLoading(true);
     setError(null);
     setEditor(null);
     setRevisiting(false);
+    setVisitingCapabilities(false);
     setPendingProfile(null);
     setReload((value) => value + 1);
   }
@@ -287,6 +306,11 @@ export function OnboardingSession({ customerId, siteId }) {
     heading.current?.focus();
   }
 
+  function adoptProgress(progress, keepCapabilities = false, canManage) {
+    setData((old) => ({ ...old, progress, status: progress.status, can_manage: canManage ?? old.can_manage }));
+    if (!keepCapabilities || progress.current_stage !== "capabilities") setVisitingCapabilities(keepCapabilities);
+  }
+
   if (loading) return <p role="status">Loading setup progress…</p>;
   if (!data) return <Unavailable error={error} retry={refresh} recovery />;
   const { customer, site, progress, can_manage: canManage } = data;
@@ -294,13 +318,32 @@ export function OnboardingSession({ customerId, siteId }) {
   const confirmed = Boolean(progress?.environment_profile);
   const completed = data.status === "completed";
   const conflict = error?.status === 409;
-  const blocked = busy || Boolean(editor) || conflict;
+  const blocked = busy || capabilitiesBusy || Boolean(editor) || conflict;
   const stageTitle = STAGES.find(([key]) => key === stage)?.[1] || "Setup progress";
 
-  return <Wizard stage={stage} decisions={progress?.stage_decisions} onEnvironment={
-    confirmed && stage !== "environment" && !busy ? () => setRevisiting(true) : undefined
-  }>
-    <div className={styles.session}>
+  return <Wizard stage={stage} decisions={progress?.stage_decisions}
+    onEnvironment={confirmed && stage !== "environment" && !blocked && !pending ? () => setRevisiting(true) : undefined}
+    onCapabilities={confirmed && progress.environment_profile === "homelab" && progress.stage_decisions.capabilities
+      && canManage && !saved && !blocked && stage !== "capabilities" ? () => {
+        setReceipt(null);
+        setRevisiting(false);
+        setVisitingCapabilities(true);
+      } : undefined}>
+    <div className={showCapabilities && !revisiting ? styles.capabilitiesSession : styles.session}>
+      {showCapabilities && <Surface className={styles.panel} hidden={revisiting}>
+        <Section title="Capabilities" headingRef={capabilitiesHeading}>
+          <OnboardingCapabilities path={path} pendingKey={pendingKey} progress={progress} customer={customer} site={site}
+            visible={!revisiting} headingRef={capabilitiesHeading} home={authenticatedHome(user)}
+            onEnvironment={() => setRevisiting(true)} onReturn={() => setVisitingCapabilities(false)}
+            onProgress={adoptProgress} onExit={() => router.replace(authenticatedHome(user))}
+            onApplied={(outcome, latest, canManage) => {
+              setReceipt(outcome);
+              adoptProgress(latest, false, canManage);
+            }}
+            onBusy={setCapabilitiesBusy} />
+        </Section>
+      </Surface>}
+      {(!showCapabilities || revisiting) && <>
       <Surface className={styles.summary}>
         <Section title="Setup context">
           <dl>
@@ -313,11 +356,16 @@ export function OnboardingSession({ customerId, siteId }) {
       <Surface className={`${styles.panel} ${styles.stagePanel}`}>
         <Section title={stageTitle} headingRef={heading}>
           <Feedback error={error} retry={conflict ? refresh : undefined} busy={busy} />
+          {receipt && <p role="status" className="success-banner">
+            Capabilities applied. Created {receipt.created.functions} {receipt.created.functions === 1 ? "Business Function" : "Business Functions"},
+            {" "}{receipt.created.services} {receipt.created.services === 1 ? "Service" : "Services"} and
+            {" "}{receipt.created.associations} {receipt.created.associations === 1 ? "Supports association" : "Supports associations"}.
+          </p>}
           {!canManage && <p>You can view setup progress for this Site.</p>}
           {saved && <p role="status">Progress is saved for this Site.</p>}
           {stage === "environment" ? <>
             {confirmed
-              ? <p>Environment is confirmed. To work on a different Site, save and exit first.</p>
+              ? <p>The Customer, Site and profile are confirmed for this setup.</p>
               : <>
                 {canManage && <p>Confirm this Customer and Site to fix the context for this setup.</p>}
                 <fieldset className={styles.profiles} disabled={!canManage || busy || saved || completed || conflict}>
@@ -337,18 +385,25 @@ export function OnboardingSession({ customerId, siteId }) {
                 onClick={() => setEditor({ kind: "customer", id: customer.id, name: customer.name })}>Rename Customer</Button>}
               {canManage && <Button disabled={busy} onClick={() => setEditor({ kind: "site", id: site.id, name: site.name })}>Rename Site</Button>}
             </div>}
-          </> : <p>{completed ? "Setup is complete." : "Environment is confirmed. Further stages are unavailable in this preview."}</p>}
+          </> : !saved && <p>{completed ? "Setup is complete."
+            : "Add integrations and the later setup stages are pending in this preview."}</p>}
           <div className={styles.footer}>
             {canManage && !confirmed && <Button href="/onboarding" disabled={blocked}>Change Site</Button>}
             {revisiting && <Button onClick={() => setRevisiting(false)} disabled={blocked}>Return to current stage</Button>}
             {!revisiting && confirmed && stage !== "environment" && <Button onClick={() => setRevisiting(true)} disabled={blocked}>Back to Environment</Button>}
-            {!canManage || completed || saved ? <Button href={authenticatedHome(user)} disabled={Boolean(editor) || busy}>Return to Atlas</Button>
-              : <Button onClick={() => change("save")} disabled={blocked}>Save &amp; exit</Button>}
+            {(!canManage || completed || saved) ? <Button href={authenticatedHome(user)} disabled={Boolean(editor) || busy}>Return to Atlas</Button>
+              : !showCapabilities && <Button onClick={() => change("save")} disabled={blocked}>Save &amp; exit</Button>}
+            {stage !== "environment" && canManage && !saved && !blocked && progress?.environment_profile === "homelab"
+              && progress.stage_decisions.capabilities && <Button onClick={() => {
+                setReceipt(null);
+                setVisitingCapabilities(true);
+              }}>Open capability catalogue</Button>}
             {canManage && saved && <Button variant="primary" onClick={() => change("resume")} disabled={blocked}>Resume setup</Button>}
             {canManage && !confirmed && !saved && !completed && <Button variant="primary" onClick={() => change("environment")} disabled={blocked}>Confirm Environment</Button>}
           </div>
         </Section>
       </Surface>
+      </>}
     </div>
   </Wizard>;
 }
