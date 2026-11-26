@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
-from app.authorization import ActiveContext, Principal, require_global, require_permission
+from app.authorization import ActiveContext, Principal, refresh_principal, require_global, require_permission
 from app.database import get_db
 from app.models import CriticalityLevel, Service, ServiceType
 from app.routes.crud_helpers import commit, flush, not_found
@@ -26,6 +26,12 @@ from app.schemas import (
 
 service_types_router = APIRouter(prefix="/service-types", tags=["service types"])
 criticality_router = APIRouter(prefix="/criticality-levels", tags=["criticality levels"])
+
+
+def _reference_for_patch(db: Session, model, identifier: uuid.UUID, *, reevaluate: bool):
+    # Before scanning Services, wait for creations holding FOR SHARE to commit.
+    # FOR NO KEY UPDATE still permits the FK KEY SHARE used by existing Service edits.
+    return db.get(model, identifier, with_for_update={"key_share": True} if reevaluate else None)
 
 
 def _service_usage_counts(
@@ -97,16 +103,21 @@ def update_service_type(
     db: Session = Depends(get_db),
 ):
     require_global(principal, "service_types.manage")
-    item = db.get(ServiceType, type_id)
+    changes = payload.model_dump(exclude_unset=True)
+    reevaluate = "requires_asset_dependency" in changes
+    item = _reference_for_patch(db, ServiceType, type_id, reevaluate=reevaluate)
+    if reevaluate:
+        principal = refresh_principal(principal, db)
+        require_global(principal, "service_types.manage")
     if item is None:
         raise not_found("Service type")
-    changes = payload.model_dump(exclude_unset=True)
     for key, value in changes.items():
         setattr(item, key, value)
     item.updated_by_user_id = principal.user.id
-    if "requires_asset_dependency" in changes:
+    if reevaluate:
         from app.services.knowledge_completeness import evaluate_services_for_service_type
-        evaluate_services_for_service_type(db, item.id, actor_user_id=principal.user.id)
+        flush(db, "Service type")
+        evaluate_services_for_service_type(db, item.id, limit=None, actor_user_id=principal.user.id)
     add_audit_event(db, action="service_type.updated", target_type="service_type", target_id=item.id, actor=principal.user, summary="Service type updated", metadata={"changed_fields": sorted(changes)}, request=request)
     commit(db, "Service type")
     db.refresh(item)
@@ -159,14 +170,19 @@ def create_criticality_level(payload: CriticalityLevelCreate, request: Request, 
 @criticality_router.patch("/{level_id}", response_model=CriticalityLevelResponse)
 def update_criticality_level(level_id: uuid.UUID, payload: CriticalityLevelUpdate, request: Request, context: ReferenceUsageContext, principal: Principal = Depends(require_permission("criticality_levels.manage")), db: Session = Depends(get_db)):
     require_global(principal, "criticality_levels.manage")
-    item = db.get(CriticalityLevel, level_id)
+    changes = payload.model_dump(exclude_unset=True)
+    reevaluate = "rank" in changes
+    item = _reference_for_patch(db, CriticalityLevel, level_id, reevaluate=reevaluate)
+    if reevaluate:
+        principal = refresh_principal(principal, db)
+        require_global(principal, "criticality_levels.manage")
     if item is None:
         raise not_found("Criticality level")
-    changes = payload.model_dump(exclude_unset=True)
     for key, value in changes.items():
         setattr(item, key, value)
-    if "rank" in changes:
+    if reevaluate:
         from app.services.knowledge_completeness import evaluate_service
+        flush(db, "Criticality level")
         for service in db.scalars(select(Service).where(Service.criticality_level_id == item.id).order_by(Service.id)):
             evaluate_service(db, service, trigger_context="criticality_rank_changed", actor_user_id=principal.user.id)
     add_audit_event(db, action="criticality_level.updated", target_type="criticality_level", target_id=item.id, actor=principal.user, summary="Criticality level updated", metadata={"changed_fields": sorted(changes)}, request=request)

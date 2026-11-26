@@ -271,3 +271,14 @@ decommissioning, then deliberately review the Atlas-owned code, configuration,
 state, database/role, units and nginx files. Do not remove shared PostgreSQL,
 Redis or nginx or unrelated nginx sites as part of Atlas removal. Retain the
 encrypted backup and deployment configuration until recovery is no longer needed.
+
+## Guided setup preview
+
+Guided setup is disabled by default. On a development or test installation,
+set `ATLAS_ONBOARDING_PREVIEW=true` in the API process environment and restart
+the API to expose the authenticated preview. The wizard supports Environment
+confirmation and shared Site progress. The Homelab starter catalogue is
+included locally in both distributions. The Capabilities API supports draft,
+Apply and Skip operations. The wizard's selection and Apply controls are
+scheduled for E1-C. Public activation is scheduled for a later packet.
+[Guided setup preview](../architecture/guided-onboarding.md)

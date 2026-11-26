@@ -20,6 +20,7 @@ from pydantic import (
 from app.presentation import PresentationIcon, PresentationAccent
 from app.taxonomy import NETWORK_TYPES
 from app.topology_classes import TopologyClass
+from app.utils.entity_names import trim_nonempty as _trim_nonempty
 
 
 class ORMResponse(BaseModel):
@@ -37,15 +38,6 @@ def _validate_icon_url(value: str | None) -> str | None:
         raise ValueError("Icon URL must not contain credentials")
     if parsed.path.lower().endswith(".svg"):
         raise ValueError("Remote SVG icons are not supported")
-    return value
-
-
-def _trim_nonempty(value: str | None) -> str:
-    if value is None:
-        raise ValueError("Value must not be null")
-    value = value.strip()
-    if not value:
-        raise ValueError("Value must not be blank")
     return value
 
 

@@ -1356,7 +1356,7 @@ def test_matching_build_encrypted_restore_of_real_replacement(installations):
 
     case.client.app.dependency_overrides[get_db] = target_db
     with case.session() as db:
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20261122_0034"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20261125_0035"
         assert db.get(EntitySourceLink, old_id).ended_epoch == db.get(EntitySourceLink, new_id).opened_epoch == 1
         assert db.get(EntitySourceLink, old_id).entity_id == prior.asset
         assert current_link(db, case, case.guest).entity_id == new_asset

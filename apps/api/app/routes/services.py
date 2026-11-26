@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import datetime, timezone
 
@@ -35,6 +34,7 @@ from app.schemas import (
     ServiceResponse, ServiceSummaryResponse, ServiceUpdate,
 )
 from app.services.asset_icons import icon_fields
+from app.services.data_sources import lock_customer_manual_inventory, manual_inventory_source
 from app.services.knowledge_assertions import accept_assertion, record_assertion
 from app.services.knowledge_changes import record_assertion_change, record_change
 from app.services.knowledge_lifecycle import retract_assertion
@@ -56,13 +56,9 @@ from app.services.service_relationship_scope import (
     visible_relationships,
     visible_service_relationship_assertion,
 )
+from app.utils.entity_names import service_slug
 
 router = APIRouter(tags=["services"])
-
-
-def _slug(value: str) -> str:
-    result = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
-    return result[:255] or "service"
 
 
 def _service(db: Session, principal: Principal, service_id: uuid.UUID, permission: str, *, lock: bool = False) -> Service:
@@ -97,8 +93,8 @@ def _validate_context(db: Session, principal: Principal, permission: str, custom
     require_scope(principal, permission, customer_id, site_id)
 
 
-def _active_type(db: Session, model, item_id: uuid.UUID, label: str, *, allow_inactive_id: uuid.UUID | None = None):
-    item = db.get(model, item_id)
+def _active_type(db: Session, model, item_id: uuid.UUID, label: str, *, allow_inactive_id: uuid.UUID | None = None, lock: bool = False):
+    item = db.get(model, item_id, with_for_update={"read": True} if lock else None, populate_existing=lock)
     if item is None or (not item.active and item.id != allow_inactive_id):
         raise HTTPException(status_code=422, detail=f"{label} is not active or does not exist")
     return item
@@ -242,10 +238,23 @@ def create_service(payload: ServiceCreate, request: Request, context: RequestCon
     if context.site_id and payload.site_id != context.site_id:
         raise HTTPException(status_code=403, detail="Service site must match the active context")
     _validate_context(db, principal, "services.create", payload.customer_id, payload.site_id)
-    _active_type(db, ServiceType, payload.service_type_id, "Service type")
-    _active_type(db, CriticalityLevel, payload.criticality_level_id, "Criticality level")
+    # Match Apply: Service Type, Criticality, then Customer inventory if needed.
+    _active_type(db, ServiceType, payload.service_type_id, "Service type", lock=True)
+    _active_type(db, CriticalityLevel, payload.criticality_level_id, "Criticality level", lock=True)
+    if payload.site_id is None:
+        lock_customer_manual_inventory(db, payload.customer_id)
+    principal = refresh_principal(principal, db)
+    item = add_service(db, payload, principal, request)
+    commit(db, "Service")
+    db.refresh(item)
+    return service_response(db, item, principal)
+
+
+def add_service(db: Session, payload: ServiceCreate, principal: Principal, request: Request) -> Service:
+    """Create a Service using the caller's locked references and Customer inventory lock, if scoped there."""
+    _validate_context(db, principal, "services.create", payload.customer_id, payload.site_id)
     values = payload.model_dump()
-    values["slug"] = payload.slug or _slug(payload.name)
+    values["slug"] = payload.slug or service_slug(payload.name)
     item = Service(**values, source="manual", created_by_user_id=principal.user.id, updated_by_user_id=principal.user.id)
     db.add(item)
     flush(db, "Service")
@@ -254,9 +263,7 @@ def create_service(payload: ServiceCreate, request: Request, context: RequestCon
     from app.services.knowledge_completeness import evaluate_service_safely
     evaluate_service_safely(db, item, trigger_context="service_created", actor_user_id=principal.user.id)
     add_audit_event(db, action="service.created", target_type="service", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Service created", metadata={"initial_assertion_ids": [str(assertion.id) for assertion in initial_assertions]}, request=request)
-    commit(db, "Service")
-    db.refresh(item)
-    return service_response(db, item, principal)
+    return item
 
 
 @router.get("/services/{service_id}", response_model=ServiceResponse)
@@ -293,16 +300,23 @@ def update_service(service_id: uuid.UUID, payload: ServiceUpdate, request: Reque
             db, ServiceDependency, item.id, item.customer_id, new_site_id,
         ):
             raise HTTPException(409, "A Service with dependencies cannot be moved to another site")
+    if "name" in changes and "slug" not in changes and item.slug == service_slug(item.name):
+        changes["slug"] = service_slug(changes["name"])
+    semantic_changes = {key: value for key, value in changes.items() if getattr(item, key) != value}
+    if semantic_changes and new_site_id is None:
+        # The existing row lock protects the edit. Take the Customer lock before
+        # a rename or move can claim a name or slug needed by an import.
+        lock_customer_manual_inventory(db, item.customer_id)
+        principal = refresh_principal(principal, db)
+        require_scope(principal, "services.edit", item.customer_id, item.site_id, hide_existence=True)
+        require_scope(principal, "services.edit", item.customer_id)
     if "service_type_id" in changes:
         _active_type(db, ServiceType, changes["service_type_id"], "Service type", allow_inactive_id=item.service_type_id)
     if "criticality_level_id" in changes:
         _active_type(db, CriticalityLevel, changes["criticality_level_id"], "Criticality level", allow_inactive_id=item.criticality_level_id)
-    previous = {field: getattr(item, field) for field in MANUAL_SERVICE_KNOWLEDGE_FIELDS if field in changes}
-    if "name" in changes and "slug" not in changes and item.slug == _slug(item.name):
-        changes["slug"] = _slug(changes["name"])
-    semantic_changes = {key: value for key, value in changes.items() if getattr(item, key) != value}
     if not semantic_changes:
         return service_response(db, item, principal)
+    previous = {field: getattr(item, field) for field in MANUAL_SERVICE_KNOWLEDGE_FIELDS if field in changes}
     for key, value in semantic_changes.items():
         setattr(item, key, value)
     item.updated_by_user_id = principal.user.id
@@ -627,7 +641,6 @@ def _end_dependency_membership(db: Session, item, service: Service, dependency_k
 
 
 def _relationship_assertion(db: Session, *, service: Service, predicate: str, object_type: str, object_id: uuid.UUID, actor_user_id: uuid.UUID) -> KnowledgeAssertion:
-    from app.services.data_sources import manual_inventory_source
     source = manual_inventory_source(db, service.customer_id, service.site_id)
     assertion, _ = record_assertion(db, customer_id=service.customer_id, site_id=service.site_id, subject_type="service", subject_id=service.id, predicate=predicate, object_type=object_type, object_id=object_id, truth_classification="declared", data_source_id=source.id)
     accept_assertion(db, assertion, user_id=actor_user_id)
@@ -1062,6 +1075,16 @@ def list_service_business_functions(service_id: uuid.UUID, principal: Principal 
 def link_business_function(service_id: uuid.UUID, payload: ServiceBusinessFunctionCreate, request: Request, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
     _lock_relationship_endpoints(db, service_id, function_ids=(payload.business_function_id,))
     principal = refresh_principal(principal, db)
+    item, service, function = add_business_function_link(db, service_id, payload, principal, request)
+    response = _business_function_link_response(db, item, service, function)
+    commit(db, "Service business function")
+    return response
+
+
+def add_business_function_link(
+    db: Session, service_id: uuid.UUID, payload: ServiceBusinessFunctionCreate, principal: Principal, request: Request,
+) -> tuple[ServiceBusinessFunction, Service, BusinessFunction]:
+    """Link endpoints already locked by the caller or created in its transaction."""
     service = _service(db, principal, service_id, "business_functions.manage")
     function = _target(db, principal, ServiceBusinessFunction, payload.business_function_id, "business_functions.manage")
     if not compatible_target_scope(service, function):
@@ -1074,9 +1097,7 @@ def link_business_function(service_id: uuid.UUID, payload: ServiceBusinessFuncti
     from app.services.knowledge_completeness import evaluate_service_safely
     evaluate_service_safely(db, service, trigger_context="business_function_added", actor_user_id=principal.user.id)
     add_audit_event(db, action="service_business_function.created", target_type="service_business_function", target_id=item.id, actor=principal.user, customer_id=service.customer_id, site_id=service.site_id, summary="Service Business Function link created", request=request)
-    response = _business_function_link_response(db, item, service, function)
-    commit(db, "Service business function")
-    return response
+    return item, service, function
 
 
 @router.patch("/service-business-functions/{link_id}", response_model=ServiceBusinessFunctionResponse)

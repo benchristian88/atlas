@@ -18,7 +18,8 @@ from app.database import get_db
 from app.main import app
 from app.models import (
     AccessAssignment, Asset, AuditEvent, BusinessFunction, Customer, InstallationState,
-    Integration, Network, Permission, Role, RolePermission, Service, Site, SiteOnboarding,
+    DataSource, Integration, KnowledgeAssertion, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap,
+    Network, Permission, Role, RolePermission, Service, ServiceBusinessFunction, Site, SiteOnboarding,
     User, Workspace,
 )
 from app.permissions import CUSTOMER_ADMINISTRATOR, MASTER_ADMINISTRATOR, ROLE_PERMISSION_KEYS, VIEWER
@@ -103,6 +104,9 @@ def env(monkeypatch, tmp_path):
             customer_ids = select(Customer.id).where(Customer.workspace_id == workspace.id)
             db.execute(delete(AuditEvent).where(AuditEvent.workspace_id == workspace.id))
             db.execute(delete(SiteOnboarding).where(SiteOnboarding.customer_id.in_(customer_ids)))
+            for model in (KnowledgeChange, KnowledgeGap, KnowledgeCompletenessSummary, KnowledgeAssertion,
+                          ServiceBusinessFunction, Service, DataSource):
+                db.execute(delete(model).where(model.customer_id.in_(customer_ids)))
             db.execute(delete(AccessAssignment).where(AccessAssignment.user_id.in_(user_ids)))
             db.execute(delete(User).where(User.id.in_(user_ids)))
             db.execute(delete(Role).where(Role.id.in_(role_ids)))

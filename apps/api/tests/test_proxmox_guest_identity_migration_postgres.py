@@ -470,7 +470,7 @@ def test_encrypted_restore_preserves_binding_history_and_open_case(installations
     archive = portable_backup(installations)
     assert archive.suffix == ".atlasbackup"
     restore(installations, archive)
-    assert _revision(target) == "20261122_0034"
+    assert _revision(target) == "20261125_0035"
     assert _snapshot(target, upgraded=True, decisions=True, restore_comparison=True) == before
     with SessionLocal(bind=target) as db:
         assert db.get(DiscoveryRun, ids.run).ingestion_generation is None

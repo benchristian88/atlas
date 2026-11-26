@@ -178,9 +178,13 @@ def update(db, customer, site, principal, request, *, version, action, profile=N
     else:
         raise ValueError("Unsupported onboarding action")
 
+    record_progress(db, customer, site, principal, request, state, action)
+    commit(db, "Onboarding progress")
+    return state
+
+
+def record_progress(db, customer, site, principal, request, state, action):
     state.last_actor_id = principal.user.id
     state.updated_at = db.scalar(select(func.clock_timestamp()))
     state.version += 1
     audit(db, customer, site, principal, request, action, version=state.version)
-    commit(db, "Onboarding progress")
-    return state

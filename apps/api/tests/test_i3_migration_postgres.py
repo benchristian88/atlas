@@ -17,7 +17,7 @@ def test_additive_upgrade_legacy_history_receipts_and_single_head(monkeypatch):
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     config.set_main_option("script_location", str(Path(__file__).parents[1] / "migrations"))
     monkeypatch.setenv("DATABASE_URL", engine.url.render_as_string(hide_password=False))
-    assert ScriptDirectory.from_config(config).get_heads() == ["20261122_0034"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["20261125_0035"]
     command.upgrade(config, "20261012_0028")
     with engine.begin() as db:
         workspace = db.scalar(text("INSERT INTO workspaces(name,slug) VALUES ('I3 migration','i3-migration') RETURNING id"))
@@ -26,11 +26,23 @@ def test_additive_upgrade_legacy_history_receipts_and_single_head(monkeypatch):
         identifier = db.scalar(text("INSERT INTO integrations(customer_id,site_id,plugin_id,name,base_url,username_or_token_id,secret_reference) VALUES (:customer,:site,'legacy','Legacy','https://example.test','','') RETURNING id"), {"customer": customer, "site": site})
         run = db.scalar(text("INSERT INTO discovery_runs(integration_id,customer_id,site_id,status,started_at,coverage_key) VALUES (:integration,:customer,:site,'completed',now(),'legacy') RETURNING id"), {"integration": identifier, "customer": customer, "site": site})
     command.upgrade(config, "20261012_0029")
+    command.upgrade(config, "20261122_0034")
+    with engine.begin() as db:
+        onboarding_id = db.scalar(text("""
+            INSERT INTO site_onboarding(customer_id, site_id, environment_profile, current_stage,
+                                        stage_decisions, status, version)
+            VALUES (:customer, :site, 'homelab', 'capabilities',
+                    '{"environment":"completed"}', 'saved', 3) RETURNING id
+        """), {"customer": customer, "site": site})
     command.upgrade(config, "head")
     with engine.begin() as db:
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20261122_0034"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "20261125_0035"
         assert db.execute(text("SELECT onboarding_customer_id, onboarding_site_id FROM installation_state")).one() == (None, None)
-        assert db.scalar(text("SELECT count(*) FROM site_onboarding")) == 0
+        assert db.execute(text("""
+            SELECT status, current_stage, environment_profile, version, capabilities_draft
+            FROM site_onboarding WHERE id=:id
+        """), {"id": onboarding_id}).one() == ("saved", "capabilities", "homelab", 3, None)
+        assert db.scalar(text("SELECT count(*) FROM onboarding_capability_submissions")) == 0
         assert db.scalar(text("SELECT customer_id FROM sites WHERE id=:id"), {"id": site}) == customer
         assert db.execute(text("SELECT status,coverage_key,execution_provenance FROM discovery_runs WHERE id=:id"), {"id": run}).one() == ("completed", "legacy", None)
         assert db.scalar(text("SELECT schedule_preset FROM integrations WHERE id=:id"), {"id": identifier}) == "manual"
@@ -43,4 +55,19 @@ def test_additive_upgrade_legacy_history_receipts_and_single_head(monkeypatch):
             db.execute(text("INSERT INTO discovery_batch_receipts(discovery_run_id,sequence,body_hash,payload_json) VALUES (:id,1,:hash,'{}')"), {"id": run, "hash": "a"*64})
         with pytest.raises(DBAPIError), db.begin_nested():
             db.execute(text("INSERT INTO discovery_runs(integration_id,customer_id,site_id,status,started_at,execution_provenance) VALUES (:integration,:customer,:site,'pending',now(),'{}')"), {"integration": identifier, "customer": customer, "site": site})
+    with engine.begin() as db:
+        db.execute(text("UPDATE site_onboarding SET capabilities_draft='{}' WHERE id=:id"), {"id": onboarding_id})
+        db.execute(text("""
+            INSERT INTO onboarding_capability_submissions(id, onboarding_id, requested_version, outcome)
+            VALUES (gen_random_uuid(), :id, 2, '{}')
+        """), {"id": onboarding_id})
+    command.downgrade(config, "20261122_0034")
+    with engine.begin() as db:
+        assert db.scalar(text("SELECT to_regclass('onboarding_capability_submissions')")) is None
+        assert db.scalar(text("SELECT version FROM site_onboarding WHERE id=:id"), {"id": onboarding_id}) == 3
+        assert db.scalar(text("SELECT name FROM integrations WHERE id=:id"), {"id": identifier}) == "Legacy"
+    command.upgrade(config, "head")
+    with engine.begin() as db:
+        assert db.scalar(text("SELECT count(*) FROM onboarding_capability_submissions")) == 0
+        assert db.scalar(text("SELECT capabilities_draft FROM site_onboarding WHERE id=:id"), {"id": onboarding_id}) is None
     engine.dispose()

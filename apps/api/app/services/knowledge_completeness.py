@@ -677,9 +677,11 @@ def evaluate_service_safely(db: Session, service_or_id: Service | uuid.UUID, *, 
         return _mark_not_evaluated(db, "service", service, scope_changed=scope_changed)
 
 
-def evaluate_services_for_service_type(db: Session, service_type_id: uuid.UUID | None, *, limit: int = 100, actor_user_id: uuid.UUID | None = None) -> int:
-    query = select(Service).order_by(Service.updated_at.desc()).limit(limit)
+def evaluate_services_for_service_type(db: Session, service_type_id: uuid.UUID | None, *, limit: int | None = 100, actor_user_id: uuid.UUID | None = None) -> int:
+    query = select(Service)
     if service_type_id is not None: query = query.where(Service.service_type_id == service_type_id)
+    if limit is not None:
+        query = query.order_by(Service.updated_at.desc()).limit(limit)
     rows = list(db.scalars(query))
     for service in sorted(rows, key=lambda item: item.id):
         evaluate_service(db, service, trigger_context="requirement_profile_changed", actor_user_id=actor_user_id)

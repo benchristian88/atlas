@@ -26,7 +26,7 @@ COPY apps/api/migrations ./migrations
 COPY apps/runtime/ansible/baseline.json apps/runtime/ansible/requirements.lock ./runtime-baseline/
 
 # Malformed canonical metadata fails the image build before distribution.
-RUN python -c "from app.release import load_metadata; load_metadata()"
+RUN python -c "from app.release import load_metadata; from app.services.homelab_catalogue import load_catalogue; load_metadata(); load_catalogue()"
 
 EXPOSE 8000
 

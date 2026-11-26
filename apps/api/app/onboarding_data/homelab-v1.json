@@ -1,0 +1,756 @@
+{
+  "schema_version": 1,
+  "catalogue_id": "atlas.homelab.capabilities",
+  "content_version": "1.0.0",
+  "status": "approved-content--proposed-wire-schema",
+  "profile": "homelab",
+  "description": "Bundled, offline-first Homelab starter catalogue. Approved content E1-D27–D54; identity and simplified import contract E1-D55–D60.",
+  "functions": [
+    {
+      "id": "bf.home-connectivity",
+      "name": "Home Connectivity",
+      "description": "Provides network connectivity, addressing and name resolution capabilities for devices and applications throughout the home.",
+      "sort_order": 1,
+      "services": [
+        {
+          "id": "svc.internet-access",
+          "name": "Internet Access",
+          "description": "Provides connectivity between the home network and the internet.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "External",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-connectivity",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.wired-network",
+          "name": "Wired Network",
+          "description": "Provides physical, cabled network connectivity for devices and infrastructure.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-connectivity",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.wireless-network",
+          "name": "Wireless Network",
+          "description": "Provides wireless network connectivity for compatible devices throughout the home.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-connectivity",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.network-segmentation",
+          "name": "Network Segmentation",
+          "description": "Separates network traffic into defined groups to support isolation and access control.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-connectivity",
+          "sort_order": 4
+        },
+        {
+          "id": "svc.dhcp",
+          "name": "DHCP",
+          "description": "Automatically assigns IP addresses and network configuration settings to connected devices.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-connectivity",
+          "sort_order": 5
+        },
+        {
+          "id": "svc.dns",
+          "name": "DNS",
+          "description": "Resolves host and domain names to network addresses for devices and applications.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-connectivity",
+          "sort_order": 6
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.secure-access",
+      "name": "Secure Access",
+      "description": "Provides identity verification, access control and secure connectivity capabilities that protect systems, applications and network resources.",
+      "sort_order": 2,
+      "services": [
+        {
+          "id": "svc.authentication",
+          "name": "Authentication",
+          "description": "Verifies the identity of users or systems before granting access to protected resources.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.secure-access",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.single-sign-on",
+          "name": "Single Sign-On",
+          "description": "Enables users to access multiple applications through a shared authentication process.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.secure-access",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.reverse-proxy",
+          "name": "Reverse Proxy",
+          "description": "Receives and routes client requests to appropriate applications or services.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.secure-access",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.certificate-management",
+          "name": "Certificate Management",
+          "description": "Manages the issuance, renewal and lifecycle of digital certificates used to secure communications.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.secure-access",
+          "sort_order": 4
+        },
+        {
+          "id": "svc.remote-access",
+          "name": "Remote Access",
+          "description": "Provides authorised connectivity to home systems and applications from outside the local network.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.secure-access",
+          "sort_order": 5
+        },
+        {
+          "id": "svc.firewall-protection",
+          "name": "Firewall Protection",
+          "description": "Controls network traffic according to defined security rules and access policies.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.secure-access",
+          "sort_order": 6
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.application-hosting",
+      "name": "Application Hosting",
+      "description": "Provides the compute platforms, execution environments and supporting resources required to host and manage applications and workloads.",
+      "sort_order": 3,
+      "services": [
+        {
+          "id": "svc.vm-hosting",
+          "name": "VM Hosting",
+          "description": "Provides virtual machine execution, resource allocation and lifecycle management for hosted workloads.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Platform",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.application-hosting",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.container-hosting",
+          "name": "Container Hosting",
+          "description": "Provides environments for running and managing containerised applications and workloads.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Platform",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.application-hosting",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.docker-hosting",
+          "name": "Docker Hosting",
+          "description": "Provides the execution and management of applications packaged as Docker containers.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Platform",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.application-hosting",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.cluster-management",
+          "name": "Cluster Management",
+          "description": "Coordinates multiple compute nodes to support shared management and workload operation.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.application-hosting",
+          "sort_order": 4
+        },
+        {
+          "id": "svc.workload-storage",
+          "name": "Workload Storage",
+          "description": "Provides persistent storage resources used by hosted virtual machines, containers and applications.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.application-hosting",
+          "sort_order": 5
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.data-storage-and-protection",
+      "name": "Data Storage and Protection",
+      "description": "Provides persistent data storage, backup and recovery capabilities to protect information and support restoration following loss or disruption.",
+      "sort_order": 4,
+      "services": [
+        {
+          "id": "svc.file-storage",
+          "name": "File Storage",
+          "description": "Provides shared or dedicated storage for files accessed by users, devices and applications.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.data-storage-and-protection",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.application-storage",
+          "name": "Application Storage",
+          "description": "Provides persistent data storage used by applications and their supporting components.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.data-storage-and-protection",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.vm-backup",
+          "name": "VM Backup",
+          "description": "Creates and manages backup copies of virtual machines to support recovery when required.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.data-storage-and-protection",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.file-backup",
+          "name": "File Backup",
+          "description": "Creates and manages backup copies of files and directories to protect against data loss.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Infrastructure",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.data-storage-and-protection",
+          "sort_order": 4
+        },
+        {
+          "id": "svc.data-restore",
+          "name": "Data Restore",
+          "description": "Provides the capability to recover files, application data or workloads from available backups.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.data-storage-and-protection",
+          "sort_order": 5
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.monitoring-and-administration",
+      "name": "Monitoring and Administration",
+      "description": "Provides monitoring, visibility, documentation and maintenance capabilities to support reliable operation and administration of the environment.",
+      "sort_order": 5,
+      "services": [
+        {
+          "id": "svc.availability-monitoring",
+          "name": "Availability Monitoring",
+          "description": "Checks the availability and responsiveness of systems, applications and network services.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.monitoring-and-administration",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.infrastructure-monitoring",
+          "name": "Infrastructure Monitoring",
+          "description": "Collects and monitors performance, capacity and health information from infrastructure components.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.monitoring-and-administration",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.network-monitoring",
+          "name": "Network Monitoring",
+          "description": "Observes network connectivity, traffic and performance to support visibility and troubleshooting.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.monitoring-and-administration",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.dashboarding",
+          "name": "Dashboarding",
+          "description": "Presents operational information, metrics and system status through visual dashboards.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.monitoring-and-administration",
+          "sort_order": 4
+        },
+        {
+          "id": "svc.asset-documentation",
+          "name": "Asset Documentation",
+          "description": "Maintains structured information about infrastructure assets, their properties and operational context.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.monitoring-and-administration",
+          "sort_order": 5
+        },
+        {
+          "id": "svc.patch-monitoring",
+          "name": "Patch Monitoring",
+          "description": "Tracks software versions, available updates and patch status across managed systems.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.monitoring-and-administration",
+          "sort_order": 6
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.smart-home",
+      "name": "Smart Home",
+      "description": "Provides automation, device connectivity and management capabilities for connected systems and technologies throughout the home.",
+      "sort_order": 6,
+      "services": [
+        {
+          "id": "svc.home-automation",
+          "name": "Home Automation",
+          "description": "Coordinates automated actions, routines and interactions between connected devices and systems.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.smart-home",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.device-integration",
+          "name": "Device Integration",
+          "description": "Connects smart-home devices and systems to enable communication and coordinated operation.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Integration",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.smart-home",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.sensor-management",
+          "name": "Sensor Management",
+          "description": "Collects and manages information from sensors that measure environmental conditions or detect events.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.smart-home",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.device-firmware-management",
+          "name": "Device Firmware Management",
+          "description": "Tracks and manages firmware versions and updates for connected smart-home devices.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.smart-home",
+          "sort_order": 4
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.home-security-and-surveillance",
+      "name": "Home Security and Surveillance",
+      "description": "Provides video monitoring, recording, activity detection and notification capabilities to support the security and surveillance of the home.",
+      "sort_order": 7,
+      "services": [
+        {
+          "id": "svc.video-surveillance",
+          "name": "Video Surveillance",
+          "description": "Provides live viewing and monitoring of video feeds from security cameras and surveillance devices.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-security-and-surveillance",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.camera-recording",
+          "name": "Camera Recording",
+          "description": "Captures, stores and manages recorded video footage from security cameras.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-security-and-surveillance",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.motion-detection",
+          "name": "Motion Detection",
+          "description": "Detects movement or activity using cameras and associated detection technologies.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-security-and-surveillance",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.security-notifications",
+          "name": "Security Notifications",
+          "description": "Generates and delivers alerts about detected security events or conditions requiring attention.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Shared",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.home-security-and-surveillance",
+          "sort_order": 4
+        }
+      ],
+      "preselected": true
+    },
+    {
+      "id": "bf.household-information-and-media",
+      "name": "Household Information and Media",
+      "description": "Provides capabilities for organising, managing and accessing household information, personal records, digital media and everyday resources.",
+      "sort_order": 8,
+      "services": [
+        {
+          "id": "svc.photo-management",
+          "name": "Photo Management",
+          "description": "Stores, organises and provides access to personal photographs and video collections.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.household-information-and-media",
+          "sort_order": 1
+        },
+        {
+          "id": "svc.document-management",
+          "name": "Document Management",
+          "description": "Captures, organises, stores and retrieves household documents and digital records.",
+          "selection_tier": "standard",
+          "preselected": true,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.household-information-and-media",
+          "sort_order": 2
+        },
+        {
+          "id": "svc.household-inventory",
+          "name": "Household Inventory",
+          "description": "Maintains records of household possessions, equipment and other owned items.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.household-information-and-media",
+          "sort_order": 3
+        },
+        {
+          "id": "svc.knowledge-management",
+          "name": "Knowledge Management",
+          "description": "Organises and maintains information, notes and documentation for reference and reuse.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.household-information-and-media",
+          "sort_order": 4
+        },
+        {
+          "id": "svc.meal-planning",
+          "name": "Meal Planning",
+          "description": "Supports the organisation of recipes, meal schedules and related household planning.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.household-information-and-media",
+          "sort_order": 5
+        },
+        {
+          "id": "svc.music-management",
+          "name": "Music Management",
+          "description": "Organises and manages digital music collections and their availability for playback.",
+          "selection_tier": "extended",
+          "preselected": false,
+          "service_type_name": "Application",
+          "criticality_name": "Medium",
+          "business_function_id": "bf.household-information-and-media",
+          "sort_order": 6
+        }
+      ],
+      "preselected": true
+    }
+  ],
+  "associations": [
+    {
+      "id": "assoc.home-connectivity.internet-access",
+      "business_function_id": "bf.home-connectivity",
+      "service_id": "svc.internet-access"
+    },
+    {
+      "id": "assoc.home-connectivity.wired-network",
+      "business_function_id": "bf.home-connectivity",
+      "service_id": "svc.wired-network"
+    },
+    {
+      "id": "assoc.home-connectivity.wireless-network",
+      "business_function_id": "bf.home-connectivity",
+      "service_id": "svc.wireless-network"
+    },
+    {
+      "id": "assoc.home-connectivity.network-segmentation",
+      "business_function_id": "bf.home-connectivity",
+      "service_id": "svc.network-segmentation"
+    },
+    {
+      "id": "assoc.home-connectivity.dhcp",
+      "business_function_id": "bf.home-connectivity",
+      "service_id": "svc.dhcp"
+    },
+    {
+      "id": "assoc.home-connectivity.dns",
+      "business_function_id": "bf.home-connectivity",
+      "service_id": "svc.dns"
+    },
+    {
+      "id": "assoc.secure-access.authentication",
+      "business_function_id": "bf.secure-access",
+      "service_id": "svc.authentication"
+    },
+    {
+      "id": "assoc.secure-access.single-sign-on",
+      "business_function_id": "bf.secure-access",
+      "service_id": "svc.single-sign-on"
+    },
+    {
+      "id": "assoc.secure-access.reverse-proxy",
+      "business_function_id": "bf.secure-access",
+      "service_id": "svc.reverse-proxy"
+    },
+    {
+      "id": "assoc.secure-access.certificate-management",
+      "business_function_id": "bf.secure-access",
+      "service_id": "svc.certificate-management"
+    },
+    {
+      "id": "assoc.secure-access.remote-access",
+      "business_function_id": "bf.secure-access",
+      "service_id": "svc.remote-access"
+    },
+    {
+      "id": "assoc.secure-access.firewall-protection",
+      "business_function_id": "bf.secure-access",
+      "service_id": "svc.firewall-protection"
+    },
+    {
+      "id": "assoc.application-hosting.vm-hosting",
+      "business_function_id": "bf.application-hosting",
+      "service_id": "svc.vm-hosting"
+    },
+    {
+      "id": "assoc.application-hosting.container-hosting",
+      "business_function_id": "bf.application-hosting",
+      "service_id": "svc.container-hosting"
+    },
+    {
+      "id": "assoc.application-hosting.docker-hosting",
+      "business_function_id": "bf.application-hosting",
+      "service_id": "svc.docker-hosting"
+    },
+    {
+      "id": "assoc.application-hosting.cluster-management",
+      "business_function_id": "bf.application-hosting",
+      "service_id": "svc.cluster-management"
+    },
+    {
+      "id": "assoc.application-hosting.workload-storage",
+      "business_function_id": "bf.application-hosting",
+      "service_id": "svc.workload-storage"
+    },
+    {
+      "id": "assoc.data-storage-and-protection.file-storage",
+      "business_function_id": "bf.data-storage-and-protection",
+      "service_id": "svc.file-storage"
+    },
+    {
+      "id": "assoc.data-storage-and-protection.application-storage",
+      "business_function_id": "bf.data-storage-and-protection",
+      "service_id": "svc.application-storage"
+    },
+    {
+      "id": "assoc.data-storage-and-protection.vm-backup",
+      "business_function_id": "bf.data-storage-and-protection",
+      "service_id": "svc.vm-backup"
+    },
+    {
+      "id": "assoc.data-storage-and-protection.file-backup",
+      "business_function_id": "bf.data-storage-and-protection",
+      "service_id": "svc.file-backup"
+    },
+    {
+      "id": "assoc.data-storage-and-protection.data-restore",
+      "business_function_id": "bf.data-storage-and-protection",
+      "service_id": "svc.data-restore"
+    },
+    {
+      "id": "assoc.monitoring-and-administration.availability-monitoring",
+      "business_function_id": "bf.monitoring-and-administration",
+      "service_id": "svc.availability-monitoring"
+    },
+    {
+      "id": "assoc.monitoring-and-administration.infrastructure-monitoring",
+      "business_function_id": "bf.monitoring-and-administration",
+      "service_id": "svc.infrastructure-monitoring"
+    },
+    {
+      "id": "assoc.monitoring-and-administration.network-monitoring",
+      "business_function_id": "bf.monitoring-and-administration",
+      "service_id": "svc.network-monitoring"
+    },
+    {
+      "id": "assoc.monitoring-and-administration.dashboarding",
+      "business_function_id": "bf.monitoring-and-administration",
+      "service_id": "svc.dashboarding"
+    },
+    {
+      "id": "assoc.monitoring-and-administration.asset-documentation",
+      "business_function_id": "bf.monitoring-and-administration",
+      "service_id": "svc.asset-documentation"
+    },
+    {
+      "id": "assoc.monitoring-and-administration.patch-monitoring",
+      "business_function_id": "bf.monitoring-and-administration",
+      "service_id": "svc.patch-monitoring"
+    },
+    {
+      "id": "assoc.smart-home.home-automation",
+      "business_function_id": "bf.smart-home",
+      "service_id": "svc.home-automation"
+    },
+    {
+      "id": "assoc.smart-home.device-integration",
+      "business_function_id": "bf.smart-home",
+      "service_id": "svc.device-integration"
+    },
+    {
+      "id": "assoc.smart-home.sensor-management",
+      "business_function_id": "bf.smart-home",
+      "service_id": "svc.sensor-management"
+    },
+    {
+      "id": "assoc.smart-home.device-firmware-management",
+      "business_function_id": "bf.smart-home",
+      "service_id": "svc.device-firmware-management"
+    },
+    {
+      "id": "assoc.home-security-and-surveillance.video-surveillance",
+      "business_function_id": "bf.home-security-and-surveillance",
+      "service_id": "svc.video-surveillance"
+    },
+    {
+      "id": "assoc.home-security-and-surveillance.camera-recording",
+      "business_function_id": "bf.home-security-and-surveillance",
+      "service_id": "svc.camera-recording"
+    },
+    {
+      "id": "assoc.home-security-and-surveillance.motion-detection",
+      "business_function_id": "bf.home-security-and-surveillance",
+      "service_id": "svc.motion-detection"
+    },
+    {
+      "id": "assoc.home-security-and-surveillance.security-notifications",
+      "business_function_id": "bf.home-security-and-surveillance",
+      "service_id": "svc.security-notifications"
+    },
+    {
+      "id": "assoc.household-information-and-media.photo-management",
+      "business_function_id": "bf.household-information-and-media",
+      "service_id": "svc.photo-management"
+    },
+    {
+      "id": "assoc.household-information-and-media.document-management",
+      "business_function_id": "bf.household-information-and-media",
+      "service_id": "svc.document-management"
+    },
+    {
+      "id": "assoc.household-information-and-media.household-inventory",
+      "business_function_id": "bf.household-information-and-media",
+      "service_id": "svc.household-inventory"
+    },
+    {
+      "id": "assoc.household-information-and-media.knowledge-management",
+      "business_function_id": "bf.household-information-and-media",
+      "service_id": "svc.knowledge-management"
+    },
+    {
+      "id": "assoc.household-information-and-media.meal-planning",
+      "business_function_id": "bf.household-information-and-media",
+      "service_id": "svc.meal-planning"
+    },
+    {
+      "id": "assoc.household-information-and-media.music-management",
+      "business_function_id": "bf.household-information-and-media",
+      "service_id": "svc.music-management"
+    }
+  ]
+}
