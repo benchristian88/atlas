@@ -188,7 +188,9 @@ try {
         assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.nav-link.active')).backgroundColor"), "rgba(0, 0, 0, 0)");
         await assertDashboardAssetCount();
         assert.deepEqual(await evaluate("[...document.querySelectorAll('.ops-summary-item strong')].map(n=>n.textContent)"), ["2", "2", "1", "2"]);
-        assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-item')].every(n=>n.querySelector('svg') && n.querySelector('small').textContent === 'Current recorded total')"), true);
+        assert.equal(await evaluate("[...document.querySelectorAll('.ops-summary-item')].every(n=>n.querySelector('svg'))"), true);
+        assert.deepEqual(await evaluate("[...document.querySelectorAll('.ops-summary-item small')].map(n=>n.textContent)"), ["Current recorded total", "Current recorded total", "Current recorded total", "Required or conditional gaps that are open or deferred"]);
+        assert.equal(await evaluate("document.querySelector('.ops-summary-item[href^=\"/knowledge-gaps?\"]').getAttribute('href')"), "/knowledge-gaps?requirement_level=required_or_conditional&status=open_or_deferred");
         assert.equal(await evaluate("new Set([...document.querySelectorAll('.ops-summary-item')].map(n=>n.getBoundingClientRect().height)).size"), 1);
         assert.equal(await evaluate("document.querySelectorAll('.ops-attention-row svg').length"), 4);
         assert.equal(await evaluate("[...document.querySelectorAll('.critical-service-card')].every(n=>n.querySelector('.entity-identity') && n.querySelector('.ops-badge') && n.querySelector('[aria-label=\"Recorded status: operational\"]') && n.querySelector('[role=meter]').getAttribute('aria-valuenow') === '75')"), true);

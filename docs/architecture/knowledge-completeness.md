@@ -69,6 +69,34 @@ active gaps in the wrong scope, Atlas also hides summaries that could still
 count those gaps. A successful reevaluation supersedes the mismatched rows and
 creates current gaps as needed.
 
+## Knowledge Gaps workspace
+
+In a Site workspace, **Knowledge Gaps** includes gaps from the selected Site
+and from records without a Site in the selected Customer, subject to the
+user's existing grants. In **Filters**, turn off **Include customer-wide**
+to view the selected Site only. The URL retains this selection. **Reset filters**
+restores customer-wide inclusion and the default active statuses (open,
+deferred and exception). A requirement filter is cleared when scoped queries
+confirm it is unavailable in the new scope. Atlas keeps the selected filter
+visible while checking or when availability cannot be confirmed.
+
+The page loads up to 500 gaps after applying the list filters. At that limit,
+the page labels the loaded count and indicates that additional records may
+exist. Pagination covers the loaded records.
+
+The Dashboard counts required and conditional gaps that are open or deferred.
+Its Knowledge Gaps links open that same subset with customer-wide inclusion.
+Choose **All levels** to see recommended gaps as well, or reset to the default
+view to include active exceptions.
+
+`GET /api/knowledge-gaps` and `GET /api/knowledge-gaps/summary` accept
+`include_customer_wide=true` with the same selected-Site behavior as
+`GET /api/dashboard/summary`. The API defaults remain Site-only when a Site is
+selected. The flag has no effect without a selected Site. All three routes
+intersect the workspace with the caller's `knowledge_gaps.view` grants.
+The list supports `requirement_level=required_or_conditional` and
+`status=open_or_deferred` for the Dashboard drill-down.
+
 ## Knowledge profile administration
 
 Asset Type and Service Type profiles separate global requirements from type-specific

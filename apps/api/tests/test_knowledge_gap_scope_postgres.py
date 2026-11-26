@@ -413,3 +413,230 @@ def test_transfer_and_gap_mutation_serialize(case, first):
     )
     _, _, audit = history(case)
     assert len(audit) == (0 if first == "transfer" else 1)
+
+
+def seed_gap_visibility(db):
+    """Seed distinct scope, level and status populations for an authenticated workspace."""
+    from secrets import token_urlsafe
+    from uuid import uuid4
+
+    from app.auth import hash_password
+    from app.models import AccessAssignment, Role, User, Workspace
+    from app.permissions import CUSTOMER_ADMINISTRATOR, MASTER_ADMINISTRATOR, VIEWER
+
+    key = uuid4().hex
+    workspace = Workspace(name="Gap visibility", slug=key)
+    db.add(workspace)
+    db.flush()
+    customer = Customer(name="Scope lab", workspace_id=workspace.id)
+    other_customer = Customer(name="Other lab", workspace_id=workspace.id)
+    db.add_all([customer, other_customer])
+    db.flush()
+    site = Site(name="Primary Site", customer_id=customer.id)
+    sibling = Site(name="Sibling Site", customer_id=customer.id)
+    empty_site = Site(name="Empty Site", customer_id=customer.id)
+    other_site = Site(name="Other Site", customer_id=other_customer.id)
+    db.add_all([site, sibling, empty_site, other_site])
+    db.flush()
+
+    service_type = db.scalar(select(ServiceType.id).where(ServiceType.active))
+    criticality = db.scalar(select(CriticalityLevel.id).where(CriticalityLevel.active))
+    now = datetime.now(timezone.utc)
+    ids = {}
+
+    def service_gaps(name, owner, location, *rows):
+        service = Service(name=name, slug=name.lower().replace(" ", "-"), customer_id=owner.id,
+                          site_id=location.id if location else None, service_type_id=service_type,
+                          criticality_level_id=criticality)
+        db.add(service)
+        db.flush()
+        for level, status, severity, label in rows:
+            requirement = KnowledgeRequirementDefinition(
+                name=label, key=f"visibility_{uuid4().hex}", entity_type="service",
+                requirement_level=level, severity=severity, rule_type="service_field_present",
+                rule_config_json={"field": "purpose"}, active=True,
+            )
+            db.add(requirement)
+            db.flush()
+            gap = KnowledgeGap(
+                customer_id=service.customer_id, site_id=service.site_id, entity_type="service",
+                entity_id=service.id, requirement_definition_id=requirement.id, requirement_level=level,
+                status=status, severity=severity, summary=f"Record {label.lower()} for {name}.",
+                first_detected_at=now, last_evaluated_at=now, last_state_changed_at=now,
+                exception_reason="Accepted by the fixture operator" if status == "exception" else None,
+            )
+            db.add(gap)
+            db.flush()
+            ids[label] = str(gap.id)
+
+    service_gaps("Shared DNS", customer, None,
+                 ("required", "open", "high", "Shared purpose"),
+                 ("conditional", "deferred", "medium", "Shared support"),
+                 ("recommended", "open", "high", "Shared recovery guidance"),
+                 ("required", "exception", "critical", "Shared exception"),
+                 ("required", "resolved", "high", "Shared history"))
+    service_gaps("Primary gateway", customer, site, ("required", "open", "critical", "Local purpose"))
+    service_gaps("Sibling gateway", customer, sibling, ("required", "open", "high", "Sibling purpose"))
+    service_gaps("Other gateway", other_customer, other_site, ("required", "open", "high", "Other purpose"))
+    service_gaps("Other shared DNS", other_customer, None, ("conditional", "open", "high", "Other shared purpose"))
+
+    def actor(role_name, scope, owner=None, location=None):
+        password = token_urlsafe(24)
+        user = User(email=f"{uuid4().hex}@example.com", display_name=role_name, password_hash=hash_password(password))
+        role_id = db.scalar(select(Role.id).where(Role.name == role_name))
+        db.add(user)
+        db.flush()
+        grant = AccessAssignment(user_id=user.id, role_id=role_id, scope_type=scope,
+                                 customer_id=owner.id if owner else None, site_id=location.id if location else None)
+        db.add(grant)
+        db.flush()
+        return SimpleNamespace(login={"email": user.email, "password": password}, grant=grant.id)
+
+    return SimpleNamespace(customer=customer.id, site=site.id, sibling=sibling.id, empty_site=empty_site.id,
+                           other_customer=other_customer.id, other_site=other_site.id, ids=ids,
+                           admin=actor(CUSTOMER_ADMINISTRATOR, "customer", customer),
+                           viewer=actor(VIEWER, "site", customer, site),
+                           global_admin=actor(MASTER_ADMINISTRATOR, "global"))
+
+
+def seed_gap_listing_volume(db, visibility):
+    """Seed 501 required gaps with 500 open gaps and 499 open high-severity gaps."""
+    from uuid import uuid4
+
+    reference_gap = db.get(KnowledgeGap, UUID(visibility.ids["Shared purpose"]))
+    reference_service = db.get(Service, reference_gap.entity_id)
+    site = Site(customer_id=visibility.customer, name="Volume Site")
+    last_requirement = KnowledgeRequirementDefinition(
+        name="Volume deferred requirement", key=f"visibility_{uuid4().hex}", entity_type="service",
+        requirement_level="required", severity="medium", rule_type="service_field_present",
+        rule_config_json={"field": "purpose"}, active=True,
+    )
+    db.add_all([site, last_requirement])
+    db.flush()
+    services = [
+        Service(
+            customer_id=visibility.customer, site_id=site.id,
+            service_type_id=reference_service.service_type_id,
+            criticality_level_id=reference_service.criticality_level_id,
+            name=f"Volume service {index + 1}", slug=f"volume-service-{index + 1}",
+        )
+        for index in range(501)
+    ]
+    db.add_all(services)
+    db.flush()
+    now = datetime.now(timezone.utc)
+    for index, service in enumerate(services):
+        is_last = index == len(services) - 1
+        db.add(KnowledgeGap(
+            customer_id=service.customer_id, site_id=service.site_id, entity_type="service",
+            entity_id=service.id, requirement_definition_id=(
+                last_requirement.id if is_last else reference_gap.requirement_definition_id
+            ),
+            requirement_level="required", status="deferred" if is_last else "open",
+            severity="medium" if is_last else "high" if index < 499 else "low",
+            summary="Record purpose for the volume fixture.",
+            first_detected_at=now, last_evaluated_at=now, last_state_changed_at=now,
+        ))
+    db.flush()
+    return SimpleNamespace(site=site.id, requirement=last_requirement.id)
+
+
+def test_authenticated_gap_listing_matches_dashboard_workspace(migrated_history, monkeypatch):
+    from secrets import token_hex
+
+    from app.main import app
+    from app.models import AccessAssignment
+
+    monkeypatch.setenv("AUTH_SECRET_KEY", token_hex(48))
+    migrated_history.migrate("upgrade", "head")
+    with migrated_history.session() as db, db.begin():
+        fixture = seed_gap_visibility(db)
+
+    def request_db():
+        with migrated_history.session() as db:
+            yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_db, request_db)
+
+    def headers(site, customer=fixture.customer):
+        return {"X-Atlas-Customer-ID": str(customer), "X-Atlas-Site-ID": str(site)}
+
+    def get(client, endpoint, context, **params):
+        response = client.get(f"/api/{endpoint}", headers=context, params=params)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def labels(rows):
+        return {row["requirement_name"] for row in rows}
+
+    def assert_counts(client, context, include, expected, **counts):
+        for endpoint in ("dashboard/summary", "knowledge-gaps/summary"):
+            result = get(client, endpoint, context, include_customer_wide=str(include).lower())
+            assert result["open_knowledge_gap_count"] == expected
+            for field, value in counts.items():
+                assert result[field] == value
+
+    primary = headers(fixture.site)
+    empty = headers(fixture.empty_site)
+    with TestClient(app, base_url="https://testserver") as client:
+        def login(actor):
+            response = client.post("/api/auth/login", json=actor.login)
+            assert response.status_code == 200, response.text
+
+        login(fixture.admin)
+        # Essential acceptance failure with the exact same headers on every request.
+        assert_counts(client, empty, True, 2, expired_exception_count=0)
+        assert get(client, "knowledge-gaps", empty, limit=500) == []
+        assert labels(get(client, "knowledge-gaps", empty, limit=500, include_customer_wide="true")) == {
+            "Shared purpose", "Shared support", "Shared recovery guidance", "Shared exception",
+        }
+        # Omitting workspace headers leaves the Customer grant in force but
+        # removes the active Site restriction, even without an inclusion flag.
+        assert labels(get(client, "knowledge-gaps", {}, limit=500)) == {
+            "Local purpose", "Shared purpose", "Shared support", "Shared recovery guidance", "Shared exception", "Sibling purpose",
+        }
+
+        assert_counts(client, primary, False, 1, high_knowledge_gap_count=0, critical_knowledge_gap_count=1)
+        assert_counts(client, primary, True, 3, high_knowledge_gap_count=2, critical_knowledge_gap_count=1)
+        assert labels(get(client, "knowledge-gaps", primary, include_customer_wide="false")) == {"Local purpose"}
+        assert labels(get(client, "knowledge-gaps", primary, include_customer_wide="true")) == {
+            "Local purpose", "Shared purpose", "Shared support", "Shared recovery guidance", "Shared exception",
+        }
+        assert labels(get(client, "knowledge-gaps", primary, include_customer_wide="true",
+                          requirement_level="required_or_conditional", status="open_or_deferred")) == {
+            "Local purpose", "Shared purpose", "Shared support",
+        }
+        assert labels(get(client, "knowledge-gaps", primary, include_customer_wide="true",
+                          requirement_level="recommended", status="open")) == {"Shared recovery guidance"}
+        assert labels(get(client, "knowledge-gaps", primary, include_customer_wide="true",
+                          status="resolved")) == {"Shared history"}
+        for endpoint in ("dashboard/summary", "knowledge-gaps", "knowledge-gaps/summary"):
+            assert client.get(f"/api/{endpoint}", headers=headers(fixture.other_site, fixture.other_customer)).status_code == 403
+
+        login(fixture.global_admin)
+        assert_counts(client, primary, True, 3, high_knowledge_gap_count=2)
+        assert labels(get(client, "knowledge-gaps", headers(fixture.other_site, fixture.other_customer),
+                          include_customer_wide="true")) == {"Other purpose", "Other shared purpose"}
+        global_rows = get(client, "knowledge-gaps", primary, include_customer_wide="true")
+        assert {row["customer_id"] for row in global_rows} == {str(fixture.customer)}
+        assert {row["site_id"] for row in global_rows} == {str(fixture.site), None}
+
+        login(fixture.viewer)
+        for endpoint in ("dashboard/summary", "knowledge-gaps", "knowledge-gaps/summary"):
+            assert client.get(f"/api/{endpoint}", headers=headers(fixture.sibling)).status_code == 403
+        for include in (False, True):
+            assert_counts(client, primary, include, 1, high_knowledge_gap_count=0)
+            assert labels(get(client, "knowledge-gaps", primary, include_customer_wide=str(include).lower())) == {"Local purpose"}
+
+        # Reload grants from the DB even when the same authenticated cookie is reused.
+        login(fixture.admin)
+        with migrated_history.session() as db, db.begin():
+            grant = db.get(AccessAssignment, fixture.admin.grant)
+            grant.scope_type = "site"
+            grant.site_id = fixture.site
+        assert_counts(client, primary, True, 1, high_knowledge_gap_count=0)
+        assert labels(get(client, "knowledge-gaps", primary, include_customer_wide="true")) == {"Local purpose"}
+        gap = fixture.ids["Shared purpose"]
+        assert client.post(f"/api/knowledge-gaps/{gap}/defer", headers=primary, json={
+            "reason": "Outside current grant", "deferred_until": REVIEW_TIME,
+        }).status_code == 404

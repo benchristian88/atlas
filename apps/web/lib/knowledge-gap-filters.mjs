@@ -2,6 +2,9 @@ export const KNOWLEDGE_GAP_SEVERITIES = ["critical", "high", "medium", "low"];
 export const KNOWLEDGE_GAP_REQUIREMENT_LEVELS = ["required", "conditional", "recommended"];
 export const KNOWLEDGE_GAP_STATUSES = ["open", "deferred", "exception", "resolved", "superseded"];
 export const KNOWLEDGE_GAP_ENTITY_TYPES = ["asset", "service"];
+export const DASHBOARD_GAP_LEVEL = "required_or_conditional";
+export const DASHBOARD_GAP_STATUS = "open_or_deferred";
+export const KNOWLEDGE_GAP_LIST_LIMIT = 500;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -27,17 +30,18 @@ export function parseKnowledgeGapFilters(searchParams, pageSize = 25) {
   return {
     entityType: member(searchParams.get("entity_type") || "", KNOWLEDGE_GAP_ENTITY_TYPES),
     assetTypeId: uuid(searchParams.get("asset_type_id")),
-    requirementId: uuid(searchParams.get("requirement_id")),
+    requirementId: uuid(searchParams.get("requirement_id")).toLowerCase(),
     severity: member(searchParams.get("severity") || "", KNOWLEDGE_GAP_SEVERITIES),
-    requirementLevel: member(searchParams.get("requirement_level") || "", KNOWLEDGE_GAP_REQUIREMENT_LEVELS),
-    status: member(searchParams.get("status") || "", KNOWLEDGE_GAP_STATUSES),
+    requirementLevel: member(searchParams.get("requirement_level") || "", [...KNOWLEDGE_GAP_REQUIREMENT_LEVELS, DASHBOARD_GAP_LEVEL]),
+    status: member(searchParams.get("status") || "", [...KNOWLEDGE_GAP_STATUSES, DASHBOARD_GAP_STATUS]),
     assignedUserId: uuid(searchParams.get("assigned_user_id")),
     minimumAgeDays,
+    includeCustomerWide: searchParams.get("include_customer_wide") !== "false",
     offset,
   };
 }
 
-export function knowledgeGapFiltersHref(filters) {
+function gapFilterParams(filters) {
   const params = new URLSearchParams();
   if (filters.entityType) params.set("entity_type", filters.entityType);
   if (filters.assetTypeId) params.set("asset_type_id", filters.assetTypeId);
@@ -46,8 +50,43 @@ export function knowledgeGapFiltersHref(filters) {
   if (filters.requirementLevel) params.set("requirement_level", filters.requirementLevel);
   if (filters.status) params.set("status", filters.status);
   if (filters.assignedUserId) params.set("assigned_user_id", filters.assignedUserId);
-  if (filters.minimumAgeDays !== "") params.set("minimum_age_days", filters.minimumAgeDays);
+  if (filters.minimumAgeDays) params.set("minimum_age_days", filters.minimumAgeDays);
+  return params;
+}
+
+export function knowledgeGapFiltersHref(filters) {
+  const params = gapFilterParams(filters);
+  if (filters.includeCustomerWide === false) params.set("include_customer_wide", "false");
   if (filters.offset > 0) params.set("offset", String(filters.offset));
   const query = params.toString();
   return query ? `/knowledge-gaps?${query}` : "/knowledge-gaps";
 }
+
+export function knowledgeGapRequestPath(filters, limit = KNOWLEDGE_GAP_LIST_LIMIT) {
+  const params = gapFilterParams(filters);
+  params.set("limit", String(limit));
+  params.set("include_customer_wide", String(filters.includeCustomerWide !== false));
+  return `/knowledge-gaps?${params}`;
+}
+
+export function knowledgeGapRequirementRequests(requirementId, includeCustomerWide) {
+  // The default API status covers open, deferred and exception. Check history
+  // separately so changing a list filter cannot make a requirement unavailable.
+  return ["", "resolved", "superseded"].map((status) =>
+    knowledgeGapRequestPath({ requirementId, includeCustomerWide, status }, 1));
+}
+
+export function resolveKnowledgeGapRequirement(results, referencesComplete) {
+  const gap = results.find((result) => result.status === "fulfilled" && result.value.length)?.value[0];
+  if (gap) return { option: { id: gap.requirement_definition_id, name: gap.requirement_name || "Unavailable" } };
+  return { unavailable: referencesComplete && results.every((result) => result.status === "fulfilled") };
+}
+
+export function countKnowledgeGapFilters(filters) {
+  return gapFilterParams(filters).size;
+}
+
+export const DASHBOARD_GAPS_HREF = knowledgeGapFiltersHref({
+  requirementLevel: DASHBOARD_GAP_LEVEL,
+  status: DASHBOARD_GAP_STATUS,
+});

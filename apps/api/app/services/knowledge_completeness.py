@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.authorization import ActiveContext, Principal, scope_condition
 from app.models import (
     Asset,
     AssetInterface,
@@ -37,7 +38,27 @@ from app.services.knowledge_requirement_references import validate_rule_config
 from app.utils.json_values import to_json_value
 
 ACTIVE_GAP_STATUSES = {"open", "deferred", "exception"}
+OPEN_GAP_STATUSES = {"open", "deferred"}
+REQUIRED_GAP_LEVELS = {"required", "conditional"}
 logger = logging.getLogger(__name__)
+
+
+def scoped_completeness_query(
+    model: type[KnowledgeGap] | type[KnowledgeCompletenessSummary],
+    context: ActiveContext,
+    principal: Principal,
+    *,
+    include_customer_wide: bool,
+):
+    query = select(model).where(scope_condition(principal, "knowledge_gaps.view", model.customer_id, model.site_id))
+    if context.customer_id is not None:
+        query = query.where(model.customer_id == context.customer_id)
+    if context.site_id is not None:
+        site = model.site_id == context.site_id
+        if include_customer_wide:
+            site = or_(site, model.site_id.is_(None))
+        query = query.where(site)
+    return query
 
 
 def lock_completeness_entity(db: Session, model: type[Asset] | type[Service], entity_id: uuid.UUID):
