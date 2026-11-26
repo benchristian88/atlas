@@ -68,6 +68,16 @@ def list_business_functions(context: RequestContext, principal: Principal = Depe
 def create_business_function(payload: BusinessFunctionCreate, request: Request, context: RequestContext, principal: Principal = Depends(require_permission("business_functions.manage")), db: Session = Depends(get_db)):
     if context.customer_id and payload.customer_id != context.customer_id: raise HTTPException(status_code=403, detail="Business Function customer must match the active context")
     if context.site_id and payload.site_id != context.site_id: raise HTTPException(status_code=403, detail="Business Function site must match the active context")
+    item = add_business_function(db, payload, principal, request)
+    commit(db, "Business function")
+    db.refresh(item)
+    return function_response(db, item, principal)
+
+
+def add_business_function(
+    db: Session, payload: BusinessFunctionCreate, principal: Principal, request: Request,
+) -> BusinessFunction:
+    """Create a canonical Business Function in the caller's transaction."""
     if payload.site_id:
         site = db.get(Site, payload.site_id)
         if site is None or site.customer_id != payload.customer_id: raise HTTPException(status_code=422, detail="Site does not belong to the selected customer")
@@ -80,8 +90,7 @@ def create_business_function(payload: BusinessFunctionCreate, request: Request, 
     item.icon_key = item.icon_key or "home"
     item.accent_key = item.accent_key or default_entity_accent(item.id)
     add_audit_event(db, action="business_function.created", target_type="business_function", target_id=item.id, actor=principal.user, customer_id=item.customer_id, site_id=item.site_id, summary="Business Function created", request=request)
-    commit(db, "Business function"); db.refresh(item)
-    return function_response(db, item, principal)
+    return item
 
 
 @router.get("/{function_id}", response_model=BusinessFunctionResponse)

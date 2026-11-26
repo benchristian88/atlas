@@ -2163,6 +2163,7 @@ class SiteOnboarding(UUIDPrimaryKeyMixin, Base):
     customer_id: Mapped[uuid.UUID | None]
     environment_profile: Mapped[str | None] = mapped_column(String(50))
     draft_profile: Mapped[str | None] = mapped_column(String(50))
+    capabilities_draft: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
     draft_only: Mapped[bool] = mapped_column(Boolean, server_default="false")
     current_stage: Mapped[str] = mapped_column(String(50), server_default="environment")
     stage_decisions: Mapped[dict[str, str]] = mapped_column(JSONB, server_default="{}")
@@ -2172,6 +2173,19 @@ class SiteOnboarding(UUIDPrimaryKeyMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class OnboardingCapabilitySubmission(Base):
+    """An Apply outcome keyed by the logical command, with no domain entity IDs."""
+
+    __tablename__ = "onboarding_capability_submissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    onboarding_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("site_onboarding.id", ondelete="CASCADE"), index=True,
+    )
+    requested_version: Mapped[int]
+    outcome: Mapped[dict] = mapped_column(JSONB)
 
 
 class OnboardingInvitationDismissal(Base):

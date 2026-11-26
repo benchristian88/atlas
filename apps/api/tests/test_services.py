@@ -8,9 +8,10 @@ from app.models import (
     Base, CriticalityLevel, RelationshipType, Service, ServiceType,
 )
 from app.permissions import PERMISSIONS, ROLE_PERMISSION_KEYS, VIEWER
-from app.routes.services import _applicable_relationship, _slug
+from app.routes.services import _applicable_relationship
 from app.schemas import ServiceCreate
 from app.services.knowledge_completeness import evaluate_service_rule
+from app.utils.entity_names import service_slug
 
 
 class ServiceRuleDatabase:
@@ -126,7 +127,7 @@ def test_c1_routes_permissions_and_slug_contract_are_registered():
         assert key in PERMISSIONS
     assert "services.view" in ROLE_PERMISSION_KEYS[VIEWER]
     assert "services.create" not in ROLE_PERMISSION_KEYS[VIEWER]
-    assert _slug("Identity & Access") == "identity-access"
+    assert service_slug("Identity & Access") == "identity-access"
 
 
 def test_service_dependency_database_constraint_rejects_self_reference_and_preserves_history_shape():

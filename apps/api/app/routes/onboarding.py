@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,18 +13,24 @@ from sqlalchemy.orm import Session
 from app.authorization import CurrentPrincipal, Principal, forbidden, scope_condition
 from app.database import get_db
 from app.models import Customer, Site, SiteOnboarding
-from app.services import onboarding
+from app.services import onboarding, onboarding_capabilities as starter
+from app.services.homelab_catalogue import Catalogue
+from app.services.knowledge_locks import concurrent_decision
 
 router = APIRouter(prefix="/onboarding", tags=["guided onboarding"])
 PAIR = "/{customer_id}/{site_id}"
+
+
+def require_preview_enabled():
+    if os.getenv("ATLAS_ONBOARDING_PREVIEW", "").lower() != "true":
+        raise HTTPException(status_code=404, detail="Record not found")
 
 
 def preview_principal(
     response: Response,
     principal: CurrentPrincipal,
 ) -> Principal:
-    if os.getenv("ATLAS_ONBOARDING_PREVIEW", "").lower() != "true":
-        raise HTTPException(status_code=404, detail="Record not found")
+    require_preview_enabled()
     if principal.user.force_password_change:
         raise forbidden("You must change your password before continuing")
     if not all(principal.can_anywhere(permission) for permission in ("customers.view", "sites.view")):
@@ -196,3 +203,131 @@ def resume(
 def dismiss(customer_id: UUID, site_id: UUID, request: Request, principal: PreviewPrincipal, db: Database):
     site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id, lock=True)
     onboarding.dismiss(db, customer, site, principal, request)
+
+
+class CapabilitiesRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def bounded_body(request: Request):
+            require_preview_enabled()
+            size = 0
+
+            async def receive():
+                nonlocal size
+                message = await request.receive()
+                size += len(message.get("body", b""))
+                # Accommodate every allowed text field even with JSON-escaped
+                # supplementary Unicode characters.
+                if size > 12 * 1024 * 1024:
+                    raise HTTPException(413, "Capabilities request is too large.")
+                return message
+
+            return await handler(Request(request.scope, receive))
+
+        return bounded_body
+
+
+capabilities_router = APIRouter(route_class=CapabilitiesRoute)
+CAPABILITIES = PAIR + "/capabilities"
+
+
+class CapabilityPermissions(BaseModel):
+    can_manage: bool
+    can_view_service_types: bool
+    can_view_criticality_levels: bool
+    can_create_functions: bool
+    can_create_services: bool
+    can_create_associations: bool
+
+
+class CapabilitiesStatus(BaseModel):
+    version: int
+    profile: Literal["homelab", "blank"]
+    permissions: CapabilityPermissions
+    catalogue: Catalogue | None
+    defaults: starter.Selection | None
+    draft: dict | None
+    draft_stale: bool
+    default_service_type_keys: dict[str, str]
+    default_criticality_key: str | None
+
+
+class PreviewSelection(VersionedRequest):
+    selection: starter.Selection
+
+
+class SaveSelection(PreviewSelection):
+    save_and_exit: bool = Field(default=False, strict=True)
+    replace_stale_draft: bool = Field(default=False, strict=True)
+
+
+class ApplySelection(VersionedRequest):
+    submission_id: UUID
+
+
+class SelectionPreview(BaseModel):
+    warnings: list[starter.NameWarning]
+
+
+def capability_context(db, principal, customer_id, site_id, *, write=False, homelab=False):
+    site, customer, principal = onboarding.scoped_site(
+        db, principal, customer_id, site_id, lock=write, manage=write,
+    )
+    state = onboarding.progress(db, site, lock=write)
+    if write:
+        principal = onboarding.refreshed_access(db, principal, site, manage=True)
+    starter.require_confirmed(state, homelab=homelab)
+    return site, customer, principal, state
+
+
+@capabilities_router.get(CAPABILITIES, response_model=CapabilitiesStatus, response_model_exclude_unset=True)
+def get_capabilities(customer_id: UUID, site_id: UUID, principal: PreviewPrincipal, db: Database):
+    site, _, principal, state = capability_context(db, principal, customer_id, site_id)
+    return starter.read(state, principal, site)
+
+
+@capabilities_router.post(CAPABILITIES + "/preview", response_model=SelectionPreview)
+def preview_capabilities(
+    customer_id: UUID, site_id: UUID, payload: PreviewSelection, principal: PreviewPrincipal, db: Database,
+):
+    _, customer, principal, state = capability_context(db, principal, customer_id, site_id, homelab=True)
+    starter.require_version(state, payload.version)
+    functions, services, _ = starter.prepare_selection(db, payload.selection, customer.id, principal)
+    return {"warnings": starter.name_warnings(db, principal, customer.id, functions, services)}
+
+
+@capabilities_router.put(CAPABILITIES + "/draft", response_model=Progress)
+@concurrent_decision
+def save_capabilities_draft(
+    customer_id: UUID, site_id: UUID, payload: SaveSelection, request: Request, principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal, state = capability_context(
+        db, principal, customer_id, site_id, write=True, homelab=True,
+    )
+    starter.save_draft(db, customer, site, principal, request, state, payload)
+    return state
+
+
+@capabilities_router.post(CAPABILITIES + "/apply", response_model=starter.ApplyOutcome)
+@concurrent_decision
+def apply_capabilities(
+    customer_id: UUID, site_id: UUID, payload: ApplySelection, request: Request, principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal, state = capability_context(
+        db, principal, customer_id, site_id, write=True, homelab=True,
+    )
+    return starter.apply(db, customer, site, principal, request, state, payload)
+
+
+@capabilities_router.post(CAPABILITIES + "/skip", response_model=Progress)
+@concurrent_decision
+def skip_capabilities(
+    customer_id: UUID, site_id: UUID, payload: VersionedRequest, request: Request, principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal, state = capability_context(db, principal, customer_id, site_id, write=True)
+    starter.skip(db, customer, site, principal, request, state, payload.version)
+    return state
+
+
+router.include_router(capabilities_router)

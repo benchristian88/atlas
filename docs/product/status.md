@@ -56,6 +56,29 @@ it is not live monitoring or evidence of recovery readiness.
   Proxmox discovery/9.2.11 qualification remain outstanding.
 - Guided onboarding to help operators establish useful initial knowledge.
 
+## Engineering backlog
+
+- **Service move with rename.** A single `PATCH /api/services/{id}` that changes
+  the name and clears `site_id` can return `409` when the accepted name assertion
+  still belongs to the original Site. PostgreSQL's
+  `uq_knowledge_assertions_single_accepted` constraint rejects the new assertion
+  and the transaction rolls back. Independently reproduced on the E1-A baseline
+  (`2b081c2`) and the E1-B working tree. The follow-up should verify that the
+  combined operation preserves assertion history and establishes the new
+  accepted name in Customer scope.
+- **Existing-Service reference reassignment during reevaluation.** If an existing
+  Service is reassigned to a Service Type or Criticality level after that
+  reference's edit has selected its Services for reevaluation, both requests can
+  succeed while the reassigned Service retains stale Knowledge Completeness and
+  Gaps. Independently reproduced on the E1-A baseline (`2b081c2`) and the E1-B
+  working tree.
+- **Synchronous reference reevaluation at scale.** Changes to the Service Type
+  Asset dependency requirement or Criticality rank reevaluate all affected
+  Services in the same transaction. Request work and lock duration grow with the
+  affected inventory, and new Services using that reference wait for the edit
+  to finish. Larger inventories can also widen the timing window for the
+  existing reassignment race.
+
 ## Before 1.0
 
 - Complete the integration/plugin and guided onboarding workflows above.

@@ -24,12 +24,13 @@ from app.database import get_db
 from app.main import app
 from app.models import (AccessAssignment, Asset, AssetIconCache, AssetInterface, AssetRelationship, AuditEvent,
                         BusinessFunction, CriticalityLevel, Customer, InstallationState, MfaChallenge, MfaRecoveryCode,
-                        Network, OnboardingInvitationDismissal, Role, Service, ServiceAssetDependency, ServiceType, Site, SiteOnboarding,
+                        Network, OnboardingCapabilitySubmission, OnboardingInvitationDismissal, Role, Service, ServiceAssetDependency, ServiceType, Site, SiteOnboarding,
                         SystemSetting, User, UserMfa, Workspace, RelationshipType)
 from app.services import backup_runtime as runtime, backups, mfa
 from app.services.backup_archive import BackupError, decrypt_archive, encrypt_archive
 from app.services.backup_postgres import migration_config
 from app.services.encrypted_data import ENCRYPTED_DATA_ADAPTERS, rewrap_application_data
+from app.services.homelab_catalogue import load_catalogue
 from app.services.installation import SETUP_COOKIE, reset_setup_code, verify_setup_code
 from scripts.seed_system import seed_system
 
@@ -144,6 +145,14 @@ def restore(inst, archive, *, mode="local", passphrase=None):
 
 def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installations):
     inst = installations
+    totp = pyotp.TOTP(inst["seed"])
+    submission_id = uuid.uuid4()
+    receipt_outcome = {
+        "submission_id": str(submission_id), "version": 4, "current_stage": "integrations",
+        "created": {"functions": 1, "services": 1, "associations": 1},
+    }
+    draft = {**load_catalogue().versions, "functions": [],
+             "services": [{"id": "svc.internet-access", "name": "Later WAN"}], "associations": []}
     with Session(inst["source"]) as db:
         site = db.scalar(select(Site))
         actor_id = inst["ids"]["user"]
@@ -156,6 +165,18 @@ def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installati
             stage_decisions={"environment": "completed"},
         ))
         db.add(OnboardingInvitationDismissal(user_id=actor_id))
+        repeat_site = Site(customer_id=site.customer_id, name="Repeat import Site")
+        db.add(repeat_site)
+        db.flush()
+        repeat_progress = SiteOnboarding(
+            customer_id=site.customer_id, site_id=repeat_site.id, last_actor_id=actor_id,
+            environment_profile="homelab", current_stage="integrations", status="saved", version=5,
+            stage_decisions={"environment": "completed", "capabilities": "completed"}, capabilities_draft=draft,
+        )
+        db.add(repeat_progress)
+        db.flush()
+        db.add(OnboardingCapabilitySubmission(id=submission_id, onboarding_id=repeat_progress.id,
+                                              requested_version=3, outcome=receipt_outcome))
         db.commit()
     archive = portable_backup(inst)
     signing_key = os.environ["AUTH_SECRET_KEY"]
@@ -171,7 +192,9 @@ def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installati
     if os.getenv("ATLAS_TEST_H3_REDIS_URL"):
         redis = Redis.from_url(os.environ["ATLAS_TEST_H3_REDIS_URL"])
         redis.set("stale-job", "old database id")
+    first_restore_step = int(time.time()) // totp.interval
     restore(inst, archive)
+    last_restore_step = int(time.time()) // totp.interval
     assert runtime.maintenance() is None
     assert os.environ["AUTH_SECRET_KEY"] == signing_key
     assert os.environ["ATLAS_DATA_ENCRYPTION_KEY"] == inst["target_key"]
@@ -191,6 +214,8 @@ def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installati
         assert db.scalar(select(func.count()).select_from(MfaChallenge)) == 0
         state = db.get(UserMfa, user.id)
         assert state.pending_ciphertext is None
+        assert first_restore_step <= state.last_totp_step <= last_restore_step
+        restored_instant = datetime.fromtimestamp(state.last_totp_step * totp.interval, timezone.utc)
         assert mfa.decrypt_seed(user.id, state.secret_nonce, state.secret_ciphertext) == inst["seed"]
         inst["monkeypatch"].setenv("ATLAS_DATA_ENCRYPTION_KEY", inst["source_key"])
         from fastapi import HTTPException
@@ -207,6 +232,11 @@ def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installati
         )
         assert progress.last_actor_id == user.id
         assert db.get(OnboardingInvitationDismissal, user.id) is not None
+        receipt = db.get(OnboardingCapabilitySubmission, submission_id)
+        assert receipt.outcome == receipt_outcome and receipt.requested_version == 3
+        repeat_progress = db.get(SiteOnboarding, receipt.onboarding_id)
+        assert repeat_progress.capabilities_draft == draft and repeat_progress.version == 5
+
         actions = list(db.scalars(select(AuditEvent.event_type)))
         assert "h3.fixture" in actions and "restore.completed" in actions
     def database():
@@ -217,10 +247,12 @@ def test_fresh_full_state_mfa_portability_target_secrets_and_sessions(installati
         client.cookies.set(COOKIE_NAME, old_token)
         assert client.get("/api/auth/me").status_code == 401
         assert client.post("/api/auth/login", json={"email": "h3@example.com", "password": inst["password"]}).json()["mfa_required"]
-        assert client.post("/api/auth/mfa/verify", json={"code": pyotp.TOTP(inst["seed"]).now()}).status_code == 400
-        next_instant = datetime.now(timezone.utc) + timedelta(seconds=31)
+        # Exercise the step consumed by restore even if the wall clock has advanced.
+        inst["monkeypatch"].setattr(mfa, "now", lambda: restored_instant)
+        assert client.post("/api/auth/mfa/verify", json={"code": totp.at(restored_instant)}).status_code == 400
+        next_instant = restored_instant + timedelta(seconds=2 * totp.interval)
         inst["monkeypatch"].setattr(mfa, "now", lambda: next_instant)
-        response = client.post("/api/auth/mfa/verify", json={"code": pyotp.TOTP(inst["seed"]).at(next_instant)})
+        response = client.post("/api/auth/mfa/verify", json={"code": totp.at(next_instant)})
         assert response.status_code == 200
         assert client.get("/api/auth/me").status_code == 200
         assert client.post("/api/setup/verify", json={"code": secrets.token_urlsafe(24)}).status_code == 409
@@ -390,7 +422,7 @@ def test_h1_schema_restores_and_migrates_forward_without_stale_new_tables(instal
     archive = portable_backup(inst)
     restore(inst, archive)
     with inst["target"].connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261122_0034"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261125_0035"
     with Session(inst["target"]) as db:
         assert db.get(User, inst["ids"]["user"]).mfa_enabled is False
         assert db.get(Asset, inst["ids"]["asset"]).name == "Portable host"
