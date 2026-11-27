@@ -169,6 +169,12 @@ def update(db, customer, site, principal, request, *, version, action, profile=N
             raise HTTPException(409, CONFLICT)
         state.stage_decisions = {**state.stage_decisions, "review_ready": "completed"}
         state.current_stage = "showcase"
+    elif action == "completed":
+        if (state.status != "in_progress" or state.current_stage != "showcase" or not state.environment_profile
+                or state.stage_decisions.get("review_ready") != "completed"):
+            raise HTTPException(409, CONFLICT)
+        state.stage_decisions = {**state.stage_decisions, "showcase": "completed"}
+        state.status = "completed"
     elif action == "saved":
         if profile is not None and (state.current_stage != "environment" or state.environment_profile is not None):
             raise HTTPException(status_code=409, detail=CONFLICT)
@@ -185,6 +191,8 @@ def update(db, customer, site, principal, request, *, version, action, profile=N
         raise ValueError("Unsupported onboarding action")
 
     record_progress(db, customer, site, principal, request, state, action)
+    if action == "completed":
+        state.completed_at = state.updated_at
     commit(db, "Onboarding progress")
     return state
 

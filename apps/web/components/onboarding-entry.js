@@ -5,12 +5,14 @@ import { apiRequest } from "../lib/api";
 import { canContinueSetup, dashboardOnboardingEntry, onboardingPath, PROFILES, STAGES } from "../lib/onboarding.mjs";
 import { useAuth } from "./auth-context";
 import { Button } from "./button";
+import { NavigationIcon } from "./navigation-icon.mjs";
+import { PageHeader } from "./page-header";
 import { Surface } from "./section";
 import styles from "./onboarding.module.css";
 
 const request = (path, options) => apiRequest(path, { ...options, omitContext: true, cache: "no-store" });
 
-export function OnboardingEntry({ customerId, siteId }) {
+export function DashboardOnboardingHeader({ customerId, siteId, children }) {
   const { hasPermission } = useAuth();
   const canManageSites = hasPermission("sites.manage");
   const [entry, setEntry] = useState(null);
@@ -27,7 +29,7 @@ export function OnboardingEntry({ customerId, siteId }) {
       const status = pair && await request(pair, { signal }).catch(() => null);
       if (signal.aborted) return;
       const kind = dashboardOnboardingEntry(status);
-      if (kind !== "voluntary" || status?.status === "completed") {
+      if (kind !== "voluntary") {
         setEntry({ kind, href: pair, status });
         return;
       }
@@ -68,7 +70,17 @@ export function OnboardingEntry({ customerId, siteId }) {
     }
   }
 
-  if (!entry) return null;
+  return <>
+    <PageHeader title="Dashboard" description="Your environment, built from recorded knowledge."
+      actions={entry?.kind === "completed" && entry.status.can_manage
+        ? <Button href={entry.href}><NavigationIcon name="compass" />Guided setup</Button> : undefined} />
+    {children}
+    <OnboardingEntry entry={entry} pair={pair} error={error} busy={busy} dismiss={dismiss} />
+  </>;
+}
+
+function OnboardingEntry({ entry, pair, error, busy, dismiss }) {
+  if (!entry || entry.kind === "completed") return null;
   if (entry.kind === "voluntary") return <section className={styles.dashboardEntry} aria-label="Guided setup">
     <Button href={entry.href ?? "/onboarding"} variant="quiet">Guided setup</Button>
   </section>;

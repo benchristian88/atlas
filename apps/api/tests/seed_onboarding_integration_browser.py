@@ -4,18 +4,21 @@ Run using python -m tests.seed_onboarding_integration_browser. Commands require
 a local disposable database and private temporary state.
 """
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.engine import make_url
 
 from app.database import DATABASE_URL, SessionLocal
 from app.models import (Asset, AssetRelationship, AuditEvent, DataSource, DiscoveryRun, EntitySourceLink,
-                        EvidenceRecord, Integration, KnowledgeAssertion, KnowledgeChange, ReconciliationItem)
+                        EvidenceRecord, Integration, KnowledgeAssertion, KnowledgeChange, ReconciliationItem,
+                        BusinessFunction, Customer, KnowledgeGap, Network, Service, ServiceAssetDependency,
+                        ServiceBusinessFunction, SiteOnboarding)
 from app.services import connector_lifecycle as lifecycle
 from app.services.backup_runtime import state_directory
 from app.services.integration_runtime import runtime
@@ -118,15 +121,56 @@ def review_snapshot(customer, site):
         }
 
 
+def showcase_snapshot(customer, site):
+    with SessionLocal() as db:
+        state = db.scalar(select(SiteOnboarding).where(
+            SiteOnboarding.customer_id == customer, SiteOnboarding.site_id == site,
+        ))
+        domain = {}
+        for model in (
+            Asset, AssetRelationship, BusinessFunction, DiscoveryRun, Integration, KnowledgeAssertion,
+            KnowledgeChange, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, ServiceBusinessFunction,
+        ):
+            table = model.__table__
+            rows = db.execute(select(*table.c).where(table.c.customer_id == customer).order_by(table.c.id))
+            domain[table.name] = hashlib.sha256(json.dumps([list(row) for row in rows], default=str).encode()).hexdigest()
+        return {
+            "domain": domain,
+            "workflow": None if state is None else {
+                "status": state.status, "version": state.version, "decisions": state.stage_decisions,
+                "completed_at": state.completed_at, "last_actor_id": state.last_actor_id,
+            },
+            "completion_audits": [str(actor) for actor in db.scalars(select(AuditEvent.user_id).where(
+                AuditEvent.customer_id == customer, AuditEvent.site_id == site, AuditEvent.event_type == "onboarding.completed",
+            ))],
+        }
+
+
+def seed_showcase_inventory(customer, site):
+    with SessionLocal.begin() as db:
+        workspace = db.scalar(select(Customer.workspace_id).where(Customer.id == customer))
+        db.execute(insert(Asset), [
+            {"customer_id": customer, "site_id": site, "workspace_id": workspace, "asset_type": "virtual_machine",
+             "name": f"Recorded QA asset {index}"}
+            for index in range(12345)
+        ])
+
+
 if __name__ == "__main__":
     url = make_url(DATABASE_URL)
     command, *ids = sys.argv[1:]
-    if command == "review-history":
+    if command in {"review-history", "showcase-snapshot", "showcase-inventory"}:
         if (url.host not in {"127.0.0.1", "localhost"}
-                or not (url.database or "").startswith(("atlas_e1d_", "atlas_e1g_"))
+                or not (url.database or "").startswith(("atlas_e1d_", "atlas_e1g_", "atlas_e1h_"))
                 or not state_directory().is_relative_to(Path("/tmp").resolve())):
-            raise SystemExit("Select a disposable E1-G browser database and temporary state directory")
-        seed_review_history(*(UUID(value) for value in ids))
+            raise SystemExit("Select a disposable onboarding browser database and temporary state directory")
+        customer, site = (UUID(value) for value in ids)
+        if command == "review-history":
+            seed_review_history(customer, site)
+        elif command == "showcase-inventory":
+            seed_showcase_inventory(customer, site)
+        else:
+            print(json.dumps(showcase_snapshot(customer, site), default=str))
     else:
         store = lifecycle.package_store().root
         if url.host not in {"127.0.0.1", "localhost"} or not (url.database or "").startswith("atlas_e1d_") or not store.is_relative_to(Path("/private/tmp")):

@@ -31,6 +31,16 @@ def validate_customer_site(
     return customer, site
 
 
+def scoped_networks(principal, customer_id, site_id):
+    query = select(Network).where(scope_condition(principal, "networks.view", Network.customer_id, Network.site_id))
+    if customer_id is not None:
+        query = query.where(Network.customer_id == customer_id)
+    if site_id is not None:
+        # Customer-wide networks are relevant, subject to their own grants.
+        query = query.where(or_(Network.site_id == site_id, Network.site_id.is_(None)))
+    return query
+
+
 @router.get("", response_model=list[NetworkResponse])
 def list_networks(
     context: RequestContext,
@@ -67,19 +77,7 @@ def list_networks(
                 raise HTTPException(status_code=403, detail="The requested customer is not available")
         else:
             require_scope(principal, "networks.view", customer_id, site_id)
-    query = (
-        select(Network)
-        .where(scope_condition(principal, "networks.view", Network.customer_id, Network.site_id))
-        .order_by(Network.name)
-        .limit(limit)
-        .offset(offset)
-    )
-    if customer_id is not None:
-        query = query.where(Network.customer_id == customer_id)
-    if site_id is not None:
-        # Customer-wide networks remain relevant inside a selected site. The
-        # scope predicate still hides them from users who hold only a site grant.
-        query = query.where(or_(Network.site_id == site_id, Network.site_id.is_(None)))
+    query = scoped_networks(principal, customer_id, site_id).order_by(Network.name).limit(limit).offset(offset)
     return list(db.scalars(query))
 
 

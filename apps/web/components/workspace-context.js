@@ -26,7 +26,7 @@ export function WorkspaceContextProvider({ user, focused, children }) {
   const loadGeneration = useRef(0);
   const previousFocused = useRef(focused);
   const selectedForExit = useRef(false);
-  const [savedSetupPath, setSavedSetupPath] = useState(null);
+  const [setupHandoff, setSetupHandoff] = useState(null);
   const [state, setState] = useState({
     status: "loading",
     customers: [],
@@ -174,11 +174,11 @@ export function WorkspaceContextProvider({ user, focused, children }) {
       selectCustomer,
       selectSite,
       selectContext,
-      savedSetupPath,
-      setSavedSetupPath,
+      setupHandoff,
+      setSetupHandoff,
       reload: load,
     };
-  }, [load, selectCustomer, selectSite, selectContext, savedSetupPath, state]);
+  }, [load, selectCustomer, selectSite, selectContext, setupHandoff, state]);
 
   return (
     <WorkspaceContext.Provider value={value}>

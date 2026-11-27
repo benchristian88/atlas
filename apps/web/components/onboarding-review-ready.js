@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
-import { PROFILES, STAGES } from "../lib/onboarding.mjs";
+import { STAGES } from "../lib/onboarding.mjs";
 import { integrationNeedsConfiguration, reviewRecommendations } from "../lib/onboarding-review.mjs";
 import { Button } from "./button";
 import { StatusIndicator } from "./status-indicator";
@@ -22,14 +22,6 @@ function ReviewStage({ stage, decision, onReview, children }) {
       {children}
     </div>
   </li>;
-}
-
-function EnvironmentDetails({ customer, site, profile }) {
-  return <dl className={styles.reviewContext} aria-label="Confirmed setup context">
-    <div><dt>Customer</dt><dd>{customer.name}</dd></div>
-    <div><dt>Site</dt><dd>{site.name}</dd></div>
-    <div><dt>Profile</dt><dd>{PROFILES[profile]}</dd></div>
-  </dl>;
 }
 
 function IntegrationStatus({ integrations }) {
@@ -66,9 +58,7 @@ function ReviewSummary({ review, decisions, visits, onKnowledgeGaps, blocked }) 
     <section aria-labelledby="review-setup-summary">
       <h3 id="review-setup-summary">Setup summary</h3>
       <ul className={styles.reviewList}>
-        <ReviewStage {...stageProps("environment")}>
-          <EnvironmentDetails customer={review.customer} site={review.site} profile={review.profile} />
-        </ReviewStage>
+        <ReviewStage {...stageProps("environment")} />
         <ReviewStage {...stageProps("capabilities")}>
           <dl className={styles.reviewContext}>
             <div><dt>Business Functions</dt><dd>{review.business_functions ?? restricted}</dd></div>
@@ -100,7 +90,7 @@ function ReviewSummary({ review, decisions, visits, onKnowledgeGaps, blocked }) 
   </div>;
 }
 
-export function OnboardingReviewReady({ path, context, decisions, visits, blocked, onKnowledgeGaps, onReloadProgress }) {
+export function OnboardingReviewReady({ path, decisions, visits, blocked, onKnowledgeGaps, onReloadProgress }) {
   const [review, setReview] = useState(null);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -117,7 +107,6 @@ export function OnboardingReviewReady({ path, context, decisions, visits, blocke
 
   const contextUnavailable = [403, 404].includes(error?.status);
   return <>
-    {!review && !contextUnavailable && <EnvironmentDetails {...context} />}
     {error ? <div className="error-banner" role="alert">
       <p>{contextUnavailable ? "This review is unavailable. Reload setup progress to check your access."
         : "Current setup information could not be loaded."}</p>

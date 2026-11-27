@@ -36,7 +36,11 @@ def _compatible_target_scope(source_customer, source_site, target_customer, targ
     )
 
 
-def _endpoint_scope(model, source, target, principal, *, include_history=False):
+def effective_relationship_at(model, instant):
+    return and_(model.valid_from <= instant, or_(model.valid_to.is_(None), model.valid_to > instant))
+
+
+def _endpoint_scope(model, source, target, principal, *, include_history=False, as_of=None):
     _, _, target_model, target_permission = RELATIONSHIPS[model]
     conditions = [source.deleted_at.is_(None)]
     if target_model is not Asset:
@@ -55,7 +59,8 @@ def _endpoint_scope(model, source, target, principal, *, include_history=False):
                  model.customer_id == target.customer_id),
         ))
     else:
-        conditions.extend((model.valid_to.is_(None), current_scope))
+        validity = model.valid_to.is_(None) if as_of is None else effective_relationship_at(model, as_of)
+        conditions.extend((validity, current_scope))
     if principal is not None:
         link_permission = "business_functions.view" if model is ServiceBusinessFunction else "service_dependencies.view"
         conditions.extend((
@@ -66,14 +71,14 @@ def _endpoint_scope(model, source, target, principal, *, include_history=False):
     return conditions
 
 
-def current_relationship(model, principal=None):
+def current_relationship(model, principal=None, *, as_of=None):
     """Predicate for counts, filters and evaluations over a relationship table."""
     source_id, target_id, target_model, _ = RELATIONSHIPS[model]
     source, target = Service.__table__.alias(), target_model.__table__.alias()
     return select(1).select_from(source.join(target, source.c.customer_id == target.c.customer_id)).where(
         source.c.id == getattr(model, source_id),
         target.c.id == getattr(model, target_id),
-        *_endpoint_scope(model, source.c, target.c, principal),
+        *_endpoint_scope(model, source.c, target.c, principal, as_of=as_of),
     ).correlate(model).exists()
 
 

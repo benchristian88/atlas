@@ -94,8 +94,9 @@ export async function checkReviewReady({
   await action(page, "Retry review").click();
   await loaded.waitFor();
   await stageRow("Capabilities").getByText("Completed", { exact: true }).waitFor();
-  await stageRow("Environment").getByText(`${longName} Customer`, { exact: true }).waitFor();
-  await stageRow("Environment").getByText(`${longName} Site`, { exact: true }).waitFor();
+  const setupContext = page.locator('.page-header dl[aria-label="Confirmed setup context"]');
+  await setupContext.getByText(`${longName} Customer`, { exact: true }).waitFor();
+  await setupContext.getByText(`${longName} Site`, { exact: true }).waitFor();
   await action(page, "Review eligible discovery proposals").waitFor();
   await mappingAction.waitFor();
   await gapAction.waitFor();
@@ -371,8 +372,8 @@ export async function checkReviewReady({
   const before = await get(reviewPath(workshopHref));
   await next.click();
   await heading(page, "Showcase").waitFor();
-  await page.getByText("This setup stage is pending in this preview.").waitFor();
-  assert.equal(await page.getByRole("navigation", { name: "Setup stages" }).locator('[aria-current="step"] small').innerText(), "Pending");
+  await heading(page, "Your capabilities").waitFor();
+  assert.equal(await page.getByRole("navigation", { name: "Setup stages" }).locator('[aria-current="step"] small').innerText(), "In progress");
   const after = await progress(workshopHref);
   assert.equal(after.status, "in_progress");
   assert.equal(after.completed_at, null);

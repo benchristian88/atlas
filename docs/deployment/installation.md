@@ -311,6 +311,12 @@ configuration you can see at the confirmed Site. Review outstanding
 discovery decisions, unmapped Services, Integration issues and required
 Knowledge Gaps using the suggested actions. **Save & exit** lets you resume
 the review with current information. **Continue to Showcase** is available
-even while work remains outstanding. Showcase, setup completion and public
-activation are scheduled for a later packet.
+even while work remains outstanding. **Showcase** presents your current
+Business Functions, Services, Assets, Networks, and recorded connections.
+Its exploration actions let you visit Atlas and return to setup. Use
+**Finish setup & explore Atlas** when you are ready to complete guided
+setup. You can finish with gaps or other outstanding work and address them
+later. After completion the Dashboard heading offers **Guided setup** to
+review the saved setup or revisit an earlier stage. Public activation
+remains scheduled for a separate packet.
 [Guided setup preview](../architecture/guided-onboarding.md).

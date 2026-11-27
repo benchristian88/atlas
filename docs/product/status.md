@@ -38,8 +38,8 @@ See the [feature reference](feature-ledger.md) for implemented scope and limits.
 Dependency impact analysis uses recorded knowledge and hypothetical scenarios;
 it is not live monitoring or evidence of recovery readiness.
 
-Guided onboarding (AT-R01) is partially implemented and the preview is off by
-default. The Dashboard can start or resume shared Site setup. Operators confirm
+Guided onboarding (AT-R01) includes all seven stages in the default-off
+preview. The Dashboard can start or resume shared Site setup. Operators confirm
 the Environment and, for the Homelab profile, can select, customise, save,
 review and apply starter Capabilities as Customer-wide records. Add Integrations
 reuses the Connector Catalogue, scoped configuration, connection testing and
@@ -47,9 +47,10 @@ supported discovery. Discovery Review lets operators inspect and reconcile
 findings at the confirmed Site. Link Services lets operators add or end manual
 Service-to-Asset dependencies at that Site and continue with unmapped Services.
 Review & Ready compares saved stage decisions with current authorised
-configuration and offers next steps for outstanding work. Operators can
-continue to pending Showcase while outstanding work remains. Showcase, guided
-setup completion and public activation remain pending.
+configuration and offers next steps for outstanding work. Showcase presents the
+recorded environment and offers exploration and explicit completion while
+work remains outstanding. The Dashboard offers voluntary access to completed
+setup. Public activation and final acceptance remain pending.
 [Guided setup preview](../architecture/guided-onboarding.md).
 
 ## Next development
@@ -71,8 +72,8 @@ setup completion and public activation remain pending.
 
 ## Engineering backlog
 
-- **Concurrent Integration saves can stall an API worker.** Resolve this
-  before public guided onboarding activation (E1-H). With a single API
+- **Concurrent Integration saves can stall an API worker.** The separate
+  public activation packet includes owner-led release-risk assessment. With a single API
   worker, start two saves for the same Connector while the first is waiting
   for runtime health. The first request holds the PostgreSQL Connector
   advisory lock across the runtime await. The second waits synchronously
@@ -107,7 +108,7 @@ setup completion and public activation remain pending.
 
 ## Before 1.0
 
-- Complete the integration/plugin and guided onboarding workflows above.
+- Complete integration/plugin workflows and qualify guided onboarding for public activation.
 - Final UX refinements, feature documentation, current screenshots and documentation freeze.
 - Final dependency/security review, including reassessment and remediation or
   explicit disposition of known dependency findings.

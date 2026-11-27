@@ -17,6 +17,17 @@ def _version(namespace, *values):
     return hmac.digest(_secret_key().encode(), repr((namespace, values)).encode(), "sha256").hex()
 
 
+def active_site_discovery_runs(context):
+    return select(DiscoveryRun.id, DiscoveryRun.status).join(
+        Integration, Integration.id == DiscoveryRun.integration_id,
+    ).where(
+        DiscoveryRun.customer_id == context.customer_id, DiscoveryRun.site_id == context.site_id,
+        Integration.customer_id == context.customer_id, Integration.site_id == context.site_id,
+        Integration.retired_at.is_(None), DiscoveryRun.archived_at.is_(None),
+        DiscoveryRun.status.in_(("pending", "running")),
+    )
+
+
 class DiscoveryReview:
     def __init__(self, db, context, principal, *, review=None):
         self.db, self.context, self.principal = db, context, principal
@@ -25,14 +36,7 @@ class DiscoveryReview:
         self.asset_resolutions = {}
         self.active_runs = None
         if principal.can("integrations.view", context.customer_id, context.site_id):
-            self.active_runs = db.execute(select(DiscoveryRun.id, DiscoveryRun.status).join(
-                Integration, Integration.id == DiscoveryRun.integration_id,
-            ).where(
-                DiscoveryRun.customer_id == context.customer_id, DiscoveryRun.site_id == context.site_id,
-                Integration.customer_id == context.customer_id, Integration.site_id == context.site_id,
-                Integration.retired_at.is_(None), DiscoveryRun.archived_at.is_(None),
-                DiscoveryRun.status.in_(("pending", "running")),
-            ).order_by(DiscoveryRun.id)).all()
+            self.active_runs = db.execute(active_site_discovery_runs(context).order_by(DiscoveryRun.id)).all()
         self.runs = {}
         if principal.can("reconciliation.view", context.customer_id, context.site_id):
             self.review = review or EntityReview(db, context, principal)

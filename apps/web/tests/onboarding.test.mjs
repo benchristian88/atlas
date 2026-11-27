@@ -25,7 +25,7 @@ test("dismissal preserves voluntary entry and shared progress controls Continue"
   assert.equal(dashboardOnboardingEntry({ status: "not_started", invitation: { offered: false, dismissed: true } }), "voluntary");
   assert.equal(dashboardOnboardingEntry({ status: "saved", can_manage: true, invitation: { offered: false, dismissed: true } }), "continue");
   assert.equal(dashboardOnboardingEntry({ status: "saved", can_manage: false, invitation: { offered: false, dismissed: true } }), "voluntary");
-  assert.equal(dashboardOnboardingEntry({ status: "completed", invitation: { offered: false, dismissed: false } }), "voluntary");
+  assert.equal(dashboardOnboardingEntry({ status: "completed", invitation: { offered: false, dismissed: false } }), "completed");
 });
 
 test("wizard addresses the selected pair explicitly", () => {

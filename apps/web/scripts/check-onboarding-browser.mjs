@@ -9,7 +9,8 @@ import { checkIntegrations } from "./onboarding-integrations-browser.mjs";
 import { checkDiscoveryReview } from "./onboarding-discovery-review-browser.mjs";
 import { checkLinkServices } from "./onboarding-link-services-browser.mjs";
 import { checkReviewReady } from "./onboarding-review-browser.mjs";
-import { checkStageNavigation } from "./onboarding-stage-navigation-browser.mjs";
+import { checkShowcaseCapabilityNavigation, checkStageNavigation } from "./onboarding-stage-navigation-browser.mjs";
+import { checkShowcase } from "./onboarding-showcase-browser.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 
@@ -306,14 +307,21 @@ try {
   const reviewReady = process.env.ATLAS_E1G_LIVE === "true" ? await checkReviewReady({
     a, b, origin, api, output, workshopHref, openPage, action, link, heading, resumeWithKeyboard,
   }) : null;
+  const showcase = process.env.ATLAS_E1H_LIVE === "true" ? await checkShowcase({
+    a, b, origin, api, output, workshopHref, openPage, action, link, heading, resumeWithKeyboard,
+  }) : null;
+  const showcaseCapabilityNavigation = showcase ? await checkShowcaseCapabilityNavigation({
+    a, origin, api, action, heading,
+  }) : null;
   assert.deepEqual(pageErrors, []);
-  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, integrations, discoveryReview, linkServices, reviewReady, stageNavigation, pageErrors, liveAuthentication: true }, null, 2));
+  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, integrations, discoveryReview, linkServices, reviewReady, stageNavigation, showcase, showcaseCapabilityNavigation, pageErrors, liveAuthentication: true }, null, 2));
   console.log(`PASS: live Environment and Capabilities, shared drafts and conflicts, keyboard and permissions, atomic Apply and receipt replay, additional import, ${layouts.length + capabilities.layouts.length} responsive/theme layouts.`);
   if (integrations) console.log(`PASS: live Add Integrations, verified installation, probe, discovery and recovery, ${integrations.layouts.length} responsive/theme layouts.`);
   if (discoveryReview) console.log(`PASS: live Discovery Review, versioned acceptance and PostgreSQL verification, uncertain response recovery, Skip and Link Services, ${discoveryReview.layouts.length} responsive/theme layouts.`);
   if (linkServices) console.log(`PASS: live Link Services, scoped dependency writes, uncertainty recovery, permissions, Save & exit, Continue and Skip, ${linkServices.layout.length} responsive/theme layouts.`);
   if (reviewReady) console.log(`PASS: live Review & Ready, advisory progression, confirmed Knowledge Gaps, revisit, stale-read and conflict recovery, ${reviewReady.layouts.length} responsive/theme layouts.`);
   if (stageNavigation) console.log("PASS: authoritative stage return, superseded workflow reads, and local Capabilities edits across revisits.");
+  if (showcase) console.log(`PASS: live Showcase, explicit completion, PostgreSQL verification, workspace recovery and voluntary access, ${showcase.layouts.length} responsive/theme layouts.`);
 } finally {
   await browser.close();
 }
