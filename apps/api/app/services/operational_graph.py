@@ -33,7 +33,7 @@ from app.models import (
     ServiceDependency,
     ServiceType,
 )
-from app.services.service_relationship_scope import valid_relationship_scope
+from app.services.service_relationship_scope import effective_relationship_at, valid_relationship_scope
 from app.schemas import (
     OperationalGraphEdge,
     OperationalGraphNode,
@@ -517,11 +517,7 @@ class OperationalGraphBuilder:
                     self.db.scalars(
                         select(ServiceBusinessFunction).where(
                             or_(*predicates),
-                            ServiceBusinessFunction.valid_from <= generated_at,
-                            or_(
-                                ServiceBusinessFunction.valid_to.is_(None),
-                                ServiceBusinessFunction.valid_to > generated_at,
-                            ),
+                            effective_relationship_at(ServiceBusinessFunction, generated_at),
                         )
                     ),
                 )

@@ -26,6 +26,7 @@ export function canContinueSetup(status) {
 }
 
 export function dashboardOnboardingEntry(status) {
+  if (status?.status === "completed") return "completed";
   if (status?.invitation?.offered && !status.invitation.dismissed) return "invitation";
   if (status?.can_manage && canContinueSetup(status.status)) return "continue";
   return "voluntary";

@@ -1,12 +1,12 @@
-# Guided setup preview (AT-R01 / E1-A through E1-G)
+# Guided setup preview (AT-R01 / E1-A through E1-H)
 
 ## Preview operation
 
 Set `ATLAS_ONBOARDING_PREVIEW=true` in the **API process environment** and restart
 that process on a development or test installation. The web client uses the API
 response to determine entry availability. With the flag unset, entry is hidden
-and direct wizard routes show an unavailable state. Public activation is
-reserved for E1-H.
+and direct wizard routes show an unavailable state. All seven stages are
+available in the preview. Public activation remains a separate release packet.
 
 Secure first-administrator installation and sign-in use the existing setup-code,
 session and MFA flows. The initial Dashboard invitation targets the exact
@@ -24,9 +24,10 @@ for the signed-in user. The compact Guided setup area below the Dashboard
 heading shows **Start guided setup** for a new setup and **Resume** with the
 saved profile and current stage for shared progress. It targets the active
 Dashboard Site or identifies a sole resumable Site if it differs from the
-workspace selection. Completed setups use a quieter **Guided setup** entry.
-The authorized chooser
-marks Sites with resumable progress, suggests a unique authorized pair and
+workspace selection. After completion, Site managers see one outlined
+**Guided setup** action opposite the Dashboard title. It opens that Site's
+completed setup, and the progress card disappears. The authorized chooser
+marks Sites with resumable and completed progress, suggests a unique authorized pair and
 requires explicit selection when there are several choices. It uses the same
 Customer and Site create and rename APIs as normal administration. Each create
 has its own confirmation and transaction. If creating a Site fails, the
@@ -123,7 +124,7 @@ in per-tab storage and replays that exact command to recover its outcome.
   writes serialize on the row and require its current version. Duplicate resume
   while already active returns current progress without writing. A stale write
   returns 409 and the wizard offers **Reload progress**. Reads preserve all
-  timestamps and version. The preview exposes no Finish transition.
+  timestamps and version. Only the explicit Finish command records completion.
 - Site progress and invitation preferences participate in Atlas's PostgreSQL
   backup and restore. Migration `20261122_0034` adds empty tables and nullable
   bootstrap markers. Its downgrade removes these E1-A records and markers.
@@ -142,6 +143,8 @@ All paths below use the `/api/onboarding` prefix. The pair prefix is
 | POST pair `/save` | Save with `version` and optional `draft_profile`. Supply version 0 and the profile for the first draft save |
 | POST pair `/resume` | Resume saved progress with `version` |
 | POST pair `/invitation/dismiss` | Dismiss the optional invitation for the authenticated user |
+| GET pair `/showcase` | Display-safe aggregates and bounded examples for the confirmed setup |
+| POST pair `/complete` | Complete an active workflow at Showcase using `{version}` and return updated progress |
 
 ## Capabilities API (E1-B)
 
@@ -538,7 +541,7 @@ Relationship provenance, Changes, audit and Knowledge Completeness use existing
 canonical code. Progress writes use the existing Site workflow lock and
 optimistic version. The preview uses the existing database schema.
 
-## Review & Ready (E1-D86)
+## Review & Ready (E1-G, D86)
 
 Review & Ready presents the saved decisions for Environment, Capabilities, Add
 Integrations, Discovery Review and Link Services alongside current configuration.
@@ -546,7 +549,12 @@ For example, Skipped Capabilities can still show Services created in Atlas.
 Use each stage's **Review** action to revisit it. **Return to current stage**
 reads the latest shared workflow progress before opening its current stage
 and refreshes the review if that is still the current stage. If the read
-fails, you can retry without leaving the revisit. The Knowledge Gaps action
+fails, you can retry without leaving the revisit. During a revisit, the stage
+rail labels the authoritative current stage and offers the same progress check
+from its stage button. Temporary stage-rail visits preserve local Capabilities
+selections, edits and open forms until you discard, save or apply them.
+The confirmed Customer, Site and profile appear under the Guided setup heading
+throughout the wizard. The Knowledge Gaps action
 establishes the confirmed Customer and Site workspace before opening the Dashboard's
 required-or-conditional, open-or-deferred filter. Leaving the wizard or choosing
 a newer workspace invalidates a pending handoff.
@@ -571,12 +579,65 @@ statuses. Restricted projections are null. Verified visible counts can be zero.
 workspace lookup fails, Dashboard shows the save confirmation and a link to
 resume the same setup. **Continue to Showcase** sends the
 current workflow version to `POST .../review-ready/decision`. It records the
-advisory acknowledgement and advances to pending Showcase. It uses the existing
+advisory acknowledgement and advances to Showcase. It uses the existing
 Site management check, progress lock, grant refresh, version conflict recovery
 and workflow audit. Progression remains available with outstanding work or
 restricted domain reads. The review and acknowledgement do not execute
 discovery, evaluate Knowledge Gaps or write canonical configuration.
 
-## Later packets
+## Showcase and completion (E1-H)
 
-Showcase, guided setup completion and public activation remain pending.
+Showcase presents current records for the confirmed Customer and Site.
+The Business Function and Service counts include visible Customer-wide
+records and records assigned to that Site. Function groups show current
+associations with authorized Services. Showcase uses one effective time for
+these associations, inclusive of the start and exclusive of the end. Each
+Function counts an associated Service once. The Service total also identifies
+Services with no effective association to a visible Business Function.
+Ordinary relationship lists and lifecycle operations continue to use their
+existing open-row convention.
+The page displays up to six Functions
+and four linked Service examples per Function, with exact totals and
+remaining counts. Inactive Functions and archived Services are excluded.
+Network inventory includes authorized Customer-wide Networks. Assets and
+Integrations are Site-local. The Asset metric follows the Dashboard's
+non-retired inventory count and groups it by managed Asset Type. The chart
+shows the eight largest types and pools the remainder. Integration counts
+exclude retired records and expose enabled and disabled counts and current
+discovery activity. The response contains no connection configuration.
+
+The connected knowledge section uses Link Services' exact Site mapping
+summary, including retained links to retired Assets where E1-F counts them.
+Asset-to-Asset relationships count once across visible non-retired endpoints
+in the confirmed Site. Network interface memberships connect visible Assets
+to visible Site and Customer-wide Networks. A null field indicates
+restricted visibility. A numeric zero or empty list represents a verified
+empty visible scope. The browser shows loading and retry states separately.
+The API uses SQL aggregates across the authorized population and avoids
+paging the inventory or traversing either graph. The Knowledge Graph,
+Topology and dependency scenario actions use existing routes with verified
+workspace selection before leaving the wizard.
+
+**Finish setup & explore Atlas** completes an active workflow at Showcase,
+even when optional stages were skipped or work is outstanding. Atlas locks
+the confirmed Site and workflow using the existing write path, refreshes
+grants at the established checkpoints and checks the optimistic version.
+The transaction records the Showcase decision, completed status, timestamp,
+last actor, new version, and one `onboarding.completed` audit event. It
+leaves canonical records and earlier decisions intact. Competing or
+stale commands recover through **Reload progress**. If a response is
+uncertain, the wizard first reads authoritative shared progress. It uses
+neutral completion feedback when that read confirms completion and
+requires an explicit new action for any later attempt.
+
+After a confirmed commit, the wizard returns to the Dashboard and tries to
+restore the confirmed Customer and Site. If workspace verification fails,
+the Dashboard uses the available context and offers a link to the completed
+setup. **Save & exit** and exploration leave completion unchanged. A Site
+manager can reopen a completed workflow, visit earlier stages, make
+explicit configuration changes or additional Capability Catalogue imports,
+and return from Showcase without another Finish request. Completion and
+invitation eligibility are scoped to each Site.
+
+Public activation remains pending. Its separate engineering packet includes
+owner-led assessment of the [Integration save concurrency issue](../product/status.md#engineering-backlog).

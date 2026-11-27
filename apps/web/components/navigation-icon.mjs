@@ -6,6 +6,7 @@ const paths = {
   "arrow-down": "M12 4v16 M5 13l7 7 7-7",
   "chevron-down": "M6 9l6 6 6-6",
   check: "M5 12l4 4L19 6",
+  compass: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18 M15.5 8.5l-2 5-5 2 2-5z",
   plus: "M12 5v14 M5 12h14",
   minus: "M5 12h14",
   cube: "M12 2 3 7v10l9 5 9-5V7L12 2z M3 7l9 5 9-5 M12 12v10 M7.5 4.5l9 5",

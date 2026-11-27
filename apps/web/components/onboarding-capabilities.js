@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { changeSelection, creationAllowed, editEntry, recommendedState } from "../lib/onboarding-capabilities.mjs";
 import { useOnboardingCapabilities } from "../lib/use-onboarding-capabilities";
-import { PROFILES } from "../lib/onboarding.mjs";
 import { Button } from "./button";
 import { CapabilityCatalogue, CapabilityReview, classificationProblems } from "./onboarding-capability-catalogue";
 import styles from "./onboarding.module.css";
@@ -38,7 +37,7 @@ function PermissionNotice({ permissions, profile }) {
     {permissions.can_create_functions ? " or import Business Functions on their own." : "."}</p>;
 }
 
-export function OnboardingCapabilities({ path, pendingKey, progress, customer, site, visible, returning,
+export function OnboardingCapabilities({ path, pendingKey, progress, visible, returning,
   headingRef, home, onEnvironment, onReturn, onProgress, onExit, onApplied, onBusy }) {
   const profile = progress.environment_profile;
   const flow = useOnboardingCapabilities({ path, profile, pendingKey, progress, visible, onProgress, onExit, onApplied, onBusy });
@@ -98,16 +97,11 @@ export function OnboardingCapabilities({ path, pendingKey, progress, customer, s
   }
 
   return <>
-    <div className={styles.capabilityIntro}>
-      <dl aria-label="Confirmed setup context">
-        <div><dt>Customer</dt><dd>{customer.name}</dd></div>
-        <div><dt>Site</dt><dd>{site.name}</dd></div>
-        <div><dt>Profile</dt><dd>{PROFILES[profile]}</dd></div>
-        {data?.catalogue && <div><dt>Catalogue version</dt><dd>{data.catalogue.content_version}</dd></div>}
-      </dl>
-      {profile === "homelab" && <p>Capabilities are created for this Customer and can be available to other authorized Sites.
-        {" "}Setup progress belongs to this Site.</p>}
-    </div>
+    {profile === "homelab" && <div className={styles.capabilityIntro}>
+      {data?.catalogue && <p className={styles.catalogueVersion}>Catalogue version {data.catalogue.content_version}</p>}
+      <p>Capabilities are created for this Customer and can be available to other authorized Sites.
+        {" "}Setup progress belongs to this Site.</p>
+    </div>}
     <CapabilityFeedback failure={classificationRejection ? null : failure}
       preview={classificationRejection ? null : preview} review={review}
       reload={reload} retry={flow.retryPreview} blocked={Boolean(busy || editing || loading)} />

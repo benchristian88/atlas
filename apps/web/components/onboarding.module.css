@@ -22,20 +22,31 @@
   padding: var(--space-6);
 }
 
-.layout, .session {
+.layout {
   align-items: start;
   display: grid;
   gap: var(--space-5);
   grid-template-columns: minmax(180px, 216px) minmax(0, 1fr);
 }
 
-.session {
-  grid-template-areas: "stage summary";
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 232px);
+.stageContent { min-width: 0; }
+
+.contextLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
 }
 
-.stagePanel { grid-area: stage; }
-.summary { grid-area: summary; }
+.contextLine > div { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; }
+.contextLine dt { flex: none; }
+.contextLine dd {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
 .rail ol {
   display: grid;
@@ -75,8 +86,8 @@
   width: 24px;
 }
 
-.panel, .summary { overflow-wrap: anywhere; }
-.panel :global(.section), .summary :global(.section) { margin: 0; }
+.panel { overflow-wrap: anywhere; }
+.panel :global(.section) { margin: 0; }
 
 .invitation {
   align-items: center;
@@ -128,17 +139,6 @@
 .profiles label { display: block; }
 .profiles input { accent-color: var(--accent); }
 .profiles small { margin-inline-start: var(--space-6); }
-.summary dl, .summary dd { margin: 0; }
-.summary dl { display: grid; gap: var(--space-3); }
-.summary dt { color: var(--muted); font-size: var(--type-label); }
-
-@media (max-width: 1024px) {
-  .session {
-    grid-template-areas: "summary" "stage";
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 720px) {
   .main { padding: var(--space-4); }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -147,8 +147,7 @@
   .footer { justify-content: flex-start; }
 }
 
-.capabilitiesSession, .catalogueGrid > *, .entryIdentity { min-width: 0; }
-.reviewSession { min-width: 0; }
+.catalogueGrid > *, .entryIdentity { min-width: 0; }
 .reviewSections { display: grid; gap: var(--space-5); }
 .reviewSections h3, .reviewSections h4 { margin: 0; }
 .reviewSections h4 { font-size: var(--type-compact); font-weight: 600; }
@@ -191,18 +190,12 @@
 .reviewIntegrations li { align-items: center; margin-top: var(--space-2); }
 
 .capabilityIntro { border-bottom: 1px solid var(--border); margin-bottom: var(--space-4); }
-.capabilityIntro dl {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-  margin: 0;
-}
-.capabilityIntro dt, .classifications dt {
+.capabilityIntro .catalogueVersion { font-size: var(--type-label); margin: 0; }
+.classifications dt {
   color: var(--muted);
   font-size: var(--type-label);
 }
-.capabilityIntro dd, .classifications dd { margin: 0; }
-.capabilityIntro dd { font-weight: var(--weight-semibold); }
+.classifications dd { margin: 0; }
 .capabilityIntro p, .entryDescription, .entryIdentity small, .capabilityStatus { color: var(--muted); }
 
 .catalogueGrid {
@@ -421,17 +414,6 @@
 
 .proposalDetails > h4 {
   margin-block: 0;
-}
-
-.linkSession {
-  grid-template-areas: "summary" "stage";
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.linkSession .summary dl {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
 }
 
 .linkServices, .mappingDetail { display: grid; gap: var(--space-3); min-width: 0; }

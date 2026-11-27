@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AccessDenied } from "../../components/access-denied";
 import { useAuth } from "../../components/auth-context";
-import { OnboardingEntry } from "../../components/onboarding-entry";
-import { PageHeader } from "../../components/page-header";
+import { DashboardOnboardingHeader } from "../../components/onboarding-entry";
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { ServiceLandscape } from "../../components/service-landscape";
 import { CompletenessLine, EntityMark, RecordedStatus } from "../../components/operations-primitives";
@@ -99,19 +98,19 @@ const widgetComponents = { "environment-summary": Summary, "environment-overview
 export default function DashboardPage() {
   const { hasAnyPermission, hasPermission } = useAuth();
   const workspace = useWorkspaceContext();
-  const { savedSetupPath, setSavedSetupPath } = workspace;
-  const [savedSetup, setSavedSetup] = useState(null);
+  const { setupHandoff, setSetupHandoff } = workspace;
+  const [setupReceipt, setSetupReceipt] = useState(null);
   const [data, setData] = useState({});
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const canView = hasAnyPermission(["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view", "services.view", "business_functions.view"]);
   const canGraph = hasAnyPermission(["assets.view", "services.view", "business_functions.view"]);
   useEffect(() => {
-    if (savedSetupPath) {
-      setSavedSetup(savedSetupPath);
-      setSavedSetupPath(null);
+    if (setupHandoff) {
+      setSetupReceipt(setupHandoff);
+      setSetupHandoff(null);
     }
-  }, [savedSetupPath, setSavedSetupPath]);
+  }, [setupHandoff, setSetupHandoff]);
 
   useEffect(() => {
     if (!canView || !workspace.customerId || !workspace.siteId) return;
@@ -122,11 +121,13 @@ export default function DashboardPage() {
     return () => { active = false; };
   }, [canView, canGraph, hasPermission, workspace.customerId, workspace.siteId, retry]);
   if (!canView) return <AccessDenied />;
-  return <div className="operations-page"><PageHeader title="Dashboard" description="Your environment, built from recorded knowledge." />
-    {savedSetup && <p className="status-banner" role="status">
-      Setup progress was saved. <Link href={savedSetup}>Resume saved setup</Link>
-    </p>}
-    <OnboardingEntry key={workspace.reloadKey} customerId={workspace.customerId} siteId={workspace.siteId} />
+  return <div className="operations-page">
+    <DashboardOnboardingHeader key={workspace.reloadKey} customerId={workspace.customerId} siteId={workspace.siteId}>
+      {setupReceipt && <p className="status-banner" role="status">
+        {setupReceipt.status === "completed" ? <>Setup is complete. The Dashboard is using the available workspace. <Link href={setupReceipt.path}>View completed setup</Link></>
+          : <>Setup progress was saved. <Link href={setupReceipt.path}>Resume saved setup</Link></>}
+      </p>}
+    </DashboardOnboardingHeader>
     {!workspace.customerId || !workspace.siteId ? <section className="ops-card"><h2>Set up your environment</h2><p>Select a Customer and Site to build your service landscape.</p>{hasPermission("sites.manage") && <Link className="text-button" href="/admin/sites">Manage Sites →</Link>}</section> : <>
       {error && <div className="error-banner" role="alert">{error} <button className="text-button" onClick={() => setRetry((n) => n + 1)} type="button">Try again</button></div>}
       <div className="ops-dashboard">{WIDGETS.map((widget) => { const Component = widgetComponents[widget.id]; return <div className={`widget-${widget.id}`} data-widget-id={widget.id} key={widget.id}><Component {...data} workspace={workspace} hasPermission={hasPermission} /></div>; })}</div>

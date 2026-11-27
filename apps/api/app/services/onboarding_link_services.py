@@ -31,12 +31,12 @@ def context(db, principal, customer_id, site_id, *, write=False):
         state.current_stage == STAGE or STAGE in state.stage_decisions
     ):
         raise HTTPException(404, "Record not found")
-    if write and state.status != "in_progress":
+    if write and state.status == "saved":
         raise HTTPException(409, onboarding.CONFLICT)
     return site, customer, principal
 
 
-def _eligible_services(principal, site):
+def eligible_services(principal, site):
     return (
         Service.customer_id == site.customer_id,
         or_(Service.site_id.is_(None), Service.site_id == site.id),
@@ -69,7 +69,7 @@ def summary(db, principal, site):
         func.coalesce(func.sum(count), 0).label("mappings"),
         func.count().filter(count.is_(None)).label("unavailable"),
     ).select_from(Service).outerjoin(counts, counts.c.service_id == Service.id).where(
-        *_eligible_services(principal, site),
+        *eligible_services(principal, site),
     )).one()._mapping)
 
 
@@ -85,7 +85,7 @@ def service_page(db, principal, site, *, search, mapping, offset, limit):
         count.label("mapping_count"),
     ).outerjoin(counts, counts.c.service_id == Service.id).join(
         ServiceType, ServiceType.id == Service.service_type_id,
-    ).where(*_eligible_services(principal, site))
+    ).where(*eligible_services(principal, site))
     if search.strip():
         query = query.where(Service.name.icontains(search.strip(), autoescape=True))
     if mapping == "linked":

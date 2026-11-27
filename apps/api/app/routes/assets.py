@@ -180,30 +180,22 @@ def list_assets(
     return [asset_response_data(db, asset) for asset in db.scalars(query)]
 
 
-@router.get("/summary", response_model=AssetSummaryResponse)
-def asset_summary(
-    context: RequestContext,
-    principal: Principal = Depends(require_permission("assets.view")),
-    db: Session = Depends(get_db),
-    include_retired: bool = False,
-):
-    customer_id = context.customer_id
-    site_id = context.site_id
-    _explicit_scope(db, principal, customer_id, site_id)
+def asset_inventory_conditions(context, principal, *, include_retired=False):
     conditions = [
         scope_condition(principal, "assets.view", Asset.customer_id, Asset.site_id)
     ]
-    if customer_id is not None:
-        conditions.append(Asset.customer_id == customer_id)
-    if site_id is not None:
-        conditions.append(Asset.site_id == site_id)
+    if context.customer_id is not None:
+        conditions.append(Asset.customer_id == context.customer_id)
+    if context.site_id is not None:
+        conditions.append(Asset.site_id == context.site_id)
 
     if not include_retired:
         conditions.append(Asset.status != "retired")
-    total = int(
-        db.scalar(select(func.count()).select_from(Asset).where(*conditions)) or 0
-    )
-    rows = db.execute(
+    return conditions
+
+
+def asset_type_distribution(conditions):
+    return (
         select(
             AssetType.id,
             AssetType.name,
@@ -215,6 +207,19 @@ def asset_summary(
         .having(func.count(Asset.id) > 0)
         .order_by(func.count(Asset.id).desc(), AssetType.name.asc())
     )
+
+
+@router.get("/summary", response_model=AssetSummaryResponse)
+def asset_summary(
+    context: RequestContext,
+    principal: Principal = Depends(require_permission("assets.view")),
+    db: Session = Depends(get_db),
+    include_retired: bool = False,
+):
+    _explicit_scope(db, principal, context.customer_id, context.site_id)
+    conditions = asset_inventory_conditions(context, principal, include_retired=include_retired)
+    total = int(db.scalar(select(func.count()).select_from(Asset).where(*conditions)) or 0)
+    rows = db.execute(asset_type_distribution(conditions))
     return {
         "total": total,
         "by_asset_type": [

@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models import Customer, Site, SiteOnboarding
 from app.services import onboarding, onboarding_capabilities as starter
 from app.services import onboarding_link_services as links
-from app.services import onboarding_review
+from app.services import onboarding_review, onboarding_showcase
 from app.services.homelab_catalogue import Catalogue
 from app.services.knowledge_locks import concurrent_decision
 
@@ -173,6 +173,65 @@ class ReviewReady(BaseModel):
     discovery: ReviewDiscovery
     link_services: LinkSummary | None
     required_gaps: int | None
+
+
+class ShowcaseServiceExamples(BaseModel):
+    total: int
+    examples: list[ContextName]
+
+
+class ShowcaseFunction(ContextName):
+    services: ShowcaseServiceExamples | None
+
+
+class ShowcaseCapabilities(BaseModel):
+    total: int
+    items: list[ShowcaseFunction]
+
+
+class ShowcaseAssetType(ContextName):
+    count: int
+
+
+class ShowcaseAssets(BaseModel):
+    total: int
+    by_type: list[ShowcaseAssetType]
+    other_assets: int
+
+
+class ShowcaseIntegrations(BaseModel):
+    total: int
+    enabled: int
+    disabled: int
+    active_runs: int
+
+
+class Showcase(BaseModel):
+    business_functions: ShowcaseCapabilities | None
+    services: int | None
+    services_without_functions: int | None
+    assets: ShowcaseAssets | None
+    networks: int | None
+    integrations: ShowcaseIntegrations | None
+    mappings: LinkSummary | None
+    asset_relationships: int | None
+    network_memberships: int | None
+    required_gaps: int | None
+    analysis_focus: str | None
+
+
+@router.get(PAIR + "/showcase", response_model=Showcase)
+def showcase(customer_id: UUID, site_id: UUID, principal: PreviewPrincipal, db: Database):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id)
+    return onboarding_showcase.showcase(db, site, customer, principal)
+
+
+@router.post(PAIR + "/complete", response_model=Progress)
+@concurrent_decision
+def complete(customer_id: UUID, site_id: UUID, payload: VersionedRequest,
+             request: Request, principal: PreviewPrincipal, db: Database):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id, lock=True, manage=True)
+    return onboarding.update(db, customer, site, principal, request, version=payload.version, action="completed")
 
 
 @router.get(PAIR + "/review-ready", response_model=ReviewReady)

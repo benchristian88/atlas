@@ -31,6 +31,16 @@ def integration_summary(db, context, principal):
     }
 
 
+def required_gap_count(db, context, principal):
+    if not principal.can("knowledge_gaps.view", context.customer_id, context.site_id):
+        return None
+    query = scoped_completeness_query(KnowledgeGap, context, principal, include_customer_wide=True)
+    return db.scalar(query.with_only_columns(func.count(KnowledgeGap.id)).where(
+        KnowledgeGap.status.in_(OPEN_GAP_STATUSES),
+        KnowledgeGap.requirement_level.in_(REQUIRED_GAP_LEVELS),
+    ))
+
+
 def review(db, site, customer, principal):
     state = onboarding.progress(db, site)
     if state is None or not state.environment_profile or not (
@@ -52,14 +62,6 @@ def review(db, site, customer, principal):
     mappings = links.summary(db, principal, site)
     services = None if mappings is None else mappings["linked"] + mappings["unlinked"] + mappings["unavailable"]
 
-    required_gaps = None
-    if can("knowledge_gaps.view"):
-        query = scoped_completeness_query(KnowledgeGap, context, principal, include_customer_wide=True)
-        required_gaps = db.scalar(query.with_only_columns(func.count(KnowledgeGap.id)).where(
-            KnowledgeGap.status.in_(OPEN_GAP_STATUSES),
-            KnowledgeGap.requirement_level.in_(REQUIRED_GAP_LEVELS),
-        ))
-
     return {
         "customer": customer,
         "site": site,
@@ -69,5 +71,5 @@ def review(db, site, customer, principal):
         "integrations": integration_summary(db, context, principal) if can("integrations.view") else None,
         "discovery": DiscoveryReview(db, context, principal).attention_counts(),
         "link_services": mappings if can("assets.view") and can(links.VIEW) else None,
-        "required_gaps": required_gaps,
+        "required_gaps": required_gap_count(db, context, principal),
     }
