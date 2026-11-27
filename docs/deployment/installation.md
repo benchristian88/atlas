@@ -285,6 +285,16 @@ package activation. Use the shared configuration form to test the connection
 and select **Save & discover**. Atlas stores the integration and shows the
 discovery status. If dispatch fails after the save, retry discovery from the
 saved integration. **Save & exit** retains Site progress and **Resume** loads
-the latest records. **Continue without integrations** advances either
-profile to pending Discovery Review. Public activation is scheduled for a
-later packet. See [Guided setup preview](../architecture/guided-onboarding.md).
+the latest records. **Continue without integrations** also opens Discovery
+Review. Review the confirmed Site's outstanding proposals and discovery
+status. **Review proposal** opens the existing individual decision
+controls. **Accept all eligible on this page** requires confirmation and
+adds the reviewed eligible proposals to canonical knowledge. Resolve
+identity and lifecycle exceptions individually. After acceptance, review
+the result and separately approve any newly eligible proposals.
+
+Manual setups can continue with an empty review. When work remains,
+acknowledge it or select **Skip Discovery Review**. Both paths preserve
+outstanding proposals and open the pending Link Services stage. Public
+activation is scheduled for a later packet.
+[Guided setup preview](../architecture/guided-onboarding.md).

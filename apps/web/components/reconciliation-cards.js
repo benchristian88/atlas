@@ -64,11 +64,13 @@ export function ReconciliationCards({ items, relatedNewEntities = [], ...actions
     </section> : <ReconciliationItemCard key={group.entity.id} item={group.entity} {...actions} />);
 }
 
-function ReviewBlockers({ item, reviewHref }) {
+function ReviewBlockers({ item, reviewHref, onReview }) {
   if (!item.blocked_reason || !["open", "deferred"].includes(item.status)) return null;
   return <div className="review-blocked" role="status">
     <span>Waiting — {item.blocked_reason}</span>
-    {item.blockers?.filter(blocker => blocker.entity_id).map(blocker => <ReconciliationReviewLink key={`${blocker.item_id}-${blocker.name}`} href={reviewHref(blocker.entity_id)}>Review {blocker.name}</ReconciliationReviewLink>)}
+    {item.blockers?.filter(blocker => blocker.entity_id).map(blocker => onReview
+      ? <Button key={`${blocker.item_id}-${blocker.name}`} variant="quiet" onClick={() => onReview(blocker)}>Review {blocker.name}</Button>
+      : <ReconciliationReviewLink key={`${blocker.item_id}-${blocker.name}`} href={reviewHref(blocker.entity_id)}>Review {blocker.name}</ReconciliationReviewLink>)}
   </div>;
 }
 
@@ -234,17 +236,40 @@ export function TechnicalIdentityLink({ item, busy, technicalChoices = {}, loadT
   </details>;
 }
 
-export function ReconciliationReviewRow({ item, busy, decide, reviewHref, ...actions }) {
+export function ReconciliationReviewRow({ item, busy, decide, reviewHref, onReview, ...actions }) {
   return <article className="review-row" aria-labelledby={`review-item-${item.id}`}>
     <div className="review-row-heading"><h4 id={`review-item-${item.id}`}>{item.label}</h4><StatusBadge status={item.status} /></div>
     {item.warning && <p className="review-warning">{item.warning}</p>}
     <ProposedValue item={item} />
     {item.category === "no_longer_observed" && <p className="secondary-text">This source no longer observes the asset. Choose a lifecycle disposition.</p>}
-    <ReviewBlockers item={item} reviewHref={reviewHref} />
+    <ReviewBlockers item={item} reviewHref={reviewHref} onReview={onReview} />
     <ReviewActions item={item} busy={busy} decide={decide} />
     <TechnicalIdentityLink item={item} busy={busy} {...actions} />
     <ReviewProvenance item={item} />
   </article>;
+}
+
+function AssetIdentityLink({ item, name, assets, busy, linkSelections, setLinkSelections, linkAsset, loadAssets }) {
+  const candidates = assets.filter(asset => asset.customer_id === item.customer_id && asset.site_id === item.site_id);
+  return <details className="review-provenance" onToggle={event => {
+    if (event.currentTarget.open) loadAssets?.();
+  }}><summary>Link an existing asset</summary><div className="reconciliation-link">
+    <select aria-label={`Existing asset to link to ${name}`} value={linkSelections[item.id] || ""} onChange={event => setLinkSelections(current => ({ ...current, [item.id]: event.target.value }))}><option value="">Select existing asset…</option>{candidates.map(asset => <option key={asset.id} value={asset.id}>{asset.name} · {asset.asset_type}</option>)}</select>
+    <Button variant="secondary" disabled={busy || !linkSelections[item.id]} onClick={() => linkAsset(item)}>Link asset</Button>
+  </div></details>;
+}
+
+export function ReconciliationProposalDetails({ item, canLinkAsset, assets, loadAssets, busy, ...actions }) {
+  if (item.entity_type === "source_identity") return <div>
+    <GuestIdentityEvidence item={item} />
+    <GuestIdentityActions key={item.identity_review?.expected_version} item={item} busy={busy} decideIdentity={actions.decideIdentity} />
+    <ReviewProvenance item={item} />
+  </div>;
+  return <>
+    <ReconciliationReviewRow item={item} busy={busy} {...actions} />
+    {canLinkAsset && <AssetIdentityLink item={item} name={item.entity_name} assets={assets} busy={busy}
+      loadAssets={loadAssets} {...actions} />}
+  </>;
 }
 
 function ReviewSection({ entity, section, ...actions }) {
@@ -261,7 +286,6 @@ function ReviewSection({ entity, section, ...actions }) {
 export function ReconciliationEntityCard({ entity, focused = false, canDecide, busy, acceptAll, assets = [], linkSelections = {}, setLinkSelections, linkAsset, ...actions }) {
   const parent = entity.parent;
   const identityReview = parent?.entity_type === "source_identity";
-  const candidates = assets.filter(asset => asset.customer_id === entity.customer_id && asset.site_id === entity.site_id);
   const blocked = entity.sections.reduce((count, section) => count + section.blocked_count, 0);
   return <article id={`entity-${entity.id}`} tabIndex={-1} className={`detail-card review-entity${focused ? " review-entity-focused" : ""}`} aria-label={`Review ${entity.name}`}>
     <details open={focused || entity.default_expanded}>
@@ -284,10 +308,9 @@ export function ReconciliationEntityCard({ entity, focused = false, canDecide, b
           {!identityReview && <ReviewBlockers item={parent} reviewHref={actions.reviewHref} />}
           {canDecide && <ReviewActions item={parent} parent busy={busy} decide={actions.decide} />}
           <TechnicalIdentityLink item={parent} busy={busy} {...actions} linkSelections={linkSelections} setLinkSelections={setLinkSelections} />
-          {canDecide && ["open", "deferred"].includes(parent.status) && parent.entity_type === "asset" && <details className="review-provenance"><summary>Link an existing asset</summary><div className="reconciliation-link">
-            <select aria-label={`Existing asset to link to ${entity.name}`} value={linkSelections[parent.id] || ""} onChange={event => setLinkSelections(current => ({ ...current, [parent.id]: event.target.value }))}><option value="">Select existing asset…</option>{candidates.map(asset => <option key={asset.id} value={asset.id}>{asset.name} · {asset.asset_type}</option>)}</select>
-            <Button variant="secondary" disabled={busy || !linkSelections[parent.id]} onClick={() => linkAsset(parent)}>Link asset</Button>
-          </div></details>}
+          {canDecide && ["open", "deferred"].includes(parent.status) && parent.entity_type === "asset" &&
+            <AssetIdentityLink item={parent} name={entity.name} assets={assets} busy={busy}
+              linkSelections={linkSelections} setLinkSelections={setLinkSelections} linkAsset={linkAsset} />}
           <ReviewProvenance item={parent} />
         </section>}
         {canDecide && entity.decision_items.length > 0 && <div className="review-bulk"><Button variant="secondary" disabled={busy || !entity.accept_all_available} onClick={() => acceptAll(entity)}>Accept all</Button><span className="secondary-text">Accept eligible changes in this review{parent && ["open", "deferred"].includes(parent.status) ? ", including the asset" : ""}. Waiting items stay unresolved.</span></div>}

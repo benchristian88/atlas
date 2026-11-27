@@ -23,6 +23,7 @@ from app.models import (
     RelationshipType,
     Site,
 )
+from app.services.knowledge_locks import lock_asset_identity_inventory
 from app.services.markdown_docs import generate_asset_document
 from app.utils.json_values import to_json_value
 
@@ -119,6 +120,11 @@ class AtlasDiscoverySync:
     ) -> SyncResult:
         if context.site_id is None:
             raise SyncError("Discovery synchronization requires a site context")
+        inventory_sites = {context.site_id}
+        if isinstance(self.db, Session):
+            inventory_sites.update(self.db.scalars(select(Asset.site_id).where(
+                Asset.source_integration_id == context.integration_id).distinct()))
+            lock_asset_identity_inventory(self.db, *inventory_sites)
         external_ids = {asset.external_id for asset in normalized.assets}
         if len(external_ids) != len(normalized.assets):
             raise SyncError("Normalized results contain duplicate asset identities")
@@ -175,13 +181,10 @@ class AtlasDiscoverySync:
             relationship_types[key] = item
         self.db.flush()
 
-        existing_assets = list(
-            self.db.scalars(
-                select(Asset).where(
-                    Asset.source_integration_id == context.integration_id
-                )
-            )
-        )
+        query = select(Asset).where(Asset.source_integration_id == context.integration_id)
+        existing_assets = list(self.db.scalars(query.with_for_update().execution_options(populate_existing=True)))
+        if any(asset.site_id not in inventory_sites for asset in existing_assets):
+            raise SyncError("An asset moved during discovery synchronization")
         assets_by_external_id = {
             asset.external_id: asset
             for asset in existing_assets

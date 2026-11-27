@@ -270,8 +270,8 @@ export async function checkIntegrations({ a, b, c, origin, api, output, workshop
   await action(page, "Use available run and continue").click();
   await heading(page, "Discovery review").waitFor();
   assert.equal(await heading(page, "Discovery review").evaluate(el => el === document.activeElement), true);
-  await page.getByText("This setup stage is pending in this preview.", { exact: true }).waitFor();
-  await screenshot("pending-discovery-review");
+  await heading(page, "Discovery status").waitFor();
+  await screenshot("discovery-review-entry");
   const completed = await status();
   assert.equal(completed.stage_decisions.integrations, "completed");
   await action(page.getByRole("navigation", { name: "Setup stages" }), "Add integrations").click();

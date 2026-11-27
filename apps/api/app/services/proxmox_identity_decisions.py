@@ -14,7 +14,7 @@ from app.models import (Asset, AssetInterface, AssetRelationship, AssetType, Con
     DiscoveryRun, EntitySourceLink, Integration, KnowledgeAssertion, KnowledgeChange, Network, ProxmoxGuestIdentityDecision,
     ReconciliationItem, RelationshipType, RunObservedEntity, Site)
 from app.services.connector_mappings import mapping_state
-from app.services.knowledge_locks import SUBJECT_MODELS, lock_subjects
+from app.services.knowledge_locks import SUBJECT_MODELS, lock_asset_identity_inventory, lock_subjects
 from app.services.proxmox_guest_bindings import GUEST_KEY, GuestBindings, attribution_epoch, historical_link, interface_guest
 from app.services.proxmox_guest_identity import REVIEW_TYPE, _pending_reviews, valid_guest_name
 from app.services.proxmox_identity_evidence import (
@@ -494,6 +494,8 @@ def lock_review(db, item_id, principal, context, payload):
     require_visible(principal, context, item)
     if principal.user.force_password_change or not _permitted(principal, item, DECISION_GRANTS[payload.outcome]):
         raise HTTPException(403, "You do not have the required permissions in this Customer and Site.")
+    if payload.outcome == "replace":
+        lock_asset_identity_inventory(db, item.site_id)
     claim = db.get(KnowledgeAssertion, item.assertion_id)
     source_id = claim.data_source_id if _scoped(item, claim) else None
     integration = db.scalar(select(Integration).where(Integration.data_source_id == source_id,

@@ -1,4 +1,4 @@
-# Guided setup preview (AT-R01 / E1-A through E1-D)
+# Guided setup preview (AT-R01 / E1-A through E1-E)
 
 ## Preview operation
 
@@ -335,7 +335,7 @@ can include a different run. If a concurrent change makes the candidate
 ineligible, the wizard refreshes status so you can choose how to continue.
 **Continue without integrations** records a skip in either profile and
 preserves configured integrations and their history. Both decisions open
-the pending Discovery Review step. Reopening Add Integrations preserves
+Discovery Review. Reopening Add Integrations preserves
 the current workflow stage and later decisions.
 
 ### API contracts
@@ -363,7 +363,106 @@ the current workflow stage and later decisions.
   returns 409 and the wizard offers **Reload progress**. The existing
   onboarding row stores the decision and the audit event records the actor.
 
+## Discovery Review (E1-E)
+
+Step 4 uses the confirmed Customer and Site and shows the active or latest
+discovery status per visible integration. Review available discoveries while
+other runs are queued or running. The proposal queue spans completed runs
+from the Site's visible reconciliation sources, including still-current
+proposals from earlier runs. Observations, outstanding proposals, and
+accepted decisions have separate counts or labels. Retired integrations and
+stale source claims are excluded from the outstanding queue.
+
+Search by entity name and filter by source and proposal category. The Site
+summary covers all visible outstanding work. Each section reports matching
+totals and the number displayed on the current page. Open **Review proposal**
+to inspect accepted and observed values, provenance and prerequisite decisions.
+Use the same versioned individual actions as Reconciliation. **Needs review**
+includes blocked proposals, deferred decisions, identity conflicts, possible
+duplicates, contradictions and lifecycle decisions. Retiring an Asset requires
+an explicit lifecycle selection and confirmation.
+
+**Accept all eligible on this page** freezes the exact eligible proposal IDs
+and versions shown in the current filtered page. Its confirmation names the
+Site, scope, proposal types and exclusions. Asset review shows whether the
+proposal will create an Asset or associate with an existing one. The
+confirmation shows the target of each reviewed association. An operator needs
+Asset view access to review that identity outcome for bulk acceptance.
+
+The canonical operation rechecks current eligibility and versions before the
+first decision and again for each item. Asset versions bind the canonical
+resolver's outcome and existing target identity where applicable. Canonical
+inventory writers take a shared Site advisory lock before source and subject
+locks. A batch that can change Asset identity takes the Site lock exclusively
+so an absent or existing match stays stable through the canonical write.
+Existing source locks protect source links. Later items see successful writes
+and savepoint rollbacks from earlier items. A changed Asset outcome requires
+fresh confirmation. A conflict that requires individual review remains open
+and appears in Needs review. Newly eligible proposals require a separate
+explicit acceptance.
+
+The batch refreshes the initiating operator's effective grants after lock
+waits, before each decision and immediately before commit. At PostgreSQL's
+default READ COMMITTED isolation these checks can see committed revocations.
+If required authority is lost, Atlas rolls back the entire uncommitted batch
+and returns a scoped authorization error without proposal outcomes. The
+checks read current grants at each checkpoint. Grant administration remains
+independent of the decision transaction, so a revocation committed after the
+final check can race with commit. Other per-item failures use the existing
+savepoints and preserve successful independent decisions. The transaction
+still records accepted assertions, Changes, completeness and actor-attributed
+audit through canonical reconciliation. Results distinguish accepted, already
+resolved, waiting or needing individual review, and failed or changed items.
+
+If a response is lost, **Check proposal status** reads current canonical
+decisions without attributing them to the lost request. The browser session
+retains affected proposal IDs and blocks another decision on them while
+their status is unresolved. Reloading or resuming does not dispatch another
+decision. The server stores canonical decisions and their actor through the
+ordinary reconciliation records and audit trail.
+
+**Back to Add Integrations** opens the existing configuration and discovery
+stage. **Save & exit** saves the Site workflow and keeps committed decisions
+and independent discovery work. Resume reloads the canonical queue. In a
+manual setup, continue with an empty queue. **Continue to Link Services**
+requires acknowledgement when proposals remain, discovery is active or the
+operator cannot inspect the required status. **Skip Discovery Review** records
+a separate decision and advances directly. Outstanding proposals remain
+available in Reconciliation. Revisiting Step 4 after advancement preserves
+the saved cursor and stage decisions.
+
+### API contracts
+
+- `GET /api/reconciliation-entities/discovery-review` is a preview-gated
+  proposal view over the existing entity-review projection. A confirmed
+  Customer/Site context and its canonical view permissions are required.
+  `search`, `source_id`, `category`, `offset` and `limit`
+  narrow the page. The response contains matching counts, the unfiltered
+  Site summary, and exact displayed items. Repeated `decision_id` parameters
+  return authorized canonical decision statuses for local recovery. Counts
+  are null when the caller lacks the relevant view grant.
+- `POST /api/reconciliation-entities/discovery-review/accept` extends
+  canonical bulk acceptance from one entity to one reviewed Site page.
+  Send `{items: [{id, version}], reason?}` with up to 100 distinct items.
+  Use the `batch_version` supplied with each eligible item. The version
+  binds the reviewed proposal, applicable relationship endpoints, and the
+  canonical Asset identity outcome. Existing
+  per-entity acceptance contracts and prerequisite behavior continue to
+  work in Reconciliation. The Site batch retains canonical eligibility,
+  role checks and locking. Its result adds the newly eligible count and
+  up to 100 examples to the existing four outcome groups.
+- Individual reconciliation, identity and lifecycle decisions call existing
+  endpoints and use their specialized reviewed versions. Access to Site
+  progress does not confer reconciliation, integration or domain permissions.
+- `POST /api/onboarding/{customer_id}/{site_id}/discovery-review/decision`
+  accepts `{version, decision, review_version?}`. With `completed` or
+  `attention`, send the Site summary version. Atlas rechecks the live
+  summary and returns a reviewable conflict when it changes. `skipped`
+  omits the review version. The existing workflow version and Site manager
+  grant apply to all three decisions. Success advances to `link_services`
+  and records the actor. The workflow stores no copy of review data.
+
 ## Later packets
 
-Discovery Review, Service linking, readiness and Showcase remain pending.
+Service linking, readiness and Showcase remain pending.
 Public activation remains gated pending E1-H.

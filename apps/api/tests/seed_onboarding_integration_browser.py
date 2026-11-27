@@ -14,7 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
 
 from app.database import DATABASE_URL, SessionLocal
-from app.models import Asset, AuditEvent, DataSource, DiscoveryRun, EntitySourceLink, Integration, ReconciliationItem
+from app.models import (Asset, AssetRelationship, AuditEvent, DataSource, DiscoveryRun, EntitySourceLink,
+                        EvidenceRecord, Integration, KnowledgeAssertion, KnowledgeChange, ReconciliationItem)
 from app.services import connector_lifecycle as lifecycle
 from app.services.integration_runtime import runtime
 from tests.i3_fixtures import fixture_bundle
@@ -71,6 +72,30 @@ def snapshot(customer, site):
         }
 
 
+def review_snapshot(customer, site):
+    with SessionLocal() as db:
+        def scoped(model):
+            return select(model).where(model.customer_id == customer, model.site_id == site)
+
+        return {
+            "evidence": len(db.scalars(scoped(EvidenceRecord)).all()),
+            "assets": [{"name": row.name, "status": row.status} for row in db.scalars(scoped(Asset))],
+            "relationships": len(db.scalars(scoped(AssetRelationship)).all()),
+            "runs": [str(row.id) for row in db.scalars(scoped(DiscoveryRun))],
+            "proposals": {
+                str(row.id): {"status": row.status, "actor": str(row.decided_by_user_id),
+                              "accepted_assertion": claim.is_accepted, "assertion_actor": str(claim.accepted_by_user_id)}
+                for row, claim in db.execute(scoped(ReconciliationItem).join(
+                    KnowledgeAssertion, KnowledgeAssertion.id == ReconciliationItem.assertion_id,
+                ).add_columns(KnowledgeAssertion))
+            },
+            "changes": sorted(str(row.reconciliation_item_id) for row in db.scalars(scoped(KnowledgeChange))
+                              if row.reconciliation_item_id),
+            "audits": {str(row.target_id): str(row.user_id) for row in db.scalars(
+                scoped(AuditEvent).where(AuditEvent.event_type == "reconciliation.accepted"))},
+        }
+
+
 if __name__ == "__main__":
     url = make_url(DATABASE_URL)
     store = lifecycle.package_store().root
@@ -85,5 +110,7 @@ if __name__ == "__main__":
             seed_history(customer, site)
         elif command == "snapshot":
             print(json.dumps(snapshot(customer, site)))
+        elif command == "review-snapshot":
+            print(json.dumps(review_snapshot(customer, site)))
         else:
-            raise SystemExit("Expected install, history or snapshot")
+            raise SystemExit("Expected install, history, snapshot or review-snapshot")

@@ -5,6 +5,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { loadComponent } from "./helpers/components.mjs";
 import { reconciliationPagePath, reconciliationGroups } from "../lib/reconciliation-queues.mjs";
+import { decisionRequest } from "../lib/reconciliation-decisions.mjs";
 
 import {
   RECONCILIATION_QUEUES,
@@ -45,11 +46,21 @@ test("client queue transitions use URL state and reset stale request state", asy
   assert.match(page, /history\.pushState/);
   assert.match(page, /history\.replaceState/);
   assert.match(page, /reconciliationReviewHref/);
-  assert.match(page, /entity_id: entityId, expected_version: item.version/);
-  assert.match(page, /asset_id: assetId, expected_version: item.version/);
+  assert.match(page, /decisionRequest\(item, "link-technical", \{ target: entityId/);
+  assert.match(page, /decisionRequest\(item, "link-asset", \{ target: assetId/);
   assert.match(page, /candidateRequests.current.get\(item.id\) !== token/);
   assert.match(page, /candidateRequests.current.clear\(\)/);
   assert.match(page, /setTechnicalChoices\(\{\}\)/);
+});
+
+test("shared association requests send the reviewed version and canonical target field", () => {
+  const item = { id: "proposal", version: "reviewed" };
+  for (const [action, field] of [["link-asset", "asset_id"], ["link-technical", "entity_id"]]) {
+    const [path, request] = decisionRequest(item, action, { target: "canonical" });
+    assert.equal(path, `/reconciliation-items/proposal/${action}`);
+    assert.equal(request.method, "POST");
+    assert.deepEqual(JSON.parse(request.body), { reason: null, expected_version: "reviewed", [field]: "canonical" });
+  }
 });
 
 const components = loadComponent(new URL("../components/reconciliation-cards.js", import.meta.url));

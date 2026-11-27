@@ -11,6 +11,7 @@ import { ReconciliationEntityCard, ReconciliationPagination, ReconciliationRevie
 import { useWorkspaceContext } from "../../components/workspace-context";
 import { apiRequest } from "../../lib/api";
 import { RECONCILIATION_QUEUES, reconciliationQueueFromValue, reconciliationEntityPagePath, reconciliationReviewHref, reconciliationReturnHref } from "../../lib/reconciliation-queues.mjs";
+import { decisionRequest, technicalCandidatesPath } from "../../lib/reconciliation-decisions.mjs";
 import styles from "./reconciliation.module.css";
 
 export default function ReconciliationPage() {
@@ -114,9 +115,7 @@ export default function ReconciliationPage() {
     setError("");
     setOutcome(null);
     try {
-      await apiRequest(`/reconciliation-items/${item.id}/${action}`, {
-        method: "POST", body: JSON.stringify({ reason: null, disposition, expected_version: item.version }),
-      });
+      await apiRequest(...decisionRequest(item, action, { disposition }));
       if (activeLoadKey.current !== actionKey) return;
       await load();
     } catch (requestError) { if (activeLoadKey.current === actionKey) setError(requestError.message || `Atlas could not ${action} this item.`); }
@@ -130,12 +129,7 @@ export default function ReconciliationPage() {
     setNotice("");
     setOutcome(null);
     try {
-      const review = item.identity_review;
-      const expectedVersion = outcome === "replace" ? (review.replacement_expected_version ?? review.expected_version) : review.expected_version;
-      await apiRequest(`/reconciliation-items/${item.id}/identity-decision`, {
-        method: "POST",
-        body: JSON.stringify({ outcome, expected_version: expectedVersion, reason }),
-      });
+      await apiRequest(...decisionRequest(item, "identity-decision", { outcome, reason }));
       if (activeLoadKey.current === actionKey) {
         await load();
         if (activeLoadKey.current === actionKey) setNotice(outcome === "replace" ? "Replacement Asset created." : "Same guest confirmed.");
@@ -174,7 +168,7 @@ export default function ReconciliationPage() {
     setDeciding(item.id);
     setError("");
     try {
-      await apiRequest(`/reconciliation-items/${item.id}/link-asset`, { method: "POST", body: JSON.stringify({ asset_id: assetId, expected_version: item.version, reason: "Linked during reconciliation" }) });
+      await apiRequest(...decisionRequest(item, "link-asset", { target: assetId, reason: "Linked during reconciliation" }));
       if (activeLoadKey.current !== actionKey) return;
       await load();
     } catch (requestError) { if (activeLoadKey.current === actionKey) setError(requestError.message || "Atlas could not link this asset."); }
@@ -186,11 +180,8 @@ export default function ReconciliationPage() {
     const token = {};
     candidateRequests.current.set(item.id, token);
     setTechnicalChoices(current => ({ ...current, [item.id]: { ...current[item.id], loading: true, error: "" } }));
-    const params = new URLSearchParams({ limit: "100", offset: String(offset) });
-    if (item.entity_type === "asset_interface") params.set("asset_id", item.link_asset_id);
-    else { params.set("customer_id", item.customer_id); params.set("site_id", item.site_id); }
     try {
-      const items = await apiRequest(`/${item.entity_type === "asset_interface" ? "asset-interfaces" : "networks"}?${params}`);
+      const items = await apiRequest(technicalCandidatesPath(item, offset));
       if (activeLoadKey.current !== actionKey || candidateRequests.current.get(item.id) !== token) return;
       setTechnicalChoices(current => ({ ...current, [item.id]: { items: offset ? [...(current[item.id]?.items || []), ...items] : items, nextOffset: items.length === 100 ? offset + 100 : null, loading: false } }));
     } catch (requestError) {
@@ -205,7 +196,7 @@ export default function ReconciliationPage() {
     const actionKey = loadKey;
     setDeciding(item.id); setError(""); setNotice(""); setOutcome(null);
     try {
-      await apiRequest(`/reconciliation-items/${item.id}/link-technical`, { method: "POST", body: JSON.stringify({ entity_id: entityId, expected_version: item.version, reason: "Linked during reconciliation" }) });
+      await apiRequest(...decisionRequest(item, "link-technical", { target: entityId, reason: "Linked during reconciliation" }));
       if (activeLoadKey.current !== actionKey) return;
       await load();
       if (activeLoadKey.current === actionKey) setNotice("Identity linked. Accepted configuration is preserved; observed configuration and source facts still need review.");

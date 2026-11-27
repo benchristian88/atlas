@@ -1,5 +1,11 @@
 """Canonical knowledge serialization shared by manual and sourced decisions.
 
+Asset identity writers take a shared Site inventory advisory lock before
+Integration, source or subject locks. A bounded review takes it exclusively
+while verifying and applying Asset identity outcomes, including when no
+candidate row exists to lock. Ordinary writers still run concurrently with
+each other. Moves take both Site locks in UUID order.
+
 Decision transactions lock DataSources FOR NO KEY UPDATE (UUID order), canonical
 subjects FOR UPDATE (model order below, then UUID), review items, then assertions.
 The source mode serializes decisions but permits the implicit FK KEY SHARE taken
@@ -23,7 +29,7 @@ from functools import wraps
 from inspect import signature
 
 from fastapi import HTTPException
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.exc import DBAPIError
 
 from app.models import Asset, AssetInterface, AssetRelationship, BusinessFunction, DataSource, EntitySourceLink, Network, Service
@@ -36,6 +42,16 @@ SUBJECT_MODELS = {
     "service": Service,
     "business_function": BusinessFunction,
 }
+
+
+def lock_asset_identity_inventory(db, *site_ids, exclusive=False):
+    """Coordinate candidate-set changes and bounded reviews on PostgreSQL."""
+    # SQLite is used by single-connection projection and route tests.
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    lock = func.pg_advisory_xact_lock if exclusive else func.pg_advisory_xact_lock_shared
+    for site_id in sorted(set(site_ids) - {None}):
+        db.execute(select(lock(func.hashtextextended(f"atlas-asset-identity:{site_id}", 0))))
 
 
 @contextmanager
