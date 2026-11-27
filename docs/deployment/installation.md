@@ -295,6 +295,14 @@ the result and separately approve any newly eligible proposals.
 
 Manual setups can continue with an empty review. When work remains,
 acknowledge it or select **Skip Discovery Review**. Both paths preserve
-outstanding proposals and open the pending Link Services stage. Public
-activation is scheduled for a later packet.
+outstanding proposals and open **Link Services**. Choose a Customer-wide or
+Site Service, select the Assets that support it at this Site and confirm
+**Add selected Assets**. Atlas saves each mapping as you go. Use **Remove**
+and confirm to end a mapping at this Site. Mappings shown for other Sites
+are read-only here. Review unconfirmed results with **Check current mappings**
+before trying again. **Save & exit** preserves committed mappings and shared
+progress. Unsubmitted checkbox selections clear when you leave the step.
+**Continue to Review & Ready** allows you to acknowledge outstanding work
+and advance to the pending stage. **Skip** also advances and keeps existing
+mappings. Public activation is scheduled for a later packet.
 [Guided setup preview](../architecture/guided-onboarding.md).

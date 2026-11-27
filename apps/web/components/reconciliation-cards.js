@@ -15,9 +15,9 @@ export function ReconciliationReviewLink({ href, children, ...props }) {
   }}>{children}</a>;
 }
 
-export function ReconciliationPagination({ pageIndex, hasMore, busy, onPrevious, onNext }) {
+export function ReconciliationPagination({ label = "Reconciliation pages", pageIndex, hasMore, busy, onPrevious, onNext }) {
   if (pageIndex === 0 && !hasMore) return null;
-  return <nav className="pagination" aria-label="Reconciliation pages">
+  return <nav className="pagination" aria-label={label}>
     <Button variant="secondary" disabled={pageIndex === 0 || busy} onClick={onPrevious} type="button">Previous</Button>
     <span>Page {pageIndex + 1}</span>
     <Button variant="secondary" disabled={!hasMore || busy} onClick={onNext} type="button">Next</Button>

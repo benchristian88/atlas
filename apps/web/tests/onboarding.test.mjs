@@ -4,7 +4,7 @@ import { dashboardOnboardingEntry, initialEnvironment, onboardingPath, PROFILES,
 
 test("preview exposes the agreed stages and two environment profiles", () => {
   assert.deepEqual(STAGES.map(([, title]) => title), [
-    "Environment", "Capabilities", "Add integrations", "Discovery review", "Link services", "Review & Ready", "Showcase",
+    "Environment", "Capabilities", "Add integrations", "Discovery review", "Link Services", "Review & Ready", "Showcase",
   ]);
   assert.deepEqual(PROFILES, { homelab: "Homelab", blank: "Blank" });
 });
