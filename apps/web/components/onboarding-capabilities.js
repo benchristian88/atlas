@@ -38,10 +38,10 @@ function PermissionNotice({ permissions, profile }) {
     {permissions.can_create_functions ? " or import Business Functions on their own." : "."}</p>;
 }
 
-export function OnboardingCapabilities({ path, pendingKey, progress, customer, site, visible,
+export function OnboardingCapabilities({ path, pendingKey, progress, customer, site, visible, returning,
   headingRef, home, onEnvironment, onReturn, onProgress, onExit, onApplied, onBusy }) {
   const profile = progress.environment_profile;
-  const flow = useOnboardingCapabilities({ path, profile, pendingKey, progress, onProgress, onExit, onApplied, onBusy });
+  const flow = useOnboardingCapabilities({ path, profile, pendingKey, progress, visible, onProgress, onExit, onApplied, onBusy });
   const [review, setReview] = useState(false);
   const [expanded, setExpanded] = useState(new Set());
   const [editing, setEditing] = useState(null);
@@ -53,7 +53,7 @@ export function OnboardingCapabilities({ path, pendingKey, progress, customer, s
   const empty = selection && !selection.functions.length && !selection.services.length;
   const selected = Boolean(selection && !empty);
   const saved = progress.status === "saved";
-  const editingLocked = locked || Boolean(busy || recovery || stale || saved);
+  const editingLocked = locked || Boolean(busy || recovery || stale || saved || returning);
   const canApply = creationAllowed(data?.permissions ?? {}, selection);
   const validated = Boolean(preview && !preview.error && !restricted.size);
   const detail = failure?.definitionId ? { definition_id: failure.definitionId, message: failure.message }
@@ -185,12 +185,12 @@ export function OnboardingCapabilities({ path, pendingKey, progress, customer, s
       <div className={styles.footer}>
         {review ? <Button disabled={Boolean(busy)} onClick={selectionView}>Back to selection</Button>
           : <Button onClick={onEnvironment} disabled={Boolean(busy || editing)}>Back to Environment</Button>}
-        {additional && <Button disabled={Boolean(busy || editing)} onClick={() => {
+        {additional && <Button disabled={Boolean(busy || editing)} loading={returning} onClick={() => {
           if (!dirty || window.confirm("Discard local edits and return to the current stage?")) onReturn();
         }}>Return to current stage</Button>}
         {!canManage || saved ? <Button href={home}>Return to Atlas</Button>
           : <>
-            {!additional && !review && <Button disabled={locked || Boolean(busy || editing)} onClick={skip}>
+            {!additional && !review && <Button disabled={locked || Boolean(busy || editing || returning)} onClick={skip}>
               Skip capabilities
             </Button>}
             {!review && <Button loading={busy === "save"} disabled={editingLocked || Boolean(editing) || restricted.size > 0

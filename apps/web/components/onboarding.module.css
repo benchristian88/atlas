@@ -148,6 +148,48 @@
 }
 
 .capabilitiesSession, .catalogueGrid > *, .entryIdentity { min-width: 0; }
+.reviewSession { min-width: 0; }
+.reviewSections { display: grid; gap: var(--space-5); }
+.reviewSections h3, .reviewSections h4 { margin: 0; }
+.reviewSections h4 { font-size: var(--type-compact); font-weight: 600; }
+.reviewList, .reviewIntegrations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reviewList { margin-top: var(--space-2); }
+.reviewRow {
+  align-items: start;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: var(--space-3) 0;
+}
+.reviewRow > span { align-self: center; }
+.reviewStage { align-items: center; row-gap: 0; }
+.reviewStageDetails { grid-column: 1 / -1; min-width: 0; }
+.reviewRow p { margin: var(--space-1) 0 0; }
+.reviewDecision {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--type-label);
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.reviewContext, .reviewIntegrations li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+.reviewContext { margin: var(--space-2) 0 0; }
+.reviewContext div { min-width: 0; }
+.reviewContext dd { margin: 0; }
+.reviewContext dt { color: var(--muted); font-size: var(--type-label); }
+.reviewIntegrations li { align-items: center; margin-top: var(--space-2); }
+
 .capabilityIntro { border-bottom: 1px solid var(--border); margin-bottom: var(--space-4); }
 .capabilityIntro dl {
   display: flex;

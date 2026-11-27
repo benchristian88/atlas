@@ -23,7 +23,7 @@ const referenceEndpoints = {
   criticality_key: ["/criticality-levels?active_only=true", "can_view_criticality_levels"],
 };
 
-export function useOnboardingCapabilities({ path, profile, pendingKey, progress, onProgress, onExit, onApplied, onBusy }) {
+export function useOnboardingCapabilities({ path, profile, pendingKey, progress, visible, onProgress, onExit, onApplied, onBusy }) {
   const url = `${path}/capabilities`;
   const [data, setData] = useState(null);
   const [state, setState] = useState(null);
@@ -116,7 +116,7 @@ export function useOnboardingCapabilities({ path, profile, pendingKey, progress,
   }, [canViewTypes, canViewLevels, profile, locked, loadAttempt, referenceAttempt]);
 
   const version = data?.version;
-  const canPreview = data?.permissions.can_manage && signature && !empty && !restricted.size && !locked && !currentPreview
+  const canPreview = visible && data?.permissions.can_manage && signature && !empty && !restricted.size && !locked && !currentPreview
     && !busy && !recovery && (!data.draft_stale || acknowledgedStale);
   const previewKey = canPreview ? `${version}:${previewAttempt}:${signature}` : null;
   previewTarget.current = previewKey;

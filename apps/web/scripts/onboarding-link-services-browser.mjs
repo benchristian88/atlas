@@ -387,7 +387,7 @@ export async function checkLinkServices({ a, b, c, origin, api, output, action, 
   await continueButton.click();
   await action(continueDialog, "Acknowledge and continue").click();
   await ready.waitFor();
-  await page.getByText("This setup stage is pending in this preview.").waitFor();
+  await heading(page, "Setup summary").waitFor();
   const advanced = (await get(path)).progress;
   assert.equal(advanced.stage_decisions.link_services, "attention");
   assert.equal(advanced.current_stage, "review_ready");

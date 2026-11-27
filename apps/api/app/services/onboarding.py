@@ -164,6 +164,11 @@ def update(db, customer, site, principal, request, *, version, action, profile=N
         state.draft_only = False
         state.stage_decisions = {**state.stage_decisions, "environment": "completed"}
         state.current_stage = "capabilities"
+    elif action == "review_ready_completed":
+        if state.status != "in_progress" or state.current_stage != "review_ready" or not state.environment_profile:
+            raise HTTPException(409, CONFLICT)
+        state.stage_decisions = {**state.stage_decisions, "review_ready": "completed"}
+        state.current_stage = "showcase"
     elif action == "saved":
         if profile is not None and (state.current_stage != "environment" or state.environment_profile is not None):
             raise HTTPException(status_code=409, detail=CONFLICT)

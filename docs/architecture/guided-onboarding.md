@@ -1,4 +1,4 @@
-# Guided setup preview (AT-R01 / E1-A through E1-F)
+# Guided setup preview (AT-R01 / E1-A through E1-G)
 
 ## Preview operation
 
@@ -84,6 +84,8 @@ After an initial decision, use the Capabilities entry in the progress rail or
 **Open capability catalogue** to start an additional import. The selection
 starts empty unless an additional-import draft exists. An additional Apply
 creates new records and preserves the current stage and other decisions.
+Visiting Environment preserves your current selection and local edits when
+you reopen Capabilities in the same wizard session.
 
 If another administrator changes progress, **Reload saved progress** fetches the
 shared state and asks before discarding local changes. Review the refreshed
@@ -536,7 +538,45 @@ Relationship provenance, Changes, audit and Knowledge Completeness use existing
 canonical code. Progress writes use the existing Site workflow lock and
 optimistic version. The preview uses the existing database schema.
 
+## Review & Ready (E1-D86)
+
+Review & Ready presents the saved decisions for Environment, Capabilities, Add
+Integrations, Discovery Review and Link Services alongside current configuration.
+For example, Skipped Capabilities can still show Services created in Atlas.
+Use each stage's **Review** action to revisit it. **Return to current stage**
+reads the latest shared workflow progress before opening its current stage
+and refreshes the review if that is still the current stage. If the read
+fails, you can retry without leaving the revisit. The Knowledge Gaps action
+establishes the confirmed Customer and Site workspace before opening the Dashboard's
+required-or-conditional, open-or-deferred filter. Leaving the wizard or choosing
+a newer workspace invalidates a pending handoff.
+
+`GET /api/onboarding/{customer_id}/{site_id}/review-ready` is a read-only preview
+projection that becomes available when Step 6 is reached. It uses the path's
+confirmed UUID pair and ignores ambient workspace headers. The wizard makes a
+single request for authorised counts and display-safe integration status. The
+existing operational list endpoints use workspace headers and several are
+paginated, so the projection can reuse their scope and status logic while
+providing exact aggregate counts for the wizard. Business Functions follow the
+canonical active catalogue scope. Active Service and mapping counts use the
+Link Services summary. Both include Customer-wide records where permitted.
+Discovery uses the existing outstanding queue and batch eligibility, with
+individual conflicts and other exceptions accounted for separately. Run status
+and decision visibility are independent. The Integration list displays up to 500
+current Site integrations with an explicit indication when more exist. Knowledge
+Gaps reuse the Dashboard's scope, live-record policy, requirement levels and
+statuses. Restricted projections are null. Verified visible counts can be zero.
+
+**Save & exit** keeps the shared cursor. If Atlas confirms the save and the
+workspace lookup fails, Dashboard shows the save confirmation and a link to
+resume the same setup. **Continue to Showcase** sends the
+current workflow version to `POST .../review-ready/decision`. It records the
+advisory acknowledgement and advances to pending Showcase. It uses the existing
+Site management check, progress lock, grant refresh, version conflict recovery
+and workflow audit. Progression remains available with outstanding work or
+restricted domain reads. The review and acknowledgement do not execute
+discovery, evaluate Knowledge Gaps or write canonical configuration.
+
 ## Later packets
 
-Review & Ready and Showcase remain pending.
-Public activation remains gated pending E1-H.
+Showcase, guided setup completion and public activation remain pending.

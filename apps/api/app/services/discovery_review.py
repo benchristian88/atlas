@@ -58,19 +58,22 @@ class DiscoveryReview:
     def batch_exclusion(self, item):
         if not self.outstanding(item):
             return "This discovery proposal is no longer available for acceptance"
+        return self._classify_outstanding(item)[1]
+
+    def _classify_outstanding(self, item):
         eligibility = self.review.eligibility(item)
         if not eligibility["can_accept"]:
-            return eligibility["blocked_reason"]
+            return "exceptions", eligibility["blocked_reason"]
         if item.category in {"contradiction", "possible_duplicate"}:
-            return "Review this conflict individually"
+            return "conflicts", "Review this conflict individually"
         if item.status == "deferred":
-            return "Review this deferred decision individually"
+            return "exceptions", "Review this deferred decision individually"
         if self.is_asset_proposal(item):
             if not self.principal.can("assets.view", item.customer_id, item.site_id):
-                return "Permission required to review asset identity"
+                return "exceptions", "Permission required to review asset identity"
             if self.requires_asset_identity_review(item):
-                return "An existing asset match requires an individual identity decision"
-        return None
+                return "conflicts", "An existing asset match requires an individual identity decision"
+        return "eligible", None
 
     @staticmethod
     def is_asset_proposal(item):
@@ -131,10 +134,22 @@ class DiscoveryReview:
             endpoints = ()
         return _version("discovery-batch", self.review.version(item), endpoints, identity)
 
+    def _outstanding_items(self):
+        if self.review is not None:
+            yield from (item for item in self.review.items.values() if self.outstanding(item))
+
     def classify(self):
-        if self.review is None:
-            return []
-        return [(item, self.batch_exclusion(item)) for item in self.review.items.values() if self.outstanding(item)]
+        return [(item, self._classify_outstanding(item)[1]) for item in self._outstanding_items()]
+
+    def attention_counts(self):
+        """Summarize the same outstanding queue without building decision versions."""
+        counts = None
+        if self.review is not None:
+            counts = dict.fromkeys(("eligible", "conflicts", "exceptions"), 0)
+            for item in self._outstanding_items():
+                category, _ = self._classify_outstanding(item)
+                counts[category] += 1
+        return {"decisions": counts, "active_runs": None if self.active_runs is None else len(self.active_runs)}
 
     def summary(self, classified):
         visible = self.review is not None

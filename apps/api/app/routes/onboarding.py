@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models import Customer, Site, SiteOnboarding
 from app.services import onboarding, onboarding_capabilities as starter
 from app.services import onboarding_link_services as links
+from app.services import onboarding_review
 from app.services.homelab_catalogue import Catalogue
 from app.services.knowledge_locks import concurrent_decision
 
@@ -138,6 +139,58 @@ class LinkSummary(BaseModel):
     unlinked: int
     mappings: int
     unavailable: int
+
+
+class ReviewIntegration(ContextName):
+    status: str
+    discovery_status: str | None
+    discovery_configured: bool | None
+
+
+class ReviewIntegrations(BaseModel):
+    items: list[ReviewIntegration]
+    has_more: bool
+
+
+class ReviewDiscoveryDecisions(BaseModel):
+    eligible: int
+    conflicts: int
+    exceptions: int
+
+
+class ReviewDiscovery(BaseModel):
+    decisions: ReviewDiscoveryDecisions | None
+    active_runs: int | None
+
+
+class ReviewReady(BaseModel):
+    customer: ContextName
+    site: OnboardingSite
+    profile: Literal["homelab", "blank"]
+    business_functions: int | None
+    services: int | None
+    integrations: ReviewIntegrations | None
+    discovery: ReviewDiscovery
+    link_services: LinkSummary | None
+    required_gaps: int | None
+
+
+@router.get(PAIR + "/review-ready", response_model=ReviewReady)
+def review_ready(customer_id: UUID, site_id: UUID, principal: PreviewPrincipal, db: Database):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id)
+    return onboarding_review.review(db, site, customer, principal)
+
+
+@router.post(PAIR + "/review-ready/decision", response_model=Progress)
+@concurrent_decision
+def decide_review_ready(
+    customer_id: UUID, site_id: UUID, payload: VersionedRequest, request: Request,
+    principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id, lock=True, manage=True)
+    return onboarding.update(
+        db, customer, site, principal, request, version=payload.version, action="review_ready_completed",
+    )
 
 
 class LinkService(ContextName):

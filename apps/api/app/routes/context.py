@@ -15,6 +15,7 @@ from app.authorization import (
 )
 from app.database import get_db
 from app.models import Asset, AssetRelationship, BusinessFunction, CriticalityLevel, Customer, KnowledgeChange, KnowledgeCompletenessSummary, KnowledgeGap, Network, ReconciliationItem, Service, ServiceAssetDependency, Site
+from app.routes.business_functions import scoped_business_functions
 from app.services.knowledge_completeness import OPEN_GAP_STATUSES, REQUIRED_GAP_LEVELS, scoped_completeness_query
 from app.services.service_relationship_scope import current_relationship
 from app.schemas import ContextResponse, DashboardSummaryResponse
@@ -106,9 +107,8 @@ def dashboard_summary(
         scope_condition(principal, "services.view", Service.customer_id, Service.site_id),
         Service.archived_at.is_(None),
     )
-    business_function_query = select(func.count()).select_from(BusinessFunction).where(
-        scope_condition(principal, "business_functions.view", BusinessFunction.customer_id, BusinessFunction.site_id),
-        BusinessFunction.active.is_(True),
+    business_function_query = scoped_business_functions(context, principal, active_only=True).with_only_columns(
+        func.count(BusinessFunction.id),
     )
     open_items_query = filtered_items(context, principal, item_status="open")
     stale_items = stale_identity_item_ids(db, open_items_query)
@@ -148,7 +148,6 @@ def dashboard_summary(
         network_query = network_query.where(Network.customer_id == context.customer_id)
         service_query = service_query.where(Service.customer_id == context.customer_id)
         service_records_query = service_records_query.where(Service.customer_id == context.customer_id)
-        business_function_query = business_function_query.where(BusinessFunction.customer_id == context.customer_id)
         changes_query = changes_query.where(KnowledgeChange.customer_id == context.customer_id)
         relationship_query = relationship_query.where(
             source.customer_id == context.customer_id,
@@ -162,7 +161,6 @@ def dashboard_summary(
         )
         service_query = service_query.where(or_(Service.site_id == context.site_id, Service.site_id.is_(None)))
         service_records_query = service_records_query.where(or_(Service.site_id == context.site_id, Service.site_id.is_(None)))
-        business_function_query = business_function_query.where(or_(BusinessFunction.site_id == context.site_id, BusinessFunction.site_id.is_(None)))
         changes_query = changes_query.where(KnowledgeChange.site_id == context.site_id)
         relationship_query = relationship_query.where(
             source.site_id == context.site_id,

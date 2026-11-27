@@ -1,7 +1,7 @@
-"""Prepare the verified test Connector and inspect disposable browser data.
+"""Prepare Connector and discovery fixtures for disposable browser runs.
 
-Run using python -m tests.seed_onboarding_integration_browser. Only a local
-atlas_e1d_* disposable database and an explicitly selected store are supported.
+Run using python -m tests.seed_onboarding_integration_browser. Commands require
+a local disposable database and private temporary state.
 """
 import asyncio
 import json
@@ -17,6 +17,7 @@ from app.database import DATABASE_URL, SessionLocal
 from app.models import (Asset, AssetRelationship, AuditEvent, DataSource, DiscoveryRun, EntitySourceLink,
                         EvidenceRecord, Integration, KnowledgeAssertion, KnowledgeChange, ReconciliationItem)
 from app.services import connector_lifecycle as lifecycle
+from app.services.backup_runtime import state_directory
 from app.services.integration_runtime import runtime
 from tests.i3_fixtures import fixture_bundle
 
@@ -50,6 +51,27 @@ def seed_history(customer, site):
         db.flush()
         db.add(DiscoveryRun(customer_id=customer, site_id=site, integration_id=integration.id,
             data_source_id=source.id, status="completed", dispatch_state="settled"))
+
+
+def seed_review_history(customer, site):
+    with SessionLocal.begin() as db:
+        for name, status in (
+            ("Failed discovery " + "LongIntegrationName" * 6, "failed"),
+            ("Running discovery fixture", "running"),
+            ("Incomplete configuration fixture", None),
+        ):
+            source = DataSource(name=name, customer_id=customer, site_id=site,
+                source_type="connector", status="active", trust_level="observed")
+            db.add(source)
+            db.flush()
+            integration = Integration(name=name, plugin_id="proxmox", customer_id=customer, site_id=site,
+                data_source_id=source.id, base_url="", username_or_token_id="", secret_reference="",
+                status="configured" if status else "unconfigured")
+            db.add(integration)
+            db.flush()
+            if status:
+                db.add(DiscoveryRun(customer_id=customer, site_id=site, integration_id=integration.id,
+                    data_source_id=source.id, status=status, dispatch_state="running" if status == "running" else "settled"))
 
 
 def snapshot(customer, site):
@@ -98,19 +120,26 @@ def review_snapshot(customer, site):
 
 if __name__ == "__main__":
     url = make_url(DATABASE_URL)
-    store = lifecycle.package_store().root
-    if url.host not in {"127.0.0.1", "localhost"} or not (url.database or "").startswith("atlas_e1d_") or not store.is_relative_to(Path("/private/tmp")):
-        raise SystemExit("Select a disposable E1-D browser database and temporary Connector store")
     command, *ids = sys.argv[1:]
-    if command == "install":
-        asyncio.run(install())
+    if command == "review-history":
+        if (url.host not in {"127.0.0.1", "localhost"}
+                or not (url.database or "").startswith(("atlas_e1d_", "atlas_e1g_"))
+                or not state_directory().is_relative_to(Path("/tmp").resolve())):
+            raise SystemExit("Select a disposable E1-G browser database and temporary state directory")
+        seed_review_history(*(UUID(value) for value in ids))
     else:
-        customer, site = (UUID(value) for value in ids)
-        if command == "history":
-            seed_history(customer, site)
-        elif command == "snapshot":
-            print(json.dumps(snapshot(customer, site)))
-        elif command == "review-snapshot":
-            print(json.dumps(review_snapshot(customer, site)))
+        store = lifecycle.package_store().root
+        if url.host not in {"127.0.0.1", "localhost"} or not (url.database or "").startswith("atlas_e1d_") or not store.is_relative_to(Path("/private/tmp")):
+            raise SystemExit("Select a disposable E1-D browser database and temporary Connector store")
+        if command == "install":
+            asyncio.run(install())
         else:
-            raise SystemExit("Expected install, history, snapshot or review-snapshot")
+            customer, site = (UUID(value) for value in ids)
+            if command == "history":
+                seed_history(customer, site)
+            elif command == "snapshot":
+                print(json.dumps(snapshot(customer, site)))
+            elif command == "review-snapshot":
+                print(json.dumps(review_snapshot(customer, site)))
+            else:
+                raise SystemExit("Expected install, history, snapshot or review-snapshot")

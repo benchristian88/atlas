@@ -53,12 +53,17 @@ def function_response(db: Session, item: BusinessFunction, principal: Principal)
     return result
 
 
-@router.get("", response_model=list[BusinessFunctionResponse])
-def list_business_functions(context: RequestContext, principal: Principal = Depends(require_permission("business_functions.view")), active_only: bool = False, search: str | None = None, limit: int = Query(default=200, ge=1, le=500), db: Session = Depends(get_db)):
+def scoped_business_functions(context, principal, *, active_only):
     query = select(BusinessFunction).where(scope_condition(principal, "business_functions.view", BusinessFunction.customer_id, BusinessFunction.site_id))
     if context.customer_id: query = query.where(BusinessFunction.customer_id == context.customer_id)
     if context.site_id: query = query.where(or_(BusinessFunction.site_id == context.site_id, BusinessFunction.site_id.is_(None)))
     if active_only: query = query.where(BusinessFunction.active.is_(True))
+    return query
+
+
+@router.get("", response_model=list[BusinessFunctionResponse])
+def list_business_functions(context: RequestContext, principal: Principal = Depends(require_permission("business_functions.view")), active_only: bool = False, search: str | None = None, limit: int = Query(default=200, ge=1, le=500), db: Session = Depends(get_db)):
+    query = scoped_business_functions(context, principal, active_only=active_only)
     if search and search.strip():
         pattern = f"%{search.strip()}%"; query = query.where(or_(BusinessFunction.name.ilike(pattern), BusinessFunction.description.ilike(pattern), BusinessFunction.owner_name.ilike(pattern)))
     return [function_response(db, item, principal) for item in db.scalars(query.order_by(BusinessFunction.name).limit(limit))]
