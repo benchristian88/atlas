@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -22,6 +23,36 @@ class AssetResolution:
 
 def normalized_name(value: str | None) -> str:
     return (value or "").strip().casefold()
+
+
+def matching_asset_names(candidates, *, name, asset_type, hostname):
+    expected_name = normalized_name(name)
+    expected_hostname = normalized_name(hostname)
+    return [
+        candidate for candidate in candidates
+        if normalized_name(candidate.name) == expected_name
+        and (not asset_type or candidate.asset_type == asset_type)
+        and (not expected_hostname or not candidate.hostname or normalized_name(candidate.hostname) == expected_hostname)
+    ]
+
+
+def asset_match_requires_review(matches, *, allow_existing_match):
+    return bool(matches) and (len(matches) != 1 or not allow_existing_match)
+
+
+class AssetIdentityCandidates:
+    """A transaction-local inventory snapshot for repeated read-only resolution."""
+
+    def __init__(self, db, customer_id, site_id):
+        self.by_external = defaultdict(list)
+        self.by_name = defaultdict(list)
+        for asset in db.scalars(_site_assets(customer_id, site_id).execution_options(populate_existing=True)):
+            self.by_external[asset.external_id].append(asset)
+            self.by_name[normalized_name(asset.name)].append(asset)
+
+
+def _site_assets(customer_id, site_id):
+    return select(Asset).where(Asset.customer_id == customer_id, Asset.site_id == site_id)
 
 
 def external_name_hint(external_id: str) -> str:
@@ -160,6 +191,7 @@ def resolve_asset_identity(
     observed_at: datetime | None = None,
     persist_link: bool = True,
     allow_existing_match: bool | None = None,
+    inventory: AssetIdentityCandidates | None = None,
 ) -> AssetResolution:
     if site_id is None:
         return AssetResolution("unresolved")
@@ -173,7 +205,7 @@ def resolve_asset_identity(
         )
     )
     if link is not None:
-        asset = db.get(Asset, link.entity_id)
+        asset = db.get(Asset, link.entity_id, populate_existing=True)
         if asset is None or asset.customer_id != customer_id or asset.site_id != site_id:
             raise HTTPException(
                 status_code=409,
@@ -186,18 +218,12 @@ def resolve_asset_identity(
     if allow_existing_match is None:
         source = db.get(DataSource, data_source_id)
         allow_existing_match = source is None or source.source_type != "connector"
-    direct = list(
-        db.scalars(
-            select(Asset).where(
-                Asset.customer_id == customer_id,
-                Asset.site_id == site_id,
-                Asset.external_id == external_id,
-            )
-        )
-    )
-    if len(direct) == 1:
-        if not allow_existing_match:
-            return AssetResolution("possible_duplicate", candidates=direct)
+    assets = _site_assets(customer_id, site_id).execution_options(populate_existing=True)
+    direct = (inventory.by_external.get(external_id, []) if inventory is not None
+              else list(db.scalars(assets.where(Asset.external_id == external_id))))
+    if asset_match_requires_review(direct, allow_existing_match=allow_existing_match):
+        return AssetResolution("possible_duplicate", candidates=direct)
+    if direct:
         if persist_link:
             ensure_asset_link(
                 db,
@@ -208,9 +234,6 @@ def resolve_asset_identity(
                 observed_at=observed_at,
             )
         return AssetResolution("resolved_existing", direct[0])
-    if len(direct) > 1:
-        return AssetResolution("possible_duplicate", candidates=direct)
-
     if run_map is not None and external_id in run_map:
         current = run_map[external_id]
         if current.asset is not None:
@@ -223,32 +246,11 @@ def resolve_asset_identity(
     if not match_name:
         return AssetResolution("unresolved")
 
-    candidates = list(
-        db.scalars(
-            select(Asset).where(
-                Asset.customer_id == customer_id,
-                Asset.site_id == site_id,
-            )
-        )
-    )
-    expected_name = normalized_name(match_name)
-    expected_hostname = normalized_name(hostname)
-    strong = []
-    for candidate in candidates:
-        if normalized_name(candidate.name) != expected_name:
-            continue
-        if asset_type and candidate.asset_type != asset_type:
-            continue
-        if (
-            expected_hostname
-            and candidate.hostname
-            and normalized_name(candidate.hostname) != expected_hostname
-        ):
-            continue
-        strong.append(candidate)
-    if len(strong) == 1:
-        if not allow_existing_match:
-            return AssetResolution("possible_duplicate", candidates=strong)
+    candidates = inventory.by_name.get(normalized_name(match_name), ()) if inventory is not None else db.scalars(assets)
+    strong = matching_asset_names(candidates, name=match_name, asset_type=asset_type, hostname=hostname)
+    if asset_match_requires_review(strong, allow_existing_match=allow_existing_match):
+        return AssetResolution("possible_duplicate", candidates=strong)
+    if strong:
         if persist_link:
             ensure_asset_link(
                 db,
@@ -259,6 +261,4 @@ def resolve_asset_identity(
                 observed_at=observed_at,
             )
         return AssetResolution("resolved_existing", strong[0])
-    if len(strong) > 1:
-        return AssetResolution("possible_duplicate", candidates=strong)
     return AssetResolution("unresolved")

@@ -1190,6 +1190,36 @@ class ReconciliationReviewVersion(BaseModel):
     version: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class DiscoveryReviewAssetIdentity(BaseModel):
+    action: Literal["create", "associate"]
+    asset_name: str | None = None
+
+
+class DiscoveryReviewItem(ReconciliationReviewItem):
+    entity_name: str
+    batch_version: str | None
+    batch_exclusion: str | None
+    batch_identity: DiscoveryReviewAssetIdentity | None
+
+
+class DiscoveryReviewSummary(BaseModel):
+    eligible: int | None
+    needs_review: int | None
+    accepted: int | None
+    active_runs: int | None
+    version: str
+
+
+class DiscoveryReviewPage(BaseModel):
+    items: list[DiscoveryReviewItem]
+    eligible: int
+    needs_review: int
+    sources: dict[uuid.UUID, str]
+    categories: list[str]
+    summary: DiscoveryReviewSummary
+    decisions: dict[uuid.UUID, str]
+
+
 class ReconciliationEntityResponse(BaseModel):
     id: uuid.UUID
     customer_id: uuid.UUID
@@ -1241,6 +1271,11 @@ class ReconciliationGroupAcceptResponse(BaseModel):
     already_resolved: list[ReconciliationGroupOutcome]
     blocked: list[ReconciliationGroupOutcome]
     failed: list[ReconciliationGroupOutcome]
+
+
+class DiscoveryReviewAcceptResponse(ReconciliationGroupAcceptResponse):
+    newly_eligible: list[ReconciliationGroupOutcome]
+    newly_eligible_total: int
 
 
 class ProxmoxIdentityDecisionRequest(BaseModel):

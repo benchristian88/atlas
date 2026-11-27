@@ -329,3 +329,54 @@
 @media (max-width: 530px) {
   .integrationRow { grid-template-columns: minmax(0, 1fr); }
 }
+
+.discoveryReview {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.discoveryReview select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+:global([data-theme="dark"]) .discoveryReview :global(.button-destructive) {
+  color: var(--surface);
+}
+
+.proposalList {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.proposalList > li {
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+.proposalHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.proposalHeading p {
+  margin: 0;
+}
+
+.proposalDetails {
+  margin-block-start: var(--space-3);
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--border);
+}
+
+.proposalDetails > h4 {
+  margin-block: 0;
+}

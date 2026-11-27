@@ -102,6 +102,12 @@ completeness and audit code as an individual acceptance. Per-item savepoints
 retain successful decisions when a later child fails. The response reports
 `accepted`, `already_resolved`, `blocked` and `failed` with explicit reasons.
 
+Guided onboarding uses the same acceptance engine for a Site-scoped batch of
+reviewed eligible records spanning multiple entities. Atlas checks membership,
+eligibility and versions before applying the first decision. A blocked child
+that becomes eligible can be included in a later confirmation.
+[Discovery Review API and operator workflow](guided-onboarding.md#discovery-review-e1-e).
+
 A relationship waiting on another Asset never creates or accepts that Asset.
 An Interface waits for its Asset and any referenced Network; its facts wait for
 the Interface. No-longer-observed records require an individual lifecycle choice

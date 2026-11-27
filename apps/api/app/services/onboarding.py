@@ -5,12 +5,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.audit import add_audit_event
-from app.authorization import Principal, forbidden, refresh_principal, require_scope
+from app.authorization import ActiveContext, Principal, forbidden, refresh_principal, require_scope
 from app.models import (
     Asset, BusinessFunction, Customer, DiscoveryRun, InstallationState, Integration, Network,
     OnboardingInvitationDismissal, Service, Site, SiteOnboarding,
 )
 from app.routes.crud_helpers import commit
+from app.services.discovery_review import DiscoveryReview
 
 MANAGE = "sites.manage"
 CONFLICT = "Setup progress changed. Reload progress before trying again."
@@ -218,5 +219,28 @@ def decide_integrations(db, customer, site, principal, request, *, version, deci
     state.current_stage = "discovery_review"
     action = "integrations_completed" if decision == "completed" else "integrations_skipped"
     record_progress(db, customer, site, principal, request, state, action)
+    commit(db, "Onboarding progress")
+    return state
+
+
+def decide_discovery_review(db, customer, site, principal, request, *, version, decision, review_version):
+    state = progress(db, site, lock=True)
+    principal = refreshed_access(db, principal, site, manage=True)
+    if state is None or version != state.version or state.status != "in_progress" or state.current_stage != "discovery_review":
+        raise HTTPException(409, CONFLICT)
+    if decision != "skipped":
+        review = DiscoveryReview(db, ActiveContext(customer.id, site.id), principal)
+        summary = review.summary(review.classify())
+        if review_version != summary["version"]:
+            raise HTTPException(409, {"code": "discovery_review_changed",
+                                     "message": "Discovery Review changed. Review the latest status before continuing."})
+        requires_ack = any(summary[key] != 0 for key in ("eligible", "needs_review", "active_runs"))
+        if requires_ack != (decision == "attention"):
+            raise HTTPException(422, "Confirm the outstanding or unavailable discovery work before continuing.")
+    elif review_version is not None:
+        raise HTTPException(422, "Skipping Discovery Review does not take a review version.")
+    state.stage_decisions = {**state.stage_decisions, "discovery_review": decision}
+    state.current_stage = "link_services"
+    record_progress(db, customer, site, principal, request, state, f"discovery_review_{decision}")
     commit(db, "Onboarding progress")
     return state

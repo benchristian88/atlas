@@ -118,6 +118,24 @@ class DecideIntegrations(VersionedRequest):
     discovery_run_id: UUID | None = None
 
 
+class DecideDiscoveryReview(VersionedRequest):
+    decision: Literal["completed", "attention", "skipped"]
+    review_version: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+@router.post(PAIR + "/discovery-review/decision", response_model=Progress)
+@concurrent_decision
+def decide_discovery_review(
+    customer_id: UUID, site_id: UUID, payload: DecideDiscoveryReview, request: Request,
+    principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id, lock=True, manage=True)
+    return onboarding.decide_discovery_review(
+        db, customer, site, principal, request, version=payload.version,
+        decision=payload.decision, review_version=payload.review_version,
+    )
+
+
 @router.post(PAIR + "/integrations/decision", response_model=Progress)
 @concurrent_decision
 def decide_integrations(

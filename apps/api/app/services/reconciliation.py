@@ -283,16 +283,12 @@ def construct_discovered_asset(db, customer, site, external_id, value):
     return asset
 
 
-def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
-    value = dict(item.observed_value_json or {})
-    site = db.get(Site, item.site_id) if item.site_id else None
-    customer = db.get(Customer, item.customer_id)
-    if customer is None or site is None or site.customer_id != customer.id:
-        raise HTTPException(status_code=409, detail="A valid customer and site are required")
-    assertion = _assertion_for_item(db, item)
+def resolve_asset_proposal(db, item, assertion, *, persist_link=False, inventory=None):
+    """Use one resolver for the reviewed outcome and canonical application."""
     if assertion.data_source_id is None or not item.candidate_external_id:
         raise HTTPException(status_code=409, detail="The discovered identity is incomplete")
-    resolution = resolve_asset_identity(
+    value = dict(item.observed_value_json or {})
+    return resolve_asset_identity(
         db,
         data_source_id=assertion.data_source_id,
         customer_id=item.customer_id,
@@ -302,7 +298,19 @@ def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
         asset_type=value.get("asset_type"),
         hostname=(value.get("facts") or {}).get("hostname"),
         observed_at=assertion.last_observed_at,
+        persist_link=persist_link,
+        inventory=inventory,
     )
+
+
+def _accept_new_asset(db: Session, item: ReconciliationItem) -> Asset:
+    value = dict(item.observed_value_json or {})
+    site = db.get(Site, item.site_id) if item.site_id else None
+    customer = db.get(Customer, item.customer_id)
+    if customer is None or site is None or site.customer_id != customer.id:
+        raise HTTPException(status_code=409, detail="A valid customer and site are required")
+    assertion = _assertion_for_item(db, item)
+    resolution = resolve_asset_proposal(db, item, assertion, persist_link=True)
     if resolution.asset is not None:
         _attach_external_identity(
             db, item=item, assertion=assertion, asset=resolution.asset

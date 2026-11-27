@@ -6,6 +6,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { checkCapabilities } from "./onboarding-capabilities-browser.mjs";
 import { checkIntegrations } from "./onboarding-integrations-browser.mjs";
+import { checkDiscoveryReview } from "./onboarding-discovery-review-browser.mjs";
 const { chromium } = await import(process.env.ATLAS_PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.ATLAS_PLAYWRIGHT_MODULE).href : "playwright");
 
@@ -290,10 +291,14 @@ try {
   const integrations = process.env.ATLAS_E1D_LIVE === "true" ? await checkIntegrations({
     a, b, c, origin, api, output, workshopHref, blankHref: href, action, heading, resumeWithKeyboard,
   }) : null;
+  const discoveryReview = integrations ? await checkDiscoveryReview({
+    a, b, c, origin, api, output, workshopHref, blankHref: href, action, heading, resumeWithKeyboard,
+  }) : null;
   assert.deepEqual(pageErrors, []);
-  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, integrations, pageErrors, liveAuthentication: true }, null, 2));
+  await writeFile(`${output}/report.json`, JSON.stringify({ layouts, accents, capabilities, integrations, discoveryReview, pageErrors, liveAuthentication: true }, null, 2));
   console.log(`PASS: live Environment and Capabilities, shared drafts and conflicts, keyboard and permissions, atomic Apply and receipt replay, additional import, ${layouts.length + capabilities.layouts.length} responsive/theme layouts.`);
   if (integrations) console.log(`PASS: live Add Integrations, verified installation, probe, discovery and recovery, ${integrations.layouts.length} responsive/theme layouts.`);
+  if (discoveryReview) console.log(`PASS: live Discovery Review, versioned acceptance and PostgreSQL verification, uncertain response recovery, Skip and Link Services, ${discoveryReview.layouts.length} responsive/theme layouts.`);
 } finally {
   await browser.close();
 }

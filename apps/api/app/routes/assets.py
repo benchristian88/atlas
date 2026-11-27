@@ -40,7 +40,7 @@ from app.services.manual_knowledge import (
     MANUAL_ASSET_KNOWLEDGE_FIELDS,
     declare_asset_changes,
 )
-from app.services.knowledge_locks import concurrent_decision
+from app.services.knowledge_locks import concurrent_decision, lock_asset_identity_inventory
 from app.services.service_relationship_scope import incompatible_incoming_move
 
 from app.services import asset_icons
@@ -241,6 +241,9 @@ def create_asset(
     if context.site_id is not None and payload.site_id != context.site_id:
         raise HTTPException(status_code=403, detail="Asset site must match the active context")
     require_scope(principal, "assets.create", payload.customer_id, payload.site_id)
+    lock_asset_identity_inventory(db, payload.site_id)
+    principal = refresh_principal(principal, db)
+    require_scope(principal, "assets.create", payload.customer_id, payload.site_id)
     customer, site = customer_and_site(db, payload.customer_id, payload.site_id)
     if customer.status != "active" or site.status != "active":
         raise HTTPException(status_code=409, detail="Assets cannot be created in an inactive context")
@@ -335,6 +338,18 @@ def get_asset_icon(
     return Response(status_code=204, headers={**headers, "Cache-Control": "no-store"})
 
 
+def _lock_inventory_for_asset(db, asset_id, principal, permission, changes=None):
+    scope = db.execute(select(Asset.customer_id, Asset.site_id).where(Asset.id == asset_id)).one_or_none()
+    if scope is None:
+        raise not_found("Asset")
+    require_scope(principal, permission, scope.customer_id, scope.site_id, hide_existence=True)
+    destination = changes.get("site_id", scope.site_id) if changes else scope.site_id
+    if destination is not None and changes:
+        require_scope(principal, permission, changes.get("customer_id", scope.customer_id), destination)
+    lock_asset_identity_inventory(db, scope.site_id, destination)
+    return tuple(scope)
+
+
 @router.patch("/{asset_id}", response_model=ManualAssetResponse)
 @concurrent_decision
 def update_asset(
@@ -345,6 +360,11 @@ def update_asset(
     principal: Principal = Depends(require_permission("assets.edit")),
     db: Session = Depends(get_db),
 ):
+    changes = payload.model_dump(exclude_unset=True, exclude={"custom_fields"})
+    identity_fields = {"name", "hostname", "asset_type", "customer_id", "site_id"}
+    initial_scope = None
+    if identity_fields.intersection(changes):
+        initial_scope = _lock_inventory_for_asset(db, asset_id, principal, "assets.edit", changes)
     asset = db.get(Asset, asset_id, with_for_update=True, populate_existing=True)
     if asset is None:
         raise not_found("Asset")
@@ -352,7 +372,8 @@ def update_asset(
     require_scope(
         principal, "assets.edit", asset.customer_id, asset.site_id, hide_existence=True
     )
-    changes = payload.model_dump(exclude_unset=True, exclude={"custom_fields"})
+    if initial_scope is not None and initial_scope != (asset.customer_id, asset.site_id):
+        raise HTTPException(409, "The asset moved while it was being edited; refresh before editing")
     customer_id = changes.get("customer_id", asset.customer_id)
     site_id = changes.get("site_id", asset.site_id)
     if site_id is None:
@@ -458,12 +479,16 @@ def delete_asset(
     principal: Principal = Depends(require_permission("assets.delete")),
     db: Session = Depends(get_db),
 ) -> Response:
+    initial_scope = _lock_inventory_for_asset(db, asset_id, principal, "assets.delete")
     asset = db.get(Asset, asset_id, with_for_update=True, populate_existing=True)
     if asset is None:
         raise not_found("Asset")
+    principal = refresh_principal(principal, db)
     require_scope(
         principal, "assets.delete", asset.customer_id, asset.site_id, hide_existence=True
     )
+    if initial_scope != (asset.customer_id, asset.site_id):
+        raise HTTPException(409, "The asset moved while it was being deleted; refresh before deleting")
     relationship_count = db.scalar(
         select(func.count())
         .select_from(AssetRelationship)
