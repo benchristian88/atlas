@@ -3,7 +3,7 @@ export const STAGES = [
   ["capabilities", "Capabilities"],
   ["integrations", "Add integrations"],
   ["discovery_review", "Discovery review"],
-  ["link_services", "Link services"],
+  ["link_services", "Link Services"],
   ["review_ready", "Review & Ready"],
   ["showcase", "Showcase"],
 ];

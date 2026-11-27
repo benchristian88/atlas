@@ -38,10 +38,16 @@ See the [feature reference](feature-ledger.md) for implemented scope and limits.
 Dependency impact analysis uses recorded knowledge and hypothetical scenarios;
 it is not live monitoring or evidence of recovery readiness.
 
-The default-off Guided setup preview now covers Environment and Capabilities.
-Homelab users can select, customise, save and review the starter catalogue, then
-apply it to create Customer-wide records. The Dashboard can resume Site setup.
-Integration setup and the remaining stages are pending.
+Guided onboarding (AT-R01) is partially implemented and the preview is off by
+default. The Dashboard can start or resume shared Site setup. Operators confirm
+the Environment and, for the Homelab profile, can select, customise, save,
+review and apply starter Capabilities as Customer-wide records. Add Integrations
+reuses the Connector Catalogue, scoped configuration, connection testing and
+supported discovery. Discovery Review lets operators inspect and reconcile
+findings at the confirmed Site. Link Services lets operators add or end manual
+Service-to-Asset dependencies at that Site and continue with unmapped Services.
+Review & Ready, Showcase, guided setup completion and public activation remain
+pending. See the [Guided setup preview](../architecture/guided-onboarding.md).
 
 ## Next development
 
@@ -59,7 +65,6 @@ Integration setup and the remaining stages are pending.
   orchestration, test-only execution and subsequent actual Docker/LXC operator
   acceptance. Native live acceptance, remote GitHub/Sigstore qualification and I4
   Proxmox discovery/9.2.11 qualification remain outstanding.
-- Guided onboarding to help operators establish useful initial knowledge.
 
 ## Engineering backlog
 

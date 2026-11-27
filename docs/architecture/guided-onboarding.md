@@ -1,4 +1,4 @@
-# Guided setup preview (AT-R01 / E1-A through E1-E)
+# Guided setup preview (AT-R01 / E1-A through E1-F)
 
 ## Preview operation
 
@@ -462,7 +462,81 @@ the saved cursor and stage decisions.
   grant apply to all three decisions. Success advances to `link_services`
   and records the actor. The workflow stores no copy of review data.
 
+## Link Services (E1-F)
+
+Step 5 uses the confirmed Customer and Site for either profile. Search by
+Service name or filter by **All Services**, **Unlinked** or **Linked**. The list
+includes visible Customer-wide Services and Services for this Site. The summary
+counts visible, current Asset dependencies at this Site across the full eligible
+Service population. Mappings that were saved before guided setup count. Where
+permissions limit the projection, the affected mapping status is unavailable.
+
+Select a Service to view its linked Assets. Existing visible mappings to retired
+Assets show their lifecycle. Visible mappings at other Sites provide read-only
+context. Search available Assets by name and filter by managed Asset Type.
+Check up to 25 Assets, including across pages, and choose **Add selected Assets**.
+The picker, linked rows and confirmations show each Asset's name, type and
+full canonical UUID, with its hostname when available. Picker checkbox labels
+include the same identifying information. Confirm the Service and the selected
+Asset identities. Each confirmed Asset is saved independently using the
+canonical `depends_on` type and the ordinary required dependency default. A
+mapping leaves the failure effect unknown. An Asset can support several Services.
+
+Result messages identify added, already-linked, rejected and unconfirmed
+requests. Atlas stops sending new requests for that confirmation when a response
+is uncertain. **Check current mappings** reloads the canonical state before a
+new explicit attempt. The browser tab remembers the unconfirmed operation for
+that Service across reloads. A current link may have been created by another
+operator. Its presence alone gives no attribution for the unconfirmed request.
+To end a mapping at this Site, choose **Remove** and confirm the Service, Asset
+and relationship type. If the relationship changes, Atlas refreshes the mappings
+and requires a fresh confirmation. Canonical relationship history and its
+provenance remain available.
+
+**Save & exit** saves shared Site progress and keeps all committed changes.
+Unsubmitted selections are cleared when changing Services or leaving the step.
+**Resume** loads live canonical mappings. **Continue to Review & Ready** allows
+outstanding work after acknowledgement. **Skip** preserves existing mappings
+and records an explicit decision. After advancing, reopen Link Services from
+the progress rail to view or edit its current mappings and return to the saved
+cursor. Shared version conflicts use **Reload progress**. Existing mapping
+commits survive a conflict.
+
+### API and write contract
+
+All paths are relative to `/api/onboarding/{customer_id}/{site_id}/link-services`.
+Reads and writes use the authenticated preview gate and the confirmed pair.
+
+| Method and path | Contract |
+| --- | --- |
+| GET root | Returns the authorized Site summary and a deterministically ordered Service page. `search`, `mapping`, `offset` and `limit` filter or page the list. |
+| GET `/services/{service_id}` | Returns visible Site and other-Site mappings, mapping permission, managed Asset Type options, and a page of eligible, unlinked Assets. `search`, `asset_type`, `offset` and `limit` affect the available Asset page. |
+| POST `/services/{service_id}/assets/{asset_id}` | Adds one selected Asset via the canonical operation. The result distinguishes `added` and `already_exists`. |
+| DELETE `/services/{service_id}/mappings/{dependency_id}` | Requires `{removal_version}` from the reviewed mapping. Ends the dependency through the canonical operation. Returns `409 link_mapping_changed` for stale confirmation and `404` if the dependency is no longer available. |
+| POST `/decision` | Accepts `{version, action, acknowledge_attention?}`. `continue` checks current visible totals and requires acknowledgement of outstanding or unavailable mappings. `skip` records an explicit skip. Both advance to `review_ready`. |
+
+The read projection counts canonical current relationships with endpoint and
+relationship view checks. Archived Services are excluded from the picker.
+Retired Assets are excluded from new mappings. Other-Site context also requires
+access to that Site. A null projection or count indicates lack of visibility.
+Pagination does not cap the Site summary. Read scope and count rules are shared
+by the page and progression command.
+
+Writes require Site setup management, Service and Asset view, and dependency
+view and management at the canonical scopes. Customer-wide Service permissions
+must apply at Customer scope. Writes use the existing Asset then Service row
+locks, load current endpoints and effective grants after waiting, and recheck
+grants before commit. Like Discovery Review, the check sees committed
+revocations at its checkpoint. Grant administration remains independent. Link
+Services does not change Asset identity or acquire the identity inventory lock.
+The endpoint locks serialize it against changes made by inventory writers.
+Atlas compares the reviewed removal version with the current relationship and
+endpoint identity under those locks, before any canonical removal side effects.
+Relationship provenance, Changes, audit and Knowledge Completeness use existing
+canonical code. Progress writes use the existing Site workflow lock and
+optimistic version. The preview uses the existing database schema.
+
 ## Later packets
 
-Service linking, readiness and Showcase remain pending.
+Review & Ready and Showcase remain pending.
 Public activation remains gated pending E1-H.

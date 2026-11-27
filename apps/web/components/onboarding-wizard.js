@@ -10,6 +10,7 @@ import { Button } from "./button";
 import { OnboardingCapabilities } from "./onboarding-capabilities";
 import { OnboardingDiscoveryReview } from "./onboarding-discovery-review";
 import { OnboardingIntegrations } from "./onboarding-integrations";
+import { OnboardingLinkServices } from "./onboarding-link-services";
 import { PageHeader } from "./page-header";
 import { Section, Surface } from "./section";
 import styles from "./onboarding.module.css";
@@ -18,7 +19,7 @@ const request = (path, options) => apiRequest(path, { ...options, omitContext: t
 const write = (path, method, values) => request(path, { method, body: JSON.stringify(values) });
 const decisionLabels = { completed: "Completed", skipped: "Skipped", attention: "Needs attention" };
 
-function Wizard({ stage, decisions = {}, onEnvironment, onCapabilities, onIntegrations, onDiscoveryReview, children }) {
+function Wizard({ stage, decisions = {}, onEnvironment, onCapabilities, onIntegrations, onDiscoveryReview, onLinkServices, children }) {
   return <>
     <PageHeader title="Guided setup" description="Set up one Site at a time." />
     <div className={styles.layout}>
@@ -26,9 +27,9 @@ function Wizard({ stage, decisions = {}, onEnvironment, onCapabilities, onIntegr
         <ol>
           {STAGES.map(([key, title], index) => {
             const label = decisionLabels[decisions[key]]
-              || (stage === key && ["environment", "capabilities", "integrations", "discovery_review"].includes(key) ? "In progress" : "Pending");
+              || (stage === key && ["environment", "capabilities", "integrations", "discovery_review", "link_services"].includes(key) ? "In progress" : "Pending");
             const openStage = { environment: onEnvironment, capabilities: onCapabilities, integrations: onIntegrations,
-              discovery_review: onDiscoveryReview }[key];
+              discovery_review: onDiscoveryReview, link_services: onLinkServices }[key];
             return <li key={key} aria-current={stage === key ? "step" : undefined}>
               <span className={styles.stepNumber} aria-hidden="true">{index + 1}</span>
               <div>
@@ -232,6 +233,8 @@ export function OnboardingSession({ customerId, siteId }) {
   const [integrationDirty, setIntegrationDirty] = useState(false);
   const [visitingDiscoveryReview, setVisitingDiscoveryReview] = useState(false);
   const [discoveryReviewBusy, setDiscoveryReviewBusy] = useState(false);
+  const [visitingLinkServices, setVisitingLinkServices] = useState(false);
+  const [linkServicesBusy, setLinkServicesBusy] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [editor, setEditor] = useState(null);
   const heading = useRef(null);
@@ -244,7 +247,8 @@ export function OnboardingSession({ customerId, siteId }) {
   const showCapabilities = data?.progress?.environment_profile
     && (pending || ((!saved || !data.can_manage) && (activeStage === "capabilities" || visitingCapabilities)));
   const headingTarget = data && (revisiting ? "environment" : showCapabilities ? "capabilities"
-    : visitingIntegrations ? "integrations" : visitingDiscoveryReview ? "discovery_review" : activeStage);
+    : visitingIntegrations ? "integrations" : visitingDiscoveryReview ? "discovery_review"
+      : visitingLinkServices ? "link_services" : activeStage);
   const profile = pendingProfile ?? data?.progress?.draft_profile ?? "homelab";
 
   useEffect(() => {
@@ -311,6 +315,7 @@ export function OnboardingSession({ customerId, siteId }) {
     setVisitingCapabilities(false);
     setVisitingIntegrations(false);
     setVisitingDiscoveryReview(false);
+    setVisitingLinkServices(false);
     setPendingProfile(null);
     setReload((value) => value + 1);
   }
@@ -335,6 +340,7 @@ export function OnboardingSession({ customerId, siteId }) {
         ...(action === "save" && !progress?.environment_profile ? { draft_profile: profile } : {}),
         ...(action === "integrations/decision" ? { decision, discovery_run_id: decisionVersion } : {}),
         ...(action === "discovery-review/decision" ? { decision, review_version: decisionVersion } : {}),
+        ...(action === "link-services/decision" ? { action: decision, acknowledge_attention: decisionVersion } : {}),
       });
       setIntegrationDirty(false);
       setPendingProfile(null);
@@ -347,6 +353,9 @@ export function OnboardingSession({ customerId, siteId }) {
       }
       if (action === "discovery-review/decision" && requestError.details?.detail?.code === "discovery_review_changed") {
         return { refreshReview: true };
+      }
+      if (action === "link-services/decision" && requestError.details?.detail?.code === "link_services_attention") {
+        return { refreshMappings: true };
       }
       if ([403, 404].includes(requestError.status)) {
         setIntegrationDirty(false);
@@ -378,7 +387,7 @@ export function OnboardingSession({ customerId, siteId }) {
   const confirmed = Boolean(progress?.environment_profile);
   const completed = data.status === "completed";
   const conflict = error?.status === 409;
-  const blocked = busy || capabilitiesBusy || integrationsBusy || discoveryReviewBusy || Boolean(editor) || conflict;
+  const blocked = busy || capabilitiesBusy || integrationsBusy || discoveryReviewBusy || linkServicesBusy || Boolean(editor) || conflict;
   const stageTitle = STAGES.find(([key]) => key === stage)?.[1] || "Setup progress";
 
   const canVisitCapabilities = confirmed && progress.stage_decisions.capabilities && canManage && !saved && !blocked && stage !== "capabilities";
@@ -392,21 +401,34 @@ export function OnboardingSession({ customerId, siteId }) {
     && stage !== "integrations" && !showCapabilities;
   const visitIntegrations = () => {
     setRevisiting(false);
+    setVisitingLinkServices(false);
     setVisitingIntegrations(true);
   };
   const visitDiscoveryReview = () => leaveIntegration(() => {
     setRevisiting(false);
     setVisitingIntegrations(false);
+    setVisitingLinkServices(false);
     setVisitingDiscoveryReview(true);
   });
+  const visitLinkServices = () => leaveIntegration(() => {
+    setRevisiting(false);
+    setVisitingIntegrations(false);
+    setVisitingDiscoveryReview(false);
+    setVisitingLinkServices(true);
+  });
+  const canVisitDiscoveryReview = confirmed && progress.stage_decisions.discovery_review && !saved && !blocked && !pending
+    && stage !== "discovery_review" && !showCapabilities;
+  const canVisitLinkServices = confirmed && progress.stage_decisions.link_services && !saved && !blocked && !pending
+    && stage !== "link_services" && !showCapabilities;
 
   return <Wizard stage={stage} decisions={progress?.stage_decisions}
     onEnvironment={confirmed && stage !== "environment" && !blocked && !pending ? visitEnvironment : undefined}
     onCapabilities={canVisitCapabilities && (stage === "integrations" || progress.environment_profile === "homelab") ? visitCapabilities : undefined}
     onIntegrations={canVisitIntegrations ? visitIntegrations : undefined}
-    onDiscoveryReview={confirmed && progress.stage_decisions.discovery_review && !saved && !blocked && !pending
-      && stage !== "discovery_review" && !showCapabilities ? visitDiscoveryReview : undefined}>
-    <div className={showCapabilities && !revisiting ? styles.capabilitiesSession : styles.session}>
+    onDiscoveryReview={canVisitDiscoveryReview ? visitDiscoveryReview : undefined}
+    onLinkServices={canVisitLinkServices ? visitLinkServices : undefined}>
+    <div className={showCapabilities && !revisiting ? styles.capabilitiesSession
+      : stage === "link_services" ? `${styles.session} ${styles.linkSession}` : styles.session}>
       {showCapabilities && <Surface className={styles.panel} hidden={revisiting}>
         <Section title="Capabilities" headingRef={capabilitiesHeading}>
           <OnboardingCapabilities path={path} pendingKey={pendingKey} progress={progress} customer={customer} site={site}
@@ -474,15 +496,23 @@ export function OnboardingSession({ customerId, siteId }) {
                   canAdvance={activeStage === "discovery_review" && !progress.stage_decisions.discovery_review}
                   onBusy={setDiscoveryReviewBusy}
                   onDecision={(decision, reviewVersion) => change("discovery-review/decision", decision, reviewVersion)} />
-              : !saved && <p>{completed ? "Setup is complete." : "This setup stage is pending in this preview."}</p>}
+              : stage === "link_services" && (!saved || !canManage)
+                ? <OnboardingLinkServices key={`${user.id}:${path}`} path={path} actor={user.id}
+                    canManage={canManage && !saved && !completed} blocked={blocked}
+                    canAdvance={activeStage === "link_services" && !progress.stage_decisions.link_services}
+                    onBusy={setLinkServicesBusy}
+                    onDecision={(action, acknowledge) => change("link-services/decision", action, acknowledge)} />
+                : !saved && <p>{completed ? "Setup is complete." : "This setup stage is pending in this preview."}</p>}
           <div className={styles.footer}>
             {canManage && !confirmed && <Button href="/onboarding" disabled={blocked}>Change Site</Button>}
             {revisiting && <Button onClick={() => setRevisiting(false)} disabled={blocked}>Return to current stage</Button>}
-            {!revisiting && confirmed && stage !== "environment" && stage !== "integrations" && stage !== "discovery_review" && <Button onClick={visitEnvironment} disabled={blocked}>Back to Environment</Button>}
+            {!revisiting && confirmed && !["environment", "integrations", "discovery_review", "link_services"].includes(stage) && <Button onClick={visitEnvironment} disabled={blocked}>Back to Environment</Button>}
             {stage === "integrations" && canVisitCapabilities && <Button onClick={visitCapabilities}>Back to Capabilities</Button>}
             {stage === "integrations" && visitingIntegrations && <Button onClick={() => leaveIntegration(() => setVisitingIntegrations(false))} disabled={blocked}>Return to current stage</Button>}
             {stage === "discovery_review" && canVisitIntegrations && <Button onClick={visitIntegrations}>Back to Add Integrations</Button>}
             {stage === "discovery_review" && visitingDiscoveryReview && <Button onClick={() => setVisitingDiscoveryReview(false)} disabled={blocked}>Return to current stage</Button>}
+            {stage === "link_services" && canVisitDiscoveryReview && <Button onClick={visitDiscoveryReview}>Back to Discovery Review</Button>}
+            {stage === "link_services" && visitingLinkServices && <Button onClick={() => setVisitingLinkServices(false)} disabled={blocked}>Return to current stage</Button>}
             {(!canManage || completed || saved) ? <Button href={authenticatedHome(user)} disabled={Boolean(editor) || busy}>Return to Atlas</Button>
               : !showCapabilities && <Button onClick={() => change("save")} disabled={blocked}>Save &amp; exit</Button>}
             {stage !== "environment" && stage !== "integrations" && canVisitCapabilities && progress.environment_profile === "homelab"

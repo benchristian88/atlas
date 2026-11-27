@@ -4,7 +4,7 @@ import os
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from app.authorization import CurrentPrincipal, Principal, forbidden, scope_cond
 from app.database import get_db
 from app.models import Customer, Site, SiteOnboarding
 from app.services import onboarding, onboarding_capabilities as starter
+from app.services import onboarding_link_services as links
 from app.services.homelab_catalogue import Catalogue
 from app.services.knowledge_locks import concurrent_decision
 
@@ -121,6 +122,131 @@ class DecideIntegrations(VersionedRequest):
 class DecideDiscoveryReview(VersionedRequest):
     decision: Literal["completed", "attention", "skipped"]
     review_version: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+LINK_SERVICES = PAIR + "/link-services"
+LINK_SERVICE = LINK_SERVICES + "/services/{service_id}"
+
+
+class DecideLinkServices(VersionedRequest):
+    action: Literal["continue", "skip"]
+    acknowledge_attention: bool = Field(default=False, strict=True)
+
+
+class LinkSummary(BaseModel):
+    linked: int
+    unlinked: int
+    mappings: int
+    unavailable: int
+
+
+class LinkService(ContextName):
+    site_id: UUID | None
+    service_type_id: UUID
+    service_type_icon_key: str | None
+    service_type_accent_key: str | None
+    mapping_count: int | None
+
+
+class LinkServicePage(BaseModel):
+    summary: LinkSummary | None
+    services: list[LinkService]
+    has_more: bool
+
+
+class LinkAsset(ContextName):
+    status: str
+    asset_type: str
+    type_name: str
+    hostname: str | None
+    cached_icon_url: str | None
+    default_icon_url: str | None
+    resolved_icon_url: str | None
+
+
+class SiteMapping(BaseModel):
+    id: UUID
+    asset: LinkAsset
+    site_name: str
+    relationship_name: str
+    removal_version: str | None
+
+
+class ConfirmMappingRemoval(BaseModel):
+    removal_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class LinkAssetType(BaseModel):
+    key: str
+    name: str
+
+
+class LinkMappingPage(BaseModel):
+    service_name: str
+    can_manage: bool
+    site_mappings: list[SiteMapping] | None
+    other_mappings: list[SiteMapping] | None
+    available: list[LinkAsset] | None
+    asset_types: list[LinkAssetType]
+    has_eligible_assets: bool
+    has_unlinked_assets: bool
+    has_more: bool
+
+
+class AddMappingOutcome(BaseModel):
+    outcome: Literal["added", "already_exists"]
+
+
+@router.get(LINK_SERVICES, response_model=LinkServicePage)
+def link_service_page(
+    customer_id: UUID, site_id: UUID, principal: PreviewPrincipal, db: Database,
+    search: str = Query(default="", max_length=300), mapping: Literal["all", "unlinked", "linked"] = "all",
+    offset: int = Query(default=0, ge=0), limit: int = Query(default=25, ge=1, le=100),
+):
+    site, _, principal = links.context(db, principal, customer_id, site_id)
+    return links.service_page(db, principal, site, search=search, mapping=mapping, offset=offset, limit=limit)
+
+
+@router.get(LINK_SERVICE, response_model=LinkMappingPage)
+def link_mapping_page(
+    customer_id: UUID, site_id: UUID, service_id: UUID, principal: PreviewPrincipal, db: Database,
+    search: str = Query(default="", max_length=300), asset_type: str = Query(default="", max_length=100),
+    offset: int = Query(default=0, ge=0), limit: int = Query(default=25, ge=1, le=100),
+):
+    site, _, principal = links.context(db, principal, customer_id, site_id)
+    return links.mapping_page(db, principal, site, service_id, search=search, asset_type=asset_type, offset=offset, limit=limit)
+
+
+@router.post(LINK_SERVICE + "/assets/{asset_id}", response_model=AddMappingOutcome)
+@concurrent_decision
+def add_link_mapping(
+    customer_id: UUID, site_id: UUID, service_id: UUID, asset_id: UUID, request: Request,
+    principal: PreviewPrincipal, db: Database,
+):
+    site, _, principal = links.context(db, principal, customer_id, site_id, write=True)
+    return links.add_mapping(db, principal, site, service_id, asset_id, request)
+
+
+@router.delete(LINK_SERVICE + "/mappings/{dependency_id}", status_code=204)
+@concurrent_decision
+def remove_link_mapping(
+    customer_id: UUID, site_id: UUID, service_id: UUID, dependency_id: UUID,
+    payload: ConfirmMappingRemoval, request: Request,
+    principal: PreviewPrincipal, db: Database,
+):
+    site, _, principal = links.context(db, principal, customer_id, site_id, write=True)
+    links.remove_mapping(db, principal, site, service_id, dependency_id, payload.removal_version, request)
+
+
+@router.post(LINK_SERVICES + "/decision", response_model=Progress)
+@concurrent_decision
+def decide_link_services(
+    customer_id: UUID, site_id: UUID, payload: DecideLinkServices, request: Request,
+    principal: PreviewPrincipal, db: Database,
+):
+    site, customer, principal = onboarding.scoped_site(db, principal, customer_id, site_id, lock=True, manage=True)
+    return links.decide(db, customer, site, principal, request, version=payload.version,
+                        action=payload.action, acknowledge_attention=payload.acknowledge_attention)
 
 
 @router.post(PAIR + "/discovery-review/decision", response_model=Progress)

@@ -224,9 +224,9 @@ export async function checkDiscoveryReview({ a, b, c, origin, api, output, works
   await acknowledge.getByText(/outstanding proposals will remain available/).waitFor();
   await acknowledge.screenshot({ path: `${output}/e1e-outstanding-acknowledgement.png` });
   await action(acknowledge, "Acknowledge and continue").click();
-  await heading(page, "Link services").waitFor();
-  await page.waitForFunction(() => document.activeElement?.textContent === "Link services");
-  await shot("pending-link-services");
+  await heading(page, "Link Services").waitFor();
+  await page.waitForFunction(() => document.activeElement?.textContent === "Link Services");
+  await shot("link-services");
   const advanced = (await progress(workshopHref)).progress;
   assert.equal(advanced.stage_decisions.discovery_review, "attention");
   assert.equal(advanced.current_stage, "link_services");
@@ -282,7 +282,7 @@ export async function checkDiscoveryReview({ a, b, c, origin, api, output, works
   await refresh();
   await proposalButton("Pending after skip").waitFor();
   await action(page, "Skip Discovery Review").click();
-  await heading(page, "Link services").waitFor();
+  await heading(page, "Link Services").waitFor();
   assert.equal((await progress(blankHref)).progress.stage_decisions.discovery_review, "skipped");
   const afterSkip = await snapshot(blankHref);
   assert.equal(afterSkip.assets.length, 0);

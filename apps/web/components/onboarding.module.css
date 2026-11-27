@@ -380,3 +380,70 @@
 .proposalDetails > h4 {
   margin-block: 0;
 }
+
+.linkSession {
+  grid-template-areas: "summary" "stage";
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.linkSession .summary dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+
+.linkServices, .mappingDetail { display: grid; gap: var(--space-3); min-width: 0; }
+.linkServices > p, .mappingDetail h3, .mappingDetail h4 { margin: 0; }
+.mappingSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+  padding: var(--space-3) 0;
+  border-block: 1px solid var(--border);
+}
+.mappingSummary dd { margin: 0; font-weight: var(--weight-semibold); }
+.mappingGrid {
+  display: grid;
+  align-items: start;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--space-5);
+}
+.mappingGrid > section { min-width: 0; }
+.mappingFilters { border: 0; min-width: 0; margin: 0; padding: 0; }
+.mappingFilters :global(.filter-toolbar-grid) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.mappingFilters :global(.field) { min-width: 0; }
+.mappingList { list-style: none; margin: 0; padding: 0; }
+.mappingRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) 0;
+}
+.mappingRow > :is(div, span:last-child) { flex: 1 1 8rem; min-width: 0; }
+.mappingAssetText { display: block; overflow-wrap: anywhere; }
+.mappingFeedback { overflow-wrap: anywhere; }
+.mappingAssetText small, .mappingService small { display: block; color: var(--muted); }
+.mappingService:global(.button) {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  white-space: normal;
+  padding: var(--space-2);
+  text-align: start;
+  width: 100%;
+}
+.mappingService > span:last-child { min-width: 0; }
+.mappingService[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-soft-foreground);
+}
+
+@media (max-width: 900px) {
+  .mappingGrid { grid-template-columns: minmax(0, 1fr); }
+}

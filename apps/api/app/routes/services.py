@@ -666,6 +666,14 @@ def create_service_asset_dependency(service_id: uuid.UUID, payload: ServiceAsset
     principal = refresh_principal(principal, db)
     service = _service(db, principal, service_id, "service_dependencies.manage")
     asset = _target(db, principal, ServiceAssetDependency, payload.asset_id, "service_dependencies.manage")
+    item = add_asset_dependency(db, service, asset, payload, principal, request)
+    response = _asset_dependency_response(db, item, service, asset)
+    commit(db, "Service asset dependency")
+    return response
+
+
+def add_asset_dependency(db, service, asset, payload, principal, request):
+    """Stage the canonical dependency and its side effects with both endpoints locked."""
     if not compatible_target_scope(service, asset):
         raise HTTPException(422, detail="Asset is outside the Service customer/site scope")
     relationship = _applicable_relationship(db, payload.relationship_type_id, "service", "asset")
@@ -676,9 +684,7 @@ def create_service_asset_dependency(service_id: uuid.UUID, payload: ServiceAsset
     from app.services.knowledge_completeness import evaluate_service_safely
     evaluate_service_safely(db, service, trigger_context="service_dependency_added", actor_user_id=principal.user.id)
     add_audit_event(db, action="service_asset_dependency.created", target_type="service_asset_dependency", target_id=item.id, actor=principal.user, customer_id=service.customer_id, site_id=service.site_id, summary="Service asset dependency created", request=request)
-    response = _asset_dependency_response(db, item, service, asset)
-    commit(db, "Service asset dependency")
-    return response
+    return item
 
 
 @router.patch("/service-asset-dependencies/{dependency_id}", response_model=ServiceAssetDependencyResponse)
@@ -733,6 +739,12 @@ def delete_service_asset_dependency(dependency_id: uuid.UUID, request: Request, 
     item, service, asset = _locked_relationship(
         db, principal, ServiceAssetDependency, dependency_id, "service_dependencies.manage", "Service asset dependency",
     )
+    end_asset_dependency(db, item, service, asset, principal, request)
+    commit(db, "Service asset dependency")
+
+
+def end_asset_dependency(db, item, service, asset, principal, request):
+    """End the canonical dependency and its provenance with both endpoints locked."""
     relationship = db.get(RelationshipType, item.relationship_type_id)
     effective_at = datetime.now(timezone.utc)
     item.valid_to = effective_at; item.ended_by_user_id = principal.user.id
@@ -742,7 +754,6 @@ def delete_service_asset_dependency(dependency_id: uuid.UUID, request: Request, 
     from app.services.knowledge_completeness import evaluate_service_safely
     evaluate_service_safely(db, service, trigger_context="service_dependency_removed", actor_user_id=principal.user.id)
     add_audit_event(db, action="service_asset_dependency.ended", target_type="service_asset_dependency", target_id=item.id, actor=principal.user, customer_id=service.customer_id, site_id=service.site_id, summary="Service asset dependency ended", request=request)
-    commit(db, "Service asset dependency")
 
 
 @router.get("/services/{service_id}/service-dependencies", response_model=list[ServiceDependencyResponse])
