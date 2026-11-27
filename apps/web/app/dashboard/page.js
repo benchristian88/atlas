@@ -99,11 +99,20 @@ const widgetComponents = { "environment-summary": Summary, "environment-overview
 export default function DashboardPage() {
   const { hasAnyPermission, hasPermission } = useAuth();
   const workspace = useWorkspaceContext();
+  const { savedSetupPath, setSavedSetupPath } = workspace;
+  const [savedSetup, setSavedSetup] = useState(null);
   const [data, setData] = useState({});
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const canView = hasAnyPermission(["customers.view", "sites.view", "assets.view", "relationships.view", "networks.view", "services.view", "business_functions.view"]);
   const canGraph = hasAnyPermission(["assets.view", "services.view", "business_functions.view"]);
+  useEffect(() => {
+    if (savedSetupPath) {
+      setSavedSetup(savedSetupPath);
+      setSavedSetupPath(null);
+    }
+  }, [savedSetupPath, setSavedSetupPath]);
+
   useEffect(() => {
     if (!canView || !workspace.customerId || !workspace.siteId) return;
     let active = true;
@@ -114,6 +123,9 @@ export default function DashboardPage() {
   }, [canView, canGraph, hasPermission, workspace.customerId, workspace.siteId, retry]);
   if (!canView) return <AccessDenied />;
   return <div className="operations-page"><PageHeader title="Dashboard" description="Your environment, built from recorded knowledge." />
+    {savedSetup && <p className="status-banner" role="status">
+      Setup progress was saved. <Link href={savedSetup}>Resume saved setup</Link>
+    </p>}
     <OnboardingEntry key={workspace.reloadKey} customerId={workspace.customerId} siteId={workspace.siteId} />
     {!workspace.customerId || !workspace.siteId ? <section className="ops-card"><h2>Set up your environment</h2><p>Select a Customer and Site to build your service landscape.</p>{hasPermission("sites.manage") && <Link className="text-button" href="/admin/sites">Manage Sites →</Link>}</section> : <>
       {error && <div className="error-banner" role="alert">{error} <button className="text-button" onClick={() => setRetry((n) => n + 1)} type="button">Try again</button></div>}

@@ -50,6 +50,13 @@ def _installed(db):
 def configured_integrations(context: RequestContext,
         principal: Principal = Depends(require_permission("integrations.view")), db: Session = Depends(get_db),
         creation_key: UUID | None = None, include_discovery: bool = False):
+    return read_configured_integrations(
+        db, context, principal, creation_key=creation_key, include_discovery=include_discovery,
+    )
+
+
+def read_configured_integrations(db, context, principal, *, creation_key=None, include_discovery=False,
+                                 include_continuation=True, active_only=False, limit=500):
     statement = select(Integration, Customer.name, Site.name).join(Customer, Customer.id == Integration.customer_id).join(Site, Site.id == Integration.site_id).where(scope_condition(principal, "integrations.view", Integration.customer_id, Integration.site_id))
     if context.customer_id:
         statement = statement.where(Integration.customer_id == context.customer_id)
@@ -59,24 +66,27 @@ def configured_integrations(context: RequestContext,
         raise HTTPException(422, "Select a Customer and Site for this integration query")
     if creation_key is not None:
         statement = statement.where(Integration.creation_key == creation_key)
+    if active_only:
+        statement = statement.where(Integration.retired_at.is_(None))
     # Preserve useful legacy identity/status without exposing endpoint, username
     # or secret references; no configuration/edit flow is added here.
     from app.services.integration_connections import available_execution_package, discovery_readiness, response
     from app.services.integration_secrets import AtlasEncryptedSecretProvider
     provider = AtlasEncryptedSecretProvider(db)
     result = []
-    rows = db.execute(statement.order_by(Integration.name, Integration.id).limit(500)).all()
+    rows = db.execute(statement.order_by(Integration.name, Integration.id).limit(limit)).all()
     runs, continuation_runs = {}, {}
     if include_discovery and rows:
-        from app.services.onboarding import integration_decision_runs
         ids = [item.id for item, _, _ in rows]
         runs = scoped_discovery_status(db, context, ids)
-        candidates = integration_decision_runs(context.customer_id, context.site_id).where(
-            DiscoveryRun.integration_id.in_(ids),
-        ).distinct(DiscoveryRun.integration_id).order_by(
-            DiscoveryRun.integration_id, DiscoveryRun.started_at.desc(), DiscoveryRun.id.desc(),
-        )
-        continuation_runs = dict(db.execute(candidates).tuples().all())
+        if include_continuation:
+            from app.services.onboarding import integration_decision_runs
+            candidates = integration_decision_runs(context.customer_id, context.site_id).where(
+                DiscoveryRun.integration_id.in_(ids),
+            ).distinct(DiscoveryRun.integration_id).order_by(
+                DiscoveryRun.integration_id, DiscoveryRun.started_at.desc(), DiscoveryRun.id.desc(),
+            )
+            continuation_runs = dict(db.execute(candidates).tuples().all())
     manifests = {}
     for item, customer_name, site_name in rows:
         if item.connector_id:
@@ -86,7 +96,8 @@ def configured_integrations(context: RequestContext,
                 "customer_id": item.customer_id, "site_id": item.site_id, "status": item.status, "generic": False}
         if include_discovery:
             value["run"] = runs.get(item.id)
-            value["continuation_run_id"] = continuation_runs.get(item.id)
+            if include_continuation:
+                value["continuation_run_id"] = continuation_runs.get(item.id)
             if item.connector_id:
                 value["connector_version"] = item.connector_version
                 if item.connector_id not in manifests:

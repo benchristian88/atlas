@@ -46,8 +46,11 @@ reuses the Connector Catalogue, scoped configuration, connection testing and
 supported discovery. Discovery Review lets operators inspect and reconcile
 findings at the confirmed Site. Link Services lets operators add or end manual
 Service-to-Asset dependencies at that Site and continue with unmapped Services.
-Review & Ready, Showcase, guided setup completion and public activation remain
-pending. See the [Guided setup preview](../architecture/guided-onboarding.md).
+Review & Ready compares saved stage decisions with current authorised
+configuration and offers next steps for outstanding work. Operators can
+continue to pending Showcase while outstanding work remains. Showcase, guided
+setup completion and public activation remain pending.
+[Guided setup preview](../architecture/guided-onboarding.md).
 
 ## Next development
 

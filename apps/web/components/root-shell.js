@@ -142,7 +142,7 @@ export function RootShell({ children }) {
   return (
     <AuthContext.Provider value={authValue}>
       <BuildInfoProvider key={authState.user.id}>
-        <WorkspaceContextProvider key={onboarding ? "onboarding" : "workspace"} user={authState.user}>
+        <WorkspaceContextProvider focused={onboarding} user={authState.user}>
           <AppShell focused={onboarding}>{children}</AppShell>
         </WorkspaceContextProvider>
       </BuildInfoProvider>

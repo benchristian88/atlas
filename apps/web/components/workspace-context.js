@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,8 +22,11 @@ import { idOf, customerIdOf, selectedFromResponse, resolveSelection } from "../l
 
 const WorkspaceContext = createContext(null);
 
-export function WorkspaceContextProvider({ user, children }) {
+export function WorkspaceContextProvider({ user, focused, children }) {
   const loadGeneration = useRef(0);
+  const previousFocused = useRef(focused);
+  const selectedForExit = useRef(false);
+  const [savedSetupPath, setSavedSetupPath] = useState(null);
   const [state, setState] = useState({
     status: "loading",
     customers: [],
@@ -83,6 +87,16 @@ export function WorkspaceContextProvider({ user, children }) {
     };
   }, [load]);
 
+  // Keep normal shell refreshes while carrying a confirmed handoff into its destination.
+  const changingMode = previousFocused.current !== focused;
+  const refreshOnModeChange = changingMode && (focused || !selectedForExit.current);
+  useLayoutEffect(() => {
+    if (!changingMode) return;
+    previousFocused.current = focused;
+    selectedForExit.current = false;
+    if (refreshOnModeChange) load();
+  }, [changingMode, focused, load, refreshOnModeChange]);
+
   useEffect(() => {
     function revalidateContext() {
       load();
@@ -94,10 +108,11 @@ export function WorkspaceContextProvider({ user, children }) {
     );
   }, [load]);
 
-  const commitSelection = useCallback((selection) => {
+  const commitSelection = useCallback((selection, context) => {
+    loadGeneration.current += 1;
     setRequestContext(selection);
     storeContext(user.id, selection);
-    setState((current) => ({ ...current, ...selection, error: "" }));
+    setState((current) => ({ ...current, ...context, ...selection, error: "" }));
   }, [user.id]);
 
   const selectCustomer = useCallback((value) => {
@@ -111,7 +126,7 @@ export function WorkspaceContextProvider({ user, children }) {
       ? state.siteId
       : customerSites.length > 0 ? idOf(customerSites[0].id) : null;
     commitSelection({ customerId, siteId });
-  }, [commitSelection, state.allowGlobal, state.customers, state.siteId, state.sites]);
+  }, [commitSelection, state.customers, state.siteId, state.sites]);
 
   const selectSite = useCallback((value) => {
     const siteId = idOf(value);
@@ -120,6 +135,27 @@ export function WorkspaceContextProvider({ user, children }) {
     if (!site || customerIdOf(site) !== state.customerId) return;
     commitSelection({ customerId: state.customerId, siteId });
   }, [commitSelection, state.customerId, state.sites]);
+
+  const selectContext = useCallback(async (customerId, siteId, signal) => {
+    if (signal.aborted) return null;
+    const generation = ++loadGeneration.current;
+    let context;
+    try {
+      context = await apiRequest("/context", { omitContext: true, signal, redirectOnUnauthorized: false });
+    } catch (error) {
+      if (generation !== loadGeneration.current) return null;
+      throw error;
+    }
+    if (generation !== loadGeneration.current || signal.aborted) return null;
+    const { customers, sites, global_access: allowGlobal } = context;
+    if (!customers.some(customer => idOf(customer.id) === customerId)
+      || !sites.some(site => idOf(site.id) === siteId && customerIdOf(site) === customerId)) return false;
+    // Retain the verified selection across the next shell transition, even
+    // when browser storage is unavailable.
+    selectedForExit.current = true;
+    commitSelection({ customerId, siteId }, { customers, sites, allowGlobal, status: "ready" });
+    return true;
+  }, [commitSelection]);
 
   const value = useMemo(() => {
     const availableSites = state.customerId
@@ -137,13 +173,16 @@ export function WorkspaceContextProvider({ user, children }) {
       reloadKey: `${state.customerId || "no-customer"}:${state.siteId || "no-site"}`,
       selectCustomer,
       selectSite,
+      selectContext,
+      savedSetupPath,
+      setSavedSetupPath,
       reload: load,
     };
-  }, [load, selectCustomer, selectSite, state]);
+  }, [load, selectCustomer, selectSite, selectContext, savedSetupPath, state]);
 
   return (
     <WorkspaceContext.Provider value={value}>
-      {state.status === "loading" ? (
+      {state.status === "loading" || refreshOnModeChange ? (
         <main className="route-loading" aria-live="polite">
           <div className="status-banner" role="status">Loading your Atlas workspace…</div>
         </main>

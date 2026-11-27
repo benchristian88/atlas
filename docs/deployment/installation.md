@@ -303,6 +303,14 @@ are read-only here. Review unconfirmed results with **Check current mappings**
 before trying again. **Save & exit** preserves committed mappings and shared
 progress. Unsubmitted checkbox selections clear when you leave the step.
 **Continue to Review & Ready** allows you to acknowledge outstanding work
-and advance to the pending stage. **Skip** also advances and keeps existing
-mappings. Public activation is scheduled for a later packet.
+and advance to the advisory review. **Skip** also advances and keeps existing
+mappings.
+
+**Review & Ready** shows the five saved stage decisions and the current
+configuration you can see at the confirmed Site. Review outstanding
+discovery decisions, unmapped Services, Integration issues and required
+Knowledge Gaps using the suggested actions. **Save & exit** lets you resume
+the review with current information. **Continue to Showcase** is available
+even while work remains outstanding. Showcase, setup completion and public
+activation are scheduled for a later packet.
 [Guided setup preview](../architecture/guided-onboarding.md).
