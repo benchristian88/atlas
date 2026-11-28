@@ -68,7 +68,22 @@ The session contains the user's session-version claim. Authentication reloads
 the user and rejects a disabled account or a version mismatch. Logout and a
 successful password change increment `users.session_version`, so previously
 issued sessions for that account stop working even if their signed expiry has
-not passed. Rotating `AUTH_SECRET_KEY` invalidates every signed session.
+not passed. Rotating `AUTH_SECRET_KEY` invalidates every signed session at
+verification. Failed-login lockout applies to password authentication.
+
+Integration mutation checkpoints use the immutable claims verified at request
+entry. Atlas retains the originating user ID, session version, token ID,
+expiry and restore epoch in request memory and carries those claims into the
+transaction worker. The checkpoint uses the same session validator as request
+entry to compare expiry, restore epoch and current account state. A missing or
+inactive account, a version or epoch mismatch, and an expired session all
+return `401 Authentication required` with `WWW-Authenticate: Bearer`. Atlas
+applies the mandatory password change restriction and evaluates current grants
+for the operation. Reusing verified claims keeps the signed credential at
+request entry. The checkpoint reads current account and restore state from
+PostgreSQL while account administration stays independent of the writer's
+transaction. See the
+[Integration write boundary](integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md#integration-saves-and-package-lifecycle).
 
 An account marked `force_password_change` is restricted to `/api/auth/me`, profile,
 password-change, logout, and the read-only `/api/context` selector until the

@@ -35,7 +35,14 @@ class SessionClaims:
     user_id: uuid.UUID
     session_version: int
     token_id: uuid.UUID
+    expires_at: int
     restore_epoch: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedSession:
+    user: User
+    claims: SessionClaims
 
 
 def validate_password_strength(password: str) -> None:
@@ -99,7 +106,7 @@ def create_session_token(user: User | uuid.UUID, session_version: int = 0, *, du
     return jwt.encode(payload, _secret_key(), algorithm=ALGORITHM)
 
 
-def decode_session_token(token: str) -> SessionClaims:
+def _verified_session_claims(token: str) -> SessionClaims:
     try:
         payload = jwt.decode(
             token,
@@ -108,7 +115,9 @@ def decode_session_token(token: str) -> SessionClaims:
             audience=TOKEN_AUDIENCE,
             issuer=TOKEN_ISSUER,
             options={
-                "require": ["sub", "ver", "iat", "exp", "iss", "aud", "jti"]
+                "require": ["sub", "ver", "iat", "exp", "iss", "aud", "jti"],
+                # Check expiry through the same function at entry and at write checkpoints.
+                "verify_exp": False,
             },
         )
         version = payload["ver"]
@@ -118,9 +127,10 @@ def decode_session_token(token: str) -> SessionClaims:
             user_id=uuid.UUID(payload["sub"]),
             session_version=version,
             token_id=uuid.UUID(payload["jti"]),
+            expires_at=int(payload["exp"]),
             restore_epoch=payload.get("restore_epoch", ""),
         )
-    except (InvalidTokenError, KeyError, TypeError, ValueError) as exc:
+    except (InvalidTokenError, KeyError, OverflowError, TypeError, ValueError) as exc:
         raise unauthorized() from exc
 
 
@@ -130,6 +140,17 @@ def unauthorized() -> HTTPException:
         detail="Authentication required",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def _require_unexpired_session(claims: SessionClaims) -> None:
+    if claims.expires_at <= datetime.now(timezone.utc).timestamp():
+        raise unauthorized()
+
+
+def decode_session_token(token: str) -> SessionClaims:
+    claims = _verified_session_claims(token)
+    _require_unexpired_session(claims)
+    return claims
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -162,21 +183,14 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     return user
 
 
-def get_current_user(
-    bearer: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
-    ] = None,
-    session_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
-    db: Session = Depends(get_db),
-) -> User:
-    token = bearer.credentials if bearer is not None else session_token
-    if token is None:
-        raise unauthorized()
-    claims = decode_session_token(token)
+def authenticate_session(claims: SessionClaims, db: Session) -> User:
+    """Validate previously verified claims against the current time and database."""
     from app.services.backups import restore_epoch
+
+    _require_unexpired_session(claims)
     if claims.restore_epoch != restore_epoch(db):
         raise unauthorized()
-    user = db.scalar(select(User).where(User.id == claims.user_id))
+    user = db.scalar(select(User).where(User.id == claims.user_id).execution_options(populate_existing=True))
     if (
         user is None
         or getattr(user, "is_active", True) is False
@@ -184,6 +198,27 @@ def get_current_user(
     ):
         raise unauthorized()
     return user
+
+
+def get_authenticated_session(
+    bearer: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
+    ] = None,
+    session_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    db: Session = Depends(get_db),
+) -> AuthenticatedSession:
+    token = bearer.credentials if bearer is not None else session_token
+    if token is None:
+        raise unauthorized()
+    claims = _verified_session_claims(token)
+    return AuthenticatedSession(user=authenticate_session(claims, db), claims=claims)
+
+
+CurrentSession = Annotated[AuthenticatedSession, Depends(get_authenticated_session)]
+
+
+def get_current_user(session: CurrentSession) -> User:
+    return session.user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

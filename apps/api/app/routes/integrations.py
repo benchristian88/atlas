@@ -7,19 +7,22 @@ from typing import Literal
 from uuid import UUID
 import re
 
+from anyio import from_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import case, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.audit import add_audit_event
-from app.authorization import Principal, RequestContext, require_global, require_permission, scope_condition
+from app.authorization import Principal, RequestContext, refresh_mutation_principal, require_global, require_permission, scope_condition
 from app.database import get_db
 from app.models import Customer, DiscoveryRun, InstalledConnectorPackage, Integration, Site
 from app.services import connector_lifecycle as lifecycle
 from app.services.integration_runtime import runtime
 from app.services.integration_connections import UpdateRequiresConfiguration
+from app.services.integration_transactions import run_integration_write
 
 router = APIRouter(tags=["integrations"])
 _CONNECTOR_ID = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
@@ -250,8 +253,35 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
             if health.get('packaging_mode') != 'docker_compose':
                 raise HTTPException(409, {'code': 'remote_install_requires_docker', 'message': 'Remote installation currently supports Docker Compose. Native installations require operator staging.'})
             package, verifier = await stack.enter_async_context(downloaded_package(remote_selection))
+        return await run_integration_write(
+            _activate, db, connector_id, payload, request, principal, package, verifier, health,
+        )
+    except UpdateRequiresConfiguration:
+        await run_in_threadpool(db.rollback)
+        raise HTTPException(409, {"code": "update_requires_configuration", "message": "Review dependent connection configuration before updating. The active version is unchanged."}) from None
+    except lifecycle.ConnectorInUse as exc:
+        await run_in_threadpool(db.rollback)
+        raise HTTPException(409, str(exc)) from None
+    except ConnectorPackageError as exc:
+        await run_in_threadpool(db.rollback)
+        raise HTTPException(409, {"code": exc.code, "message": "Connector package verification or installation was unsuccessful"}) from None
+    except (OSError, ValueError, SQLAlchemyError):
+        await run_in_threadpool(db.rollback)
+        raise HTTPException(409, "Connector package activation was unsuccessful") from None
+    except HTTPException:
+        await run_in_threadpool(db.rollback)
+        raise
+    finally:
+        await stack.aclose()
+
+
+def _activate(db, connector_id, payload, request, principal, package, verifier, health):
+    try:
         lifecycle.lock_connector(db, connector_id)
-        if remote_selection is not None:
+        principal = refresh_mutation_principal(principal, db)
+        require_global(principal, "integration_runtime.manage")
+        if payload.source == "official":
+            from app.services.remote_connector_packages import require_confirmation, select_remote
             require_confirmation(select_remote(db, connector_id, payload.version, lock=True), payload)
         # Activation validates all live generic owners against the new Manifest.
         # Legacy owners retain the conservative I1 update guard.
@@ -259,30 +289,18 @@ async def _install(connector_id: str, payload: PackageSelection, request: Reques
             raise lifecycle.ConnectorInUse("Legacy configured connections must be migrated before changing this Connector package")
         stored = lifecycle.package_store().install(package, verifier)
         reference = {"connector_id": stored.connector_id, "version": stored.version, "digest": stored.bundle_digest.removeprefix("sha256:")}
-        if (await runtime.verify_connector(reference))["state"] != "verified":
+        if from_thread.run(runtime.verify_connector, reference)["state"] != "verified":
             raise HTTPException(409, "The runtime could not verify this installed package")
         active = lifecycle.activate(db, stored, health)
+        principal = refresh_mutation_principal(principal, db)
+        require_global(principal, "integration_runtime.manage")
         add_audit_event(db, action="connector.activated", target_type="connector_package", actor=principal.user,
             summary="Verified Connector package activated", metadata=reference, request=request)
         db.commit()
         return lifecycle.installed_response(active, db=db)
-    except UpdateRequiresConfiguration:
-        db.rollback()
-        raise HTTPException(409, {"code": "update_requires_configuration", "message": "Review dependent connection configuration before updating. The active version is unchanged."}) from None
-    except lifecycle.ConnectorInUse as exc:
-        db.rollback()
-        raise HTTPException(409, str(exc)) from None
-    except ConnectorPackageError as exc:
-        db.rollback()
-        raise HTTPException(409, {"code": exc.code, "message": "Connector package verification or installation was unsuccessful"}) from None
-    except (OSError, ValueError, SQLAlchemyError):
-        db.rollback()
-        raise HTTPException(409, "Connector package activation was unsuccessful") from None
-    except HTTPException:
+    except BaseException:
         db.rollback()
         raise
-    finally:
-        await stack.aclose()
 
 
 @router.post("/integration-catalogue/{connector_id}/install")

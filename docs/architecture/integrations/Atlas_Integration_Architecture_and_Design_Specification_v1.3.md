@@ -1902,6 +1902,69 @@ Prevent overlapping discovery for the same Integration. A failed run never
 becomes a complete snapshot and never creates absence. Apply bounded retries
 with backoff and stop hammering persistent authentication/network failures.
 
+### Integration saves and package lifecycle
+
+Integration creation owns one PostgreSQL transaction. It acquires the existing
+transaction advisory locks in Connector-then-creation-key order. The Connector
+lock serializes create with activation, deactivation and other Connector writes
+across API workers and processes. The second lock and the unique Customer/Site/
+creation-key constraint serialize duplicate submissions, including submissions
+that name different Connectors. A save that cannot acquire either lock
+immediately rolls back and returns HTTP 409 with code `integration_save_busy`.
+Retry with the same creation key when the locks are available. If the original
+save committed, the retry returns the existing Integration and skips runtime
+checks and new writes. A committed key used with a different Connector still
+returns a conflict.
+
+The API runs synchronous SQL and package writes in a worker thread. Async
+runtime calls use the API loop while the transaction remains exclusively owned
+by the thread. Activation, saved probes, discovery start and scheduling, debug
+trace deletion and ingestion also run their potentially blocking writes off the
+event loop. Package verification, the exact active digest and approval checks
+stay under the existing serialization. Activation revalidates the originating
+session and global management grant after acquiring the Connector lock and
+again before commit. Integration creation checks the session and scoped grants
+at worker admission, after runtime health before staging records, and before
+commit. Saved probes and discovery start recheck after lock acquisition and
+runtime waits. Schedule changes check after lock acquisition and before writing
+the schedule. Debug-trace deletion rechecks after staging the deletion and
+before writing its audit and committing. Each checkpoint uses the verified
+request claims to check expiry, restore epoch, active account and session
+version, then enforces the mandatory password change restriction and applicable
+current grants. An invalid session returns the canonical `401`; permission
+and scope failures retain their operation-specific `403` or nondisclosing
+`404`. Rejection rolls back uncommitted database state and successful mutation
+audits. Runtime work already admitted can complete externally. Session and
+grant administration use separate transactions, so changes after the final
+checkpoint can race with commit.
+
+The Integration, Data Source, encrypted credentials, audit and any successfully
+prepared initial run commit together. Unavailable runtime health before save
+rejects creation. Recoverable eligibility, configuration, I/O or runtime
+errors during initial discovery preparation roll back its savepoint. The
+configured Integration can then commit with `initial_discovery_unavailable`.
+An enabled Integration created with initial discovery requested can also stage
+an hourly schedule (`schedule_preset` and `next_run_at`) when the Connector and
+package policy allow automatic scheduling. Both that schedule and a prepared
+initial run are durable execution intents. With either intent present, the
+final checkpoint requires `integrations.run` over the same Customer and Site
+as `integrations.manage`. If `integrations.run` was withdrawn, the entire save
+rolls back, including any schedule retained after a recoverable preparation
+failure. An authorized manual configuration can commit without either intent.
+Worker scheduling evaluates the persisted Integration and runtime eligibility.
+A database integrity failure while preparing the run aborts the entire save,
+including the Integration, Data Source, credentials and audit. Redis carries
+a post-commit hint for the initial run, and the worker scans for pending runs
+if the hint is lost. A request that disappears
+after a write has been admitted can still commit. The API keeps the request
+Session open until the thread is finished, and the creation key resolves an
+uncertain outcome.
+
+Connector-wide serialization still applies while its runtime checks are in
+progress, so saves for different sites using the same Connector can conflict.
+Existing runtime time limits still govern the admitted operation. Other
+PostgreSQL lock waits can still occupy shared thread and connection capacity.
+
 ## 18.3 Idempotent batches
 
 AIP batches are run-scoped and sequence/body-hash idempotent. The durable

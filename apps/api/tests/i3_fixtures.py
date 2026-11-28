@@ -12,12 +12,13 @@ from app.services.connector_verification import BootstrapReleaseVerifier, Offici
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def fixture_bundle(tmp_path, *, with_probe=False):
+def fixture_bundle(tmp_path, *, with_probe=False, scheduling=True):
     manifest = json.loads((ROOT / "docs/architecture/integrations/contracts/manifests/proxmox.json").read_text())
     # Schema example is only a template: no vendor endpoint or inventory code.
     raw = json.dumps(manifest).replace("proxmox", "i3-fixture")
     manifest = json.loads(raw)
     manifest["id"], manifest["version"] = "i3-fixture", "1.0.0"
+    manifest["capabilities"]["scheduling"] = scheduling
     manifest["licensing"]["licence"] = "AGPL-3.0-only"
     manifest["display"].update(name="I3 test fixture", description="Deterministic test-only execution")
     manifest["source_versions"].update(qualification="qualified", qualified_versions=["8.4.0"])
