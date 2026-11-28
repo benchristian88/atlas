@@ -359,7 +359,16 @@ the current workflow stage and later decisions.
   `true` for existing callers. Onboarding passes `false` before issuing
   the existing explicit discovery action. The ordinary form, package
   activation, discovery start and discovery read endpoints handle their
-  respective permissions and persistence.
+  respective permissions and persistence. Save and explicit discovery start
+  revalidate the originating session and current scoped grants at their write
+  checkpoints. If either transaction is rejected, its uncommitted changes roll
+  back. A previously saved Integration remains available after a failed
+  discovery start.
+- If an overlapping write owns the Connector or creation key, a save returns
+  HTTP 409 with code `integration_save_busy`. The form keeps its entries.
+  Retry with the same creation key. If the earlier request already committed,
+  Atlas returns the previously created Integration. See
+  [Integration save concurrency](integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md#integration-saves-and-package-lifecycle).
 - `POST /api/onboarding/{customer_id}/{site_id}/integrations/decision`
   accepts `{version, decision, discovery_run_id?}` and returns existing
   progress. The preview gate and scoped Site management apply.
@@ -639,5 +648,6 @@ explicit configuration changes or additional Capability Catalogue imports,
 and return from Showcase without another Finish request. Completion and
 invitation eligibility are scoped to each Site.
 
-Public activation remains pending. Its separate engineering packet includes
-owner-led assessment of the [Integration save concurrency issue](../product/status.md#engineering-backlog).
+Public activation remains pending independent acceptance and green PR CI.
+Its separate engineering packet includes owner-led assessment of the
+[Integration save concurrency issue](../product/status.md#engineering-backlog).

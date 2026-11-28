@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Iterable
 
 from fastapi import Depends, Header, HTTPException, status
@@ -11,7 +11,7 @@ from sqlalchemy import and_, false, or_, select, true
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.auth import CurrentUser
+from app.auth import CurrentSession, SessionClaims, authenticate_session, unauthorized
 from app.database import get_db
 from app.models import AccessAssignment, Customer, Permission, Role, RolePermission, Site, User
 
@@ -76,6 +76,7 @@ class Principal:
     user: User
     grants: tuple[ScopeGrant, ...]
     database_backed: bool = False
+    session_claims: SessionClaims | None = field(default=None, repr=False)
 
     @property
     def permissions(self) -> frozenset[str]:
@@ -147,7 +148,7 @@ class Principal:
         )
 
 
-def _load_principal(user: User, db: Session) -> Principal:
+def _load_principal(user: User, db: Session, *, session_claims: SessionClaims | None = None) -> Principal:
     assignment_rows = db.execute(
         select(AccessAssignment, Role)
         .join(Role, Role.id == AccessAssignment.role_id)
@@ -181,7 +182,7 @@ def _load_principal(user: User, db: Session) -> Principal:
         )
         for assignment, role in assignment_rows
     )
-    return Principal(user=user, grants=grants, database_backed=True)
+    return Principal(user=user, grants=grants, database_backed=True, session_claims=session_claims)
 
 
 def refresh_principal(principal: Principal, db: Session) -> Principal:
@@ -191,11 +192,11 @@ def refresh_principal(principal: Principal, db: Session) -> Principal:
     user = db.get(User, principal.user.id, populate_existing=True)
     if user is None or not user.is_active:
         raise forbidden()
-    return _load_principal(user, db)
+    return _load_principal(user, db, session_claims=principal.session_claims)
 
 
-def get_principal(user: CurrentUser, db: Session = Depends(get_db)) -> Principal:
-    return _load_principal(user, db)
+def get_principal(session: CurrentSession, db: Session = Depends(get_db)) -> Principal:
+    return _load_principal(session.user, db, session_claims=session.claims)
 
 
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
@@ -205,10 +206,26 @@ def forbidden(detail: str = "You do not have permission to perform this action")
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
+def require_password_change_completed(principal: Principal) -> None:
+    if principal.user.force_password_change:
+        raise forbidden("You must change your password before continuing")
+
+
+def refresh_mutation_principal(principal: Principal, db: Session) -> Principal:
+    """Recheck the originating session, account eligibility and current grants."""
+    if principal.database_backed:
+        claims = principal.session_claims
+        if claims is None:
+            raise unauthorized()
+        user = authenticate_session(claims, db)
+        principal = _load_principal(user, db, session_claims=claims)
+    require_password_change_completed(principal)
+    return principal
+
+
 def require_permission(permission: str):
     def dependency(principal: CurrentPrincipal) -> Principal:
-        if principal.user.force_password_change:
-            raise forbidden("You must change your password before continuing")
+        require_password_change_completed(principal)
         if not principal.can_anywhere(permission):
             raise forbidden()
         return principal
@@ -218,8 +235,7 @@ def require_permission(permission: str):
 
 def require_any_permission(*permissions: str):
     def dependency(principal: CurrentPrincipal) -> Principal:
-        if principal.user.force_password_change:
-            raise forbidden("You must change your password before continuing")
+        require_password_change_completed(principal)
         if not any(principal.can_anywhere(key) for key in permissions):
             raise forbidden()
         return principal

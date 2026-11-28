@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 
+from anyio import from_thread
 from sqlalchemy import or_, select
 
 from atlas_connector_sdk.aip import body_hash
@@ -70,7 +71,7 @@ def scope_encoding(row, manifest, mappings):
         "domains": domains}, classes
 
 
-async def eligibility(db, row, *, require_runtime=True):
+def discovery_configuration(db, row):
     if row.connector_id is None or row.retired_at or not row.enabled:
         raise DiscoveryEligibilityError("integration_disabled")
     if row.source_compatibility == "known_incompatible":
@@ -87,15 +88,23 @@ async def eligibility(db, row, *, require_runtime=True):
     validate_configuration(manifest, row.config_json, configured_fields=provider.state(row))
     mappings = require_resolved(db, manifest)
     coverage, classes = scope_encoding(row, manifest, mappings)
-    health = await runtime.health() if require_runtime else None
-    if health is not None and (compatibility(manifest, health)["state"] != "compatible"
+    return record, manifest, mappings, coverage, classes
+
+
+def require_discovery_runtime(manifest, health):
+    if (compatibility(manifest, health)["state"] != "compatible"
             or not REQUIRED_OPERATIONS <= set(health.get("capabilities", {}).get("operations", []))):
         raise DiscoveryEligibilityError("runtime_unavailable")
+
+
+async def eligibility(db, row):
+    record, manifest, mappings, coverage, classes = discovery_configuration(db, row)
+    health = await runtime.health()
+    require_discovery_runtime(manifest, health)
     return record, manifest, mappings, coverage, classes, health
 
 
-async def create_run(db, row, *, trigger="manual", user_id=None):
-    """Caller holds the Integration row lock. Unique index is a final DB guard."""
+def check_run_request(db, row, trigger):
     if trigger not in {"manual", "schedule", "onboarding", "retry"}:
         raise DiscoveryEligibilityError("invalid_trigger")
     existing = active_run(db, row.id)
@@ -103,7 +112,25 @@ async def create_run(db, row, *, trigger="manual", user_id=None):
         error = DiscoveryEligibilityError("run_already_active")
         error.run_id = existing.id
         raise error
-    record, manifest, mappings, coverage, classes, health = await eligibility(db, row)
+
+
+async def create_run(db, row, *, trigger="manual", user_id=None):
+    check_run_request(db, row, trigger)
+    return insert_run(db, row, await eligibility(db, row), trigger, user_id)
+
+
+def create_run_sync(db, row, *, trigger="manual", user_id=None):
+    """Prepare a run in an API worker thread, calling only the runtime on the loop."""
+    check_run_request(db, row, trigger)
+    record, manifest, mappings, coverage, classes = discovery_configuration(db, row)
+    health = from_thread.run(runtime.health)
+    require_discovery_runtime(manifest, health)
+    return insert_run(db, row, (record, manifest, mappings, coverage, classes, health), trigger, user_id)
+
+
+def insert_run(db, row, eligible, trigger, user_id):
+    """Caller owns the Integration write. Unique index is a final DB guard."""
+    record, manifest, mappings, coverage, classes, health = eligible
     require_manual(record, trigger)
     baseline = _approved_baseline()
     if SDK_VERSION != baseline["sdk_version"]:

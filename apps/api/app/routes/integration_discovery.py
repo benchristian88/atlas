@@ -2,6 +2,7 @@
 import uuid
 import asyncio
 
+from anyio import from_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, StrictBool
 from sqlalchemy import select, delete
@@ -9,12 +10,13 @@ from sqlalchemy.orm import Session
 
 from atlas_connector_sdk.contracts import ContractError, strict_json
 from app.audit import add_audit_event
-from app.authorization import Principal, require_permission, require_scope, require_global, scope_condition
+from app.authorization import Principal, refresh_mutation_principal, require_permission, require_scope, require_global, scope_condition
 from app.database import get_db
 from app.models import DiscoveryRun, DiscoveryRunDebugTrace, Integration, DataSource
-from app.routes.integration_connections import scoped, require_live
+from app.routes.integration_connections import refresh_connection_principal, scoped, require_live
 from app.routes.knowledge import run_response
 from app.services import discovery_orchestration as orchestration, discovery_tokens, aip_ingestion
+from app.services.integration_transactions import run_integration_write
 from app.services.knowledge_locks import decision_conflicts
 
 router = APIRouter(tags=["integration-discovery"])
@@ -70,16 +72,28 @@ def get_debug_trace(run_id: uuid.UUID,
 @router.delete("/discovery-runs/{run_id}/debug-trace")
 async def delete_debug_trace(run_id: uuid.UUID, request: Request,
         principal: Principal = Depends(require_permission("integration_runtime.manage")), db: Session = Depends(get_db)):
-    run = debug_run(db, principal, run_id)
-    db.execute(delete(DiscoveryRunDebugTrace).where(DiscoveryRunDebugTrace.discovery_run_id == run.id))
-    run.debug_deleted_at = orchestration.utcnow()
-    add_audit_event(db, action="integration.discovery_debug_deleted", target_type="discovery_run", target_id=run.id,
-        customer_id=run.customer_id, site_id=run.site_id, actor=principal.user, request=request,
-        summary="Discovery debug data deleted")
-    db.commit()
-    if run.runtime_job_id:
-        await orchestration.runtime.get_job(run.id, run.runtime_job_id, delete_debug=True)
+    job_id = await run_integration_write(_delete_debug_trace, run_id, request, principal, db)
+    if job_id:
+        await orchestration.runtime.get_job(run_id, job_id, delete_debug=True)
     return {"deleted": True}
+
+
+def _delete_debug_trace(run_id, request, principal, db):
+    try:
+        run = debug_run(db, principal, run_id)
+        db.execute(delete(DiscoveryRunDebugTrace).where(DiscoveryRunDebugTrace.discovery_run_id == run.id))
+        run.debug_deleted_at = orchestration.utcnow()
+        principal = refresh_mutation_principal(principal, db)
+        require_global(principal, "integration_runtime.manage")
+        require_scope(principal, "integrations.view", run.customer_id, run.site_id, hide_existence=True)
+        add_audit_event(db, action="integration.discovery_debug_deleted", target_type="discovery_run", target_id=run.id,
+            customer_id=run.customer_id, site_id=run.site_id, actor=principal.user, request=request,
+            summary="Discovery debug data deleted")
+        db.commit()
+        return run.runtime_job_id
+    except HTTPException:
+        db.rollback()
+        raise
 
 
 def eligibility_error(error):
@@ -90,17 +104,22 @@ def eligibility_error(error):
     raise HTTPException(409, value) from None
 
 
-async def start(integration_id, request, principal, db, *, trigger):
-    row = scoped(db, principal, "integrations.run", integration_id, lock=True)
-    require_live(row)
+def start(integration_id, request, principal, db, *, trigger):
     try:
-        run = await orchestration.create_run(db, row, trigger=trigger, user_id=principal.user.id)
+        row = scoped(db, principal, "integrations.run", integration_id, lock=True)
+        principal = refresh_connection_principal(db, principal, "integrations.run", row)
+        require_live(row)
+        run = orchestration.create_run_sync(db, row, trigger=trigger, user_id=principal.user.id)
+        principal = refresh_connection_principal(db, principal, "integrations.run", row)
         add_audit_event(db, action="integration.discovery_requested", target_type="discovery_run", target_id=run.id,
             customer_id=row.customer_id, site_id=row.site_id, actor=principal.user, request=request,
             summary="Integration discovery requested", metadata={"trigger": trigger, "integration_id": str(row.id)})
         db.commit()
         orchestration.enqueue(run.id)
         return run_response(db, run)
+    except HTTPException:
+        db.rollback()
+        raise
     except (ValueError, OSError, RuntimeError) as error:
         db.rollback()
         eligibility_error(error)
@@ -109,13 +128,13 @@ async def start(integration_id, request, principal, db, *, trigger):
 @router.post("/integrations/{integration_id}/run", status_code=202)
 async def run_now(integration_id: uuid.UUID, request: Request,
         principal: Principal = Depends(require_permission("integrations.run")), db: Session = Depends(get_db)):
-    return await start(integration_id, request, principal, db, trigger="manual")
+    return await run_integration_write(start, integration_id, request, principal, db, trigger="manual")
 
 
 @router.post("/integrations/{integration_id}/initial-discovery", status_code=202)
 async def initial_discovery(integration_id: uuid.UUID, request: Request,
         principal: Principal = Depends(require_permission("integrations.run")), db: Session = Depends(get_db)):
-    return await start(integration_id, request, principal, db, trigger="onboarding")
+    return await run_integration_write(start, integration_id, request, principal, db, trigger="onboarding")
 
 
 class ScheduleInput(BaseModel):
@@ -126,17 +145,24 @@ class ScheduleInput(BaseModel):
 @router.put("/integrations/{integration_id}/schedule")
 async def set_schedule(integration_id: uuid.UUID, payload: ScheduleInput, request: Request,
         principal: Principal = Depends(require_permission("integrations.manage")), db: Session = Depends(get_db)):
-    row = scoped(db, principal, "integrations.manage", integration_id, lock=True)
-    require_scope(principal, "integrations.run", row.customer_id, row.site_id, hide_existence=True)
-    require_live(row)
-    if payload.preset not in orchestration.SCHEDULES:
-        raise HTTPException(422, "Select a supported schedule preset")
+    return await run_integration_write(_set_schedule, integration_id, payload, request, principal, db)
+
+
+def _set_schedule(integration_id, payload, request, principal, db):
     try:
-        record, manifest, _, _, _, _ = await orchestration.eligibility(db, row, require_runtime=False)
+        row = scoped(db, principal, "integrations.manage", integration_id, lock=True)
+        principal = refresh_connection_principal(db, principal, "integrations.manage", row)
+        require_scope(principal, "integrations.run", row.customer_id, row.site_id, hide_existence=True)
+        require_live(row)
+        if payload.preset not in orchestration.SCHEDULES:
+            raise HTTPException(422, "Select a supported schedule preset")
+        record, manifest, _, _, _ = orchestration.discovery_configuration(db, row)
         from app.services.integration_connections import require_manual
         require_manual(record, payload.preset)
         if not manifest["capabilities"]["scheduling"]:
             raise orchestration.DiscoveryEligibilityError("scheduling_unavailable")
+        principal = refresh_connection_principal(db, principal, "integrations.manage", row)
+        require_scope(principal, "integrations.run", row.customer_id, row.site_id, hide_existence=True)
         row.schedule_preset = payload.preset
         row.next_run_at = orchestration.next_run(payload.preset, orchestration.utcnow())
         add_audit_event(db, action="integration.schedule_changed", target_type="integration", target_id=row.id,
@@ -144,6 +170,9 @@ async def set_schedule(integration_id: uuid.UUID, payload: ScheduleInput, reques
             summary="Integration discovery schedule changed", metadata={"preset": payload.preset})
         db.commit()
         return {"preset": row.schedule_preset, "next_run_at": row.next_run_at}
+    except HTTPException:
+        db.rollback()
+        raise
     except (ValueError, OSError, RuntimeError) as error:
         db.rollback()
         eligibility_error(error)
@@ -210,16 +239,20 @@ async def body(request):
 
 
 async def ingest(run_id, request, db, operation):
+    return await run_integration_write(_ingest, run_id, request, db, operation)
+
+
+def _ingest(run_id, request, db, operation):
     # Authentication itself takes writer locks and can also encounter a bounded
     # transaction conflict. Keep it inside the same rollback/error boundary.
     with decision_conflicts(db):
-        return await _ingest(run_id, request, db, operation)
+        return _accept_ingestion(run_id, request, db, operation)
 
 
-async def _ingest(run_id, request, db, operation):
+def _accept_ingestion(run_id, request, db, operation):
     run, row = authenticate_ingestion(db, request, run_id, finalisation=operation != "batch")
     try:
-        message = await body(request)
+        message = from_thread.run(body, request)
         aip_ingestion.reject_sensitive_material(db, run, row, message, request.headers["authorization"][7:])
         # Evidence, receipts, review and seal share one transaction. Invalid
         # finalisation rolls back its attempted domain changes before failure.

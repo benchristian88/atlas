@@ -72,19 +72,21 @@ setup. Public activation and final acceptance remain pending.
 
 ## Engineering backlog
 
-- **Concurrent Integration saves can stall an API worker.** The separate
-  public activation packet includes owner-led release-risk assessment. With a single API
-  worker, start two saves for the same Connector while the first is waiting
-  for runtime health. The first request holds the PostgreSQL Connector
-  advisory lock across the runtime await. The second waits synchronously
-  for that lock on the same event loop, preventing the first from resuming
-  and stalling other requests on the worker. The E1-D independent review
-  reproduced the wait on disposable PostgreSQL and found the same lock
-  ordering at baseline `6d6026e`. Investigate moving blocking lock
-  acquisition off the event loop or restructuring the transaction around
-  runtime I/O. Preserve package identity checks, write serialization and
-  creation-key replay. Add a two-request single-worker regression.
-  [Integration creation](../../apps/api/app/routes/integration_connections.py)
+- **E1-I.2 — Integration save concurrency (pending independent acceptance).** Reproduced the
+  single-worker stall at `39093db2`: a second save blocked the API loop on an
+  advisory lock while the first awaited the runtime. Integration and related
+  writer transactions now run off the API loop. A save that encounters the
+  Connector or creation-key lock returns a retryable 409, and a committed
+  creation key replays without duplicate writes. A single-worker regression
+  covers overlapping authenticated saves and responsive health and authenticated
+  reads. Mutation checkpoints now revalidate the originating session and
+  current grants, including `integrations.run` for a new automatic schedule
+  retained after recoverable initial discovery preparation. Connector-wide
+  contention still requires retry, and runtime latency affects the save that
+  holds the lock. Shared thread and database
+  connection capacity remain finite. Guided onboarding remains default-off
+  and public activation requires independent acceptance and green PR CI.
+  [Integration architecture](../architecture/integrations/Atlas_Integration_Architecture_and_Design_Specification_v1.3.md#integration-saves-and-package-lifecycle)
 - **Service move with rename.** A single `PATCH /api/services/{id}` that changes
   the name and clears `site_id` can return `409` when the accepted name assertion
   still belongs to the original Site. PostgreSQL's

@@ -2,16 +2,17 @@
 from datetime import datetime, timedelta, timezone
 import uuid
 
+from anyio import from_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from atlas_connector_sdk.contracts import ContractError
 from atlas_connector_sdk.configuration import validate_configuration, source_compatibility, visible
 from app.audit import add_audit_event
-from app.authorization import Principal, require_permission, require_scope, require_global, scope_condition
+from app.authorization import Principal, refresh_mutation_principal, require_permission, require_scope, require_global, scope_condition
 from app.database import get_db
 from app.models import Integration, DataSource, Site, InstalledConnectorPackage, ConnectorMapping
 from app.services import connector_lifecycle as lifecycle
@@ -20,6 +21,7 @@ from app.services.integration_connections import installed_manifest, response, v
 from app.services.integration_connections import available_execution_package, discovery_readiness
 from app.services.integration_secrets import AtlasEncryptedSecretProvider, JobSecretLease, SecretProviderError
 from app.services.integration_runtime import runtime
+from app.services.integration_transactions import run_integration_write
 
 router = APIRouter(tags=["integrations"])
 
@@ -84,6 +86,12 @@ def require_live(row):
         raise HTTPException(409, "This connection cannot be changed through the generic Integration workflow")
 
 
+def refresh_connection_principal(db, principal, permission, row):
+    principal = refresh_mutation_principal(principal, db)
+    require_scope(principal, permission, row.customer_id, row.site_id, hide_existence=True)
+    return principal
+
+
 def validate_scope(db, principal, permission, customer_id, site_id):
     require_scope(principal, permission, customer_id, site_id, hide_existence=True)
     site = db.get(Site, site_id)
@@ -105,10 +113,14 @@ def invalid(db, error):
 
 async def ready(db, connector_id):
     record, manifest = installed_manifest(db, connector_id)
-    from app.services.connector_catalogue import compatibility
-    if compatibility(manifest, await runtime.health())["state"] != "compatible":
-        raise HTTPException(409, "A compatible healthy runtime is required for this operation")
+    require_compatible_runtime(manifest, await runtime.health())
     return record, manifest
+
+
+def require_compatible_runtime(manifest, health):
+    from app.services.connector_catalogue import compatibility
+    if compatibility(manifest, health)["state"] != "compatible":
+        raise HTTPException(409, "A compatible healthy runtime is required for this operation")
 
 
 def require_expected_package(record, payload):
@@ -154,19 +166,32 @@ def integration_detail(integration_id: uuid.UUID, principal: Principal = Depends
 @router.post("/integrations", status_code=201)
 async def create_integration(payload: ConnectionCreate, request: Request,
         principal: Principal = Depends(require_permission("integrations.manage")), db: Session = Depends(get_db)):
-    validate_scope(db, principal, "integrations.manage", payload.customer_id, payload.site_id)
-    # Serialize retries as well as global package changes; ownership and the
-    # database unique constraint prevent duplicate provenance sources.
-    lifecycle.lock_connector(db, payload.connector_id)
-    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"integration-create:{payload.customer_id}:{payload.site_id}:{payload.creation_key}"})
-    existing = db.scalar(select(Integration).where(Integration.customer_id == payload.customer_id,
-        Integration.site_id == payload.site_id, Integration.creation_key == payload.creation_key))
-    if existing:
-        if existing.connector_id != payload.connector_id:
-            raise HTTPException(409, "Creation request already used")
-        return response(existing, AtlasEncryptedSecretProvider(db))
+    return await run_integration_write(_create_integration, payload, request, principal, db)
+
+
+def _create_integration(payload, request, principal, db):
     try:
-        record, manifest = await ready(db, payload.connector_id)
+        principal = refresh_mutation_principal(principal, db)
+        validate_scope(db, principal, "integrations.manage", payload.customer_id, payload.site_id)
+        # The Connector and creation key share their existing PostgreSQL lock
+        # identities with other processes. Decline contention before any writes.
+        key = f"integration-create:{payload.customer_id}:{payload.site_id}:{payload.creation_key}"
+        if not lifecycle.lock_connector(db, payload.connector_id, wait=False) or not lifecycle.try_transaction_lock(db, key):
+            raise HTTPException(409, {"code": "integration_save_busy",
+                "message": "Another operation is using this Connector or save request. Retry this save."})
+        existing = db.scalar(select(Integration).where(Integration.customer_id == payload.customer_id,
+            Integration.site_id == payload.site_id, Integration.creation_key == payload.creation_key))
+        if existing:
+            if existing.connector_id != payload.connector_id:
+                raise HTTPException(409, "Creation request already used")
+            result = response(existing, AtlasEncryptedSecretProvider(db))
+            db.rollback()
+            return result
+        record, manifest = installed_manifest(db, payload.connector_id)
+        require_compatible_runtime(manifest, from_thread.run(runtime.health))
+        # Runtime checks may outlast changes to the initiating user's access.
+        principal = refresh_mutation_principal(principal, db)
+        validate_scope(db, principal, "integrations.manage", payload.customer_id, payload.site_id)
         require_expected_package(record, payload)
         values = {key: value.get_secret_value() for key, value in payload.credentials.items()}
         config = validate_configuration(manifest, payload.config, values)
@@ -189,17 +214,23 @@ async def create_integration(payload: ConnectionCreate, request: Request,
         values.clear()
         from app.services import discovery_orchestration as discovery
         initial = None
-        can_run = db.scalar(select(Integration.id).where(Integration.id == row.id,
-            scope_condition(principal, "integrations.run", Integration.customer_id, Integration.site_id))) is not None
+        can_run = principal.can("integrations.run", row.customer_id, row.site_id)
         if (payload.start_initial_discovery and manifest["capabilities"]["discover"] == "read_only"
                 and row.enabled and can_run and not locally_accepted(record)):
             if manifest["capabilities"]["scheduling"]:
                 row.schedule_preset = "hourly"
                 row.next_run_at = discovery.next_run("hourly", datetime.now(timezone.utc))
             try:
-                initial = await discovery.create_run(db, row, trigger="onboarding", user_id=principal.user.id)
+                with db.begin_nested():
+                    initial = discovery.create_run_sync(db, row, trigger="onboarding", user_id=principal.user.id)
             except (ValueError, OSError, RuntimeError):
+                initial = None
                 row.last_error_code = "initial_discovery_unavailable"
+        principal = refresh_mutation_principal(principal, db)
+        validate_scope(db, principal, "integrations.manage", payload.customer_id, payload.site_id)
+        has_execution_intent = initial is not None or row.schedule_preset != "manual"
+        if has_execution_intent and not principal.can("integrations.run", row.customer_id, row.site_id):
+            raise HTTPException(403, "Discovery permission changed while saving the Integration")
         audit(db, row, principal, request, "created")
         audit(db, row, principal, request, "credential_configured", metadata={"fields": provider.state(row)})
         result = response(row, provider)
@@ -212,6 +243,9 @@ async def create_integration(payload: ConnectionCreate, request: Request,
         raise
     except (ValueError, OSError, RuntimeError, SQLAlchemyError) as error:
         invalid(db, error)
+    except BaseException:
+        db.rollback()
+        raise
 
 
 @router.patch("/integrations/{integration_id}")
@@ -364,23 +398,31 @@ async def preview_connection(connector_id: str, payload: ConnectionCreate, reque
 @router.post("/integrations/{integration_id}/test-connection")
 async def test_connection(integration_id: uuid.UUID, request: Request,
         principal: Principal = Depends(require_permission("integrations.run")), db: Session = Depends(get_db)):
-    row = scoped(db, principal, "integrations.run", integration_id, lock=True)
-    require_live(row)
-    lifecycle.lock_connector(db, row.connector_id)
+    return await run_integration_write(_test_connection, integration_id, request, principal, db)
+
+
+def _test_connection(integration_id, request, principal, db):
     try:
+        row = scoped(db, principal, "integrations.run", integration_id, lock=True)
+        principal = refresh_connection_principal(db, principal, "integrations.run", row)
+        require_live(row)
         record, manifest = installed_manifest(db, row.connector_id)
         if (record.version, record.bundle_digest) != (row.connector_version, row.connector_digest):
             raise HTTPException(409, "Connection configuration requires the active Connector identity")
         provider = AtlasEncryptedSecretProvider(db)
         validate_configuration(manifest, row.config_json, configured_fields=provider.state(row))
         required = [field["key"] for field in manifest["connection_fields"] if field["secret"] and field["required"] and visible(field, row.config_json)]
-        audit(db, row, principal, request, "test_requested")
         from app.services.connector_catalogue import compatibility
-        if compatibility(manifest, await runtime.health())["state"] != "compatible":
+        health = from_thread.run(runtime.health)
+        principal = refresh_connection_principal(db, principal, "integrations.run", row)
+        audit(db, row, principal, request, "test_requested")
+        if compatibility(manifest, health)["state"] != "compatible":
             result = {"success": False, "category": "runtime_unavailable", "source_version": None, "compatibility": "unknown"}
         else:
             with provider.materialize_for_job(row, uuid.uuid4(), required) as lease:
-                result = await invoke(record, manifest, row.config_json, lease.values, lease.request_id)
+                # Pass a materialized reference into the async runtime client.
+                result = from_thread.run(invoke, record, manifest, row.config_json, lease.values, lease.request_id)
+            principal = refresh_connection_principal(db, principal, "integrations.run", row)
         row.last_test_at = datetime.now(timezone.utc)
         row.last_test_status = result["category"]
         if result["success"]:

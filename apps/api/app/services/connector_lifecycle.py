@@ -40,10 +40,18 @@ def package_store():
     return PackageStore(Path(os.getenv("ATLAS_CONNECTOR_STORE_PATH", "/var/lib/atlas-connectors")))
 
 
-def lock_connector(db, connector_id: str):
+def lock_connector(db, connector_id: str, *, wait=True):
     # Also serializes absent-row install, update and uninstall. PostgreSQL owns
     # active state; hash collisions only serialize extra work and confer no access.
-    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": "atlas-connector:" + connector_id})
+    key = "atlas-connector:" + connector_id
+    if not wait:
+        return try_transaction_lock(db, key)
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key})
+    return True
+
+
+def try_transaction_lock(db, key: str) -> bool:
+    return db.scalar(text("SELECT pg_try_advisory_xact_lock(hashtext(:key))"), {"key": key})
 
 
 def require_local_revoked(record, *, db=None, replacement=None):
